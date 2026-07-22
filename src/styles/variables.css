@@ -1,0 +1,84 @@
+:root {
+  /* Color Palette (Cool Slate & Deep Violet Accent) */
+  --color-bg-light: #f8fafc;
+  --color-bg-dark: #09090b;
+  --color-card-light: #ffffff;
+  --color-card-dark: #18181b;
+  
+  --color-text-light-primary: #0f172a;
+  --color-text-light-secondary: #475569;
+  --color-text-light-muted: #94a3b8;
+  
+  --color-text-dark-primary: #f8fafc;
+  --color-text-dark-secondary: #cbd5e1;
+  --color-text-dark-muted: #64748b;
+  
+  /* Accents & Statuses */
+  --color-primary: #6366f1; /* Indigo */
+  --color-primary-hover: #4f46e5;
+  --color-primary-glow: rgba(99, 102, 241, 0.15);
+  
+  --color-success: #10b981; /* Emerald */
+  --color-warning: #f59e0b; /* Amber */
+  --color-danger: #ef4444;  /* Rose */
+  --color-info: #06b6d4;    /* Cyan */
+  
+  /* Borders */
+  --border-light: 1px solid rgba(226, 232, 240, 0.8);
+  --border-dark: 1px solid rgba(39, 39, 42, 0.8);
+  
+  /* Typography */
+  --font-family: 'Outfit', 'Inter', system-ui, -apple-system, sans-serif;
+  
+  /* Radius & Shadows */
+  --radius-sm: 6px;
+  --radius-md: 12px;
+  --radius-lg: 18px;
+  --radius-full: 9999px;
+  
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
+  
+  /* Transitions */
+  --transition-fast: 0.15s ease;
+  --transition-normal: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  
+  /* Layout Dimensions */
+  --sidebar-width: 260px;
+  --header-height: 70px;
+}
+
+/* Base Light Mode variables */
+:root {
+  --bg-app: var(--color-bg-light);
+  --bg-card: var(--color-card-light);
+  --border-color: rgba(226, 232, 240, 0.8);
+  --text-primary: var(--color-text-light-primary);
+  --text-secondary: var(--color-text-light-secondary);
+  --text-muted: var(--color-text-light-muted);
+  --shadow-card: var(--shadow-md);
+  
+  /* Glassmorphism */
+  --glass-bg: rgba(255, 255, 255, 0.7);
+  --glass-border: rgba(226, 232, 240, 0.5);
+  --glass-blur: 12px;
+}
+
+/* Base Dark Mode variables */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg-app: var(--color-bg-dark);
+    --bg-card: var(--color-card-dark);
+    --border-color: rgba(39, 39, 42, 0.8);
+    --text-primary: var(--color-text-dark-primary);
+    --text-secondary: var(--color-text-dark-secondary);
+    --text-muted: var(--color-text-dark-muted);
+    --shadow-card: 0 4px 20px rgba(0, 0, 0, 0.3);
+    
+    /* Glassmorphism */
+    --glass-bg: rgba(15, 15, 20, 0.7);
+    --glass-border: rgba(255, 255, 255, 0.05);
+    --glass-blur: 16px;
+  }
+}

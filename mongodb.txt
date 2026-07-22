@@ -1,0 +1,4 @@
+mongodb+srv://<db_username>:ykhpg2hO4chncrTt@nexace.zni14mm.mongodb.net/?appName=NexAce
+
+ashishsharma7251_db_user
+ykhpg2hO4chncrTt

@@ -1,0 +1,211 @@
+.header {
+  margin-bottom: 2rem;
+}
+
+.welcomeTitle {
+  font-size: 2rem;
+  font-weight: 800;
+  margin-bottom: 0.25rem;
+}
+
+.welcomeDesc {
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+}
+
+.kpiGrid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1.5rem;
+  margin-bottom: 2.5rem;
+}
+
+.kpiCard {
+  padding: 1.5rem;
+  border-radius: var(--radius-md);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  transition: transform var(--transition-fast);
+}
+
+.kpiCard:hover {
+  transform: translateY(-2px);
+}
+
+.kpiMeta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.kpiIcon {
+  font-size: 1.25rem;
+}
+
+.kpiValue {
+  font-size: 1.75rem;
+  font-weight: 800;
+}
+
+.kpiTrend {
+  font-size: 0.75rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.trendUp {
+  color: var(--color-success);
+}
+
+.trendDown {
+  color: var(--color-danger);
+}
+
+.dashboardGrid {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 1.5rem;
+}
+
+.mainPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.sidePanel {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.sectionCard {
+  padding: 1.5rem;
+  border-radius: var(--radius-lg);
+}
+
+.sectionHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.25rem;
+}
+
+.sectionTitle {
+  font-size: 1.15rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.viewAllLink {
+  font-size: 0.8rem;
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
+.viewAllLink:hover {
+  color: var(--color-primary-hover);
+}
+
+/* Dummy Project / Timesheet Lists */
+.projectList {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.projectItem {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem;
+  border-radius: var(--radius-sm);
+  background: rgba(0, 0, 0, 0.01);
+  border: 1px solid var(--border-color);
+}
+
+@media (prefers-color-scheme: dark) {
+  .projectItem {
+    background: rgba(255, 255, 255, 0.01);
+  }
+}
+
+.projectInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.projectName {
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.projectClient {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.projectStatus {
+  padding: 0.25rem 0.5rem;
+  border-radius: var(--radius-full);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.statusActive {
+  background: var(--color-primary-glow);
+  color: var(--color-primary);
+}
+
+.statusCompleted {
+  background: rgba(16, 185, 129, 0.1);
+  color: var(--color-success);
+}
+
+/* User Activity List */
+.activityList {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.activityItem {
+  display: flex;
+  gap: 0.75rem;
+  font-size: 0.85rem;
+}
+
+.activityDot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-full);
+  background: var(--color-primary);
+  margin-top: 0.35rem;
+  flex-shrink: 0;
+}
+
+.activityMeta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.activityContent {
+  color: var(--text-secondary);
+}
+
+.activityTime {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
