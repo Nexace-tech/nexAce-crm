@@ -22,6 +22,10 @@ export default function TeamDashboardPage() {
   const [editSkillsText, setEditSkillsText] = useState("");
   const [editPhotoUrl, setEditPhotoUrl] = useState("");
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editEmail, setEditEmail] = useState("");
+  const [editPhone, setEditPhone] = useState("");
+// Passwords are not editable from the teams page modal (restricted to settings)
 
   // Add Employee Form States (Admin only)
   const [showAddForm, setShowAddForm] = useState(false);
@@ -94,11 +98,16 @@ export default function TeamDashboardPage() {
     }
   };
 
-  // Profile update action (Self edit bio/skills)
+  // Profile update action (Self edit profile, email, or credentials)
+  const [isUpdating, setIsUpdating] = useState(false);
+
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedMember) return;
 
+    // Password changes are restricted to settings only
+
+    setIsUpdating(true);
     try {
       const parsedSkills = editSkillsText
         .split(",")
@@ -108,19 +117,31 @@ export default function TeamDashboardPage() {
       const response = await fetch(`/api/team/${selectedMember._id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ bio: editBioText, skills: parsedSkills, photoUrl: editPhotoUrl }),
+        body: JSON.stringify({
+          name: editName,
+          email: editEmail,
+          phone: editPhone,
+          bio: editBioText,
+          skills: parsedSkills,
+          photoUrl: editPhotoUrl,
+        }),
       });
 
+      const data = await response.json();
+
       if (response.ok) {
-        const data = await response.json();
         setSelectedMember(data.user);
         setIsEditingBio(false);
         await fetchTeam();
         showToast("Profile updated successfully!", "success");
+      } else {
+        showToast(data.error || "Failed to update profile.", "error");
       }
     } catch (error) {
       console.error("Profile update error:", error);
       showToast("Failed to update profile.", "error");
+    } finally {
+      setIsUpdating(false);
     }
   };
 
@@ -182,6 +203,9 @@ export default function TeamDashboardPage() {
       setEditBioText(member.bio || "");
       setEditSkillsText(member.skills ? member.skills.join(", ") : "");
       setEditPhotoUrl(member.photoUrl || "");
+      setEditName(member.name || "");
+      setEditEmail(member.email || "");
+      setEditPhone(member.phone || "");
       setIsEditingBio(false);
     }
   };
@@ -247,10 +271,15 @@ export default function TeamDashboardPage() {
           <h1 className={styles.title}>My Team</h1>
           <p style={{ color: "var(--text-secondary)", fontSize: "0.95rem" }}>
             Manage organization members, departments, and reporting connections.
+            {currentUser && (
+              <span style={{ fontSize: "0.85rem", color: "var(--color-primary)", marginLeft: "0.5rem" }}>
+                (Logged in as: {currentUser.name} • Role: {currentUser.role})
+              </span>
+            )}
           </p>
         </div>
 
-        {isAdmin && (
+        {isManagerOrAdmin && (
           <button className={styles.btnPrimary} onClick={() => setShowAddForm(true)}>
             <i className="fa-solid fa-plus" style={{ marginRight: "0.25rem" }}></i> Add Employee
           </button>
@@ -654,25 +683,60 @@ export default function TeamDashboardPage() {
 
             {/* Profile Body */}
             {isEditingBio ? (
-              <form onSubmit={handleUpdateProfile} style={{ display: "flex", flexDirection: "column", gap: "1rem", borderTop: "1px solid var(--border-color)", paddingTop: "1rem" }}>
+              <form onSubmit={handleUpdateProfile} className={styles.form} style={{ borderTop: "1px solid var(--border-color)", paddingTop: "1rem", marginTop: "0.5rem" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
+                  <div className={styles.formGroup}>
+                    <label className={styles.label}>Full Name</label>
+                    <input
+                      type="text"
+                      value={editName}
+                      onChange={(e) => setEditName(e.target.value)}
+                      className={styles.input}
+                      required
+                    />
+                  </div>
+
+                  <div className={styles.formGroup}>
+                    <label className={styles.label}>Email Address</label>
+                    <input
+                      type="email"
+                      value={editEmail}
+                      onChange={(e) => setEditEmail(e.target.value)}
+                      className={styles.input}
+                      required
+                    />
+                  </div>
+
+                  <div className={styles.formGroup}>
+                    <label className={styles.label}>Phone Number</label>
+                    <input
+                      type="text"
+                      value={editPhone}
+                      onChange={(e) => setEditPhone(e.target.value)}
+                      placeholder="e.g. +1-555-0199"
+                      className={styles.input}
+                    />
+                  </div>
+
+                  <div className={styles.formGroup}>
+                    <label className={styles.label}>Skills (comma-separated)</label>
+                    <input
+                      type="text"
+                      value={editSkillsText}
+                      onChange={(e) => setEditSkillsText(e.target.value)}
+                      placeholder="e.g. React, Next.js, CSS"
+                      className={styles.input}
+                    />
+                  </div>
+                </div>
+
                 <div className={styles.formGroup}>
                   <label className={styles.label}>Biography</label>
                   <textarea
                     value={editBioText}
                     onChange={(e) => setEditBioText(e.target.value)}
                     className={styles.input}
-                    style={{ width: "100%", height: "80px", resize: "none" }}
-                  />
-                </div>
-
-                <div className={styles.formGroup}>
-                  <label className={styles.label}>Skills (comma-separated)</label>
-                  <input
-                    type="text"
-                    value={editSkillsText}
-                    onChange={(e) => setEditSkillsText(e.target.value)}
-                    placeholder="e.g. Next.js, Figma, TypeScript"
-                    className={styles.input}
+                    style={{ width: "100%", height: "70px", resize: "vertical" }}
                   />
                 </div>
 
@@ -690,7 +754,7 @@ export default function TeamDashboardPage() {
                         No Pic
                       </div>
                     )}
-                    <label className={styles.btnSecondary} style={{ cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "0.25rem" }}>
+                    <label className={styles.btnSecondary} style={{ cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "0.25rem", padding: "0.4rem 0.8rem", fontSize: "0.8rem" }}>
                       <i className="fa-solid fa-cloud-arrow-up"></i> Choose Photo
                       <input
                         type="file"
@@ -729,12 +793,14 @@ export default function TeamDashboardPage() {
                   {uploadingPhoto && <span style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "0.25rem" }}>Uploading image...</span>}
                 </div>
 
-                <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end", marginTop: "0.5rem" }}>
-                  <button type="button" className={styles.btnSecondary} onClick={() => setIsEditingBio(false)}>
+                {/* Password updates are restricted to the settings page */}
+
+                <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end", marginTop: "0.75rem", borderTop: "1px solid var(--border-color)", paddingTop: "0.75rem" }}>
+                  <button type="button" className={styles.btnSecondary} onClick={() => setIsEditingBio(false)} disabled={isUpdating}>
                     Cancel
                   </button>
-                  <button type="submit" className={styles.btnPrimary} disabled={uploadingPhoto}>
-                    Save Changes
+                  <button type="submit" className={styles.btnPrimary} disabled={uploadingPhoto || isUpdating}>
+                    {isUpdating ? "Saving changes..." : "Save Changes"}
                   </button>
                 </div>
               </form>
@@ -804,8 +870,8 @@ export default function TeamDashboardPage() {
         </div>
       )}
 
-      {/* ----------------- Add Employee Modal (Admin Only) ----------------- */}
-      {showAddForm && isAdmin && (
+      {/* ----------------- Add Employee Modal (Admin & Manager) ----------------- */}
+      {showAddForm && isManagerOrAdmin && (
         <div className={styles.modalOverlay} onClick={() => setShowAddForm(false)}>
           <div className={`${styles.modal} glass-panel`} onClick={(e) => e.stopPropagation()}>
             <span className={styles.closeBtn} onClick={() => setShowAddForm(false)}>

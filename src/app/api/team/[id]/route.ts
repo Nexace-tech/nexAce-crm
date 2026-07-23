@@ -67,10 +67,36 @@ export async function PUT(request: Request, { params }: RouteParams) {
     }
 
     // Determine allowed updates
+    // Both Self and Admin can update name and email (with duplicate checking)
+    if (body.email && body.email.toLowerCase() !== user.email) {
+      const existingUser = await User.findOne({ email: body.email.toLowerCase() });
+      if (existingUser) {
+        return NextResponse.json({ error: "Email address is already in use by another user." }, { status: 400 });
+      }
+      user.email = body.email.toLowerCase();
+    }
+    if (body.name) {
+      user.name = body.name;
+    }
+
+    // Both Self and Admin can change password (Self requires currentPassword)
+    if (body.newPassword) {
+      if (isSelf) {
+        if (!body.currentPassword) {
+          return NextResponse.json({ error: "Current password is required to change password" }, { status: 400 });
+        }
+        const bcrypt = await import("bcryptjs");
+        const isMatch = await bcrypt.compare(body.currentPassword, user.passwordHash);
+        if (!isMatch) {
+          return NextResponse.json({ error: "Incorrect current password" }, { status: 400 });
+        }
+      }
+      const bcrypt = await import("bcryptjs");
+      user.passwordHash = await bcrypt.hash(body.newPassword, 10);
+    }
+
+    // Admin-specific updates
     if (isAdmin) {
-      // Admins can update everything
-      if (body.name) user.name = body.name;
-      if (body.email) user.email = body.email.toLowerCase();
       if (body.role && ["Admin", "Manager", "Employee"].includes(body.role)) {
         user.role = body.role;
       }

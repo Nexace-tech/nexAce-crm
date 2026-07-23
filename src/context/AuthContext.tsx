@@ -18,6 +18,7 @@ interface UserProfile {
   status?: string;
   skills?: string[];
   bio?: string;
+  phone?: string;
 }
 
 interface AuthContextType {

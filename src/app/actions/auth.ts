@@ -214,3 +214,43 @@ export async function logoutAction() {
   await deleteSession();
   redirect("/login");
 }
+
+/**
+ * Server Action to handle forgot password requests (mocked).
+ */
+export async function forgotPasswordAction(state: FormState | undefined, formData: FormData): Promise<FormState> {
+  const email = formData.get("email") as string;
+
+  const errors: NonNullable<FormState["errors"]> = {};
+
+  if (!email || !email.includes("@")) {
+    errors.email = ["Please enter a valid email address."];
+    return { errors };
+  }
+
+  try {
+    await connectToDatabase();
+
+    // Check if the user exists
+    const user = await User.findOne({ email: email.toLowerCase() });
+    if (!user) {
+      // Return success even if user not found for security reasons,
+      // but mention that we sent a reset link to prevent enumeration.
+      return {
+        success: true,
+        message: "If an account exists with that email, a password reset link has been sent."
+      };
+    }
+
+    return {
+      success: true,
+      message: `A password reset link has been sent to ${email}. (In a production environment, this would send a secure JWT reset token link via email).`
+    };
+  } catch (error: any) {
+    console.error("Forgot password error:", error);
+    return {
+      message: getDescriptiveErrorMessage(error, "An error occurred during password reset. Please try again.")
+    };
+  }
+}
+

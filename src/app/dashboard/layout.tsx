@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { getSession } from "@/lib/session";
-import { logoutAction } from "@/app/actions/auth";
 import { redirect } from "next/navigation";
 import styles from "./layout.module.css";
+import { UserProfileCard } from "@/components/layout/UserProfileCard";
+import { LogoutHeaderBtn } from "@/components/layout/LogoutHeaderBtn";
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -26,16 +27,7 @@ export default async function DashboardLayout({ children }: DashboardLayoutProps
     { name: "Analytics Logs", href: "/dashboard/analytics", icon: "fa-solid fa-chart-line" },
     { name: "CRM Retainers", href: "/dashboard/clients", icon: "fa-solid fa-handshake" },
     { name: "Referral Pipeline", href: "/dashboard/referrals", icon: "fa-solid fa-link" },
-    { name: "Settings", href: "/dashboard/settings", icon: "fa-solid fa-sliders" },
   ];
-
-  const initials = session.userName
-    ? session.userName
-        .split(" ")
-        .map((n) => n[0])
-        .join("")
-        .toUpperCase()
-    : "U";
 
   return (
     <div className={styles.container}>
@@ -55,21 +47,11 @@ export default async function DashboardLayout({ children }: DashboardLayoutProps
         </nav>
 
         {/* Sidebar Footer (Tenant / User details) */}
-        <div className={styles.footer}>
-          <div className={styles.tenantInfo}>{session.tenantName}</div>
-          <div className={styles.userInfo}>
-            <div className={styles.avatar}>{initials}</div>
-            <div className={styles.userMeta}>
-              <span className={styles.userName}>{session.userName}</span>
-              <span className={styles.userRole}>{session.role}</span>
-              <form action={logoutAction}>
-                <button type="submit" className={styles.logoutBtn}>
-                  <i className="fa-solid fa-right-from-bracket"></i> Log Out
-                </button>
-              </form>
-            </div>
-          </div>
-        </div>
+        <UserProfileCard
+          userName={session.userName}
+          role={session.role}
+          tenantName={session.tenantName}
+        />
       </aside>
 
       {/* Main Workspace */}
@@ -91,6 +73,7 @@ export default async function DashboardLayout({ children }: DashboardLayoutProps
             <button className={styles.iconBtn} title="Quick Action">
               <i className="fa-solid fa-plus"></i>
             </button>
+            <LogoutHeaderBtn />
           </div>
         </header>
 

@@ -65,9 +65,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Role-based permission check: Admin only
-    if (session.role !== "Admin") {
-      return NextResponse.json({ error: "Forbidden: Admins only" }, { status: 403 });
+    // Role-based permission check: Admin or Manager only
+    if (session.role !== "Admin" && session.role !== "Manager") {
+      return NextResponse.json({ error: "Forbidden: Admins or Managers only" }, { status: 403 });
     }
 
     const body = await request.json();
