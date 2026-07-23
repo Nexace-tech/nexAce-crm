@@ -48,7 +48,7 @@ export async function GET() {
     // 4. Create CEO / Admin
     const ceo = await User.create({
       name: "John Doe",
-      email: "john@acme.com",
+      email: "admin@nex.com",
       passwordHash: hashedPassword,
       role: "Admin",
       tenantId,

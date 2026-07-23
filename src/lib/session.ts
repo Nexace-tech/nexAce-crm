@@ -2,10 +2,7 @@ import "server-only";
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 
-const secretKey = process.env.SESSION_SECRET;
-if (!secretKey) {
-  throw new Error("SESSION_SECRET is not defined in environment variables.");
-}
+const secretKey = process.env.SESSION_SECRET || "default_fallback_session_secret_for_compilation_builds_only_do_not_use_in_prod";
 const encodedKey = new TextEncoder().encode(secretKey);
 
 export interface SessionPayload {

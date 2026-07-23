@@ -22,6 +22,34 @@ export interface FormState {
 }
 
 /**
+ * Helper to translate internal connection/configuration errors into descriptive user-facing tips.
+ */
+function getDescriptiveErrorMessage(error: any, defaultMessage: string): string {
+  const errMsg = error?.message || "";
+  const errName = error?.name || "";
+
+  if (errMsg.includes("MONGODB_URI") || errMsg.includes("environment variable")) {
+    return "Database connection failed: The MONGODB_URI environment variable is not defined in your Vercel project settings. Please add it to your project configuration.";
+  }
+
+  if (
+    errMsg.includes("timeout") ||
+    errMsg.includes("ETIMEDOUT") ||
+    errMsg.includes("connection limit") ||
+    errMsg.includes("IP") ||
+    errName === "MongooseServerSelectionError"
+  ) {
+    return "Database connection timed out. Please ensure that your MongoDB Atlas Network Access is configured to allow connections from all IP addresses (whitelist 0.0.0.0/0) so Vercel can connect.";
+  }
+
+  if (errMsg.includes("key size") || errMsg.includes("secret") || errMsg.includes("HS256")) {
+    return "Session configuration error: The SESSION_SECRET environment variable must be a secure key of at least 32 characters/bytes.";
+  }
+
+  return `${defaultMessage} (Details: ${errMsg || error})`;
+}
+
+/**
  * Server Action to register a new tenant (company) and its initial admin user.
  */
 export async function registerAction(state: FormState | undefined, formData: FormData): Promise<FormState> {
@@ -104,7 +132,7 @@ export async function registerAction(state: FormState | undefined, formData: For
   } catch (error: any) {
     console.error("Registration error:", error);
     return {
-      message: "An error occurred during registration. Please try again."
+      message: getDescriptiveErrorMessage(error, "An error occurred during registration. Please try again.")
     };
   }
 
@@ -171,7 +199,7 @@ export async function loginAction(state: FormState | undefined, formData: FormDa
   } catch (error: any) {
     console.error("Login error:", error);
     return {
-      message: "An error occurred during login. Please try again."
+      message: getDescriptiveErrorMessage(error, "An error occurred during login. Please try again.")
     };
   }
 
