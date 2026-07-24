@@ -4,6 +4,7 @@ import bcrypt from "bcryptjs";
 import { connectToDatabase } from "@/lib/db";
 import { Tenant } from "@/models/Tenant";
 import { User } from "@/models/User";
+import { EmailVerification } from "@/models/EmailVerification";
 import { createSession, deleteSession } from "@/lib/session";
 import { redirect } from "next/navigation";
 
@@ -58,6 +59,7 @@ export async function registerAction(state: FormState | undefined, formData: For
   const adminName = formData.get("adminName") as string;
   const adminEmail = formData.get("adminEmail") as string;
   const adminPassword = formData.get("adminPassword") as string;
+  const code = formData.get("code") as string;
 
   // 1. Simple Server-Side Validation
   const errors: NonNullable<FormState["errors"]> = {};
@@ -89,6 +91,14 @@ export async function registerAction(state: FormState | undefined, formData: For
   try {
     await connectToDatabase();
 
+    // Verification Code Check
+    const verification = await EmailVerification.findOne({ email: adminEmail.toLowerCase() });
+    if (!verification || verification.code !== code) {
+      return {
+        message: "Incorrect or expired email verification code. Please request a new code."
+      };
+    }
+
     // 2. Check for existing Tenant slug
     const existingTenant = await Tenant.findOne({ slug: companySlug.toLowerCase() });
     if (existingTenant) {
@@ -104,6 +114,9 @@ export async function registerAction(state: FormState | undefined, formData: For
         errors: { adminEmail: ["This email is already registered."] }
       };
     }
+
+    // Clear verification code after successful verification
+    await EmailVerification.deleteOne({ _id: verification._id });
 
     // 4. Create Tenant
     const tenant = await Tenant.create({

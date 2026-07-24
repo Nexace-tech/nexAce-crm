@@ -3,7 +3,7 @@ import mongoose, { Schema, Document, Model } from "mongoose";
 export interface IProject extends Document {
   name: string;
   description?: string;
-  status: "Planning" | "In Progress" | "On Hold" | "Completed";
+  status: "Planning" | "In Progress" | "In Review" | "On Hold" | "Completed";
   members: mongoose.Types.ObjectId[];
   tenantId: mongoose.Types.ObjectId;
   createdAt: Date;
@@ -16,7 +16,7 @@ const ProjectSchema = new Schema<IProject>(
     description: { type: String },
     status: {
       type: String,
-      enum: ["Planning", "In Progress", "On Hold", "Completed"],
+      enum: ["Planning", "In Progress", "In Review", "On Hold", "Completed"],
       default: "Planning",
     },
     members: [{ type: Schema.Types.ObjectId, ref: "User" }],

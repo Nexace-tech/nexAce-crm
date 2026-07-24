@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
 import { connectToDatabase } from "@/lib/db";
 import { User } from "@/models/User";
+import { EmailVerification } from "@/models/EmailVerification";
 import mongoose from "mongoose";
 
 interface RouteParams {
@@ -67,12 +68,25 @@ export async function PUT(request: Request, { params }: RouteParams) {
     }
 
     // Determine allowed updates
-    // Both Self and Admin can update name and email (with duplicate checking)
+    // Both Self and Admin can update name and email (with duplicate checking and email code verification)
     if (body.email && body.email.toLowerCase() !== user.email) {
+      // 1. Verify code
+      if (!body.code) {
+        return NextResponse.json({ error: "Verification code is required to update email address." }, { status: 400 });
+      }
+      const verification = await EmailVerification.findOne({ email: body.email.toLowerCase() });
+      if (!verification || verification.code !== body.code) {
+        return NextResponse.json({ error: "Incorrect or expired email verification code. Please request a new code." }, { status: 400 });
+      }
+
+      // 2. Duplicate checking
       const existingUser = await User.findOne({ email: body.email.toLowerCase() });
       if (existingUser) {
         return NextResponse.json({ error: "Email address is already in use by another user." }, { status: 400 });
       }
+
+      // 3. Clear code and update email
+      await EmailVerification.deleteOne({ _id: verification._id });
       user.email = body.email.toLowerCase();
     }
     if (body.name) {
@@ -100,7 +114,13 @@ export async function PUT(request: Request, { params }: RouteParams) {
       if (body.role && ["Admin", "Manager", "Employee"].includes(body.role)) {
         user.role = body.role;
       }
-      if (body.department) user.department = body.department;
+      if (body.departments && Array.isArray(body.departments)) {
+        user.departments = body.departments;
+        user.department = body.departments[0] || "General";
+      } else if (body.department) {
+        user.department = body.department;
+        user.departments = [body.department];
+      }
       if (body.managerId !== undefined) {
         user.managerId = body.managerId ? new mongoose.Types.ObjectId(body.managerId) : undefined;
       }
@@ -109,11 +129,13 @@ export async function PUT(request: Request, { params }: RouteParams) {
       }
     }
 
-    // Both Self and Admin can update profile meta
-    if (body.bio !== undefined) user.bio = body.bio;
-    if (body.phone !== undefined) user.phone = body.phone;
-    if (body.photoUrl !== undefined) user.photoUrl = body.photoUrl;
-    if (body.skills !== undefined) user.skills = body.skills;
+    // Personal profile meta updates (restricted strictly to account owner/self)
+    if (isSelf) {
+      if (body.bio !== undefined) user.bio = body.bio;
+      if (body.phone !== undefined) user.phone = body.phone;
+      if (body.photoUrl !== undefined) user.photoUrl = body.photoUrl;
+      if (body.skills !== undefined) user.skills = body.skills;
+    }
 
     await user.save();
 

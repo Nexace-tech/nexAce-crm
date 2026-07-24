@@ -12,6 +12,12 @@ export interface IComment {
   createdAt: Date;
 }
 
+export interface IHistory {
+  action: string;
+  userName: string;
+  date: Date;
+}
+
 export interface ITask extends Document {
   title: string;
   description?: string;
@@ -23,6 +29,7 @@ export interface ITask extends Document {
   status: "To Do" | "In Progress" | "Review" | "Done";
   subtasks: ISubtask[];
   comments: IComment[];
+  history: IHistory[];
   tenantId: mongoose.Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
@@ -38,6 +45,12 @@ const CommentSchema = new Schema<IComment>({
   userName: { type: String, required: true },
   content: { type: String, required: true },
   createdAt: { type: Date, default: Date.now },
+});
+
+const HistorySchema = new Schema<IHistory>({
+  action: { type: String, required: true },
+  userName: { type: String, required: true },
+  date: { type: Date, default: Date.now },
 });
 
 const TaskSchema = new Schema<ITask>(
@@ -60,6 +73,7 @@ const TaskSchema = new Schema<ITask>(
     },
     subtasks: [SubtaskSchema],
     comments: [CommentSchema],
+    history: [HistorySchema],
     tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true },
   },
   { timestamps: true }

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSession, deleteSession } from "@/lib/session";
 import { connectToDatabase } from "@/lib/db";
 import { User } from "@/models/User";
+import "@/models/Tenant";
 
 export async function GET() {
   try {

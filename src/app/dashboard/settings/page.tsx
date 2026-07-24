@@ -27,6 +27,8 @@ export default function SettingsPage() {
   const [emailCode, setEmailCode] = useState("");
   const [emailCodeError, setEmailCodeError] = useState("");
   const [pendingProfileData, setPendingProfileData] = useState<any>(null);
+  const [devPreviewUrl, setDevPreviewUrl] = useState("");
+  const [devCode, setDevCode] = useState("");
 
   // UI state
   const [updatingProfile, setUpdatingProfile] = useState(false);
@@ -99,15 +101,36 @@ export default function SettingsPage() {
       phone,
       bio,
       skills: skillsArray,
+      code: "",
     };
 
     const emailChanged = email.toLowerCase() !== (user.email || "").toLowerCase();
 
     if (emailChanged) {
-      setPendingProfileData(profileData);
-      setEmailCode("");
-      setEmailCodeError("");
-      setShowEmailModal(true);
+      setUpdatingProfile(true);
+      try {
+        const res = await fetch("/api/auth/send-code", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email }),
+        });
+        const data = await res.json();
+        if (res.ok) {
+          setDevPreviewUrl(data.previewUrl || "");
+          setDevCode(data.devCode || "");
+          setPendingProfileData(profileData);
+          setEmailCode("");
+          setEmailCodeError("");
+          setShowEmailModal(true);
+        } else {
+          showToast(data.error || "Failed to request email verification code.", "error");
+        }
+      } catch (err) {
+        console.error(err);
+        showToast("Network error requesting email verification code.", "error");
+      } finally {
+        setUpdatingProfile(false);
+      }
       return;
     }
 
@@ -116,13 +139,17 @@ export default function SettingsPage() {
 
   const handleVerifyEmailCode = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (emailCode !== "654321") {
-      setEmailCodeError("Incorrect verification code. Please enter '654321' to authorize email update.");
+    if (!emailCode) {
+      setEmailCodeError("Please enter the verification code.");
       return;
     }
     setEmailCodeError("");
     if (pendingProfileData) {
-      await executeUpdateProfile(pendingProfileData);
+      const verifiedProfileData = {
+        ...pendingProfileData,
+        code: emailCode,
+      };
+      await executeUpdateProfile(verifiedProfileData);
     }
   };
 
@@ -281,14 +308,9 @@ export default function SettingsPage() {
                 title={showCurrentPassword ? "Hide password" : "Show password"}
               >
                 {showCurrentPassword ? (
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" style={{ width: "20px", height: "20px" }}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88" />
-                  </svg>
+                  <i className="fa-solid fa-eye-slash"></i>
                 ) : (
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" style={{ width: "20px", height: "20px" }}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.754C3.066 7.749 6.877 4.5 12 4.5c4.63 0 8.444 3.248 9.474 7.068a1.012 1.012 0 010 .754C20.444 16.252 16.63 19.5 12 19.5c-5.123 0-8.937-3.248-9.474-7.068z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                  </svg>
+                  <i className="fa-solid fa-eye"></i>
                 )}
               </button>
             </div>
@@ -314,14 +336,9 @@ export default function SettingsPage() {
                 title={showNewPassword ? "Hide password" : "Show password"}
               >
                 {showNewPassword ? (
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" style={{ width: "20px", height: "20px" }}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88" />
-                  </svg>
+                  <i className="fa-solid fa-eye-slash"></i>
                 ) : (
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" style={{ width: "20px", height: "20px" }}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.754C3.066 7.749 6.877 4.5 12 4.5c4.63 0 8.444 3.248 9.474 7.068a1.012 1.012 0 010 .754C20.444 16.252 16.63 19.5 12 19.5c-5.123 0-8.937-3.248-9.474-7.068z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                  </svg>
+                  <i className="fa-solid fa-eye"></i>
                 )}
               </button>
             </div>
@@ -345,14 +362,9 @@ export default function SettingsPage() {
                 title={showConfirmPassword ? "Hide password" : "Show password"}
               >
                 {showConfirmPassword ? (
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" style={{ width: "20px", height: "20px" }}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88" />
-                  </svg>
+                  <i className="fa-solid fa-eye-slash"></i>
                 ) : (
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" style={{ width: "20px", height: "20px" }}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.754C3.066 7.749 6.877 4.5 12 4.5c4.63 0 8.444 3.248 9.474 7.068a1.012 1.012 0 010 .754C20.444 16.252 16.63 19.5 12 19.5c-5.123 0-8.937-3.248-9.474-7.068z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                  </svg>
+                  <i className="fa-solid fa-eye"></i>
                 )}
               </button>
             </div>
@@ -383,10 +395,25 @@ export default function SettingsPage() {
               To change your account email to <strong>{email}</strong>, please authorize this action by entering the simulated code.
             </p>
 
-            <div style={{ background: "rgba(99, 102, 241, 0.08)", border: "1px solid var(--color-primary-glow)", padding: "0.75rem 1rem", borderRadius: "var(--radius-md)", fontSize: "0.85rem", color: "var(--text-primary)" }}>
-              <i className="fa-solid fa-paper-plane" style={{ color: "var(--color-primary)", marginRight: "0.35rem" }}></i>
-              <strong>Simulated Email Sent!</strong> Use code <code style={{ background: "rgba(255,255,255,0.1)", padding: "0.1rem 0.3rem", borderRadius: "4px", color: "var(--color-primary)", fontWeight: "bold" }}>654321</code>.
-            </div>
+            {devPreviewUrl ? (
+              <div style={{ background: "rgba(99, 102, 241, 0.08)", border: "1px solid var(--color-primary-glow)", padding: "1rem", borderRadius: "var(--radius-md)", fontSize: "0.85rem", color: "var(--text-primary)", display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                <div>
+                  <i className="fa-solid fa-paper-plane" style={{ color: "var(--color-primary)", marginRight: "0.35rem" }}></i>
+                  <strong>Developer SMTP Sandbox:</strong> Verification code sent!
+                </div>
+                <div>
+                  Use code: <code style={{ background: "rgba(255,255,255,0.1)", padding: "0.15rem 0.35rem", borderRadius: "4px", color: "var(--color-primary)", fontWeight: "bold" }}>{devCode}</code>
+                </div>
+                <a href={devPreviewUrl} target="_blank" rel="noopener noreferrer" style={{ color: "var(--color-info)", textDecoration: "underline", fontWeight: 600 }}>
+                  View Sent Email Inbox ↗
+                </a>
+              </div>
+            ) : (
+              <div style={{ background: "rgba(16, 185, 129, 0.08)", border: "1px solid rgba(16, 185, 129, 0.2)", padding: "1rem", borderRadius: "var(--radius-md)", fontSize: "0.85rem", color: "var(--text-primary)" }}>
+                <i className="fa-solid fa-envelope-circle-check" style={{ color: "#10b981", marginRight: "0.35rem" }}></i>
+                Verification code sent successfully. Please check your inbox.
+              </div>
+            )}
 
             <form onSubmit={handleVerifyEmailCode} style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
               {emailCodeError && (

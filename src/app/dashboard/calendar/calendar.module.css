@@ -455,6 +455,18 @@
   background: rgba(0, 0, 0, 0.02);
 }
 
+.btnPrimary:disabled,
+.btnSecondary:disabled,
+button:disabled {
+  background: rgba(148, 163, 184, 0.12) !important;
+  color: #94a3b8 !important;
+  border: 1px solid rgba(148, 163, 184, 0.2) !important;
+  box-shadow: none !important;
+  cursor: not-allowed !important;
+  opacity: 0.65 !important;
+  transform: none !important;
+}
+
 @media (prefers-color-scheme: dark) {
   .btnSecondary:hover {
     background: rgba(255, 255, 255, 0.02);
@@ -499,3 +511,11 @@
     opacity: 1;
   }
 }
+
+input[type="date"]::-webkit-calendar-picker-indicator,
+input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  filter: invert(0.8) sepia(100%) saturate(500%) hue-rotate(200deg);
+  opacity: 0.9;
+}
+

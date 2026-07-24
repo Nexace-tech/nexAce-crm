@@ -17,6 +17,9 @@ export default function RegisterPage() {
   const [verificationCode, setVerificationCode] = useState("");
   const [verificationError, setVerificationError] = useState("");
   const [emailForVerification, setEmailForVerification] = useState("");
+  const [sendingCode, setSendingCode] = useState(false);
+  const [devPreviewUrl, setDevPreviewUrl] = useState("");
+  const [devCode, setDevCode] = useState("");
 
   const slugify = (text: string) => {
     return text
@@ -40,7 +43,7 @@ export default function RegisterPage() {
     setCompanySlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""));
   };
 
-  const handleNextStep = (e: React.MouseEvent) => {
+  const handleNextStep = async (e: React.MouseEvent) => {
     e.preventDefault();
     
     // Simple client validation before advancing
@@ -66,15 +69,33 @@ export default function RegisterPage() {
     }
 
     setVerificationError("");
-    setEmailForVerification(adminEmail);
-    setStep("verify");
+    setSendingCode(true);
+
+    try {
+      const res = await fetch("/api/auth/send-code", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: adminEmail }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setDevPreviewUrl(data.previewUrl || "");
+        setDevCode(data.devCode || "");
+        setEmailForVerification(adminEmail);
+        setStep("verify");
+      } else {
+        setVerificationError(data.error || "Failed to send verification code. Please try again.");
+      }
+    } catch (err) {
+      console.error(err);
+      setVerificationError("Network error: Failed to request verification code.");
+    } finally {
+      setSendingCode(false);
+    }
   };
 
   const handleFormSubmit = (e: React.FormEvent<HTMLFormElement>) => {
-    if (step === "verify" && verificationCode !== "123456") {
-      e.preventDefault();
-      setVerificationError("Incorrect verification code. Please enter '123456' to proceed.");
-    }
+    // Submitted naturally to server action
   };
 
   return (
@@ -88,11 +109,12 @@ export default function RegisterPage() {
           <p className={styles.subtitle}>
             {step === "details" 
               ? "Register your client company tenant account." 
-              : `We've sent a simulated verification code to ${emailForVerification}`}
+              : `We've sent a verification code to ${emailForVerification}`}
           </p>
         </div>
 
         <form action={formAction} onSubmit={handleFormSubmit} className={styles.form}>
+          <input type="hidden" name="code" value={verificationCode} />
           {/* General Message (API/DB Connection Errors) */}
           {(state?.message || verificationError) && (
             <div className={styles.generalError}>
@@ -186,9 +208,9 @@ export default function RegisterPage() {
                   aria-label={showPassword ? "Hide password" : "Show password"}
                 >
                   {showPassword ? (
-                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.52 13.52 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" y1="2" x2="22" y2="22"/></svg>
+                    <i className="fa-solid fa-eye-slash"></i>
                   ) : (
-                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+                    <i className="fa-solid fa-eye"></i>
                   )}
                 </button>
               </div>
@@ -197,17 +219,37 @@ export default function RegisterPage() {
               )}
             </div>
 
-            <button type="button" onClick={handleNextStep} className={styles.submitBtn}>
-              Send Verification Code
+            <button 
+              type="button" 
+              onClick={handleNextStep} 
+              className={styles.submitBtn}
+              disabled={sendingCode}
+            >
+              {sendingCode ? "Sending Code..." : "Send Verification Code"}
             </button>
           </div>
 
           {/* STEP 2: Email Verification Code Section */}
           <div style={{ display: step === "verify" ? "flex" : "none", flexDirection: "column", gap: "1.25rem" }}>
-            <div style={{ background: "rgba(99, 102, 241, 0.08)", border: "1px solid var(--color-primary-glow)", padding: "1rem", borderRadius: "var(--radius-md)", fontSize: "0.85rem", color: "var(--text-primary)", textAlign: "center" }}>
-              <i className="fa-solid fa-paper-plane" style={{ color: "var(--color-primary)", marginRight: "0.35rem" }}></i>
-              <strong>Simulated Email Sent!</strong> Use verification code <code style={{ background: "rgba(255,255,255,0.1)", padding: "0.15rem 0.35rem", borderRadius: "4px", color: "var(--color-primary)", fontWeight: "bold" }}>123456</code> to complete workspace creation.
-            </div>
+            {devPreviewUrl ? (
+              <div style={{ background: "rgba(99, 102, 241, 0.08)", border: "1px solid var(--color-primary-glow)", padding: "1rem", borderRadius: "var(--radius-md)", fontSize: "0.85rem", color: "var(--text-primary)", textAlign: "center", display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                <div>
+                  <i className="fa-solid fa-paper-plane" style={{ color: "var(--color-primary)", marginRight: "0.35rem" }}></i>
+                  <strong>Developer SMTP Sandbox:</strong> Verification code sent!
+                </div>
+                <div>
+                  Use code: <code style={{ background: "rgba(255,255,255,0.1)", padding: "0.15rem 0.35rem", borderRadius: "4px", color: "var(--color-primary)", fontWeight: "bold" }}>{devCode}</code>
+                </div>
+                <a href={devPreviewUrl} target="_blank" rel="noopener noreferrer" style={{ color: "var(--color-info)", textDecoration: "underline", fontWeight: 600 }}>
+                  View Sent Email Inbox ↗
+                </a>
+              </div>
+            ) : (
+              <div style={{ background: "rgba(16, 185, 129, 0.08)", border: "1px solid rgba(16, 185, 129, 0.2)", padding: "1rem", borderRadius: "var(--radius-md)", fontSize: "0.85rem", color: "var(--text-primary)", textAlign: "center" }}>
+                <i className="fa-solid fa-envelope-circle-check" style={{ color: "#10b981", marginRight: "0.35rem" }}></i>
+                Verification code sent successfully to <strong>{emailForVerification}</strong>. Please check your inbox.
+              </div>
+            )}
 
             <div className={styles.formGroup}>
               <label htmlFor="code" className={styles.label}>Verification Code</label>

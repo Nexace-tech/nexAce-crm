@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
 import { connectToDatabase } from "@/lib/db";
 import { DriveFile } from "@/models/DriveFile";
+import { ActivityLog } from "@/models/ActivityLog";
 import mongoose from "mongoose";
 import fs from "fs";
 import path from "path";
@@ -70,6 +71,8 @@ export async function POST(request: Request) {
     
     fs.writeFileSync(destinationPath, buffer);
 
+    const folder = (formData.get("folder") as string) || "/";
+
     await connectToDatabase();
 
     // Log file metadata in DB
@@ -78,9 +81,20 @@ export async function POST(request: Request) {
       size,
       mimeType,
       filePath: safeName, // relative path to target uploads
-      folder: "/",
+      folder,
       uploadedBy: new mongoose.Types.ObjectId(session.userId),
       tenantId: new mongoose.Types.ObjectId(session.tenantId),
+    });
+
+    // Record Activity Log
+    await ActivityLog.create({
+      tenantId: new mongoose.Types.ObjectId(session.tenantId),
+      userId: new mongoose.Types.ObjectId(session.userId),
+      userName: session.userName,
+      userRole: session.role,
+      action: "FILE_UPLOADED",
+      targetName: fileName,
+      details: `Uploaded shared document '${fileName}' (${Math.round(size / 1024)} KB)`,
     });
 
     return NextResponse.json({ success: true, file: newFile }, { status: 201 });

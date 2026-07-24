@@ -11,8 +11,10 @@ function getTodayDateNormalized(): Date {
   return today;
 }
 
+const SHIFT_TARGET_HOURS = 8.0;
+
 /**
- * GET: Get current user's attendance status for today.
+ * GET: Get current user's attendance status for today, standard shift metadata, and attendance history logs.
  */
 export async function GET() {
   try {
@@ -23,15 +25,36 @@ export async function GET() {
 
     await connectToDatabase();
 
+    const userObjectId = new mongoose.Types.ObjectId(session.userId);
+    const tenantObjectId = new mongoose.Types.ObjectId(session.tenantId);
     const todayDate = getTodayDateNormalized();
 
-    const attendance = await Attendance.findOne({
-      userId: new mongoose.Types.ObjectId(session.userId),
-      tenantId: new mongoose.Types.ObjectId(session.tenantId),
+    const todayAttendance = await Attendance.findOne({
+      userId: userObjectId,
+      tenantId: tenantObjectId,
       date: todayDate,
     });
 
-    return NextResponse.json({ attendance });
+    const history = await Attendance.find({
+      userId: userObjectId,
+      tenantId: tenantObjectId,
+    })
+      .sort({ date: -1 })
+      .limit(14);
+
+    const shiftInfo = {
+      shiftName: "Standard Regular Shift",
+      startTime: "09:00 AM",
+      endTime: "05:00 PM",
+      targetHours: SHIFT_TARGET_HOURS,
+      location: "Office / Remote Hybrid",
+    };
+
+    return NextResponse.json({
+      attendance: todayAttendance,
+      history,
+      shiftInfo,
+    });
   } catch (error: any) {
     console.error("API GET Attendance error:", error);
     return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: 500 });
@@ -39,8 +62,8 @@ export async function GET() {
 }
 
 /**
- * POST: Clock in or Clock out.
- * Body: { action: 'in' | 'out' }
+ * POST: Clock in, Clock out, or Resume shift.
+ * Body: { action: 'in' | 'out' | 'resume' }
  */
 export async function POST(request: Request) {
   try {
@@ -52,8 +75,8 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { action } = body;
 
-    if (!action || !["in", "out"].includes(action)) {
-      return NextResponse.json({ error: "Action must be either 'in' or 'out'" }, { status: 400 });
+    if (!action || !["in", "out", "resume"].includes(action)) {
+      return NextResponse.json({ error: "Action must be 'in', 'out', or 'resume'" }, { status: 400 });
     }
 
     await connectToDatabase();
@@ -68,19 +91,20 @@ export async function POST(request: Request) {
           userId: new mongoose.Types.ObjectId(session.userId),
           date: todayDate,
           clockIn: now,
+          regularHours: 0,
+          overtimeHours: 0,
           status: "Present",
           tenantId: new mongoose.Types.ObjectId(session.tenantId),
         });
         return NextResponse.json({ success: true, attendance: newRecord }, { status: 201 });
       } catch (mongoError: any) {
-        // Handle duplicate key error (already clocked in)
         if (mongoError.code === 11000) {
           return NextResponse.json({ error: "You are already clocked in for today" }, { status: 400 });
         }
         throw mongoError;
       }
-    } else {
-      // Clock Out: Find today's record and update clockOut
+    } else if (action === "out") {
+      // Clock Out: Find today's record and calculate regular & overtime hours
       const record = await Attendance.findOne({
         userId: new mongoose.Types.ObjectId(session.userId),
         tenantId: new mongoose.Types.ObjectId(session.tenantId),
@@ -95,10 +119,40 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "You have already clocked out for today" }, { status: 400 });
       }
 
+      const diffMs = now.getTime() - new Date(record.clockIn).getTime();
+      const totalHours = diffMs / (1000 * 60 * 60);
+
+      const regular = Math.min(totalHours, SHIFT_TARGET_HOURS);
+      const overtime = Math.max(0, totalHours - SHIFT_TARGET_HOURS);
+
       record.clockOut = now;
+      record.regularHours = Number(regular.toFixed(2));
+      record.overtimeHours = Number(overtime.toFixed(2));
       await record.save();
 
       return NextResponse.json({ success: true, attendance: record });
+    } else if (action === "resume") {
+      // Resume Shift: Find today's record and clear clockOut
+      const record = await Attendance.findOne({
+        userId: new mongoose.Types.ObjectId(session.userId),
+        tenantId: new mongoose.Types.ObjectId(session.tenantId),
+        date: todayDate,
+      });
+
+      if (!record) {
+        return NextResponse.json({ error: "No clock-in record found for today" }, { status: 400 });
+      }
+
+      if (!record.clockOut) {
+        return NextResponse.json({ error: "Your shift is currently active" }, { status: 400 });
+      }
+
+      record.clockOut = undefined;
+      record.regularHours = 0;
+      record.overtimeHours = 0;
+      await record.save();
+
+      return NextResponse.json({ success: true, attendance: record, message: "Shift resumed successfully!" });
     }
   } catch (error: any) {
     console.error("API POST Attendance error:", error);

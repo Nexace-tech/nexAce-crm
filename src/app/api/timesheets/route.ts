@@ -7,7 +7,7 @@ import mongoose from "mongoose";
 
 /**
  * GET: Fetch timesheet entries.
- * - If ?pending=true: returns all pending entries for direct reports (Manager view).
+ * - If ?pending=true: returns pending entries (Admins get all tenant pending entries; Managers get direct reports' pending entries).
  * - Otherwise: returns logged-in user's entries in the selected date range (?start=...&end=...).
  */
 export async function GET(request: Request) {
@@ -31,20 +31,24 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: "Forbidden: Access denied" }, { status: 403 });
       }
 
-      // Find users who report to this manager
-      const reports = await User.find({
+      let query: any = {
         tenantId: new mongoose.Types.ObjectId(session.tenantId),
-        managerId: new mongoose.Types.ObjectId(session.userId),
-      }).select("_id");
-      
-      const reportIds = reports.map((r) => r._id);
-
-      // Find pending timesheet entries for reports
-      const pendingEntries = await TimeEntry.find({
-        tenantId: new mongoose.Types.ObjectId(session.tenantId),
-        userId: { $in: reportIds },
         status: "Pending",
-      })
+      };
+
+      if (session.role === "Manager") {
+        // Find users who report to this manager
+        const reports = await User.find({
+          tenantId: new mongoose.Types.ObjectId(session.tenantId),
+          managerId: new mongoose.Types.ObjectId(session.userId),
+        }).select("_id");
+        
+        const reportIds = reports.map((r) => r._id);
+        query.userId = { $in: reportIds };
+      }
+
+      // Find pending timesheet entries
+      const pendingEntries = await TimeEntry.find(query)
         .populate("userId", "name role department photoUrl")
         .sort({ date: 1 });
 
@@ -89,26 +93,36 @@ export async function POST(request: Request) {
 
     if (Array.isArray(body)) {
       // Batch log/submit
-      const entriesToCreate = body.map((entry: any) => ({
-        userId: new mongoose.Types.ObjectId(session.userId),
-        project: entry.project,
-        taskName: entry.taskName,
-        hours: Number(entry.hours),
-        date: new Date(entry.date),
-        isBillable: entry.isBillable !== false,
-        status: entry.status || "Draft",
-        tenantId: new mongoose.Types.ObjectId(session.tenantId),
+      // Batch log/submit with upsert to prevent duplicates
+      const bulkOps = body.map((entry: any) => ({
+        updateOne: {
+          filter: {
+            userId: new mongoose.Types.ObjectId(session.userId),
+            tenantId: new mongoose.Types.ObjectId(session.tenantId),
+            date: new Date(entry.date),
+            project: entry.project,
+            taskName: entry.taskName || "General Tasks",
+          },
+          update: {
+            $set: {
+              hours: Number(entry.hours),
+              isBillable: entry.isBillable !== false,
+              status: entry.status || "Draft",
+            }
+          },
+          upsert: true
+        }
       }));
 
       // Basic validation
-      for (const e of entriesToCreate) {
-        if (!e.project || !e.taskName || isNaN(e.hours) || !e.date) {
+      for (const e of body) {
+        if (!e.project || isNaN(Number(e.hours)) || !e.date) {
           return NextResponse.json({ error: "Invalid timesheet entry payload fields" }, { status: 400 });
         }
       }
 
-      const created = await TimeEntry.insertMany(entriesToCreate);
-      return NextResponse.json({ success: true, count: created.length });
+      const result = await TimeEntry.bulkWrite(bulkOps);
+      return NextResponse.json({ success: true, count: result.upsertedCount + result.modifiedCount });
     } else {
       // Single entry log/submit
       const { project, taskName, hours, date, isBillable, status } = body;
@@ -137,8 +151,9 @@ export async function POST(request: Request) {
 }
 
 /**
- * PUT: Approve or reject timesheet submissions (Restricted to Manager/Admin).
- * Body: { entryIds: string[], status: 'Approved' | 'Rejected' }
+ * PUT: Update timesheet submissions.
+ * - Bulk submit week: Body { action: 'submit_week', start: string, end: string }
+ * - Approve/Reject (Manager/Admin): Body { entryIds: string[], status: 'Approved' | 'Rejected' }
  */
 export async function PUT(request: Request) {
   try {
@@ -147,12 +162,35 @@ export async function PUT(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    const body = await request.json();
+    await connectToDatabase();
+
+    // 1. Bulk submit week for current user
+    if (body.action === "submit_week") {
+      const { start, end } = body;
+      if (!start || !end) {
+        return NextResponse.json({ error: "Start and end dates are required for week submission" }, { status: 400 });
+      }
+
+      const result = await TimeEntry.updateMany(
+        {
+          userId: new mongoose.Types.ObjectId(session.userId),
+          tenantId: new mongoose.Types.ObjectId(session.tenantId),
+          status: "Draft",
+          date: { $gte: new Date(start), $lte: new Date(end) },
+        },
+        { status: "Pending" }
+      );
+
+      return NextResponse.json({ success: true, submittedCount: result.modifiedCount });
+    }
+
+    // 2. Manager / Admin Approval & Rejection
     const isManagerOrAdmin = session.role === "Admin" || session.role === "Manager";
     if (!isManagerOrAdmin) {
       return NextResponse.json({ error: "Forbidden: Access denied" }, { status: 403 });
     }
 
-    const body = await request.json();
     const { entryIds, status } = body;
 
     if (!entryIds || !Array.isArray(entryIds) || !status) {
@@ -162,8 +200,6 @@ export async function PUT(request: Request) {
     if (!["Approved", "Rejected"].includes(status)) {
       return NextResponse.json({ error: "Invalid status value" }, { status: 400 });
     }
-
-    await connectToDatabase();
 
     // Verify and update matching entries belonging to the tenant
     const result = await TimeEntry.updateMany(

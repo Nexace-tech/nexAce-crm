@@ -98,3 +98,38 @@ export async function PUT(request: Request) {
     return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: 500 });
   }
 }
+
+/**
+ * DELETE: Delete a wiki article.
+ * URL: /api/wiki?articleId=xxx
+ */
+export async function DELETE(request: Request) {
+  try {
+    const session = await getSession();
+    if (!session) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { searchParams } = new URL(request.url);
+    const articleId = searchParams.get("articleId");
+
+    if (!articleId) {
+      return NextResponse.json({ error: "Article ID is required" }, { status: 400 });
+    }
+
+    await connectToDatabase();
+
+    const article = await Wiki.findById(articleId);
+    if (!article || article.tenantId.toString() !== session.tenantId) {
+      return NextResponse.json({ error: "Article not found" }, { status: 404 });
+    }
+
+    await article.deleteOne();
+
+    return NextResponse.json({ success: true, message: "Wiki article deleted successfully" });
+  } catch (error: any) {
+    console.error("API DELETE Wiki error:", error);
+    return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: 500 });
+  }
+}
+

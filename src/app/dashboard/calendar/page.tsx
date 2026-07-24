@@ -31,6 +31,10 @@ export default function CalendarPage() {
   const [showEventModal, setShowEventModal] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<any | null>(null);
 
+  // Filters
+  const [filterType, setFilterType] = useState<string>("All");
+  const [filterDept, setFilterDept] = useState<string>("All");
+
   // New Event form states
   const [newEvtTitle, setNewEvtTitle] = useState("");
   const [newEvtDesc, setNewEvtDesc] = useState("");
@@ -59,7 +63,7 @@ export default function CalendarPage() {
     return mon;
   });
 
-  // Timesheet grid inputs state: Array of rows representing logged items
+  // Timesheet grid inputs state
   const [timesheetRows, setTimesheetRows] = useState<any[]>([
     { project: "NexAce CRM Implementation", taskName: "UI/UX Development", mon: 0, tue: 0, wed: 0, thu: 0, fri: 0, isBillable: true },
     { project: "Client Portal Integration", taskName: "API endpoints integration", mon: 0, tue: 0, wed: 0, thu: 0, fri: 0, isBillable: true },
@@ -68,11 +72,13 @@ export default function CalendarPage() {
   // ----------------- Tab 4: Attendance States -----------------
   const [attendanceToday, setAttendanceToday] = useState<any>(null);
   const [attendanceHistory, setAttendanceHistory] = useState<any[]>([]);
+  const [shiftInfo, setShiftInfo] = useState<any>(null);
+  const [selectedAttendanceLog, setSelectedAttendanceLog] = useState<any | null>(null);
   const [elapsedTime, setElapsedTime] = useState("00:00:00");
+  const [totalSecondsWorked, setTotalSecondsWorked] = useState(0);
   const [timerIntervalId, setTimerIntervalId] = useState<NodeJS.Timeout | null>(null);
 
-  const departments = ["All", "Management", "Engineering", "Design", "Marketing"];
-  const projectsList = ["NexAce CRM Implementation", "Client Portal Integration", "Website Redesign", "Marketing Campaign", "General Internal Admin"];
+  const [projectsList, setProjectsList] = useState<string[]>(["General Administration"]);
 
   // Role permissions helpers
   const isAdmin = currentUser?.role === "Admin";
@@ -109,6 +115,22 @@ export default function CalendarPage() {
     }
   };
 
+  // Fetch Projects for Dropdown
+  const fetchProjects = async () => {
+    try {
+      const res = await fetch("/api/projects");
+      if (res.ok) {
+        const data = await res.json();
+        const names = data.projects.map((p: any) => p.name);
+        if (names.length > 0) {
+          setProjectsList(names);
+        }
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   // Fetch Timesheets for current week + pending approvals
   const fetchTimesheets = async () => {
     try {
@@ -117,15 +139,12 @@ export default function CalendarPage() {
       end.setDate(end.getDate() + 6);
       const endStr = end.toISOString();
 
-      // Fetch current logged entries
       const res = await fetch(`/api/timesheets?start=${startStr}&end=${endStr}`);
       if (res.ok) {
         const data = await res.json();
         setTimesheetEntries(data.entries || []);
 
-        // Populating the UI grid input fields if backend has data
         if (data.entries && data.entries.length > 0) {
-          // Group tasks by project and taskName to represent in the grid rows
           const rowsMap: { [key: string]: any } = {};
           data.entries.forEach((entry: any) => {
             const key = `${entry.project}-${entry.taskName}`;
@@ -150,15 +169,12 @@ export default function CalendarPage() {
           });
           setTimesheetRows(Object.values(rowsMap));
         } else {
-          // Reset grid inputs to default if no records exist for this week
           setTimesheetRows([
-            { project: "NexAce CRM Implementation", taskName: "UI/UX Development", mon: 0, tue: 0, wed: 0, thu: 0, fri: 0, isBillable: true },
-            { project: "Client Portal Integration", taskName: "API endpoints integration", mon: 0, tue: 0, wed: 0, thu: 0, fri: 0, isBillable: true },
+            { project: "", taskName: "", mon: 0, tue: 0, wed: 0, thu: 0, fri: 0, isBillable: true }
           ]);
         }
       }
 
-      // Fetch pending direct report timesheets for Manager view
       if (isManagerOrAdmin) {
         const pendingRes = await fetch("/api/timesheets?pending=true");
         if (pendingRes.ok) {
@@ -178,6 +194,8 @@ export default function CalendarPage() {
       if (res.ok) {
         const data = await res.json();
         setAttendanceToday(data.attendance);
+        setAttendanceHistory(data.history || []);
+        setShiftInfo(data.shiftInfo);
       }
     } catch (e) {
       console.error(e);
@@ -191,7 +209,10 @@ export default function CalendarPage() {
       setLoading(true);
       if (activeTab === "calendar") await fetchEvents();
       else if (activeTab === "sprints") await fetchSprints();
-      else if (activeTab === "timesheets") await fetchTimesheets();
+      else if (activeTab === "timesheets") {
+        await fetchProjects();
+        await fetchTimesheets();
+      }
       else if (activeTab === "attendance") await fetchAttendance();
       setLoading(false);
     };
@@ -202,12 +223,13 @@ export default function CalendarPage() {
   useEffect(() => {
     if (!mounted) return;
     if (attendanceToday && !attendanceToday.clockOut) {
-      // User is clocked in and active: update timer every second
       const startTime = new Date(attendanceToday.clockIn).getTime();
 
       const interval = setInterval(() => {
         const diffMs = Date.now() - startTime;
         const totalSecs = Math.floor(diffMs / 1000);
+        setTotalSecondsWorked(totalSecs);
+
         const hrs = Math.floor(totalSecs / 3600);
         const mins = Math.floor((totalSecs % 3600) / 60);
         const secs = totalSecs % 60;
@@ -219,7 +241,6 @@ export default function CalendarPage() {
       setTimerIntervalId(interval);
       return () => clearInterval(interval);
     } else {
-      // User is either clocked out or not clocked in yet
       if (timerIntervalId) {
         clearInterval(timerIntervalId);
         setTimerIntervalId(null);
@@ -227,6 +248,8 @@ export default function CalendarPage() {
       if (attendanceToday?.clockIn && attendanceToday?.clockOut) {
         const duration = new Date(attendanceToday.clockOut).getTime() - new Date(attendanceToday.clockIn).getTime();
         const totalSecs = Math.floor(duration / 1000);
+        setTotalSecondsWorked(totalSecs);
+
         const hrs = Math.floor(totalSecs / 3600);
         const mins = Math.floor((totalSecs % 3600) / 60);
         const secs = totalSecs % 60;
@@ -234,6 +257,7 @@ export default function CalendarPage() {
         setElapsedTime(`${pad(hrs)}:${pad(mins)}:${pad(secs)}`);
       } else {
         setElapsedTime("00:00:00");
+        setTotalSecondsWorked(0);
       }
     }
   }, [attendanceToday]);
@@ -333,8 +357,8 @@ export default function CalendarPage() {
     }
   };
 
-  // Attendance Clock-In / Clock-Out actions
-  const handleClockAction = async (action: "in" | "out") => {
+  // Attendance Clock-In / Clock-Out / Resume actions
+  const handleClockAction = async (action: "in" | "out" | "resume") => {
     try {
       const res = await fetch("/api/attendance", {
         method: "POST",
@@ -345,7 +369,13 @@ export default function CalendarPage() {
       const data = await res.json();
       if (res.ok) {
         setAttendanceToday(data.attendance);
-        showToast(`Successfully clocked ${action === "in" ? "In" : "Out"}!`, "success");
+        await fetchAttendance();
+        showToast(
+          action === "resume"
+            ? "Shift resumed successfully!"
+            : `Successfully clocked ${action === "in" ? "In" : "Out"}!`,
+          "success"
+        );
       } else {
         showToast(data.error || "Clocking failed", "error");
       }
@@ -370,9 +400,8 @@ export default function CalendarPage() {
   };
 
   const handleSaveTimesheet = async (submitStatus: "Draft" | "Pending") => {
-    // Generate individual daily entry objects out of rows input grid
     const entryPayload: any[] = [];
-    const weekdaysOffset = [0, 1, 2, 3, 4]; // Mon, Tue, Wed, Thu, Fri
+    const weekdaysOffset = [0, 1, 2, 3, 4];
 
     timesheetRows.forEach((row) => {
       const days = ["mon", "tue", "wed", "thu", "fri"];
@@ -416,7 +445,6 @@ export default function CalendarPage() {
     }
   };
 
-  // Timesheet approval / rejection actions (Manager/Admin only)
   const handleTimesheetApproval = async (entryId: string, status: "Approved" | "Rejected") => {
     try {
       const res = await fetch("/api/timesheets", {
@@ -434,9 +462,19 @@ export default function CalendarPage() {
     }
   };
 
-  // ==========================================
-  // CALENDAR RENDER HELPERS
-  // ==========================================
+  // Calculate Timesheet Totals
+  const totalLoggedHours = timesheetRows.reduce((acc, row) => acc + (Number(row.mon) || 0) + (Number(row.tue) || 0) + (Number(row.wed) || 0) + (Number(row.thu) || 0) + (Number(row.fri) || 0), 0);
+  const totalBillableHours = timesheetRows.filter(r => r.isBillable).reduce((acc, row) => acc + (Number(row.mon) || 0) + (Number(row.tue) || 0) + (Number(row.wed) || 0) + (Number(row.thu) || 0) + (Number(row.fri) || 0), 0);
+  const totalNonBillableHours = totalLoggedHours - totalBillableHours;
+  const billableRatio = totalLoggedHours > 0 ? Math.round((totalBillableHours / totalLoggedHours) * 100) : 0;
+
+  // Overtime Calculation Helpers
+  const SHIFT_TARGET_SECONDS = 8 * 3600; // 8 Hours in seconds
+  const isOvertimeActive = totalSecondsWorked > SHIFT_TARGET_SECONDS;
+  const overtimeSeconds = Math.max(0, totalSecondsWorked - SHIFT_TARGET_SECONDS);
+  const overtimeHoursDecimal = (overtimeSeconds / 3600).toFixed(1);
+
+  // Calendar Helpers
   const getDaysInMonth = () => {
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth();
@@ -444,11 +482,9 @@ export default function CalendarPage() {
     const totalDays = new Date(year, month + 1, 0).getDate();
 
     const days = [];
-    // Padding for empty days of previous month
     for (let i = 0; i < firstDayIndex; i++) {
       days.push(null);
     }
-    // Calendar days
     for (let d = 1; d <= totalDays; d++) {
       days.push(new Date(year, month, d));
     }
@@ -482,50 +518,50 @@ export default function CalendarPage() {
       {/* Title section */}
       <div className={styles.titleSection}>
         <div>
-          <h1 className={styles.title}>Calendar & Time</h1>
+          <h1 className={styles.title}>Calendar, Sprints & Time</h1>
           <p style={{ color: "var(--text-secondary)", fontSize: "0.95rem" }}>
-            Track shared calendars, log weekly client timesheets, manage sprints, and clock shifts.
+            Shared team schedule, sprint burndown tracking, client billable timesheets, and shift attendance with overtime tracking.
           </p>
         </div>
 
         {activeTab === "calendar" && (
           <button className={styles.btnPrimary} onClick={() => setShowEventModal(true)}>
-            <i className="fa-solid fa-calendar-plus" style={{ marginRight: "0.25rem" }}></i> Schedule Event
+            <i className="fa-solid fa-calendar-plus" style={{ marginRight: "0.35rem" }}></i> Schedule Event
           </button>
         )}
 
         {activeTab === "sprints" && isManagerOrAdmin && (
           <button className={styles.btnPrimary} onClick={() => setShowSprintModal(true)}>
-            <i className="fa-solid fa-plus" style={{ marginRight: "0.25rem" }}></i> Plan Sprint
+            <i className="fa-solid fa-plus" style={{ marginRight: "0.35rem" }}></i> Plan Sprint
           </button>
         )}
       </div>
 
-      {/* Tabs */}
+      {/* Navigation Tabs */}
       <div className={styles.tabs}>
         <button
           className={`${styles.tab} ${activeTab === "calendar" ? styles.tabActive : ""}`}
           onClick={() => startTransition(() => setActiveTab("calendar"))}
         >
-          <i className="fa-solid fa-calendar-days" style={{ marginRight: "0.25rem" }}></i> Shared Calendar
+          <i className="fa-solid fa-calendar-days" style={{ marginRight: "0.35rem" }}></i> Shared Calendar
         </button>
         <button
           className={`${styles.tab} ${activeTab === "sprints" ? styles.tabActive : ""}`}
           onClick={() => startTransition(() => setActiveTab("sprints"))}
         >
-          <i className="fa-solid fa-person-running" style={{ marginRight: "0.25rem" }}></i> Sprints
+          <i className="fa-solid fa-person-running" style={{ marginRight: "0.35rem" }}></i> Sprint Board
         </button>
         <button
           className={`${styles.tab} ${activeTab === "timesheets" ? styles.tabActive : ""}`}
           onClick={() => startTransition(() => setActiveTab("timesheets"))}
         >
-          <i className="fa-solid fa-business-time" style={{ marginRight: "0.25rem" }}></i> Timesheets
+          <i className="fa-solid fa-business-time" style={{ marginRight: "0.35rem" }}></i> Timesheets
         </button>
         <button
           className={`${styles.tab} ${activeTab === "attendance" ? styles.tabActive : ""}`}
           onClick={() => startTransition(() => setActiveTab("attendance"))}
         >
-          <i className="fa-solid fa-fingerprint" style={{ marginRight: "0.25rem" }}></i> Shift Clock
+          <i className="fa-solid fa-fingerprint" style={{ marginRight: "0.35rem" }}></i> Shift Clock
         </button>
       </div>
 
@@ -543,6 +579,42 @@ export default function CalendarPage() {
               <button className={styles.btnSecondary} onClick={handleNextMonth}>
                 <i className="fa-solid fa-chevron-right"></i>
               </button>
+            </div>
+
+            {/* Event Filter Toolbar */}
+            <div style={{ display: "flex", gap: "0.75rem", alignItems: "center" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.35rem", fontSize: "0.85rem" }}>
+                <span style={{ color: "var(--text-muted)" }}>Type:</span>
+                <select
+                  className={styles.select}
+                  value={filterType}
+                  onChange={(e) => setFilterType(e.target.value)}
+                  style={{ padding: "0.35rem 0.6rem", fontSize: "0.85rem" }}
+                >
+                  <option value="All">All Event Types</option>
+                  <option value="Meeting">Meetings</option>
+                  <option value="Holiday">Holidays</option>
+                  <option value="Birthday">Birthdays / Anniversaries</option>
+                  <option value="Deadline">Deadlines</option>
+                  <option value="Personal">Personal</option>
+                </select>
+              </div>
+
+              <div style={{ display: "flex", alignItems: "center", gap: "0.35rem", fontSize: "0.85rem" }}>
+                <span style={{ color: "var(--text-muted)" }}>Department:</span>
+                <select
+                  className={styles.select}
+                  value={filterDept}
+                  onChange={(e) => setFilterDept(e.target.value)}
+                  style={{ padding: "0.35rem 0.6rem", fontSize: "0.85rem" }}
+                >
+                  <option value="All">All Departments</option>
+                  <option value="Management">Management</option>
+                  <option value="Engineering">Engineering</option>
+                  <option value="Design">Design</option>
+                  <option value="Marketing">Marketing</option>
+                </select>
+              </div>
             </div>
           </div>
 
@@ -567,7 +639,12 @@ export default function CalendarPage() {
                 start.setHours(0,0,0,0);
                 const end = new Date(evt.endDate);
                 end.setHours(23,59,59,999);
-                return day >= start && day <= end;
+
+                const matchesDate = day >= start && day <= end;
+                const matchesType = filterType === "All" || evt.type === filterType;
+                const matchesDept = filterDept === "All" || evt.department === filterDept || evt.department === "All";
+
+                return matchesDate && matchesType && matchesDept;
               });
 
               return (
@@ -607,15 +684,15 @@ export default function CalendarPage() {
       {/* ----------------- Tab 2: Sprints ----------------- */}
       {activeTab === "sprints" && (
         <div className={styles.sprintGrid}>
-          {/* Active Sprint overview */}
+          {/* Active Sprint Overview */}
           <div className={`${styles.sprintMetaCard} glass-panel`} style={{ padding: "1.5rem", borderRadius: "var(--radius-lg)" }}>
             <h2 style={{ fontSize: "1.2rem", fontWeight: 700, borderBottom: "1px solid var(--border-color)", paddingBottom: "0.5rem" }}>
-              🚀 Active Sprint
+              <i className="fa-solid fa-rocket" style={{ color: "var(--color-primary)", marginRight: "0.4rem" }}></i> Active Sprint & Burndown
             </h2>
 
             {sprints.filter((s) => s.status === "Active").length === 0 ? (
               <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", padding: "1rem 0" }}>
-                No active sprints. Plan and activate a sprint to track burndown rates.
+                No active sprints. Plan and activate a sprint to track burndown progress.
               </p>
             ) : (
               sprints
@@ -639,18 +716,36 @@ export default function CalendarPage() {
                       </p>
 
                       <div style={{ fontSize: "0.85rem" }}>
-                        📅 <strong>Timeline:</strong> {new Date(active.startDate).toLocaleDateString()} - {new Date(active.endDate).toLocaleDateString()} ({daysLeft > 0 ? `${daysLeft} days remaining` : "Ended"})
+                        <i className="fa-regular fa-calendar-check" style={{ color: "var(--color-primary)", marginRight: "0.35rem" }}></i> <strong>Timeline:</strong> {new Date(active.startDate).toLocaleDateString()} - {new Date(active.endDate).toLocaleDateString()} ({daysLeft > 0 ? `${daysLeft} days remaining` : "Ended"})
                       </div>
 
+                      {/* Burndown Progress Bar */}
                       <div className={styles.progressContainer}>
-                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.8rem" }}>
-                          <span>Sprint Target Hours:</span>
-                          <strong>80 / 120 hrs logged</strong>
+                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.85rem", fontWeight: 600 }}>
+                          <span>Burndown Progress:</span>
+                          <span style={{ color: "var(--color-primary)" }}>
+                            {active.completedTasks || 0} / {active.totalTasks || 0} Tasks ({active.burndownProgress || 0}%)
+                          </span>
                         </div>
-                        <div className={styles.progressBar}>
-                          <div className={styles.progressFill} style={{ width: "66%" }} />
+                        <div className={styles.progressBar} style={{ height: "10px", marginTop: "0.35rem" }}>
+                          <div className={styles.progressFill} style={{ width: `${active.burndownProgress || 0}%` }} />
                         </div>
                       </div>
+
+                      {/* Linked Tasks Section */}
+                      {active.linkedTasks && active.linkedTasks.length > 0 && (
+                        <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", marginTop: "0.5rem" }}>
+                          <span style={{ fontSize: "0.85rem", fontWeight: 700 }}>Linked Sprint Tasks:</span>
+                          {active.linkedTasks.map((t: any) => (
+                            <div key={t._id} style={{ display: "flex", justifyContent: "space-between", padding: "0.5rem", background: "rgba(255,255,255,0.02)", borderRadius: "var(--radius-sm)", fontSize: "0.8rem", border: "1px solid var(--border-color)" }}>
+                              <span>{t.title}</span>
+                              <span style={{ color: t.status === "Done" ? "var(--color-success)" : "var(--color-warning)" }}>
+                                {t.status}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
 
                       {isManagerOrAdmin && (
                         <button
@@ -658,7 +753,7 @@ export default function CalendarPage() {
                           style={{ marginTop: "1rem", alignSelf: "flex-start" }}
                           onClick={() => handleUpdateSprintStatus(active._id, "Completed")}
                         >
-                          ✔️ Complete Sprint
+                          <i className="fa-solid fa-check-double" style={{ marginRight: "0.35rem" }}></i> Complete Sprint
                         </button>
                       )}
                     </div>
@@ -667,10 +762,10 @@ export default function CalendarPage() {
             )}
           </div>
 
-          {/* Sprints listing history */}
+          {/* Sprints Backlog & History */}
           <div className="glass-panel" style={{ padding: "1.5rem", borderRadius: "var(--radius-lg)" }}>
             <h2 style={{ fontSize: "1.2rem", fontWeight: 700, borderBottom: "1px solid var(--border-color)", paddingBottom: "0.5rem" }}>
-              📋 Sprint Backlog & Timeline
+              <i className="fa-solid fa-list-check" style={{ color: "var(--color-primary)", marginRight: "0.4rem" }}></i> Sprint Backlog & Timeline
             </h2>
 
             <div style={{ display: "flex", flexDirection: "column", gap: "1rem", marginTop: "1rem" }}>
@@ -721,9 +816,32 @@ export default function CalendarPage() {
         </div>
       )}
 
-      {/* ----------------- Tab 3: Timesheet Logger ----------------- */}
+      {/* ----------------- Tab 3: Timesheets ----------------- */}
       {activeTab === "timesheets" && (
         <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
+          {/* Summary KPI Cards */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "1rem" }}>
+            <div className="glass-panel" style={{ padding: "1.25rem", borderRadius: "var(--radius-md)", display: "flex", flexDirection: "column", gap: "0.35rem" }}>
+              <span style={{ fontSize: "0.8rem", color: "var(--text-muted)", fontWeight: 600 }}>TOTAL HOURS LOGGED</span>
+              <strong style={{ fontSize: "1.6rem", color: "var(--color-primary)" }}>{totalLoggedHours.toFixed(1)} hrs</strong>
+            </div>
+
+            <div className="glass-panel" style={{ padding: "1.25rem", borderRadius: "var(--radius-md)", display: "flex", flexDirection: "column", gap: "0.35rem" }}>
+              <span style={{ fontSize: "0.8rem", color: "var(--text-muted)", fontWeight: 600 }}>BILLABLE HOURS</span>
+              <strong style={{ fontSize: "1.6rem", color: "var(--color-success)" }}>{totalBillableHours.toFixed(1)} hrs</strong>
+            </div>
+
+            <div className="glass-panel" style={{ padding: "1.25rem", borderRadius: "var(--radius-md)", display: "flex", flexDirection: "column", gap: "0.35rem" }}>
+              <span style={{ fontSize: "0.8rem", color: "var(--text-muted)", fontWeight: 600 }}>NON-BILLABLE HOURS</span>
+              <strong style={{ fontSize: "1.6rem", color: "var(--color-warning)" }}>{totalNonBillableHours.toFixed(1)} hrs</strong>
+            </div>
+
+            <div className="glass-panel" style={{ padding: "1.25rem", borderRadius: "var(--radius-md)", display: "flex", flexDirection: "column", gap: "0.35rem" }}>
+              <span style={{ fontSize: "0.8rem", color: "var(--text-muted)", fontWeight: 600 }}>BILLABLE UTILIZATION</span>
+              <strong style={{ fontSize: "1.6rem", color: "var(--color-info)" }}>{billableRatio}% Ratio</strong>
+            </div>
+          </div>
+
           {/* Week Selector Bar */}
           <div className="glass-panel" style={{ padding: "1rem", display: "flex", justifyItems: "center", justifyContent: "space-between", alignItems: "center" }}>
             <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
@@ -735,7 +853,7 @@ export default function CalendarPage() {
                   setTimesheetWeekStart(prev);
                 }}
               >
-                ◀️ Previous Week
+                <i className="fa-solid fa-chevron-left" style={{ marginRight: "0.35rem" }}></i> Previous Week
               </button>
               <strong style={{ fontSize: "0.95rem" }}>
                 Week of: {timesheetWeekStart.toLocaleDateString()} - {new Date(new Date(timesheetWeekStart).setDate(timesheetWeekStart.getDate() + 4)).toLocaleDateString()}
@@ -748,16 +866,16 @@ export default function CalendarPage() {
                   setTimesheetWeekStart(next);
                 }}
               >
-                Next Week ▶️
+                Next Week <i className="fa-solid fa-chevron-right" style={{ marginLeft: "0.35rem" }}></i>
               </button>
             </div>
 
             <div style={{ display: "flex", gap: "0.5rem" }}>
               <button className={styles.btnSecondary} onClick={() => handleSaveTimesheet("Draft")}>
-                💾 Save Draft
+                <i className="fa-solid fa-floppy-disk" style={{ marginRight: "0.35rem" }}></i> Save Draft
               </button>
               <button className={styles.btnPrimary} onClick={() => handleSaveTimesheet("Pending")}>
-                🚀 Submit Timesheet
+                <i className="fa-solid fa-paper-plane" style={{ marginRight: "0.35rem" }}></i> Submit Timesheet
               </button>
             </div>
           </div>
@@ -827,7 +945,7 @@ export default function CalendarPage() {
             </table>
             
             <button className={styles.btnSecondary} onClick={handleAddTimesheetRow} style={{ marginTop: "1rem" }}>
-              ➕ Add Log Row
+              <i className="fa-solid fa-plus" style={{ marginRight: "0.35rem" }}></i> Add Log Row
             </button>
           </div>
 
@@ -835,7 +953,7 @@ export default function CalendarPage() {
           {isManagerOrAdmin && (
             <div className="glass-panel" style={{ padding: "1.5rem", borderRadius: "var(--radius-lg)" }}>
               <h2 style={{ fontSize: "1.2rem", fontWeight: 700, borderBottom: "1px solid var(--border-color)", paddingBottom: "0.5rem" }}>
-                👑 Pending Timesheet Approvals
+                <i className="fa-solid fa-user-check" style={{ color: "var(--color-primary)", marginRight: "0.4rem" }}></i> Pending Timesheet Approvals
               </h2>
 
               {pendingSubmissions.length === 0 ? (
@@ -894,17 +1012,31 @@ export default function CalendarPage() {
       {/* ----------------- Tab 4: Attendance Shift Clock ----------------- */}
       {activeTab === "attendance" && (
         <div className={styles.attendanceGrid}>
-          {/* Clock In/Out panel */}
+          {/* Clock In/Out Panel */}
           <div className={`${styles.timesheetCard} glass-panel`}>
             <h2 style={{ fontSize: "1.2rem", fontWeight: 700, borderBottom: "1px solid var(--border-color)", paddingBottom: "0.5rem" }}>
-              ⏱️ Daily Shift Clock
+              <i className="fa-solid fa-stopwatch" style={{ color: "var(--color-primary)", marginRight: "0.4rem" }}></i> Daily Shift Clock
             </h2>
+
+            {shiftInfo && (
+              <div style={{ fontSize: "0.85rem", color: "var(--text-secondary)", background: "rgba(255,255,255,0.02)", padding: "0.75rem 1rem", borderRadius: "var(--radius-md)", border: "1px solid var(--border-color)", marginTop: "0.5rem", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span>Shift: <strong>{shiftInfo.shiftName}</strong></span>
+                <span>Target: <strong>{shiftInfo.startTime} - {shiftInfo.endTime} (8.0 hrs)</strong></span>
+              </div>
+            )}
 
             <div className={styles.clockContainer}>
               <div className={`${styles.clockRing} ${attendanceToday && !attendanceToday.clockOut ? styles.clockRingActive : ""}`}>
                 <span className={styles.clockTime}>{elapsedTime}</span>
                 <span className={styles.clockLabel}>Hours Worked</span>
               </div>
+
+              {/* Overtime Active Badge */}
+              {isOvertimeActive && (
+                <span style={{ fontSize: "0.85rem", fontWeight: 700, color: "#f59e0b", background: "rgba(245, 158, 11, 0.12)", padding: "0.35rem 0.85rem", borderRadius: "20px", border: "1px solid rgba(245, 158, 11, 0.3)", display: "inline-flex", alignItems: "center", gap: "0.4rem" }}>
+                  <i className="fa-solid fa-fire"></i> Overtime Active: +{overtimeHoursDecimal} hrs
+                </span>
+              )}
 
               <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "0.5rem" }}>
                 <span className={styles.attendanceStatus}>
@@ -943,56 +1075,168 @@ export default function CalendarPage() {
                     cursor: !!attendanceToday ? "not-allowed" : "pointer",
                   }}
                 >
-                  🟢 Clock In
+                  <i className="fa-solid fa-right-to-bracket" style={{ marginRight: "0.35rem" }}></i> Clock In
                 </button>
-                <button
-                  className={styles.btnSecondary}
-                  disabled={!attendanceToday || !!attendanceToday.clockOut}
-                  onClick={() => handleClockAction("out")}
-                  style={{
-                    color: !attendanceToday || !!attendanceToday.clockOut ? "var(--text-muted)" : "var(--color-danger)",
-                    borderColor: !attendanceToday || !!attendanceToday.clockOut ? "var(--border-color)" : "var(--color-danger)",
-                    cursor: !attendanceToday || !!attendanceToday.clockOut ? "not-allowed" : "pointer",
-                  }}
-                >
-                  🔴 Clock Out
-                </button>
+
+                {attendanceToday && attendanceToday.clockOut ? (
+                  <button
+                    className={styles.btnPrimary}
+                    onClick={() => handleClockAction("resume")}
+                    style={{
+                      backgroundColor: "var(--color-primary)",
+                      cursor: "pointer",
+                    }}
+                  >
+                    <i className="fa-solid fa-play" style={{ marginRight: "0.35rem" }}></i> Resume Shift
+                  </button>
+                ) : (
+                  <button
+                    className={styles.btnSecondary}
+                    disabled={!attendanceToday || !!attendanceToday.clockOut}
+                    onClick={() => handleClockAction("out")}
+                    style={{
+                      color: !attendanceToday || !!attendanceToday.clockOut ? "var(--text-muted)" : "var(--color-danger)",
+                      borderColor: !attendanceToday || !!attendanceToday.clockOut ? "var(--border-color)" : "var(--color-danger)",
+                      cursor: !attendanceToday || !!attendanceToday.clockOut ? "not-allowed" : "pointer",
+                    }}
+                  >
+                    <i className="fa-solid fa-right-from-bracket" style={{ marginRight: "0.35rem" }}></i> Clock Out
+                  </button>
+                )}
               </div>
             </div>
           </div>
 
-          {/* Attendance Check-in Logs history */}
+          {/* Attendance Check-in Logs History */}
           <div className="glass-panel" style={{ padding: "1.5rem", borderRadius: "var(--radius-lg)" }}>
             <h2 style={{ fontSize: "1.2rem", fontWeight: 700, borderBottom: "1px solid var(--border-color)", paddingBottom: "0.5rem" }}>
-              📋 Attendance Logs
+              <i className="fa-solid fa-clock-rotate-left" style={{ color: "var(--color-primary)", marginRight: "0.4rem" }}></i> Recent Attendance Logs
             </h2>
 
-            <div className={styles.historyList}>
-              <div className={styles.historyItem}>
-                <span style={{ fontSize: "0.85rem", fontWeight: 600 }}>Today, July 22</span>
-                <span style={{ fontSize: "0.8rem", color: "var(--text-secondary)" }}>
-                  {attendanceToday
-                    ? `${new Date(attendanceToday.clockIn).toLocaleTimeString()}` +
-                      (attendanceToday.clockOut ? ` - ${new Date(attendanceToday.clockOut).toLocaleTimeString()}` : " (Active)")
-                    : "No record logged"}
-                </span>
-              </div>
-              
-              <div className={styles.historyItem}>
-                <span style={{ fontSize: "0.85rem", fontWeight: 600 }}>Yesterday, July 21</span>
-                <span style={{ fontSize: "0.8rem", color: "var(--text-secondary)" }}>09:15 AM - 05:45 PM (8.5 hrs)</span>
-              </div>
+            <div className={styles.historyList} style={{ marginTop: "1rem", display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+              {attendanceHistory.length === 0 ? (
+                <p style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>No historical attendance records found.</p>
+              ) : (
+                attendanceHistory.map((log) => {
+                  const logDate = new Date(log.date).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+                  const inTime = log.clockIn ? new Date(log.clockIn).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "N/A";
+                  const outTime = log.clockOut ? new Date(log.clockOut).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "Active";
+                  const hasOvertime = (log.overtimeHours && log.overtimeHours > 0);
 
-              <div className={styles.historyItem}>
-                <span style={{ fontSize: "0.85rem", fontWeight: 600 }}>Monday, July 20</span>
-                <span style={{ fontSize: "0.8rem", color: "var(--text-secondary)" }}>09:02 AM - 06:12 PM (9.1 hrs)</span>
-              </div>
+                  return (
+                    <div
+                      key={log._id}
+                      className={styles.historyItem}
+                      onClick={() => setSelectedAttendanceLog(log)}
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        padding: "0.75rem",
+                        border: "1px solid var(--border-color)",
+                        borderRadius: "var(--radius-md)",
+                        cursor: "pointer",
+                        transition: "background var(--transition-fast)",
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                        <i className="fa-solid fa-calendar-day" style={{ color: "var(--color-primary)", fontSize: "0.85rem" }}></i>
+                        <span style={{ fontSize: "0.85rem", fontWeight: 600 }}>{logDate}</span>
+                        {hasOvertime && (
+                          <span style={{ fontSize: "0.7rem", fontWeight: 700, color: "#f59e0b", background: "rgba(245,158,11,0.12)", padding: "0.15rem 0.45rem", borderRadius: "10px", border: "1px solid rgba(245,158,11,0.25)" }}>
+                            +{log.overtimeHours}h Overtime
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                        <span style={{ fontSize: "0.8rem", color: "var(--text-secondary)" }}>
+                          {inTime} - {outTime} ({log.status})
+                        </span>
+                        <i className="fa-solid fa-chevron-right" style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}></i>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
             </div>
           </div>
         </div>
       )}
 
       {/* ----------------- Popups / Modal Dialogs ----------------- */}
+
+      {/* Attendance Log Details Modal */}
+      {selectedAttendanceLog && (
+        <div className={styles.modalOverlay} onClick={() => setSelectedAttendanceLog(null)}>
+          <div className={`${styles.modal} glass-panel`} onClick={(e) => e.stopPropagation()} style={{ maxWidth: "480px" }}>
+            <span className={styles.closeBtn} onClick={() => setSelectedAttendanceLog(null)}>×</span>
+            <h2 style={{ fontSize: "1.25rem", fontWeight: 800, display: "flex", alignItems: "center", gap: "0.5rem" }}>
+              <i className="fa-solid fa-clock-rotate-left" style={{ color: "var(--color-primary)" }}></i> Daily Shift Details
+            </h2>
+            <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", marginTop: "0.25rem" }}>
+              Log entry for {new Date(selectedAttendanceLog.date).toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
+            </p>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.85rem", marginTop: "1.25rem", background: "rgba(255,255,255,0.02)", padding: "1rem", borderRadius: "var(--radius-md)", border: "1px solid var(--border-color)" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.85rem" }}>
+                <span style={{ color: "var(--text-muted)" }}>Attendance Status:</span>
+                <span style={{ fontWeight: 700, color: selectedAttendanceLog.status === "Present" ? "var(--color-success)" : "var(--color-warning)" }}>
+                  {selectedAttendanceLog.status}
+                </span>
+              </div>
+
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.85rem" }}>
+                <span style={{ color: "var(--text-muted)" }}>Clock In Time:</span>
+                <strong>{selectedAttendanceLog.clockIn ? new Date(selectedAttendanceLog.clockIn).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }) : "N/A"}</strong>
+              </div>
+
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.85rem" }}>
+                <span style={{ color: "var(--text-muted)" }}>Clock Out Time:</span>
+                <strong>{selectedAttendanceLog.clockOut ? new Date(selectedAttendanceLog.clockOut).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }) : "Active / In Progress"}</strong>
+              </div>
+
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.85rem" }}>
+                <span style={{ color: "var(--text-muted)" }}>Regular Shift Hours:</span>
+                <strong>{selectedAttendanceLog.regularHours ? `${selectedAttendanceLog.regularHours} hrs` : "8.0 hrs"}</strong>
+              </div>
+
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.85rem" }}>
+                <span style={{ color: "var(--text-muted)" }}>Overtime Hours:</span>
+                <strong style={{ color: selectedAttendanceLog.overtimeHours > 0 ? "#f59e0b" : "var(--text-muted)" }}>
+                  {selectedAttendanceLog.overtimeHours ? `+${selectedAttendanceLog.overtimeHours} hrs` : "0.0 hrs"}
+                </strong>
+              </div>
+
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.85rem", borderTop: "1px solid var(--border-color)", paddingTop: "0.5rem" }}>
+                <span style={{ color: "var(--text-muted)" }}>Total Duration Worked:</span>
+                <strong style={{ color: "var(--color-primary)" }}>
+                  {selectedAttendanceLog.clockIn && selectedAttendanceLog.clockOut
+                    ? (() => {
+                        const diff = new Date(selectedAttendanceLog.clockOut).getTime() - new Date(selectedAttendanceLog.clockIn).getTime();
+                        const hrs = Math.floor(diff / (1000 * 60 * 60));
+                        const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+                        return `${hrs} hrs ${mins} mins`;
+                      })()
+                    : "In Progress"}
+                </strong>
+              </div>
+
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.85rem" }}>
+                <span style={{ color: "var(--text-muted)" }}>Assigned Shift:</span>
+                <strong>Standard Regular Day Shift</strong>
+              </div>
+            </div>
+
+            <button
+              className={styles.btnPrimary}
+              style={{ marginTop: "1.25rem", width: "100%", padding: "0.65rem" }}
+              onClick={() => setSelectedAttendanceLog(null)}
+            >
+              Close Details
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Event Details Popup */}
       {selectedEvent && (
@@ -1003,12 +1247,12 @@ export default function CalendarPage() {
             <p style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>
               📅 {new Date(selectedEvent.startDate).toLocaleString()} - {new Date(selectedEvent.endDate).toLocaleString()}
             </p>
-            <p style={{ fontSize: "0.9rem", color: "var(--text-secondary)" }}>
+            <p style={{ fontSize: "0.9rem", color: "var(--text-secondary)", marginTop: "0.5rem" }}>
               {selectedEvent.description || "No description provided."}
             </p>
-            <div style={{ display: "flex", gap: "0.5rem", fontSize: "0.75rem", marginTop: "0.5rem" }}>
+            <div style={{ display: "flex", gap: "1rem", fontSize: "0.8rem", marginTop: "1rem", background: "rgba(255,255,255,0.03)", padding: "0.75rem", borderRadius: "var(--radius-sm)" }}>
               <span>Type: <strong>{selectedEvent.type}</strong></span>
-              <span>Scope: <strong>{selectedEvent.department} department</strong></span>
+              <span>Department: <strong>{selectedEvent.department}</strong></span>
             </div>
           </div>
         </div>
@@ -1020,7 +1264,9 @@ export default function CalendarPage() {
           <div className={`${styles.modal} glass-panel`} onClick={(e) => e.stopPropagation()}>
             <span className={styles.closeBtn} onClick={() => setShowEventModal(false)}>×</span>
             
-            <h2 style={{ fontSize: "1.25rem", fontWeight: 800 }}>📅 Schedule New Event</h2>
+            <h2 style={{ fontSize: "1.25rem", fontWeight: 800 }}>
+              <i className="fa-solid fa-calendar-plus" style={{ color: "var(--color-primary)", marginRight: "0.4rem" }}></i> Schedule New Event
+            </h2>
             
             <form onSubmit={handleCreateEvent} style={{ display: "flex", flexDirection: "column", gap: "1rem", marginTop: "0.5rem" }}>
               <div className={styles.formGroup}>
@@ -1069,9 +1315,11 @@ export default function CalendarPage() {
                     value={newEvtDept}
                     onChange={(e) => setNewEvtDept(e.target.value)}
                   >
-                    {departments.map((d) => (
-                      <option key={d} value={d}>{d === "All" ? "All Staff" : `${d} department`}</option>
-                    ))}
+                    <option value="All">All Staff</option>
+                    <option value="Management">Management</option>
+                    <option value="Engineering">Engineering</option>
+                    <option value="Design">Design</option>
+                    <option value="Marketing">Marketing</option>
                   </select>
                 </div>
               </div>
@@ -1114,7 +1362,9 @@ export default function CalendarPage() {
           <div className={`${styles.modal} glass-panel`} onClick={(e) => e.stopPropagation()}>
             <span className={styles.closeBtn} onClick={() => setShowSprintModal(false)}>×</span>
             
-            <h2 style={{ fontSize: "1.25rem", fontWeight: 800 }}>🚀 Plan New Sprint</h2>
+            <h2 style={{ fontSize: "1.25rem", fontWeight: 800 }}>
+              <i className="fa-solid fa-diagram-project" style={{ color: "var(--color-primary)", marginRight: "0.4rem" }}></i> Plan New Sprint
+            </h2>
             
             <form onSubmit={handleCreateSprint} style={{ display: "flex", flexDirection: "column", gap: "1rem", marginTop: "0.5rem" }}>
               <div className={styles.formGroup}>

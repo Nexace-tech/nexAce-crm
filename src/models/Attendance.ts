@@ -5,6 +5,8 @@ export interface IAttendance extends Document {
   date: Date; // Normalized to midnight UTC
   clockIn: Date;
   clockOut?: Date;
+  regularHours?: number;
+  overtimeHours?: number;
   status: "Present" | "On Leave" | "Absent";
   tenantId: mongoose.Types.ObjectId;
   createdAt: Date;
@@ -17,6 +19,8 @@ const AttendanceSchema = new Schema<IAttendance>(
     date: { type: Date, required: true },
     clockIn: { type: Date, required: true },
     clockOut: { type: Date },
+    regularHours: { type: Number, default: 0 },
+    overtimeHours: { type: Number, default: 0 },
     status: {
       type: String,
       enum: ["Present", "On Leave", "Absent"],

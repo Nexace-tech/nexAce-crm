@@ -127,7 +127,7 @@
 }
 
 .memberCard:hover {
-  transform: translateY(-3px);
+  border-color: rgba(99, 102, 241, 0.35);
   box-shadow: var(--shadow-card);
 }
 
@@ -341,11 +341,13 @@
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   background: var(--bg-card);
-  transition: transform var(--transition-fast);
+  transition: background var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 
 .reportItem:hover {
-  transform: translateX(4px);
+  background: rgba(99, 102, 241, 0.08);
+  border-color: rgba(99, 102, 241, 0.35);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
 }
 
 .reportUser {
@@ -571,3 +573,183 @@
 .eyeButton:hover {
   color: var(--text-primary);
 }
+
+.btnDanger {
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: var(--color-danger);
+  padding: 0.6rem 1.2rem;
+  border-radius: var(--radius-md);
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.btnDanger:hover {
+  background: var(--color-danger);
+  color: white;
+}
+
+/* Floating Bulk Action Bar */
+.bulkActionBar {
+  position: fixed;
+  bottom: 2rem;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+  backdrop-filter: blur(12px);
+  padding: 0.75rem 1.5rem;
+  border-radius: var(--radius-full);
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  z-index: 900;
+  animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes slideUp {
+  from {
+    transform: translate(-50%, 100%);
+    opacity: 0;
+  }
+  to {
+    transform: translate(-50%, 0);
+    opacity: 1;
+  }
+}
+
+.deptCheckboxGroup {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.35rem;
+}
+
+.deptCheckboxPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.75rem;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border-color);
+  background: var(--bg-card);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+  transition: all var(--transition-fast);
+}
+
+.deptCheckboxPillActive {
+  background: var(--color-primary-glow);
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.bulkRow {
+  display: grid;
+  grid-template-columns: 1.5fr 2fr 1fr 2fr 1.5fr 40px;
+  gap: 0.75rem;
+  align-items: center;
+  background: rgba(0,0,0,0.01);
+  padding: 0.75rem;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+}
+
+@media (prefers-color-scheme: dark) {
+  .bulkRow {
+    background: rgba(255,255,255,0.01);
+  }
+}
+
+/* Prevent unwanted horizontal/bottom scrollbars on card hover and modal lists */
+.modal,
+.directReportsCard,
+.cardGrid,
+.listTableCard {
+  overflow-x: hidden;
+}
+
+.modal ::-webkit-scrollbar {
+  width: 6px;
+  height: 0px;
+}
+
+.modal ::-webkit-scrollbar-thumb {
+  background: rgba(150, 150, 150, 0.25);
+  border-radius: 10px;
+}
+
+/* Mobile & Tablet Responsive Media Queries */
+@media (max-width: 900px) {
+  .managerPanelGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .title {
+    font-size: 1.5rem;
+  }
+
+  .tabs {
+    overflow-x: auto;
+    white-space: nowrap;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 0.5rem;
+  }
+
+  .filterBar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .searchGroup {
+    width: 100%;
+  }
+
+  .searchInput {
+    width: 100%;
+  }
+
+  .filterGroup {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .cardGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .bulkRow {
+    grid-template-columns: 1fr;
+  }
+
+  .bulkActionBar {
+    width: 90%;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 0.75rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .titleSection {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.75rem;
+  }
+
+  .modal {
+    padding: 1.25rem;
+    max-width: 95vw;
+  }
+}
+
+
+
+

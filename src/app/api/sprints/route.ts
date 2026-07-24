@@ -2,10 +2,11 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
 import { connectToDatabase } from "@/lib/db";
 import { Sprint } from "@/models/Sprint";
+import { Task } from "@/models/Task";
 import mongoose from "mongoose";
 
 /**
- * GET: Fetch all sprints.
+ * GET: Fetch all sprints with burndown statistics and linked tasks.
  */
 export async function GET() {
   try {
@@ -16,11 +17,41 @@ export async function GET() {
 
     await connectToDatabase();
 
-    const sprints = await Sprint.find({
-      tenantId: new mongoose.Types.ObjectId(session.tenantId),
+    const tenantObjectId = new mongoose.Types.ObjectId(session.tenantId);
+
+    const rawSprints = await Sprint.find({
+      tenantId: tenantObjectId,
     }).sort({ startDate: -1 });
 
-    return NextResponse.json({ sprints });
+    // Populate burndown stats and linked tasks for each sprint
+    const sprintsWithStats = await Promise.all(
+      rawSprints.map(async (sprintDoc) => {
+        const sprint = sprintDoc.toObject();
+        const linkedTasks = await Task.find({
+          tenantId: tenantObjectId,
+          sprintId: sprintDoc._id,
+        }).populate("assignee", "name photoUrl role department");
+
+        const totalTasks = linkedTasks.length;
+        const completedTasks = linkedTasks.filter((t) => t.status === "Done").length;
+        const inProgressTasks = linkedTasks.filter((t) => t.status === "In Progress" || t.status === "Review").length;
+        const todoTasks = linkedTasks.filter((t) => t.status === "To Do").length;
+
+        const burndownProgress = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+
+        return {
+          ...sprint,
+          totalTasks,
+          completedTasks,
+          inProgressTasks,
+          todoTasks,
+          burndownProgress,
+          linkedTasks,
+        };
+      })
+    );
+
+    return NextResponse.json({ sprints: sprintsWithStats });
   } catch (error: any) {
     console.error("API GET Sprints error:", error);
     return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: 500 });
