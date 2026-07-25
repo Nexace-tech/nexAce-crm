@@ -1,7 +1,9 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import styles from "@/app/dashboard/layout.module.css";
+import { Bell, BellOff, CheckCheck } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 interface NotifItem {
   _id: string;
@@ -38,7 +40,6 @@ export function NotificationBell() {
     return () => clearInterval(interval);
   }, []);
 
-  // Close dropdown on outside click
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
@@ -81,109 +82,71 @@ export function NotificationBell() {
   };
 
   return (
-    <div style={{ position: "relative" }} ref={dropdownRef}>
-      <button
-        className={styles.iconBtn}
+    <div className="relative" ref={dropdownRef}>
+      <Button
+        variant="ghost"
+        size="icon"
         onClick={() => setOpen(!open)}
+        className="relative text-muted-foreground hover:text-foreground h-9 w-9 rounded-full"
         title="Notifications"
-        style={{ position: "relative" }}
       >
-        <i className="fa-solid fa-bell"></i>
+        <Bell className="w-5 h-5 text-muted-foreground group-hover:text-foreground" />
         {unreadCount > 0 && (
-          <span
-            style={{
-              position: "absolute",
-              top: "-2px",
-              right: "-2px",
-              backgroundColor: "#ef4444",
-              color: "#fff",
-              fontSize: "0.65rem",
-              fontWeight: 800,
-              padding: "0.1rem 0.35rem",
-              borderRadius: "10px",
-              minWidth: "16px",
-              textAlign: "center",
-              boxShadow: "0 0 8px rgba(239, 68, 68, 0.6)",
-            }}
-          >
+          <span className="absolute -top-0.5 -right-0.5 bg-destructive text-destructive-foreground text-[10px] font-bold h-4 min-w-[16px] px-1 rounded-full flex items-center justify-center shadow-xs animate-pulse">
             {unreadCount > 9 ? "9+" : unreadCount}
           </span>
         )}
-      </button>
+      </Button>
 
-      {/* Notifications Dropdown Drawer */}
+      {/* Notifications Dropdown Panel */}
       {open && (
-        <div
-          style={{
-            position: "absolute",
-            right: 0,
-            top: "calc(100% + 8px)",
-            width: "340px",
-            backgroundColor: "#18181b",
-            border: "1px solid rgba(255, 255, 255, 0.12)",
-            borderRadius: "14px",
-            boxShadow: "0 12px 32px rgba(0, 0, 0, 0.5)",
-            zIndex: 999,
-            overflow: "hidden",
-          }}
-        >
+        <div className="absolute right-0 top-full mt-2 w-80 sm:w-96 bg-card border border-border rounded-xl shadow-2xl z-50 overflow-hidden animate-in fade-in zoom-in-95">
           {/* Header */}
-          <div
-            style={{
-              padding: "0.75rem 1rem",
-              borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-            }}
-          >
-            <div style={{ fontWeight: 700, fontSize: "0.9rem", color: "#fff" }}>
-              Notifications {unreadCount > 0 && `(${unreadCount})`}
+          <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/30">
+            <div className="flex items-center gap-2">
+              <span className="font-semibold text-sm text-foreground">Notifications</span>
+              {unreadCount > 0 && (
+                <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full font-bold">
+                  {unreadCount} new
+                </span>
+              )}
             </div>
             {unreadCount > 0 && (
               <button
                 onClick={handleMarkAllRead}
-                style={{
-                  fontSize: "0.75rem",
-                  color: "var(--color-primary, #6366f1)",
-                  fontWeight: 600,
-                  cursor: "pointer",
-                }}
+                className="text-xs text-primary hover:underline font-medium flex items-center gap-1 cursor-pointer"
               >
-                Mark all read
+                <CheckCheck className="w-3.5 h-3.5" /> Mark all read
               </button>
             )}
           </div>
 
           {/* List */}
-          <div style={{ maxHeight: "320px", overflowY: "auto" }}>
+          <div className="max-h-80 overflow-y-auto divide-y divide-border/40">
             {notifications.length === 0 ? (
-              <div style={{ padding: "2rem 1rem", textAlign: "center", color: "#64748b", fontSize: "0.85rem" }}>
-                <i className="fa-regular fa-bell-slash" style={{ fontSize: "1.5rem", marginBottom: "0.5rem", display: "block" }} />
-                No notifications right now.
+              <div className="py-8 text-center text-muted-foreground space-y-2">
+                <BellOff className="w-8 h-8 mx-auto stroke-1 opacity-60" />
+                <p className="text-sm font-medium">No notifications yet.</p>
               </div>
             ) : (
               notifications.map((n) => (
                 <div
                   key={n._id}
                   onClick={() => !n.read && handleMarkSingleRead(n._id)}
-                  style={{
-                    padding: "0.75rem 1rem",
-                    borderBottom: "1px solid rgba(255, 255, 255, 0.04)",
-                    backgroundColor: n.read ? "transparent" : "rgba(99, 102, 241, 0.08)",
-                    cursor: "pointer",
-                    transition: "background-color 0.2s ease",
-                  }}
+                  className={cn(
+                    "p-3.5 transition-colors cursor-pointer hover:bg-accent/50",
+                    !n.read ? "bg-primary/5 font-medium" : "opacity-80"
+                  )}
                 >
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "0.25rem" }}>
-                    <span style={{ fontWeight: 700, fontSize: "0.825rem", color: n.read ? "#cbd5e1" : "#fff" }}>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className={cn("text-xs font-semibold truncate", !n.read ? "text-foreground" : "text-muted-foreground")}>
                       {n.title}
                     </span>
-                    <span style={{ fontSize: "0.7rem", color: "#64748b" }}>
+                    <span className="text-[10px] text-muted-foreground shrink-0 ml-2">
                       {new Date(n.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                     </span>
                   </div>
-                  <div style={{ fontSize: "0.8rem", color: "#94a3b8", lineHeight: 1.3 }}>{n.message}</div>
+                  <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2">{n.message}</p>
                 </div>
               ))
             )}

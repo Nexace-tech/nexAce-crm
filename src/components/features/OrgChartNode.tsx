@@ -138,52 +138,62 @@ export function OrgChartNode({ node, onReassign, isAdmin, onSelectMember }: OrgC
           <div
             style={{
               width: "2px",
-              height: "20px",
-              backgroundColor: "var(--border-color)",
+              height: "32px",
+              backgroundColor: "hsl(var(--border))",
               position: "absolute",
-              top: "-20px",
+              top: "-32px",
+              left: "50%",
+              transform: "translateX(-50%)",
             }}
           />
 
           {/* Children container wrapper */}
-          <div className={styles.treeNodeChildren} style={{ marginTop: "20px" }}>
-            {/* Horizontal line connector connecting all children */}
-            {node.reports.length > 1 && (
-              <div
-                style={{
-                  height: "2px",
-                  backgroundColor: "var(--border-color)",
-                  position: "absolute",
-                  top: "0",
-                  left: "110px", // Align to center of first child card
-                  right: "110px", // Align to center of last child card
-                }}
-              />
-            )}
+          <div className={styles.treeNodeChildren} style={{ marginTop: "0px" }}>
+            {node.reports.map((report, index) => {
+              const isFirst = index === 0;
+              const isLast = index === node.reports.length - 1;
+              const hasSiblings = node.reports.length > 1;
 
-            {node.reports.map((report) => (
-              <div key={report._id} style={{ position: "relative", display: "flex", flexDirection: "column", alignItems: "center" }}>
-                {/* Vertical line down to child card */}
-                <div
-                  style={{
-                    width: "2px",
-                    height: "20px",
-                    backgroundColor: "var(--border-color)",
-                    position: "absolute",
-                    top: "0",
-                  }}
-                />
-                
-                <div style={{ paddingTop: "20px" }}>
-                  <OrgChartNode
-                    node={report}
-                    onReassign={onReassign}
-                    isAdmin={isAdmin}
-                    onSelectMember={onSelectMember}
+              return (
+                <div key={report._id} style={{ position: "relative", display: "flex", flexDirection: "column", alignItems: "center" }}>
+                  {/* Horizontal line connector segment */}
+                  {hasSiblings && (
+                    <div
+                      style={{
+                        height: "2px",
+                        backgroundColor: "hsl(var(--border))",
+                        position: "absolute",
+                        top: "0",
+                        left: isFirst ? "50%" : "-1rem",
+                        right: isLast ? "50%" : "-1rem",
+                      }}
+                    />
+                  )}
+
+                  {/* Vertical line down to child card */}
+                  <div
+                    style={{
+                      width: "2px",
+                      height: "24px",
+                      backgroundColor: "hsl(var(--border))",
+                      position: "absolute",
+                      top: "0",
+                      left: "50%",
+                      transform: "translateX(-50%)",
+                    }}
                   />
+                  
+                  <div style={{ paddingTop: "24px" }}>
+                    <OrgChartNode
+                      node={report}
+                      onReassign={onReassign}
+                      isAdmin={isAdmin}
+                      onSelectMember={onSelectMember}
+                    />
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}

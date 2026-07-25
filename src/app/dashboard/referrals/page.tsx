@@ -1,6 +1,25 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from "react";
+import { 
+  Share2, 
+  UserPlus, 
+  Search, 
+  Mail, 
+  Phone, 
+  Gift, 
+  CheckCircle, 
+  AlertCircle,
+  Plus,
+  Trash2,
+  ChevronRight
+} from "lucide-react";
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Pagination } from "@/components/ui/pagination";
+import { cn } from "@/lib/utils";
 
 interface ReferralData {
   _id: string;
@@ -29,8 +48,9 @@ export default function ReferralsPage() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [stageFilter, setStageFilter] = useState<string>("All");
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 6;
 
-  // Modal State
   const [showModal, setShowModal] = useState(false);
   const [formData, setFormData] = useState({
     candidateName: "",
@@ -91,7 +111,6 @@ export default function ReferralsPage() {
 
   const handleUpdateStage = async (id: string, newStatus: ReferralData["status"]) => {
     try {
-      // Auto-update payoutStatus to Approved when Hired, or Paid when Paid
       let payoutStatusUpdate: ReferralData["payoutStatus"] | undefined = undefined;
       if (newStatus === "Hired") payoutStatusUpdate = "Approved";
       if (newStatus === "Paid") payoutStatusUpdate = "Paid";
@@ -131,7 +150,6 @@ export default function ReferralsPage() {
     }
   };
 
-  // Filtered list
   const filteredReferrals = useMemo(() => {
     return referrals.filter((r) => {
       const matchesSearch =
@@ -144,7 +162,12 @@ export default function ReferralsPage() {
     });
   }, [referrals, searchQuery, stageFilter]);
 
-  // Aggregate Metrics
+  const totalPages = Math.ceil(filteredReferrals.length / itemsPerPage);
+  const paginatedReferrals = useMemo(() => {
+    const start = (currentPage - 1) * itemsPerPage;
+    return filteredReferrals.slice(start, start + itemsPerPage);
+  }, [filteredReferrals, currentPage, itemsPerPage]);
+
   const metrics = useMemo(() => {
     const total = referrals.length;
     const hired = referrals.filter((r) => r.status === "Hired" || r.status === "Paid").length;
@@ -159,531 +182,171 @@ export default function ReferralsPage() {
   }, [referrals]);
 
   return (
-    <div style={{ padding: "1.5rem", maxWidth: "1400px", margin: "0 auto" }}>
-      {/* Header */}
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          flexWrap: "wrap",
-          gap: "1rem",
-          marginBottom: "1.5rem",
-        }}
-      >
+    <div className="space-y-8">
+      {/* Title */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 style={{ fontSize: "2rem", fontWeight: 800, marginBottom: "0.25rem" }}>
-            Referral & Payout Pipeline
-          </h1>
-          <p style={{ color: "var(--color-text-dark-secondary, #cbd5e1)", fontSize: "0.95rem" }}>
-            Track candidate pipeline stages (Submitted → Interviewing → Hired → Paid) and reward payouts.
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">Referral & Reward Pipeline</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            Track candidate pipeline stages (Submitted → Interviewing → Hired → Paid) and referral payouts.
           </p>
         </div>
-        <button
-          onClick={() => setShowModal(true)}
-          style={{
-            padding: "0.65rem 1.25rem",
-            backgroundColor: "var(--color-primary, #6366f1)",
-            color: "#fff",
-            borderRadius: "10px",
-            fontWeight: 600,
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-            gap: "0.5rem",
-            boxShadow: "0 4px 12px rgba(99, 102, 241, 0.25)",
-          }}
-        >
-          <i className="fa-solid fa-user-plus" />
-          Submit Referral
-        </button>
+
+        <Button color="primary" size="sm" onClick={() => setShowModal(true)} className="gap-2">
+          <UserPlus className="w-4 h-4" /> Submit Referral
+        </Button>
       </div>
 
-      {/* Summary KPI Cards */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
-          gap: "1.25rem",
-          marginBottom: "2rem",
-        }}
-      >
-        <div className="glass-panel" style={{ padding: "1.25rem", borderRadius: "14px" }}>
-          <div style={{ color: "var(--color-text-dark-muted)", fontSize: "0.85rem", fontWeight: 600 }}>
-            Total Referrals
-          </div>
-          <div style={{ fontSize: "1.8rem", fontWeight: 800, marginTop: "0.25rem" }}>
-            {metrics.total}
-          </div>
-        </div>
-        <div className="glass-panel" style={{ padding: "1.25rem", borderRadius: "14px" }}>
-          <div style={{ color: "var(--color-text-dark-muted)", fontSize: "0.85rem", fontWeight: 600 }}>
-            Hired Candidates
-          </div>
-          <div style={{ fontSize: "1.8rem", fontWeight: 800, marginTop: "0.25rem", color: "#10b981" }}>
-            {metrics.hired}
-          </div>
-        </div>
-        <div className="glass-panel" style={{ padding: "1.25rem", borderRadius: "14px" }}>
-          <div style={{ color: "var(--color-text-dark-muted)", fontSize: "0.85rem", fontWeight: 600 }}>
-            Pending Reward Payouts
-          </div>
-          <div style={{ fontSize: "1.8rem", fontWeight: 800, marginTop: "0.25rem", color: "#f59e0b" }}>
-            ${metrics.pendingPayouts.toLocaleString()}
-          </div>
-        </div>
-        <div className="glass-panel" style={{ padding: "1.25rem", borderRadius: "14px" }}>
-          <div style={{ color: "var(--color-text-dark-muted)", fontSize: "0.85rem", fontWeight: 600 }}>
-            Total Rewards Paid
-          </div>
-          <div style={{ fontSize: "1.8rem", fontWeight: 800, marginTop: "0.25rem", color: "#6366f1" }}>
-            ${metrics.totalPayouts.toLocaleString()}
-          </div>
-        </div>
+      {/* Metric Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+        <Card className="border-l-4 border-l-primary">
+          <CardContent className="p-5 flex items-center justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Total Referrals</p>
+              <p className="text-2xl font-bold text-foreground">{metrics.total}</p>
+            </div>
+            <div className="p-3 bg-primary/10 text-primary rounded-xl">
+              <Share2 className="w-6 h-6" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-l-4 border-l-emerald-500">
+          <CardContent className="p-5 flex items-center justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Hired Candidates</p>
+              <p className="text-2xl font-bold text-foreground">{metrics.hired}</p>
+            </div>
+            <div className="p-3 bg-emerald-500/10 text-emerald-500 rounded-xl">
+              <CheckCircle className="w-6 h-6" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-l-4 border-l-amber-500">
+          <CardContent className="p-5 flex items-center justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Pending Payouts</p>
+              <p className="text-2xl font-bold text-foreground">${metrics.pendingPayouts.toLocaleString()}</p>
+            </div>
+            <div className="p-3 bg-amber-500/10 text-amber-500 rounded-xl">
+              <Gift className="w-6 h-6" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-l-4 border-l-sky-500">
+          <CardContent className="p-5 flex items-center justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Total Rewards Paid</p>
+              <p className="text-2xl font-bold text-foreground">${metrics.totalPayouts.toLocaleString()}</p>
+            </div>
+            <div className="p-3 bg-sky-500/10 text-sky-500 rounded-xl">
+              <Gift className="w-6 h-6" />
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
-      {/* Toolbar: Search & Stage Filter Tabs */}
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          flexWrap: "wrap",
-          gap: "1rem",
-          marginBottom: "1.5rem",
-          backgroundColor: "rgba(255, 255, 255, 0.03)",
-          padding: "0.85rem 1.25rem",
-          borderRadius: "12px",
-          border: "1px solid rgba(255, 255, 255, 0.08)",
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flex: 1, minWidth: "260px" }}>
-          <i className="fa-solid fa-magnifying-glass" style={{ color: "#94a3b8" }} />
-          <input
+      {/* Filter Bar */}
+      <Card className="p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div className="relative w-full sm:max-w-md">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Input
             type="text"
-            placeholder="Search candidate, role, or referrer..."
+            placeholder="Search candidate, position, or referrer..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            style={{
-              width: "100%",
-              color: "#fff",
-              fontSize: "0.95rem",
-            }}
+            className="pl-9"
           />
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
-          <button
+        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar w-full sm:w-auto">
+          <Button
+            variant={stageFilter === "All" ? "default" : "outline"}
+            size="sm"
             onClick={() => setStageFilter("All")}
-            style={{
-              padding: "0.4rem 0.85rem",
-              borderRadius: "8px",
-              fontSize: "0.85rem",
-              fontWeight: 600,
-              cursor: "pointer",
-              backgroundColor: stageFilter === "All" ? "var(--color-primary, #6366f1)" : "rgba(255, 255, 255, 0.06)",
-              color: "#fff",
-            }}
           >
-            All ({referrals.length})
-          </button>
-          {STAGES.map((stg) => {
-            const count = referrals.filter((r) => r.status === stg).length;
-            return (
-              <button
-                key={stg}
-                onClick={() => setStageFilter(stg)}
-                style={{
-                  padding: "0.4rem 0.85rem",
-                  borderRadius: "8px",
-                  fontSize: "0.85rem",
-                  fontWeight: 600,
-                  cursor: "pointer",
-                  backgroundColor: stageFilter === stg ? "var(--color-primary, #6366f1)" : "rgba(255, 255, 255, 0.06)",
-                  color: stageFilter === stg ? "#fff" : "#cbd5e1",
-                }}
-              >
-                {stg} ({count})
-              </button>
-            );
-          })}
+            All
+          </Button>
+          {STAGES.map((stg) => (
+            <Button
+              key={stg}
+              variant={stageFilter === stg ? "default" : "outline"}
+              size="sm"
+              onClick={() => setStageFilter(stg)}
+            >
+              {stg}
+            </Button>
+          ))}
         </div>
+      </Card>
+
+      {/* Referral Cards Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+        {paginatedReferrals.map((ref) => (
+          <Card key={ref._id} className="hover:shadow-md transition-all flex flex-col justify-between">
+            <CardHeader className="flex flex-row items-start justify-between pb-3">
+              <div>
+                <CardTitle className="text-base font-bold text-foreground">{ref.candidateName}</CardTitle>
+                <p className="text-xs text-primary font-semibold mt-0.5">{ref.position}</p>
+              </div>
+              <Badge color={ref.status === "Hired" ? "success" : ref.status === "Paid" ? "info" : "warning"} variant="soft">
+                {ref.status}
+              </Badge>
+            </CardHeader>
+
+            <CardContent className="space-y-4">
+              <div className="text-xs text-muted-foreground space-y-1">
+                <p className="flex items-center gap-2"><Mail className="w-3.5 h-3.5" /> {ref.candidateEmail}</p>
+                <p className="text-foreground">Referred by: <strong>{ref.referrerName}</strong></p>
+              </div>
+
+              <div className="p-3 rounded-lg bg-muted/40 border border-border flex items-center justify-between text-xs">
+                <div>
+                  <span className="text-muted-foreground block text-[10px] uppercase font-semibold">Bonus Reward</span>
+                  <span className="font-bold text-emerald-500 text-sm">${ref.rewardAmount.toLocaleString()}</span>
+                </div>
+                <Badge color={ref.payoutStatus === "Paid" ? "success" : "warning"} variant="soft">
+                  Payout: {ref.payoutStatus}
+                </Badge>
+              </div>
+
+              <div className="flex items-center justify-between pt-3 border-t border-border">
+                <div className="flex gap-1.5">
+                  {ref.status === "Submitted" && (
+                    <Button size="sm" variant="outline" onClick={() => handleUpdateStage(ref._id, "Interviewing")}>
+                      Interviewing
+                    </Button>
+                  )}
+                  {(ref.status === "Submitted" || ref.status === "Interviewing") && (
+                    <Button size="sm" color="success" onClick={() => handleUpdateStage(ref._id, "Hired")}>
+                      Mark Hired
+                    </Button>
+                  )}
+                  {ref.status === "Hired" && (
+                    <Button size="sm" color="primary" onClick={() => handleUpdateStage(ref._id, "Paid")}>
+                      Mark Paid
+                    </Button>
+                  )}
+                </div>
+
+                <Button variant="ghost" size="icon" onClick={() => handleDeleteReferral(ref._id)} className="h-8 w-8 text-destructive">
+                  <Trash2 className="w-4 h-4" />
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
       </div>
 
-      {/* Referrals Cards Grid */}
-      {loading ? (
-        <div style={{ textAlign: "center", padding: "3rem", color: "#94a3b8" }}>
-          <i className="fa-solid fa-circle-notch fa-spin" style={{ fontSize: "1.8rem", marginBottom: "0.75rem" }} />
-          <p>Loading candidate referrals...</p>
-        </div>
-      ) : filteredReferrals.length === 0 ? (
-        <div
-          style={{
-            textAlign: "center",
-            padding: "3.5rem",
-            backgroundColor: "rgba(255, 255, 255, 0.02)",
-            borderRadius: "16px",
-            border: "1px dashed rgba(255, 255, 255, 0.1)",
-          }}
-        >
-          <i className="fa-solid fa-user-xmark" style={{ fontSize: "2.5rem", color: "#64748b", marginBottom: "1rem" }} />
-          <h3 style={{ fontSize: "1.2rem", fontWeight: 700, marginBottom: "0.5rem" }}>No Referrals Found</h3>
-          <p style={{ color: "#94a3b8", fontSize: "0.9rem", marginBottom: "1.25rem" }}>
-            {searchQuery || stageFilter !== "All"
-              ? "No referrals match your current search/stage filter."
-              : "You haven't submitted any candidate referrals yet."}
-          </p>
-          <button
-            onClick={() => setShowModal(true)}
-            style={{
-              padding: "0.5rem 1rem",
-              backgroundColor: "var(--color-primary, #6366f1)",
-              color: "#fff",
-              borderRadius: "8px",
-              fontWeight: 600,
-              cursor: "pointer",
-            }}
-          >
-            Submit First Referral
-          </button>
-        </div>
-      ) : (
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fill, minmax(330px, 1fr))",
-            gap: "1.5rem",
-          }}
-        >
-          {filteredReferrals.map((referral) => {
-            let statusColor = "#6366f1"; // Submitted
-            if (referral.status === "Interviewing") statusColor = "#06b6d4";
-            if (referral.status === "Hired") statusColor = "#10b981";
-            if (referral.status === "Paid") statusColor = "#8b5cf6";
-            if (referral.status === "Rejected") statusColor = "#ef4444";
-
-            return (
-              <div
-                key={referral._id}
-                className="glass-panel"
-                style={{
-                  borderRadius: "16px",
-                  padding: "1.5rem",
-                  display: "flex",
-                  flexDirection: "column",
-                  justifyContent: "space-between",
-                  border: "1px solid rgba(255, 255, 255, 0.08)",
-                }}
-              >
-                <div>
-                  {/* Top Bar */}
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "0.75rem" }}>
-                    <div>
-                      <h3 style={{ fontSize: "1.2rem", fontWeight: 700, color: "#fff" }}>{referral.candidateName}</h3>
-                      <div style={{ fontSize: "0.85rem", color: "var(--color-primary, #6366f1)", fontWeight: 600 }}>
-                        {referral.position}
-                      </div>
-                    </div>
-                    <span
-                      style={{
-                        padding: "0.2rem 0.65rem",
-                        borderRadius: "20px",
-                        fontSize: "0.75rem",
-                        fontWeight: 700,
-                        backgroundColor: `${statusColor}20`,
-                        color: statusColor,
-                      }}
-                    >
-                      {referral.status}
-                    </span>
-                  </div>
-
-                  {/* Contact & Referrer */}
-                  <div style={{ fontSize: "0.825rem", color: "#cbd5e1", marginBottom: "1rem" }}>
-                    <div><i className="fa-regular fa-envelope" style={{ width: "16px", color: "#94a3b8" }} /> {referral.candidateEmail}</div>
-                    {referral.phone && <div><i className="fa-solid fa-phone" style={{ width: "16px", color: "#94a3b8" }} /> {referral.phone}</div>}
-                    <div style={{ marginTop: "0.35rem", color: "#94a3b8" }}>
-                      Referred by: <strong style={{ color: "#fff" }}>{referral.referrerName}</strong>
-                    </div>
-                  </div>
-
-                  {/* Reward & Payout Status */}
-                  <div
-                    style={{
-                      padding: "0.65rem 0.85rem",
-                      backgroundColor: "rgba(255, 255, 255, 0.03)",
-                      borderRadius: "10px",
-                      border: "1px solid rgba(255, 255, 255, 0.06)",
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                      marginBottom: "1rem",
-                    }}
-                  >
-                    <div>
-                      <span style={{ fontSize: "0.75rem", color: "#94a3b8", display: "block" }}>Bonus Reward</span>
-                      <span style={{ fontSize: "1.1rem", fontWeight: 800, color: "#10b981" }}>
-                        ${referral.rewardAmount.toLocaleString()}
-                      </span>
-                    </div>
-                    <span
-                      style={{
-                        fontSize: "0.75rem",
-                        fontWeight: 700,
-                        color: referral.payoutStatus === "Paid" ? "#8b5cf6" : referral.payoutStatus === "Approved" ? "#10b981" : "#f59e0b",
-                      }}
-                    >
-                      Payout: {referral.payoutStatus}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Stage Advancement Action Bar */}
-                <div style={{ paddingTop: "0.85rem", borderTop: "1px solid rgba(255, 255, 255, 0.06)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <div style={{ display: "flex", gap: "0.35rem" }}>
-                    {referral.status === "Submitted" && (
-                      <button
-                        onClick={() => handleUpdateStage(referral._id, "Interviewing")}
-                        style={{
-                          padding: "0.35rem 0.65rem",
-                          backgroundColor: "rgba(6, 182, 212, 0.15)",
-                          color: "#06b6d4",
-                          borderRadius: "6px",
-                          fontSize: "0.75rem",
-                          fontWeight: 600,
-                          cursor: "pointer",
-                        }}
-                      >
-                        Interviewing
-                      </button>
-                    )}
-                    {(referral.status === "Submitted" || referral.status === "Interviewing") && (
-                      <button
-                        onClick={() => handleUpdateStage(referral._id, "Hired")}
-                        style={{
-                          padding: "0.35rem 0.65rem",
-                          backgroundColor: "rgba(16, 185, 129, 0.15)",
-                          color: "#10b981",
-                          borderRadius: "6px",
-                          fontSize: "0.75rem",
-                          fontWeight: 600,
-                          cursor: "pointer",
-                        }}
-                      >
-                        Mark Hired
-                      </button>
-                    )}
-                    {referral.status === "Hired" && (
-                      <button
-                        onClick={() => handleUpdateStage(referral._id, "Paid")}
-                        style={{
-                          padding: "0.35rem 0.65rem",
-                          backgroundColor: "rgba(139, 92, 246, 0.15)",
-                          color: "#8b5cf6",
-                          borderRadius: "6px",
-                          fontSize: "0.75rem",
-                          fontWeight: 600,
-                          cursor: "pointer",
-                        }}
-                      >
-                        Mark Reward Paid
-                      </button>
-                    )}
-                  </div>
-
-                  <button
-                    onClick={() => handleDeleteReferral(referral._id)}
-                    title="Delete Referral"
-                    style={{
-                      padding: "0.4rem 0.6rem",
-                      backgroundColor: "rgba(239, 68, 68, 0.12)",
-                      color: "#ef4444",
-                      borderRadius: "6px",
-                      fontSize: "0.8rem",
-                      cursor: "pointer",
-                    }}
-                  >
-                    <i className="fa-solid fa-trash" />
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {/* Modal: Submit Referral */}
-      {showModal && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            backgroundColor: "rgba(0,0,0,0.7)",
-            backdropFilter: "blur(6px)",
-            display: "flex",
-            justifyContent: "center",
-            alignItems: "center",
-            zIndex: 1000,
-            padding: "1rem",
-          }}
-        >
-          <div
-            style={{
-              backgroundColor: "#18181b",
-              border: "1px solid rgba(255,255,255,0.12)",
-              borderRadius: "16px",
-              padding: "1.75rem",
-              width: "100%",
-              maxWidth: "500px",
-              boxShadow: "0 20px 40px rgba(0,0,0,0.5)",
-            }}
-          >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.25rem" }}>
-              <h2 style={{ fontSize: "1.3rem", fontWeight: 700 }}>Submit Candidate Referral</h2>
-              <button onClick={() => setShowModal(false)} style={{ color: "#94a3b8", fontSize: "1.2rem", cursor: "pointer" }}>
-                <i className="fa-solid fa-xmark" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSubmitReferral} style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-              <div>
-                <label style={{ display: "block", fontSize: "0.85rem", color: "#cbd5e1", marginBottom: "0.35rem", fontWeight: 600 }}>
-                  Candidate Name *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={formData.candidateName}
-                  onChange={(e) => setFormData({ ...formData, candidateName: e.target.value })}
-                  style={{
-                    width: "100%",
-                    padding: "0.6rem 0.85rem",
-                    borderRadius: "8px",
-                    backgroundColor: "rgba(255,255,255,0.06)",
-                    color: "#fff",
-                    border: "1px solid rgba(255,255,255,0.1)",
-                  }}
-                  placeholder="e.g. Alex Rivera"
-                />
-              </div>
-
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
-                <div>
-                  <label style={{ display: "block", fontSize: "0.85rem", color: "#cbd5e1", marginBottom: "0.35rem", fontWeight: 600 }}>
-                    Candidate Email *
-                  </label>
-                  <input
-                    type="email"
-                    required
-                    value={formData.candidateEmail}
-                    onChange={(e) => setFormData({ ...formData, candidateEmail: e.target.value })}
-                    style={{
-                      width: "100%",
-                      padding: "0.6rem 0.85rem",
-                      borderRadius: "8px",
-                      backgroundColor: "rgba(255,255,255,0.06)",
-                      color: "#fff",
-                      border: "1px solid rgba(255,255,255,0.1)",
-                    }}
-                    placeholder="alex@example.com"
-                  />
-                </div>
-                <div>
-                  <label style={{ display: "block", fontSize: "0.85rem", color: "#cbd5e1", marginBottom: "0.35rem", fontWeight: 600 }}>
-                    Target Position *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={formData.position}
-                    onChange={(e) => setFormData({ ...formData, position: e.target.value })}
-                    style={{
-                      width: "100%",
-                      padding: "0.6rem 0.85rem",
-                      borderRadius: "8px",
-                      backgroundColor: "rgba(255,255,255,0.06)",
-                      color: "#fff",
-                      border: "1px solid rgba(255,255,255,0.1)",
-                    }}
-                    placeholder="e.g. Senior Frontend Engineer"
-                  />
-                </div>
-              </div>
-
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
-                <div>
-                  <label style={{ display: "block", fontSize: "0.85rem", color: "#cbd5e1", marginBottom: "0.35rem", fontWeight: 600 }}>
-                    Phone Number
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.phone}
-                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                    style={{
-                      width: "100%",
-                      padding: "0.6rem 0.85rem",
-                      borderRadius: "8px",
-                      backgroundColor: "rgba(255,255,255,0.06)",
-                      color: "#fff",
-                      border: "1px solid rgba(255,255,255,0.1)",
-                    }}
-                    placeholder="+1 (555) 000-0000"
-                  />
-                </div>
-                <div>
-                  <label style={{ display: "block", fontSize: "0.85rem", color: "#cbd5e1", marginBottom: "0.35rem", fontWeight: 600 }}>
-                    Reward Bonus ($)
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    value={formData.rewardAmount}
-                    onChange={(e) => setFormData({ ...formData, rewardAmount: Number(e.target.value) })}
-                    style={{
-                      width: "100%",
-                      padding: "0.6rem 0.85rem",
-                      borderRadius: "8px",
-                      backgroundColor: "rgba(255,255,255,0.06)",
-                      color: "#fff",
-                      border: "1px solid rgba(255,255,255,0.1)",
-                    }}
-                  />
-                </div>
-              </div>
-
-              <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.75rem", marginTop: "1rem" }}>
-                <button
-                  type="button"
-                  onClick={() => setShowModal(false)}
-                  style={{
-                    padding: "0.6rem 1.1rem",
-                    borderRadius: "8px",
-                    backgroundColor: "rgba(255,255,255,0.06)",
-                    color: "#cbd5e1",
-                    fontWeight: 600,
-                    cursor: "pointer",
-                  }}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  style={{
-                    padding: "0.6rem 1.25rem",
-                    borderRadius: "8px",
-                    backgroundColor: "var(--color-primary, #6366f1)",
-                    color: "#fff",
-                    fontWeight: 600,
-                    cursor: "pointer",
-                  }}
-                >
-                  Submit Referral
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      <Pagination
+        currentPage={currentPage}
+        totalPages={totalPages}
+        onPageChange={setCurrentPage}
+        totalItems={filteredReferrals.length}
+        itemsPerPage={itemsPerPage}
+      />
     </div>
   );
 }

@@ -24,6 +24,7 @@ export default async function DashboardLayout({ children }: DashboardLayoutProps
     { name: "Analytics Logs", href: "/dashboard/analytics", icon: "fa-solid fa-chart-line" },
     { name: "CRM Retainers", href: "/dashboard/clients", icon: "fa-solid fa-handshake" },
     { name: "Referral Pipeline", href: "/dashboard/referrals", icon: "fa-solid fa-link" },
+    { name: "Settings & Security", href: "/dashboard/settings", icon: "fa-solid fa-gear" },
   ];
 
   return (

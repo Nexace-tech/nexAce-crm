@@ -1,12 +1,19 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { logoutAction } from "@/app/actions/auth";
-import styles from "./LogoutHeaderBtn.module.css";
+import { LogOut, AlertCircle } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 export function LogoutHeaderBtn() {
   const [showConfirm, setShowConfirm] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const handleLogout = async () => {
     setLoggingOut(true);
@@ -21,46 +28,55 @@ export function LogoutHeaderBtn() {
 
   return (
     <>
-      <button 
-        type="button" 
-        onClick={() => setShowConfirm(true)} 
-        className={styles.logoutBtn}
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={() => setShowConfirm(true)}
+        className="text-muted-foreground hover:text-destructive hover:bg-destructive/10 gap-2 transition-colors"
         title="Log Out"
       >
-        <i className="fa-solid fa-right-from-bracket"></i>
-        <span>Log Out</span>
-      </button>
+        <LogOut className="w-4 h-4" />
+        <span className="hidden sm:inline font-medium">Log Out</span>
+      </Button>
 
-      {/* Sleek Logout Confirmation Modal */}
-      {showConfirm && (
-        <div className={styles.modalOverlay} onClick={() => !loggingOut && setShowConfirm(false)}>
-          <div className={`${styles.modal} glass-panel`} onClick={(e) => e.stopPropagation()}>
-            <h3 className={styles.modalTitle}>
-              <i className="fa-solid fa-right-from-bracket" style={{ color: "var(--color-danger)" }}></i> Confirm Log Out
-            </h3>
-            <p className={styles.modalDesc}>
+      {/* Sleek Logout Confirmation Modal Rendered via React Portal */}
+      {showConfirm && mounted && createPortal(
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in"
+          onClick={() => !loggingOut && setShowConfirm(false)}
+        >
+          <div
+            className="w-full max-w-md bg-card border border-border rounded-xl p-6 shadow-2xl space-y-4 animate-in zoom-in-95"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-3 text-destructive">
+              <AlertCircle className="w-6 h-6 shrink-0" />
+              <h3 className="text-lg font-bold text-foreground">Confirm Log Out</h3>
+            </div>
+            <p className="text-sm text-muted-foreground leading-relaxed">
               Are you sure you want to sign out of your NexAce CRM workspace?
             </p>
-            <div className={styles.modalActions}>
-              <button 
-                type="button" 
-                className={styles.btnCancel} 
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={() => setShowConfirm(false)}
                 disabled={loggingOut}
               >
                 Cancel
-              </button>
-              <button 
-                type="button" 
-                className={styles.btnConfirm} 
+              </Button>
+              <Button
+                color="destructive"
+                size="sm"
                 onClick={handleLogout}
                 disabled={loggingOut}
               >
                 {loggingOut ? "Logging Out..." : "Log Out"}
-              </button>
+              </Button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );

@@ -12,7 +12,7 @@
 /mongodb.txt
 # testing
 /coverage
-
+/v1
 # next.js
 /.next/
 /out/

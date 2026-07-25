@@ -2,19 +2,33 @@
 
 import React, { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
-import styles from "./settings.module.css";
+import { 
+  UserCog, 
+  ShieldCheck, 
+  Eye, 
+  EyeOff, 
+  Mail, 
+  CheckCircle, 
+  AlertCircle,
+  Save,
+  KeyRound,
+  ExternalLink
+} from "lucide-react";
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 
 export default function SettingsPage() {
   const { user, loading: authLoading, refreshUser } = useAuth();
 
-  // Form states
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [bio, setBio] = useState("");
   const [skills, setSkills] = useState("");
 
-  // Password change states
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -22,7 +36,6 @@ export default function SettingsPage() {
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  // Email verification modal states
   const [showEmailModal, setShowEmailModal] = useState(false);
   const [emailCode, setEmailCode] = useState("");
   const [emailCodeError, setEmailCodeError] = useState("");
@@ -30,7 +43,6 @@ export default function SettingsPage() {
   const [devPreviewUrl, setDevPreviewUrl] = useState("");
   const [devCode, setDevCode] = useState("");
 
-  // UI state
   const [updatingProfile, setUpdatingProfile] = useState(false);
   const [updatingPassword, setUpdatingPassword] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
@@ -42,7 +54,6 @@ export default function SettingsPage() {
     }, 4000);
   };
 
-  // Hydrate form states once user is loaded
   useEffect(() => {
     if (user) {
       setName(user.name || "");
@@ -137,22 +148,6 @@ export default function SettingsPage() {
     await executeUpdateProfile(profileData);
   };
 
-  const handleVerifyEmailCode = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!emailCode) {
-      setEmailCodeError("Please enter the verification code.");
-      return;
-    }
-    setEmailCodeError("");
-    if (pendingProfileData) {
-      const verifiedProfileData = {
-        ...pendingProfileData,
-        code: emailCode,
-      };
-      await executeUpdateProfile(verifiedProfileData);
-    }
-  };
-
   const handleUpdatePassword = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
@@ -200,264 +195,138 @@ export default function SettingsPage() {
 
   if (authLoading || !user) {
     return (
-      <div style={{ padding: "2rem", color: "var(--text-secondary)", textAlign: "center" }}>
-        Loading Settings...
+      <div className="flex items-center justify-center min-h-[300px] text-muted-foreground text-sm">
+        <div className="animate-spin w-5 h-5 border-2 border-primary border-t-transparent rounded-full mr-3" />
+        Loading User Settings...
       </div>
     );
   }
 
   return (
-    <div className={styles.container}>
-      <div className={styles.titleSection}>
-        <h1 className={styles.title}>Settings</h1>
-        <p style={{ color: "var(--text-secondary)", fontSize: "0.95rem" }}>
-          Manage your account profile details, security credentials, and preferences.
-        </p>
-      </div>
-
-      {/* Profile Details Form */}
-      <form onSubmit={handleUpdateProfile} className={`${styles.section} glass-panel`}>
-        <h2 className={styles.sectionTitle}>
-          <i className="fa-solid fa-user-gear" style={{ color: "var(--color-primary)" }}></i> Account Profile
-        </h2>
-
-        <div className={styles.formGrid}>
-          <div className={styles.formGroup}>
-            <label className={styles.label}>Full Name</label>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className={styles.input}
-              required
-            />
-          </div>
-
-          <div className={styles.formGroup}>
-            <label className={styles.label}>Email Address</label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className={styles.input}
-              required
-            />
-          </div>
-
-          <div className={styles.formGroup}>
-            <label className={styles.label}>Phone Number</label>
-            <input
-              type="text"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              placeholder="e.g. +1-555-0199"
-              className={styles.input}
-            />
-          </div>
-
-          <div className={styles.formGroup}>
-            <label className={styles.label}>Skills / Tags (comma-separated)</label>
-            <input
-              type="text"
-              value={skills}
-              onChange={(e) => setSkills(e.target.value)}
-              placeholder="e.g. React, Next.js, Marketing"
-              className={styles.input}
-            />
-          </div>
-
-          <div className={styles.formGroupFull}>
-            <label className={styles.label}>Bio / Description</label>
-            <textarea
-              value={bio}
-              onChange={(e) => setBio(e.target.value)}
-              placeholder="Tell us about yourself..."
-              className={`${styles.input} ${styles.textarea}`}
-              style={{ minHeight: "100px", resize: "vertical" }}
-            />
-          </div>
-        </div>
-
-        <button type="submit" className={styles.btnPrimary} disabled={updatingProfile}>
-          {updatingProfile ? "Saving changes..." : "Save Profile Details"}
-        </button>
-      </form>
-
-      {/* Security Form */}
-      <form onSubmit={handleUpdatePassword} className={`${styles.section} glass-panel`}>
-        <h2 className={styles.sectionTitle}>
-          <i className="fa-solid fa-shield-halved" style={{ color: "var(--color-primary)" }}></i> Password & Security
-        </h2>
-
-        <div className={styles.formGrid}>
-          <div className={styles.formGroup}>
-            <label className={styles.label}>Current Password</label>
-            <div className={styles.passwordWrapper}>
-              <input
-                type={showCurrentPassword ? "text" : "password"}
-                value={currentPassword}
-                onChange={(e) => setCurrentPassword(e.target.value)}
-                placeholder="••••••••"
-                className={`${styles.input} ${styles.passwordInput}`}
-                required
-              />
-              <button
-                type="button"
-                className={styles.eyeButton}
-                onClick={() => setShowCurrentPassword(!showCurrentPassword)}
-                title={showCurrentPassword ? "Hide password" : "Show password"}
-              >
-                {showCurrentPassword ? (
-                  <i className="fa-solid fa-eye-slash"></i>
-                ) : (
-                  <i className="fa-solid fa-eye"></i>
-                )}
-              </button>
-            </div>
-          </div>
-
-          <div style={{ gridColumn: "1 / -1" }} />
-
-          <div className={styles.formGroup}>
-            <label className={styles.label}>New Password</label>
-            <div className={styles.passwordWrapper}>
-              <input
-                type={showNewPassword ? "text" : "password"}
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                placeholder="••••••••"
-                className={`${styles.input} ${styles.passwordInput}`}
-                required
-              />
-              <button
-                type="button"
-                className={styles.eyeButton}
-                onClick={() => setShowNewPassword(!showNewPassword)}
-                title={showNewPassword ? "Hide password" : "Show password"}
-              >
-                {showNewPassword ? (
-                  <i className="fa-solid fa-eye-slash"></i>
-                ) : (
-                  <i className="fa-solid fa-eye"></i>
-                )}
-              </button>
-            </div>
-          </div>
-
-          <div className={styles.formGroup}>
-            <label className={styles.label}>Confirm New Password</label>
-            <div className={styles.passwordWrapper}>
-              <input
-                type={showConfirmPassword ? "text" : "password"}
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                placeholder="••••••••"
-                className={`${styles.input} ${styles.passwordInput}`}
-                required
-              />
-              <button
-                type="button"
-                className={styles.eyeButton}
-                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                title={showConfirmPassword ? "Hide password" : "Show password"}
-              >
-                {showConfirmPassword ? (
-                  <i className="fa-solid fa-eye-slash"></i>
-                ) : (
-                  <i className="fa-solid fa-eye"></i>
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <button type="submit" className={styles.btnPrimary} disabled={updatingPassword}>
-          {updatingPassword ? "Updating password..." : "Change Password"}
-        </button>
-      </form>
-
+    <div className="space-y-8 max-w-4xl">
       {/* Toast Notification */}
       {toast && (
-        <div className={`${styles.toast} ${toast.type === "success" ? styles.toastSuccess : styles.toastError}`}>
-          <i className={toast.type === "success" ? "fa-solid fa-circle-check" : "fa-solid fa-circle-xmark"}></i>
+        <div
+          className={cn(
+            "fixed top-4 right-4 z-50 px-4 py-3 rounded-lg shadow-lg border text-sm font-medium flex items-center gap-2 animate-in fade-in slide-in-from-top-2",
+            toast.type === "success"
+              ? "bg-emerald-500/90 text-white border-emerald-600"
+              : "bg-destructive/90 text-white border-destructive"
+          )}
+        >
+          {toast.type === "success" ? <CheckCircle className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
           {toast.message}
         </div>
       )}
-      {/* Email Verification Modal */}
-      {showEmailModal && (
-        <div className={styles.modalOverlay} onClick={() => !updatingProfile && setShowEmailModal(false)}>
-          <div className={`${styles.modal} glass-panel`} onClick={(e) => e.stopPropagation()}>
-            <h3 className={styles.modalTitle}>
-              <i className="fa-solid fa-envelope" style={{ color: "var(--color-primary)" }}></i> Verify New Email
-            </h3>
-            
-            <p className={styles.modalDesc}>
-              To change your account email to <strong>{email}</strong>, please authorize this action by entering the simulated code.
-            </p>
 
-            {devPreviewUrl ? (
-              <div style={{ background: "rgba(99, 102, 241, 0.08)", border: "1px solid var(--color-primary-glow)", padding: "1rem", borderRadius: "var(--radius-md)", fontSize: "0.85rem", color: "var(--text-primary)", display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-                <div>
-                  <i className="fa-solid fa-paper-plane" style={{ color: "var(--color-primary)", marginRight: "0.35rem" }}></i>
-                  <strong>Developer SMTP Sandbox:</strong> Verification code sent!
-                </div>
-                <div>
-                  Use code: <code style={{ background: "rgba(255,255,255,0.1)", padding: "0.15rem 0.35rem", borderRadius: "4px", color: "var(--color-primary)", fontWeight: "bold" }}>{devCode}</code>
-                </div>
-                <a href={devPreviewUrl} target="_blank" rel="noopener noreferrer" style={{ color: "var(--color-info)", textDecoration: "underline", fontWeight: 600 }}>
-                  View Sent Email Inbox ↗
-                </a>
+      {/* Title */}
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight text-foreground">Settings & Security</h1>
+        <p className="text-sm text-muted-foreground mt-0.5">
+          Manage your user profile details, email address, and security authentication credentials.
+        </p>
+      </div>
+
+      {/* Account Profile Section */}
+      <form onSubmit={handleUpdateProfile}>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg font-bold flex items-center gap-2">
+              <UserCog className="w-5 h-5 text-primary" /> Account Profile
+            </CardTitle>
+            <CardDescription>Update your personal information and tenant display details</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-foreground">Full Name</label>
+                <Input value={name} onChange={(e) => setName(e.target.value)} required />
               </div>
-            ) : (
-              <div style={{ background: "rgba(16, 185, 129, 0.08)", border: "1px solid rgba(16, 185, 129, 0.2)", padding: "1rem", borderRadius: "var(--radius-md)", fontSize: "0.85rem", color: "var(--text-primary)" }}>
-                <i className="fa-solid fa-envelope-circle-check" style={{ color: "#10b981", marginRight: "0.35rem" }}></i>
-                Verification code sent successfully. Please check your inbox.
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-foreground">Email Address</label>
+                <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
               </div>
-            )}
 
-            <form onSubmit={handleVerifyEmailCode} style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-              {emailCodeError && (
-                <div className={styles.toastError} style={{ padding: "0.5rem", borderRadius: "var(--radius-md)", fontSize: "0.85rem", color: "var(--color-danger)", border: "1px solid rgba(239, 68, 68, 0.15)", background: "rgba(239, 68, 68, 0.05)" }}>
-                  {emailCodeError}
-                </div>
-              )}
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-foreground">Phone Number</label>
+                <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+1-555-0199" />
+              </div>
 
-              <div className={styles.formGroup}>
-                <label className={styles.label}>Verification Code</label>
-                <input
-                  type="text"
-                  placeholder="e.g. 654321"
-                  value={emailCode}
-                  onChange={(e) => setEmailCode(e.target.value)}
-                  className={styles.input}
-                  maxLength={6}
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-foreground">Skills / Tags (comma-separated)</label>
+                <Input value={skills} onChange={(e) => setSkills(e.target.value)} placeholder="React, Next.js, Management" />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-foreground">Bio / Description</label>
+              <textarea
+                value={bio}
+                onChange={(e) => setBio(e.target.value)}
+                rows={3}
+                className="w-full px-3 py-2 text-sm bg-background border border-border rounded-md text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary resize-y"
+              />
+            </div>
+
+            <Button color="primary" type="submit" disabled={updatingProfile} className="gap-2">
+              <Save className="w-4 h-4" /> {updatingProfile ? "Saving Details..." : "Save Profile Details"}
+            </Button>
+          </CardContent>
+        </Card>
+      </form>
+
+      {/* Security Section */}
+      <form onSubmit={handleUpdatePassword}>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg font-bold flex items-center gap-2">
+              <ShieldCheck className="w-5 h-5 text-emerald-500" /> Password & Security
+            </CardTitle>
+            <CardDescription>Modify your security credentials</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-1.5 md:col-span-2">
+                <label className="text-xs font-semibold text-foreground">Current Password</label>
+                <Input
+                  type={showCurrentPassword ? "text" : "password"}
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  placeholder="••••••••"
                   required
                 />
               </div>
 
-              <div className={styles.modalActions}>
-                <button
-                  type="button"
-                  className={styles.btnCancel}
-                  onClick={() => setShowEmailModal(false)}
-                  disabled={updatingProfile}
-                  style={{ padding: "0.75rem" }}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className={styles.btnPrimary}
-                  disabled={updatingProfile}
-                  style={{ alignSelf: "unset", flex: 1, padding: "0.75rem" }}
-                >
-                  {updatingProfile ? "Updating Profile..." : "Verify & Save"}
-                </button>
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-foreground">New Password</label>
+                <Input
+                  type={showNewPassword ? "text" : "password"}
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="••••••••"
+                  required
+                />
               </div>
-            </form>
-          </div>
-        </div>
-      )}
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-foreground">Confirm New Password</label>
+                <Input
+                  type={showConfirmPassword ? "text" : "password"}
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="••••••••"
+                  required
+                />
+              </div>
+            </div>
+
+            <Button color="primary" type="submit" disabled={updatingPassword} className="gap-2">
+              <KeyRound className="w-4 h-4" /> {updatingPassword ? "Updating Password..." : "Change Password"}
+            </Button>
+          </CardContent>
+        </Card>
+      </form>
     </div>
   );
 }

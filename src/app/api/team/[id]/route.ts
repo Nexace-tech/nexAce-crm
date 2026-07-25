@@ -129,8 +129,8 @@ export async function PUT(request: Request, { params }: RouteParams) {
       }
     }
 
-    // Personal profile meta updates (restricted strictly to account owner/self)
-    if (isSelf) {
+    // Personal profile meta updates (Allowed for Self and Admin)
+    if (isSelf || isAdmin) {
       if (body.bio !== undefined) user.bio = body.bio;
       if (body.phone !== undefined) user.phone = body.phone;
       if (body.photoUrl !== undefined) user.photoUrl = body.photoUrl;

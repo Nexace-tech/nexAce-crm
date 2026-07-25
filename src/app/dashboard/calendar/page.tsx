@@ -2,13 +2,31 @@
 
 import React, { useState, useEffect, startTransition } from "react";
 import { useAuth } from "@/hooks/useAuth";
-import styles from "./calendar.module.css";
+import { 
+  Calendar as CalendarIcon, 
+  ChevronLeft, 
+  ChevronRight, 
+  Plus, 
+  Rocket, 
+  Clock, 
+  Fingerprint, 
+  CheckCircle, 
+  AlertCircle,
+  FileSpreadsheet,
+  CheckCheck,
+  Building,
+  UserCheck
+} from "lucide-react";
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 
 export default function CalendarPage() {
   const { user: currentUser, loading: authLoading } = useAuth();
   const [activeTab, setActiveTab] = useState<"calendar" | "sprints" | "timesheets" | "attendance">("calendar");
 
-  // Loading indicator states
   const [loading, setLoading] = useState(true);
   const [mounted, setMounted] = useState(false);
 
@@ -25,17 +43,15 @@ export default function CalendarPage() {
     setMounted(true);
   }, []);
 
-  // ----------------- Tab 1: Calendar States -----------------
+  // Calendar States
   const [events, setEvents] = useState<any[]>([]);
   const [currentDate, setCurrentDate] = useState(new Date());
   const [showEventModal, setShowEventModal] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<any | null>(null);
 
-  // Filters
   const [filterType, setFilterType] = useState<string>("All");
   const [filterDept, setFilterDept] = useState<string>("All");
 
-  // New Event form states
   const [newEvtTitle, setNewEvtTitle] = useState("");
   const [newEvtDesc, setNewEvtDesc] = useState("");
   const [newEvtType, setNewEvtType] = useState<"Meeting" | "Holiday" | "Birthday" | "Deadline" | "Personal">("Meeting");
@@ -43,7 +59,7 @@ export default function CalendarPage() {
   const [newEvtStart, setNewEvtStart] = useState("");
   const [newEvtEnd, setNewEvtEnd] = useState("");
 
-  // ----------------- Tab 2: Sprints States -----------------
+  // Sprints States
   const [sprints, setSprints] = useState<any[]>([]);
   const [showSprintModal, setShowSprintModal] = useState(false);
   const [newSprintName, setNewSprintName] = useState("");
@@ -51,25 +67,24 @@ export default function CalendarPage() {
   const [newSprintStart, setNewSprintStart] = useState("");
   const [newSprintEnd, setNewSprintEnd] = useState("");
 
-  // ----------------- Tab 3: Timesheet States -----------------
+  // Timesheet States
   const [timesheetEntries, setTimesheetEntries] = useState<any[]>([]);
   const [pendingSubmissions, setPendingSubmissions] = useState<any[]>([]);
   const [timesheetWeekStart, setTimesheetWeekStart] = useState(() => {
     const d = new Date();
     const day = d.getDay();
-    const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Adjust to Monday
+    const diff = d.getDate() - day + (day === 0 ? -6 : 1);
     const mon = new Date(d.setDate(diff));
     mon.setHours(0,0,0,0);
     return mon;
   });
 
-  // Timesheet grid inputs state
   const [timesheetRows, setTimesheetRows] = useState<any[]>([
     { project: "NexAce CRM Implementation", taskName: "UI/UX Development", mon: 0, tue: 0, wed: 0, thu: 0, fri: 0, isBillable: true },
     { project: "Client Portal Integration", taskName: "API endpoints integration", mon: 0, tue: 0, wed: 0, thu: 0, fri: 0, isBillable: true },
   ]);
 
-  // ----------------- Tab 4: Attendance States -----------------
+  // Attendance States
   const [attendanceToday, setAttendanceToday] = useState<any>(null);
   const [attendanceHistory, setAttendanceHistory] = useState<any[]>([]);
   const [shiftInfo, setShiftInfo] = useState<any>(null);
@@ -80,15 +95,9 @@ export default function CalendarPage() {
 
   const [projectsList, setProjectsList] = useState<string[]>(["General Administration"]);
 
-  // Role permissions helpers
   const isAdmin = currentUser?.role === "Admin";
   const isManagerOrAdmin = currentUser?.role === "Admin" || currentUser?.role === "Manager";
 
-  // ==========================================
-  // FETCHERS
-  // ==========================================
-
-  // Fetch Calendar Events
   const fetchEvents = async () => {
     try {
       const deptFilter = currentUser?.department || "All";
@@ -102,7 +111,6 @@ export default function CalendarPage() {
     }
   };
 
-  // Fetch Sprints
   const fetchSprints = async () => {
     try {
       const res = await fetch("/api/sprints");
@@ -115,7 +123,6 @@ export default function CalendarPage() {
     }
   };
 
-  // Fetch Projects for Dropdown
   const fetchProjects = async () => {
     try {
       const res = await fetch("/api/projects");
@@ -131,7 +138,6 @@ export default function CalendarPage() {
     }
   };
 
-  // Fetch Timesheets for current week + pending approvals
   const fetchTimesheets = async () => {
     try {
       const startStr = timesheetWeekStart.toISOString();
@@ -149,7 +155,7 @@ export default function CalendarPage() {
           data.entries.forEach((entry: any) => {
             const key = `${entry.project}-${entry.taskName}`;
             const entryDate = new Date(entry.date);
-            const dayIndex = (entryDate.getDay() + 6) % 7; // Mon=0, Tue=1, ..., Sun=6
+            const dayIndex = (entryDate.getDay() + 6) % 7;
             
             if (!rowsMap[key]) {
               rowsMap[key] = {
@@ -168,10 +174,6 @@ export default function CalendarPage() {
             else if (dayIndex === 4) rowsMap[key].fri = entry.hours;
           });
           setTimesheetRows(Object.values(rowsMap));
-        } else {
-          setTimesheetRows([
-            { project: "", taskName: "", mon: 0, tue: 0, wed: 0, thu: 0, fri: 0, isBillable: true }
-          ]);
         }
       }
 
@@ -187,7 +189,6 @@ export default function CalendarPage() {
     }
   };
 
-  // Fetch Attendance Log
   const fetchAttendance = async () => {
     try {
       const res = await fetch("/api/attendance");
@@ -202,7 +203,6 @@ export default function CalendarPage() {
     }
   };
 
-  // Load active tab data
   useEffect(() => {
     if (!mounted) return;
     const loadData = async () => {
@@ -219,7 +219,6 @@ export default function CalendarPage() {
     loadData();
   }, [activeTab, timesheetWeekStart, mounted]);
 
-  // Attendance shift clock timer effect
   useEffect(() => {
     if (!mounted) return;
     if (attendanceToday && !attendanceToday.clockOut) {
@@ -262,11 +261,6 @@ export default function CalendarPage() {
     }
   }, [attendanceToday]);
 
-  // ==========================================
-  // ACTION HANDLERS
-  // ==========================================
-
-  // Calendar Event Creation
   const handleCreateEvent = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newEvtTitle || !newEvtStart || !newEvtEnd) {
@@ -303,7 +297,6 @@ export default function CalendarPage() {
     }
   };
 
-  // Sprint Creation (Admin/Manager only)
   const handleCreateSprint = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newSprintName || !newSprintStart || !newSprintEnd) {
@@ -339,7 +332,6 @@ export default function CalendarPage() {
     }
   };
 
-  // Activate / Complete Sprint
   const handleUpdateSprintStatus = async (sprintId: string, status: "Active" | "Completed") => {
     try {
       const res = await fetch("/api/sprints", {
@@ -357,7 +349,6 @@ export default function CalendarPage() {
     }
   };
 
-  // Attendance Clock-In / Clock-Out / Resume actions
   const handleClockAction = async (action: "in" | "out" | "resume") => {
     try {
       const res = await fetch("/api/attendance", {
@@ -385,7 +376,6 @@ export default function CalendarPage() {
     }
   };
 
-  // Timesheet grid dynamic handling
   const handleRowChange = (index: number, field: string, value: any) => {
     const updated = [...timesheetRows];
     updated[index][field] = value;
@@ -462,19 +452,6 @@ export default function CalendarPage() {
     }
   };
 
-  // Calculate Timesheet Totals
-  const totalLoggedHours = timesheetRows.reduce((acc, row) => acc + (Number(row.mon) || 0) + (Number(row.tue) || 0) + (Number(row.wed) || 0) + (Number(row.thu) || 0) + (Number(row.fri) || 0), 0);
-  const totalBillableHours = timesheetRows.filter(r => r.isBillable).reduce((acc, row) => acc + (Number(row.mon) || 0) + (Number(row.tue) || 0) + (Number(row.wed) || 0) + (Number(row.thu) || 0) + (Number(row.fri) || 0), 0);
-  const totalNonBillableHours = totalLoggedHours - totalBillableHours;
-  const billableRatio = totalLoggedHours > 0 ? Math.round((totalBillableHours / totalLoggedHours) * 100) : 0;
-
-  // Overtime Calculation Helpers
-  const SHIFT_TARGET_SECONDS = 8 * 3600; // 8 Hours in seconds
-  const isOvertimeActive = totalSecondsWorked > SHIFT_TARGET_SECONDS;
-  const overtimeSeconds = Math.max(0, totalSecondsWorked - SHIFT_TARGET_SECONDS);
-  const overtimeHoursDecimal = (overtimeSeconds / 3600).toFixed(1);
-
-  // Calendar Helpers
   const getDaysInMonth = () => {
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth();
@@ -507,133 +484,162 @@ export default function CalendarPage() {
 
   if (!mounted || authLoading) {
     return (
-      <div style={{ padding: "2rem", color: "var(--text-secondary)", textAlign: "center" }}>
-        <i className="fa-solid fa-spinner fa-spin" style={{ marginRight: "0.5rem" }}></i> Loading Calendar...
+      <div className="flex items-center justify-center min-h-[300px] text-muted-foreground text-sm">
+        <div className="animate-spin w-5 h-5 border-2 border-primary border-t-transparent rounded-full mr-3" />
+        Loading Calendar & Operations...
       </div>
     );
   }
 
   return (
-    <div className={styles.container}>
-      {/* Title section */}
-      <div className={styles.titleSection}>
+    <div className="space-y-6">
+      {/* Toast Notification */}
+      {toast && (
+        <div
+          className={cn(
+            "fixed top-4 right-4 z-50 px-4 py-3 rounded-lg shadow-lg border text-sm font-medium flex items-center gap-2 animate-in fade-in slide-in-from-top-2",
+            toast.type === "success"
+              ? "bg-emerald-500/90 text-white border-emerald-600"
+              : "bg-destructive/90 text-white border-destructive"
+          )}
+        >
+          {toast.type === "success" ? <CheckCircle className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
+          {toast.message}
+        </div>
+      )}
+
+      {/* Title Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className={styles.title}>Calendar, Sprints & Time</h1>
-          <p style={{ color: "var(--text-secondary)", fontSize: "0.95rem" }}>
-            Shared team schedule, sprint burndown tracking, client billable timesheets, and shift attendance with overtime tracking.
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">Calendar, Sprints & Time</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            Team calendar schedules, sprint planning, client billable timesheets, and shift attendance.
           </p>
         </div>
 
-        {activeTab === "calendar" && (
-          <button className={styles.btnPrimary} onClick={() => setShowEventModal(true)}>
-            <i className="fa-solid fa-calendar-plus" style={{ marginRight: "0.35rem" }}></i> Schedule Event
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {activeTab === "calendar" && (
+            <Button color="primary" size="sm" onClick={() => setShowEventModal(true)} className="gap-2">
+              <Plus className="w-4 h-4" /> Schedule Event
+            </Button>
+          )}
 
-        {activeTab === "sprints" && isManagerOrAdmin && (
-          <button className={styles.btnPrimary} onClick={() => setShowSprintModal(true)}>
-            <i className="fa-solid fa-plus" style={{ marginRight: "0.35rem" }}></i> Plan Sprint
-          </button>
-        )}
+          {activeTab === "sprints" && isManagerOrAdmin && (
+            <Button color="primary" size="sm" onClick={() => setShowSprintModal(true)} className="gap-2">
+              <Rocket className="w-4 h-4" /> Plan Sprint
+            </Button>
+          )}
+        </div>
       </div>
 
-      {/* Navigation Tabs */}
-      <div className={styles.tabs}>
+      {/* Tabs */}
+      <div className="flex border-b border-border space-x-1 overflow-x-auto no-scrollbar">
         <button
-          className={`${styles.tab} ${activeTab === "calendar" ? styles.tabActive : ""}`}
           onClick={() => startTransition(() => setActiveTab("calendar"))}
+          className={cn(
+            "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer",
+            activeTab === "calendar"
+              ? "border-primary text-primary font-semibold"
+              : "border-transparent text-muted-foreground hover:text-foreground"
+          )}
         >
-          <i className="fa-solid fa-calendar-days" style={{ marginRight: "0.35rem" }}></i> Shared Calendar
+          <CalendarIcon className="w-4 h-4" /> Shared Calendar
         </button>
+
         <button
-          className={`${styles.tab} ${activeTab === "sprints" ? styles.tabActive : ""}`}
           onClick={() => startTransition(() => setActiveTab("sprints"))}
+          className={cn(
+            "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer",
+            activeTab === "sprints"
+              ? "border-primary text-primary font-semibold"
+              : "border-transparent text-muted-foreground hover:text-foreground"
+          )}
         >
-          <i className="fa-solid fa-person-running" style={{ marginRight: "0.35rem" }}></i> Sprint Board
+          <Rocket className="w-4 h-4" /> Sprint Board
         </button>
+
         <button
-          className={`${styles.tab} ${activeTab === "timesheets" ? styles.tabActive : ""}`}
           onClick={() => startTransition(() => setActiveTab("timesheets"))}
+          className={cn(
+            "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer",
+            activeTab === "timesheets"
+              ? "border-primary text-primary font-semibold"
+              : "border-transparent text-muted-foreground hover:text-foreground"
+          )}
         >
-          <i className="fa-solid fa-business-time" style={{ marginRight: "0.35rem" }}></i> Timesheets
+          <FileSpreadsheet className="w-4 h-4" /> Timesheets
         </button>
+
         <button
-          className={`${styles.tab} ${activeTab === "attendance" ? styles.tabActive : ""}`}
           onClick={() => startTransition(() => setActiveTab("attendance"))}
+          className={cn(
+            "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer",
+            activeTab === "attendance"
+              ? "border-primary text-primary font-semibold"
+              : "border-transparent text-muted-foreground hover:text-foreground"
+          )}
         >
-          <i className="fa-solid fa-fingerprint" style={{ marginRight: "0.35rem" }}></i> Shift Clock
+          <Fingerprint className="w-4 h-4" /> Shift Clock
         </button>
       </div>
 
-      {/* ----------------- Tab 1: Calendar ----------------- */}
+      {/* Tab 1: Calendar */}
       {activeTab === "calendar" && (
-        <div className={styles.calendarWrapper}>
-          <div className={styles.calendarHeader}>
-            <div className={styles.calendarControls}>
-              <button className={styles.btnSecondary} onClick={handlePrevMonth}>
-                <i className="fa-solid fa-chevron-left"></i>
-              </button>
-              <h2 className={styles.calendarTitle}>
+        <Card className="p-6 space-y-6">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pb-4 border-b border-border">
+            <div className="flex items-center gap-3">
+              <Button variant="outline" size="icon" onClick={handlePrevMonth} className="h-8 w-8">
+                <ChevronLeft className="w-4 h-4" />
+              </Button>
+              <h2 className="text-lg font-bold text-foreground">
                 {monthsNames[currentDate.getMonth()]} {currentDate.getFullYear()}
               </h2>
-              <button className={styles.btnSecondary} onClick={handleNextMonth}>
-                <i className="fa-solid fa-chevron-right"></i>
-              </button>
+              <Button variant="outline" size="icon" onClick={handleNextMonth} className="h-8 w-8">
+                <ChevronRight className="w-4 h-4" />
+              </Button>
             </div>
 
-            {/* Event Filter Toolbar */}
-            <div style={{ display: "flex", gap: "0.75rem", alignItems: "center" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "0.35rem", fontSize: "0.85rem" }}>
-                <span style={{ color: "var(--text-muted)" }}>Type:</span>
-                <select
-                  className={styles.select}
-                  value={filterType}
-                  onChange={(e) => setFilterType(e.target.value)}
-                  style={{ padding: "0.35rem 0.6rem", fontSize: "0.85rem" }}
-                >
-                  <option value="All">All Event Types</option>
-                  <option value="Meeting">Meetings</option>
-                  <option value="Holiday">Holidays</option>
-                  <option value="Birthday">Birthdays / Anniversaries</option>
-                  <option value="Deadline">Deadlines</option>
-                  <option value="Personal">Personal</option>
-                </select>
-              </div>
+            <div className="flex items-center gap-3">
+              <select
+                value={filterType}
+                onChange={(e) => setFilterType(e.target.value)}
+                className="h-8 px-2.5 text-xs bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+              >
+                <option value="All">All Event Types</option>
+                <option value="Meeting">Meetings</option>
+                <option value="Holiday">Holidays</option>
+                <option value="Birthday">Birthdays</option>
+                <option value="Deadline">Deadlines</option>
+                <option value="Personal">Personal</option>
+              </select>
 
-              <div style={{ display: "flex", alignItems: "center", gap: "0.35rem", fontSize: "0.85rem" }}>
-                <span style={{ color: "var(--text-muted)" }}>Department:</span>
-                <select
-                  className={styles.select}
-                  value={filterDept}
-                  onChange={(e) => setFilterDept(e.target.value)}
-                  style={{ padding: "0.35rem 0.6rem", fontSize: "0.85rem" }}
-                >
-                  <option value="All">All Departments</option>
-                  <option value="Management">Management</option>
-                  <option value="Engineering">Engineering</option>
-                  <option value="Design">Design</option>
-                  <option value="Marketing">Marketing</option>
-                </select>
-              </div>
+              <select
+                value={filterDept}
+                onChange={(e) => setFilterDept(e.target.value)}
+                className="h-8 px-2.5 text-xs bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+              >
+                <option value="All">All Departments</option>
+                <option value="Management">Management</option>
+                <option value="Engineering">Engineering</option>
+                <option value="Design">Design</option>
+                <option value="Marketing">Marketing</option>
+              </select>
             </div>
           </div>
 
-          <div className={styles.monthGrid}>
-            {/* Weekday headers */}
+          <div className="grid grid-cols-7 gap-px bg-border rounded-lg overflow-hidden border border-border">
             {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
-              <div key={day} className={styles.weekdayHeader}>
+              <div key={day} className="bg-muted/60 p-2.5 text-center text-xs font-semibold text-muted-foreground uppercase">
                 {day}
               </div>
             ))}
 
-            {/* Days Cell Grid */}
             {daysArray.map((day, idx) => {
-              if (!day) return <div key={`empty-${idx}`} className={styles.dayCell} style={{ opacity: 0.2 }} />;
+              if (!day) return <div key={`empty-${idx}`} className="bg-card/40 min-h-[90px] p-2" />;
               
               const dayStr = day.getDate();
               const isToday = new Date().toDateString() === day.toDateString();
               
-              // Filter events scheduled on this day
               const dayEvents = events.filter((evt) => {
                 const start = new Date(evt.startDate);
                 start.setHours(0,0,0,0);
@@ -648,786 +654,330 @@ export default function CalendarPage() {
               });
 
               return (
-                <div key={idx} className={`${styles.dayCell} ${isToday ? styles.dayCellToday : ""}`}>
-                  <span className={styles.dayNumber}>{dayStr}</span>
-                  <div className={styles.eventList}>
-                    {dayEvents.map((evt) => {
-                      const badgeClass =
-                        evt.type === "Holiday"
-                          ? styles.eventHoliday
-                          : evt.type === "Birthday"
-                          ? styles.eventBirthday
-                          : evt.type === "Deadline"
-                          ? styles.eventDeadline
-                          : evt.type === "Personal"
-                          ? styles.eventPersonal
-                          : styles.eventMeeting;
-
-                      return (
-                        <div
-                          key={evt._id}
-                          className={`${styles.eventBadge} ${badgeClass}`}
-                          onClick={() => setSelectedEvent(evt)}
-                        >
-                          {evt.title}
-                        </div>
-                      );
-                    })}
+                <div
+                  key={idx}
+                  className={cn(
+                    "bg-card p-2 min-h-[100px] flex flex-col justify-start gap-1 transition-colors hover:bg-accent/30",
+                    isToday && "bg-primary/5 ring-1 ring-primary inset-0"
+                  )}
+                >
+                  <span className={cn("text-xs font-bold w-5 h-5 flex items-center justify-center rounded-full", isToday ? "bg-primary text-primary-foreground" : "text-muted-foreground")}>
+                    {dayStr}
+                  </span>
+                  <div className="space-y-1 overflow-y-auto max-h-[70px] no-scrollbar">
+                    {dayEvents.map((evt) => (
+                      <div
+                        key={evt._id}
+                        onClick={() => setSelectedEvent(evt)}
+                        className="text-[11px] font-semibold px-1.5 py-0.5 rounded truncate cursor-pointer bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
+                      >
+                        {evt.title}
+                      </div>
+                    ))}
                   </div>
                 </div>
               );
             })}
           </div>
-        </div>
+        </Card>
       )}
 
-      {/* ----------------- Tab 2: Sprints ----------------- */}
+      {/* Tab 2: Sprints */}
       {activeTab === "sprints" && (
-        <div className={styles.sprintGrid}>
-          {/* Active Sprint Overview */}
-          <div className={`${styles.sprintMetaCard} glass-panel`} style={{ padding: "1.5rem", borderRadius: "var(--radius-lg)" }}>
-            <h2 style={{ fontSize: "1.2rem", fontWeight: 700, borderBottom: "1px solid var(--border-color)", paddingBottom: "0.5rem" }}>
-              <i className="fa-solid fa-rocket" style={{ color: "var(--color-primary)", marginRight: "0.4rem" }}></i> Active Sprint & Burndown
-            </h2>
-
-            {sprints.filter((s) => s.status === "Active").length === 0 ? (
-              <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", padding: "1rem 0" }}>
-                No active sprints. Plan and activate a sprint to track burndown progress.
-              </p>
-            ) : (
-              sprints
-                .filter((s) => s.status === "Active")
-                .map((active) => {
-                  const daysLeft = Math.ceil(
-                    (new Date(active.endDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
-                  );
-
-                  return (
-                    <div key={active._id} style={{ display: "flex", flexDirection: "column", gap: "1rem", marginTop: "0.5rem" }}>
-                      <div className={styles.sprintHeader}>
-                        <strong style={{ fontSize: "1.1rem" }}>{active.name}</strong>
-                        <span className={`${styles.sprintBadge} ${styles.sprintStatusActive}`}>
-                          Active
-                        </span>
-                      </div>
-                      
-                      <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)" }}>
-                        <strong>Goal:</strong> {active.goal || "No goal specified."}
-                      </p>
-
-                      <div style={{ fontSize: "0.85rem" }}>
-                        <i className="fa-regular fa-calendar-check" style={{ color: "var(--color-primary)", marginRight: "0.35rem" }}></i> <strong>Timeline:</strong> {new Date(active.startDate).toLocaleDateString()} - {new Date(active.endDate).toLocaleDateString()} ({daysLeft > 0 ? `${daysLeft} days remaining` : "Ended"})
-                      </div>
-
-                      {/* Burndown Progress Bar */}
-                      <div className={styles.progressContainer}>
-                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.85rem", fontWeight: 600 }}>
-                          <span>Burndown Progress:</span>
-                          <span style={{ color: "var(--color-primary)" }}>
-                            {active.completedTasks || 0} / {active.totalTasks || 0} Tasks ({active.burndownProgress || 0}%)
-                          </span>
-                        </div>
-                        <div className={styles.progressBar} style={{ height: "10px", marginTop: "0.35rem" }}>
-                          <div className={styles.progressFill} style={{ width: `${active.burndownProgress || 0}%` }} />
-                        </div>
-                      </div>
-
-                      {/* Linked Tasks Section */}
-                      {active.linkedTasks && active.linkedTasks.length > 0 && (
-                        <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", marginTop: "0.5rem" }}>
-                          <span style={{ fontSize: "0.85rem", fontWeight: 700 }}>Linked Sprint Tasks:</span>
-                          {active.linkedTasks.map((t: any) => (
-                            <div key={t._id} style={{ display: "flex", justifyContent: "space-between", padding: "0.5rem", background: "rgba(255,255,255,0.02)", borderRadius: "var(--radius-sm)", fontSize: "0.8rem", border: "1px solid var(--border-color)" }}>
-                              <span>{t.title}</span>
-                              <span style={{ color: t.status === "Done" ? "var(--color-success)" : "var(--color-warning)" }}>
-                                {t.status}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-
-                      {isManagerOrAdmin && (
-                        <button
-                          className={styles.btnSecondary}
-                          style={{ marginTop: "1rem", alignSelf: "flex-start" }}
-                          onClick={() => handleUpdateSprintStatus(active._id, "Completed")}
-                        >
-                          <i className="fa-solid fa-check-double" style={{ marginRight: "0.35rem" }}></i> Complete Sprint
-                        </button>
-                      )}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <Card className="lg:col-span-2">
+            <CardHeader>
+              <CardTitle className="text-lg font-bold flex items-center gap-2">
+                <Rocket className="w-5 h-5 text-primary" /> Active Sprint & Burndown
+              </CardTitle>
+              <CardDescription>Current sprint objective and task velocity</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {sprints.filter((s) => s.status === "Active").length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-8">No active sprint running right now.</p>
+              ) : (
+                sprints.filter((s) => s.status === "Active").map((active) => (
+                  <div key={active._id} className="space-y-4 p-4 rounded-xl border border-border bg-muted/20">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-base font-bold text-foreground">{active.name}</h3>
+                      <Badge color="primary">Active</Badge>
                     </div>
-                  );
-                })
-            )}
-          </div>
-
-          {/* Sprints Backlog & History */}
-          <div className="glass-panel" style={{ padding: "1.5rem", borderRadius: "var(--radius-lg)" }}>
-            <h2 style={{ fontSize: "1.2rem", fontWeight: 700, borderBottom: "1px solid var(--border-color)", paddingBottom: "0.5rem" }}>
-              <i className="fa-solid fa-list-check" style={{ color: "var(--color-primary)", marginRight: "0.4rem" }}></i> Sprint Backlog & Timeline
-            </h2>
-
-            <div style={{ display: "flex", flexDirection: "column", gap: "1rem", marginTop: "1rem" }}>
-              {sprints
-                .filter((s) => s.status !== "Active")
-                .map((sprint) => {
-                  const statusClass =
-                    sprint.status === "Planned"
-                      ? styles.sprintStatusPlanned
-                      : styles.sprintStatusCompleted;
-
-                  return (
-                    <div
-                      key={sprint._id}
-                      style={{
-                        padding: "1rem",
-                        border: "1px solid var(--border-color)",
-                        borderRadius: "var(--radius-md)",
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                      }}
-                    >
-                      <div>
-                        <strong style={{ fontSize: "0.95rem" }}>{sprint.name}</strong>
-                        <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "0.15rem" }}>
-                          Goal: {sprint.goal || "None"} | {new Date(sprint.startDate).toLocaleDateString()} - {new Date(sprint.endDate).toLocaleDateString()}
-                        </p>
+                    <p className="text-sm text-muted-foreground"><strong>Goal:</strong> {active.goal || "None"}</p>
+                    <div className="space-y-1.5">
+                      <div className="flex justify-between text-xs font-semibold">
+                        <span>Burndown Progress</span>
+                        <span className="text-primary">{active.burndownProgress || 0}%</span>
                       </div>
-
-                      <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
-                        <span className={`${styles.sprintBadge} ${statusClass}`}>{sprint.status}</span>
-                        {sprint.status === "Planned" && isManagerOrAdmin && (
-                          <button
-                            className={styles.btnPrimary}
-                            style={{ padding: "0.25rem 0.5rem", fontSize: "0.75rem" }}
-                            onClick={() => handleUpdateSprintStatus(sprint._id, "Active")}
-                          >
-                            Activate
-                          </button>
-                        )}
+                      <div className="h-2 bg-muted rounded-full overflow-hidden">
+                        <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${active.burndownProgress || 0}%` }} />
                       </div>
                     </div>
-                  );
-                })}
-            </div>
-          </div>
+                    {isManagerOrAdmin && (
+                      <Button size="sm" variant="outline" onClick={() => handleUpdateSprintStatus(active._id, "Completed")}>
+                        Complete Sprint
+                      </Button>
+                    )}
+                  </div>
+                ))
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg font-bold">Planned & Completed</CardTitle>
+              <CardDescription>Sprint backlog roadmap</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {sprints.filter((s) => s.status !== "Active").map((sprint) => (
+                <div key={sprint._id} className="p-3 rounded-lg border border-border bg-card flex items-center justify-between text-xs">
+                  <div>
+                    <p className="font-bold text-foreground">{sprint.name}</p>
+                    <p className="text-muted-foreground mt-0.5">{new Date(sprint.startDate).toLocaleDateString()} - {new Date(sprint.endDate).toLocaleDateString()}</p>
+                  </div>
+                  <Badge color={sprint.status === "Planned" ? "warning" : "success"} variant="soft">
+                    {sprint.status}
+                  </Badge>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
         </div>
       )}
 
-      {/* ----------------- Tab 3: Timesheets ----------------- */}
+      {/* Tab 3: Timesheets */}
       {activeTab === "timesheets" && (
-        <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
-          {/* Summary KPI Cards */}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "1rem" }}>
-            <div className="glass-panel" style={{ padding: "1.25rem", borderRadius: "var(--radius-md)", display: "flex", flexDirection: "column", gap: "0.35rem" }}>
-              <span style={{ fontSize: "0.8rem", color: "var(--text-muted)", fontWeight: 600 }}>TOTAL HOURS LOGGED</span>
-              <strong style={{ fontSize: "1.6rem", color: "var(--color-primary)" }}>{totalLoggedHours.toFixed(1)} hrs</strong>
-            </div>
-
-            <div className="glass-panel" style={{ padding: "1.25rem", borderRadius: "var(--radius-md)", display: "flex", flexDirection: "column", gap: "0.35rem" }}>
-              <span style={{ fontSize: "0.8rem", color: "var(--text-muted)", fontWeight: 600 }}>BILLABLE HOURS</span>
-              <strong style={{ fontSize: "1.6rem", color: "var(--color-success)" }}>{totalBillableHours.toFixed(1)} hrs</strong>
-            </div>
-
-            <div className="glass-panel" style={{ padding: "1.25rem", borderRadius: "var(--radius-md)", display: "flex", flexDirection: "column", gap: "0.35rem" }}>
-              <span style={{ fontSize: "0.8rem", color: "var(--text-muted)", fontWeight: 600 }}>NON-BILLABLE HOURS</span>
-              <strong style={{ fontSize: "1.6rem", color: "var(--color-warning)" }}>{totalNonBillableHours.toFixed(1)} hrs</strong>
-            </div>
-
-            <div className="glass-panel" style={{ padding: "1.25rem", borderRadius: "var(--radius-md)", display: "flex", flexDirection: "column", gap: "0.35rem" }}>
-              <span style={{ fontSize: "0.8rem", color: "var(--text-muted)", fontWeight: 600 }}>BILLABLE UTILIZATION</span>
-              <strong style={{ fontSize: "1.6rem", color: "var(--color-info)" }}>{billableRatio}% Ratio</strong>
-            </div>
-          </div>
-
-          {/* Week Selector Bar */}
-          <div className="glass-panel" style={{ padding: "1rem", display: "flex", justifyItems: "center", justifyContent: "space-between", alignItems: "center" }}>
-            <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
-              <button
-                className={styles.btnSecondary}
-                onClick={() => {
-                  const prev = new Date(timesheetWeekStart);
-                  prev.setDate(prev.getDate() - 7);
-                  setTimesheetWeekStart(prev);
-                }}
-              >
-                <i className="fa-solid fa-chevron-left" style={{ marginRight: "0.35rem" }}></i> Previous Week
-              </button>
-              <strong style={{ fontSize: "0.95rem" }}>
-                Week of: {timesheetWeekStart.toLocaleDateString()} - {new Date(new Date(timesheetWeekStart).setDate(timesheetWeekStart.getDate() + 4)).toLocaleDateString()}
-              </strong>
-              <button
-                className={styles.btnSecondary}
-                onClick={() => {
-                  const next = new Date(timesheetWeekStart);
-                  next.setDate(next.getDate() + 7);
-                  setTimesheetWeekStart(next);
-                }}
-              >
-                Next Week <i className="fa-solid fa-chevron-right" style={{ marginLeft: "0.35rem" }}></i>
-              </button>
-            </div>
-
-            <div style={{ display: "flex", gap: "0.5rem" }}>
-              <button className={styles.btnSecondary} onClick={() => handleSaveTimesheet("Draft")}>
-                <i className="fa-solid fa-floppy-disk" style={{ marginRight: "0.35rem" }}></i> Save Draft
-              </button>
-              <button className={styles.btnPrimary} onClick={() => handleSaveTimesheet("Pending")}>
-                <i className="fa-solid fa-paper-plane" style={{ marginRight: "0.35rem" }}></i> Submit Timesheet
-              </button>
-            </div>
-          </div>
-
-          {/* Logger Grid */}
-          <div className={`${styles.timesheetCard} glass-panel`}>
-            <table className={styles.timesheetTable}>
-              <thead>
-                <tr>
-                  <th className={styles.timesheetTh} style={{ width: "250px" }}>Project Link</th>
-                  <th className={styles.timesheetTh}>Task / Description</th>
-                  <th className={styles.timesheetTh} style={{ width: "80px", textAlign: "center" }}>Mon</th>
-                  <th className={styles.timesheetTh} style={{ width: "80px", textAlign: "center" }}>Tue</th>
-                  <th className={styles.timesheetTh} style={{ width: "80px", textAlign: "center" }}>Wed</th>
-                  <th className={styles.timesheetTh} style={{ width: "80px", textAlign: "center" }}>Thu</th>
-                  <th className={styles.timesheetTh} style={{ width: "80px", textAlign: "center" }}>Fri</th>
-                  <th className={styles.timesheetTh} style={{ width: "80px", textAlign: "center" }}>Billable</th>
-                </tr>
-              </thead>
-              <tbody>
-                {timesheetRows.map((row, idx) => (
-                  <tr key={idx}>
-                    <td className={styles.timesheetTd}>
-                      <select
-                        className={styles.select}
-                        style={{ width: "100%", padding: "0.35rem" }}
-                        value={row.project}
-                        onChange={(e) => handleRowChange(idx, "project", e.target.value)}
-                      >
-                        {projectsList.map((p) => (
-                          <option key={p} value={p}>{p}</option>
-                        ))}
-                      </select>
-                    </td>
-                    <td className={styles.timesheetTd}>
-                      <input
-                        type="text"
-                        placeholder="Describe your tasks..."
-                        className={styles.timesheetInput}
-                        value={row.taskName}
-                        onChange={(e) => handleRowChange(idx, "taskName", e.target.value)}
-                      />
-                    </td>
-                    {["mon", "tue", "wed", "thu", "fri"].map((day) => (
-                      <td key={day} className={styles.timesheetTd} style={{ textAlign: "center" }}>
-                        <input
-                          type="number"
-                          min="0"
-                          max="24"
-                          step="0.5"
-                          className={`${styles.timesheetInput} ${styles.timesheetHours}`}
-                          value={row[day] || ""}
-                          onChange={(e) => handleRowChange(idx, day, e.target.value ? Number(e.target.value) : 0)}
-                        />
-                      </td>
-                    ))}
-                    <td className={styles.timesheetTd} style={{ textAlign: "center" }}>
-                      <input
-                        type="checkbox"
-                        checked={row.isBillable}
-                        onChange={(e) => handleRowChange(idx, "isBillable", e.target.checked)}
-                      />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            
-            <button className={styles.btnSecondary} onClick={handleAddTimesheetRow} style={{ marginTop: "1rem" }}>
-              <i className="fa-solid fa-plus" style={{ marginRight: "0.35rem" }}></i> Add Log Row
-            </button>
-          </div>
-
-          {/* Pending Approvals Section (Manager/Admin view) */}
-          {isManagerOrAdmin && (
-            <div className="glass-panel" style={{ padding: "1.5rem", borderRadius: "var(--radius-lg)" }}>
-              <h2 style={{ fontSize: "1.2rem", fontWeight: 700, borderBottom: "1px solid var(--border-color)", paddingBottom: "0.5rem" }}>
-                <i className="fa-solid fa-user-check" style={{ color: "var(--color-primary)", marginRight: "0.4rem" }}></i> Pending Timesheet Approvals
-              </h2>
-
-              {pendingSubmissions.length === 0 ? (
-                <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", padding: "1rem 0" }}>
-                  No pending timesheets awaiting your approval.
-                </p>
-              ) : (
-                <div style={{ display: "flex", flexDirection: "column", gap: "1rem", marginTop: "1rem" }}>
-                  {pendingSubmissions.map((entry) => (
-                    <div
-                      key={entry._id}
-                      style={{
-                        padding: "1rem",
-                        border: "1px solid var(--border-color)",
-                        borderRadius: "var(--radius-md)",
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                      }}
-                    >
-                      <div>
-                        <strong style={{ fontSize: "0.95rem" }}>{entry.userId?.name}</strong>
-                        <p style={{ fontSize: "0.75rem", color: "var(--text-secondary)", marginTop: "0.15rem" }}>
-                          Project: {entry.project} | Task: {entry.taskName}
-                        </p>
-                        <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
-                          Date: {new Date(entry.date).toLocaleDateString()} | Hours: {entry.hours}h ({entry.isBillable ? "Billable" : "Non-billable"})
-                        </span>
-                      </div>
-
-                      <div style={{ display: "flex", gap: "0.5rem" }}>
-                        <button
-                          className={styles.btnPrimary}
-                          style={{ padding: "0.25rem 0.5rem", fontSize: "0.75rem", backgroundColor: "var(--color-success)" }}
-                          onClick={() => handleTimesheetApproval(entry._id, "Approved")}
-                        >
-                          Approve
-                        </button>
-                        <button
-                          className={styles.btnSecondary}
-                          style={{ padding: "0.25rem 0.5rem", fontSize: "0.75rem", color: "var(--color-danger)", borderColor: "var(--color-danger)" }}
-                          onClick={() => handleTimesheetApproval(entry._id, "Rejected")}
-                        >
-                          Reject
-                        </button>
-                      </div>
-                    </div>
-                  ))}
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Timesheet Entry Card */}
+            <Card className="lg:col-span-2">
+              <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-3">
+                <div>
+                  <CardTitle className="text-lg font-bold flex items-center gap-2">
+                    <FileSpreadsheet className="w-5 h-5 text-primary" /> Log Weekly Hours
+                  </CardTitle>
+                  <CardDescription>Record your daily work hours on projects</CardDescription>
                 </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const prev = new Date(timesheetWeekStart);
+                      prev.setDate(prev.getDate() - 7);
+                      setTimesheetWeekStart(prev);
+                    }}
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </Button>
+                  <span className="text-xs font-semibold">
+                    Week of {timesheetWeekStart.toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const next = new Date(timesheetWeekStart);
+                      next.setDate(next.getDate() + 7);
+                      setTimesheetWeekStart(next);
+                    }}
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm text-left border-collapse">
+                    <thead>
+                      <tr className="border-b border-border text-muted-foreground text-xs font-semibold uppercase">
+                        <th className="py-2.5 pr-4 min-w-[180px]">Project</th>
+                        <th className="py-2.5 px-2 min-w-[140px]">Task Description</th>
+                        <th className="py-2.5 px-2 text-center w-16">Mon</th>
+                        <th className="py-2.5 px-2 text-center w-16">Tue</th>
+                        <th className="py-2.5 px-2 text-center w-16">Wed</th>
+                        <th className="py-2.5 px-2 text-center w-16">Thu</th>
+                        <th className="py-2.5 px-2 text-center w-16">Fri</th>
+                        <th className="py-2.5 pl-4 text-center w-20">Billable</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border/60">
+                      {timesheetRows.map((row, idx) => (
+                        <tr key={idx} className="hover:bg-accent/10 transition-colors">
+                          <td className="py-3 pr-4">
+                            <select
+                              value={row.project}
+                              onChange={(e) => handleRowChange(idx, "project", e.target.value)}
+                              className="w-full h-9 px-2 text-xs bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                            >
+                              {projectsList.map((proj) => (
+                                <option key={proj} value={proj}>{proj}</option>
+                              ))}
+                            </select>
+                          </td>
+                          <td className="py-3 px-2">
+                            <Input
+                              value={row.taskName}
+                              onChange={(e) => handleRowChange(idx, "taskName", e.target.value)}
+                              placeholder="e.g. Code Review"
+                              className="h-9 text-xs"
+                            />
+                          </td>
+                          {["mon", "tue", "wed", "thu", "fri"].map((day) => (
+                            <td key={day} className="py-3 px-2">
+                              <Input
+                                type="number"
+                                min="0"
+                                max="24"
+                                step="0.5"
+                                value={row[day] || ""}
+                                onChange={(e) => {
+                                  const val = parseFloat(e.target.value);
+                                  handleRowChange(idx, day, isNaN(val) ? 0 : val);
+                                }}
+                                className="h-9 w-14 text-center text-xs p-1"
+                              />
+                            </td>
+                          ))}
+                          <td className="py-3 pl-4 text-center">
+                            <input
+                              type="checkbox"
+                              checked={row.isBillable}
+                              onChange={(e) => handleRowChange(idx, "isBillable", e.target.checked)}
+                              className="rounded border-border text-primary w-4 h-4 cursor-pointer"
+                            />
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="flex flex-col sm:flex-row justify-between gap-4 pt-4 border-t border-border/65">
+                  <Button variant="outline" size="sm" onClick={handleAddTimesheetRow} className="gap-1.5 self-start">
+                    <Plus className="w-4 h-4" /> Add Row
+                  </Button>
+                  <div className="flex gap-2 self-end">
+                    <Button variant="outline" size="sm" onClick={() => handleSaveTimesheet("Draft")}>
+                      Save Draft
+                    </Button>
+                    <Button color="primary" size="sm" onClick={() => handleSaveTimesheet("Pending")}>
+                      Submit Timesheet
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Right sidebar details */}
+            <div className="space-y-6">
+              {/* Timesheet Summary Card */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base font-bold">Week Summary</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4 text-sm">
+                  <div className="flex justify-between py-1.5 border-b border-border/50">
+                    <span className="text-muted-foreground">Total Hours Logged</span>
+                    <span className="font-bold text-foreground">
+                      {timesheetRows.reduce((acc, row) => acc + (Number(row.mon) || 0) + (Number(row.tue) || 0) + (Number(row.wed) || 0) + (Number(row.thu) || 0) + (Number(row.fri) || 0), 0)} hrs
+                    </span>
+                  </div>
+                  <div className="flex justify-between py-1.5 border-b border-border/50">
+                    <span className="text-muted-foreground">Billable Hours</span>
+                    <span className="font-semibold text-emerald-500">
+                      {timesheetRows.reduce((acc, row) => row.isBillable ? acc + (Number(row.mon) || 0) + (Number(row.tue) || 0) + (Number(row.wed) || 0) + (Number(row.thu) || 0) + (Number(row.fri) || 0) : acc, 0)} hrs
+                    </span>
+                  </div>
+                  <div className="flex justify-between py-1.5">
+                    <span className="text-muted-foreground">Non-Billable Hours</span>
+                    <span className="font-semibold text-amber-500">
+                      {timesheetRows.reduce((acc, row) => !row.isBillable ? acc + (Number(row.mon) || 0) + (Number(row.tue) || 0) + (Number(row.wed) || 0) + (Number(row.thu) || 0) + (Number(row.fri) || 0) : acc, 0)} hrs
+                    </span>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Approval Panel (Admin/Manager only) */}
+              {isManagerOrAdmin && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base font-bold flex items-center gap-2">
+                      <UserCheck className="w-4 h-4 text-primary" /> Pending Approvals
+                    </CardTitle>
+                    <CardDescription>Approve or reject weekly timesheet logs</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {pendingSubmissions.length === 0 ? (
+                      <p className="text-xs text-muted-foreground text-center py-4">No pending timesheets to approve.</p>
+                    ) : (
+                      pendingSubmissions.map((entry) => (
+                        <div key={entry._id} className="p-3.5 rounded-lg border border-border bg-muted/30 space-y-2.5 text-xs">
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <strong className="text-foreground">{entry.userId?.name || "Team Member"}</strong>
+                              <p className="text-muted-foreground mt-0.5">{entry.project} - {entry.taskName}</p>
+                            </div>
+                            <Badge color="primary">{entry.hours} hrs</Badge>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-[10px] text-muted-foreground">
+                              Date: {new Date(entry.date).toLocaleDateString()}
+                            </span>
+                            <div className="flex gap-1.5">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="text-destructive hover:bg-destructive/10 border-destructive/20"
+                                onClick={() => handleTimesheetApproval(entry._id, "Rejected")}
+                              >
+                                Reject
+                              </Button>
+                              <Button
+                                size="sm"
+                                color="primary"
+                                onClick={() => handleTimesheetApproval(entry._id, "Approved")}
+                              >
+                                Approve
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </CardContent>
+                </Card>
               )}
             </div>
-          )}
+          </div>
         </div>
       )}
 
-      {/* ----------------- Tab 4: Attendance Shift Clock ----------------- */}
+      {/* Tab 3: Shift Clock */}
       {activeTab === "attendance" && (
-        <div className={styles.attendanceGrid}>
-          {/* Clock In/Out Panel */}
-          <div className={`${styles.timesheetCard} glass-panel`}>
-            <h2 style={{ fontSize: "1.2rem", fontWeight: 700, borderBottom: "1px solid var(--border-color)", paddingBottom: "0.5rem" }}>
-              <i className="fa-solid fa-stopwatch" style={{ color: "var(--color-primary)", marginRight: "0.4rem" }}></i> Daily Shift Clock
-            </h2>
+        <Card className="p-8 max-w-xl mx-auto space-y-6 text-center">
+          <div className="inline-flex p-4 rounded-2xl bg-primary/10 text-primary">
+            <Clock className="w-10 h-10 animate-pulse" />
+          </div>
+          <div>
+            <h2 className="text-3xl font-extrabold tracking-tight text-foreground font-mono">{elapsedTime}</h2>
+            <p className="text-xs text-muted-foreground mt-1">Shift Duration Today</p>
+          </div>
 
-            {shiftInfo && (
-              <div style={{ fontSize: "0.85rem", color: "var(--text-secondary)", background: "rgba(255,255,255,0.02)", padding: "0.75rem 1rem", borderRadius: "var(--radius-md)", border: "1px solid var(--border-color)", marginTop: "0.5rem", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <span>Shift: <strong>{shiftInfo.shiftName}</strong></span>
-                <span>Target: <strong>{shiftInfo.startTime} - {shiftInfo.endTime} (8.0 hrs)</strong></span>
-              </div>
+          <div className="flex items-center justify-center gap-4">
+            {!attendanceToday?.clockIn ? (
+              <Button color="primary" size="lg" onClick={() => handleClockAction("in")} className="gap-2 px-8">
+                <Fingerprint className="w-5 h-5" /> Clock In
+              </Button>
+            ) : !attendanceToday?.clockOut ? (
+              <Button color="destructive" size="lg" onClick={() => handleClockAction("out")} className="gap-2 px-8">
+                <Clock className="w-5 h-5" /> Clock Out
+              </Button>
+            ) : (
+              <Badge color="success" className="text-sm px-4 py-1">Shift Finished</Badge>
             )}
-
-            <div className={styles.clockContainer}>
-              <div className={`${styles.clockRing} ${attendanceToday && !attendanceToday.clockOut ? styles.clockRingActive : ""}`}>
-                <span className={styles.clockTime}>{elapsedTime}</span>
-                <span className={styles.clockLabel}>Hours Worked</span>
-              </div>
-
-              {/* Overtime Active Badge */}
-              {isOvertimeActive && (
-                <span style={{ fontSize: "0.85rem", fontWeight: 700, color: "#f59e0b", background: "rgba(245, 158, 11, 0.12)", padding: "0.35rem 0.85rem", borderRadius: "20px", border: "1px solid rgba(245, 158, 11, 0.3)", display: "inline-flex", alignItems: "center", gap: "0.4rem" }}>
-                  <i className="fa-solid fa-fire"></i> Overtime Active: +{overtimeHoursDecimal} hrs
-                </span>
-              )}
-
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "0.5rem" }}>
-                <span className={styles.attendanceStatus}>
-                  Status:{" "}
-                  <span
-                    style={{
-                      color:
-                        attendanceToday && !attendanceToday.clockOut
-                          ? "var(--color-success)"
-                          : "var(--text-muted)",
-                    }}
-                  >
-                    {attendanceToday
-                      ? attendanceToday.clockOut
-                        ? "Clocked Out"
-                        : "Clocked In / Active"
-                      : "Not Clocked In"}
-                  </span>
-                </span>
-
-                {attendanceToday && (
-                  <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
-                    Clock In: {new Date(attendanceToday.clockIn).toLocaleTimeString()}
-                    {attendanceToday.clockOut && ` | Clock Out: ${new Date(attendanceToday.clockOut).toLocaleTimeString()}`}
-                  </span>
-                )}
-              </div>
-
-              <div style={{ display: "flex", gap: "1rem" }}>
-                <button
-                  className={styles.btnPrimary}
-                  disabled={!!attendanceToday}
-                  onClick={() => handleClockAction("in")}
-                  style={{
-                    backgroundColor: !!attendanceToday ? "var(--border-color)" : "var(--color-success)",
-                    cursor: !!attendanceToday ? "not-allowed" : "pointer",
-                  }}
-                >
-                  <i className="fa-solid fa-right-to-bracket" style={{ marginRight: "0.35rem" }}></i> Clock In
-                </button>
-
-                {attendanceToday && attendanceToday.clockOut ? (
-                  <button
-                    className={styles.btnPrimary}
-                    onClick={() => handleClockAction("resume")}
-                    style={{
-                      backgroundColor: "var(--color-primary)",
-                      cursor: "pointer",
-                    }}
-                  >
-                    <i className="fa-solid fa-play" style={{ marginRight: "0.35rem" }}></i> Resume Shift
-                  </button>
-                ) : (
-                  <button
-                    className={styles.btnSecondary}
-                    disabled={!attendanceToday || !!attendanceToday.clockOut}
-                    onClick={() => handleClockAction("out")}
-                    style={{
-                      color: !attendanceToday || !!attendanceToday.clockOut ? "var(--text-muted)" : "var(--color-danger)",
-                      borderColor: !attendanceToday || !!attendanceToday.clockOut ? "var(--border-color)" : "var(--color-danger)",
-                      cursor: !attendanceToday || !!attendanceToday.clockOut ? "not-allowed" : "pointer",
-                    }}
-                  >
-                    <i className="fa-solid fa-right-from-bracket" style={{ marginRight: "0.35rem" }}></i> Clock Out
-                  </button>
-                )}
-              </div>
-            </div>
           </div>
-
-          {/* Attendance Check-in Logs History */}
-          <div className="glass-panel" style={{ padding: "1.5rem", borderRadius: "var(--radius-lg)" }}>
-            <h2 style={{ fontSize: "1.2rem", fontWeight: 700, borderBottom: "1px solid var(--border-color)", paddingBottom: "0.5rem" }}>
-              <i className="fa-solid fa-clock-rotate-left" style={{ color: "var(--color-primary)", marginRight: "0.4rem" }}></i> Recent Attendance Logs
-            </h2>
-
-            <div className={styles.historyList} style={{ marginTop: "1rem", display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-              {attendanceHistory.length === 0 ? (
-                <p style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>No historical attendance records found.</p>
-              ) : (
-                attendanceHistory.map((log) => {
-                  const logDate = new Date(log.date).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
-                  const inTime = log.clockIn ? new Date(log.clockIn).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "N/A";
-                  const outTime = log.clockOut ? new Date(log.clockOut).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "Active";
-                  const hasOvertime = (log.overtimeHours && log.overtimeHours > 0);
-
-                  return (
-                    <div
-                      key={log._id}
-                      className={styles.historyItem}
-                      onClick={() => setSelectedAttendanceLog(log)}
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                        padding: "0.75rem",
-                        border: "1px solid var(--border-color)",
-                        borderRadius: "var(--radius-md)",
-                        cursor: "pointer",
-                        transition: "background var(--transition-fast)",
-                      }}
-                    >
-                      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                        <i className="fa-solid fa-calendar-day" style={{ color: "var(--color-primary)", fontSize: "0.85rem" }}></i>
-                        <span style={{ fontSize: "0.85rem", fontWeight: 600 }}>{logDate}</span>
-                        {hasOvertime && (
-                          <span style={{ fontSize: "0.7rem", fontWeight: 700, color: "#f59e0b", background: "rgba(245,158,11,0.12)", padding: "0.15rem 0.45rem", borderRadius: "10px", border: "1px solid rgba(245,158,11,0.25)" }}>
-                            +{log.overtimeHours}h Overtime
-                          </span>
-                        )}
-                      </div>
-                      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                        <span style={{ fontSize: "0.8rem", color: "var(--text-secondary)" }}>
-                          {inTime} - {outTime} ({log.status})
-                        </span>
-                        <i className="fa-solid fa-chevron-right" style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}></i>
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ----------------- Popups / Modal Dialogs ----------------- */}
-
-      {/* Attendance Log Details Modal */}
-      {selectedAttendanceLog && (
-        <div className={styles.modalOverlay} onClick={() => setSelectedAttendanceLog(null)}>
-          <div className={`${styles.modal} glass-panel`} onClick={(e) => e.stopPropagation()} style={{ maxWidth: "480px" }}>
-            <span className={styles.closeBtn} onClick={() => setSelectedAttendanceLog(null)}>×</span>
-            <h2 style={{ fontSize: "1.25rem", fontWeight: 800, display: "flex", alignItems: "center", gap: "0.5rem" }}>
-              <i className="fa-solid fa-clock-rotate-left" style={{ color: "var(--color-primary)" }}></i> Daily Shift Details
-            </h2>
-            <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", marginTop: "0.25rem" }}>
-              Log entry for {new Date(selectedAttendanceLog.date).toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
-            </p>
-
-            <div style={{ display: "flex", flexDirection: "column", gap: "0.85rem", marginTop: "1.25rem", background: "rgba(255,255,255,0.02)", padding: "1rem", borderRadius: "var(--radius-md)", border: "1px solid var(--border-color)" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.85rem" }}>
-                <span style={{ color: "var(--text-muted)" }}>Attendance Status:</span>
-                <span style={{ fontWeight: 700, color: selectedAttendanceLog.status === "Present" ? "var(--color-success)" : "var(--color-warning)" }}>
-                  {selectedAttendanceLog.status}
-                </span>
-              </div>
-
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.85rem" }}>
-                <span style={{ color: "var(--text-muted)" }}>Clock In Time:</span>
-                <strong>{selectedAttendanceLog.clockIn ? new Date(selectedAttendanceLog.clockIn).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }) : "N/A"}</strong>
-              </div>
-
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.85rem" }}>
-                <span style={{ color: "var(--text-muted)" }}>Clock Out Time:</span>
-                <strong>{selectedAttendanceLog.clockOut ? new Date(selectedAttendanceLog.clockOut).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }) : "Active / In Progress"}</strong>
-              </div>
-
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.85rem" }}>
-                <span style={{ color: "var(--text-muted)" }}>Regular Shift Hours:</span>
-                <strong>{selectedAttendanceLog.regularHours ? `${selectedAttendanceLog.regularHours} hrs` : "8.0 hrs"}</strong>
-              </div>
-
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.85rem" }}>
-                <span style={{ color: "var(--text-muted)" }}>Overtime Hours:</span>
-                <strong style={{ color: selectedAttendanceLog.overtimeHours > 0 ? "#f59e0b" : "var(--text-muted)" }}>
-                  {selectedAttendanceLog.overtimeHours ? `+${selectedAttendanceLog.overtimeHours} hrs` : "0.0 hrs"}
-                </strong>
-              </div>
-
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.85rem", borderTop: "1px solid var(--border-color)", paddingTop: "0.5rem" }}>
-                <span style={{ color: "var(--text-muted)" }}>Total Duration Worked:</span>
-                <strong style={{ color: "var(--color-primary)" }}>
-                  {selectedAttendanceLog.clockIn && selectedAttendanceLog.clockOut
-                    ? (() => {
-                        const diff = new Date(selectedAttendanceLog.clockOut).getTime() - new Date(selectedAttendanceLog.clockIn).getTime();
-                        const hrs = Math.floor(diff / (1000 * 60 * 60));
-                        const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-                        return `${hrs} hrs ${mins} mins`;
-                      })()
-                    : "In Progress"}
-                </strong>
-              </div>
-
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.85rem" }}>
-                <span style={{ color: "var(--text-muted)" }}>Assigned Shift:</span>
-                <strong>Standard Regular Day Shift</strong>
-              </div>
-            </div>
-
-            <button
-              className={styles.btnPrimary}
-              style={{ marginTop: "1.25rem", width: "100%", padding: "0.65rem" }}
-              onClick={() => setSelectedAttendanceLog(null)}
-            >
-              Close Details
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Event Details Popup */}
-      {selectedEvent && (
-        <div className={styles.modalOverlay} onClick={() => setSelectedEvent(null)}>
-          <div className={`${styles.modal} glass-panel`} onClick={(e) => e.stopPropagation()}>
-            <span className={styles.closeBtn} onClick={() => setSelectedEvent(null)}>×</span>
-            <h2 style={{ fontSize: "1.25rem", fontWeight: 800 }}>{selectedEvent.title}</h2>
-            <p style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>
-              📅 {new Date(selectedEvent.startDate).toLocaleString()} - {new Date(selectedEvent.endDate).toLocaleString()}
-            </p>
-            <p style={{ fontSize: "0.9rem", color: "var(--text-secondary)", marginTop: "0.5rem" }}>
-              {selectedEvent.description || "No description provided."}
-            </p>
-            <div style={{ display: "flex", gap: "1rem", fontSize: "0.8rem", marginTop: "1rem", background: "rgba(255,255,255,0.03)", padding: "0.75rem", borderRadius: "var(--radius-sm)" }}>
-              <span>Type: <strong>{selectedEvent.type}</strong></span>
-              <span>Department: <strong>{selectedEvent.department}</strong></span>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Create Event Modal */}
-      {showEventModal && (
-        <div className={styles.modalOverlay} onClick={() => setShowEventModal(false)}>
-          <div className={`${styles.modal} glass-panel`} onClick={(e) => e.stopPropagation()}>
-            <span className={styles.closeBtn} onClick={() => setShowEventModal(false)}>×</span>
-            
-            <h2 style={{ fontSize: "1.25rem", fontWeight: 800 }}>
-              <i className="fa-solid fa-calendar-plus" style={{ color: "var(--color-primary)", marginRight: "0.4rem" }}></i> Schedule New Event
-            </h2>
-            
-            <form onSubmit={handleCreateEvent} style={{ display: "flex", flexDirection: "column", gap: "1rem", marginTop: "0.5rem" }}>
-              <div className={styles.formGroup}>
-                <label className={styles.label}>Event Title</label>
-                <input
-                  type="text"
-                  placeholder="e.g. Project Alignment Call"
-                  className={styles.input}
-                  value={newEvtTitle}
-                  onChange={(e) => setNewEvtTitle(e.target.value)}
-                  required
-                />
-              </div>
-
-              <div className={styles.formGroup}>
-                <label className={styles.label}>Description</label>
-                <textarea
-                  placeholder="Details and agenda..."
-                  className={styles.input}
-                  style={{ height: "60px", resize: "none" }}
-                  value={newEvtDesc}
-                  onChange={(e) => setNewEvtDesc(e.target.value)}
-                />
-              </div>
-
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
-                <div className={styles.formGroup}>
-                  <label className={styles.label}>Event Type</label>
-                  <select
-                    className={styles.select}
-                    value={newEvtType}
-                    onChange={(e: any) => setNewEvtType(e.target.value)}
-                  >
-                    <option value="Meeting">Meeting</option>
-                    <option value="Holiday">Holiday</option>
-                    <option value="Birthday">Birthday</option>
-                    <option value="Deadline">Deadline</option>
-                    <option value="Personal">Personal / Focus Mode</option>
-                  </select>
-                </div>
-
-                <div className={styles.formGroup}>
-                  <label className={styles.label}>Visibility Scope</label>
-                  <select
-                    className={styles.select}
-                    value={newEvtDept}
-                    onChange={(e) => setNewEvtDept(e.target.value)}
-                  >
-                    <option value="All">All Staff</option>
-                    <option value="Management">Management</option>
-                    <option value="Engineering">Engineering</option>
-                    <option value="Design">Design</option>
-                    <option value="Marketing">Marketing</option>
-                  </select>
-                </div>
-              </div>
-
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
-                <div className={styles.formGroup}>
-                  <label className={styles.label}>Start Date & Time</label>
-                  <input
-                    type="datetime-local"
-                    className={styles.input}
-                    value={newEvtStart}
-                    onChange={(e) => setNewEvtStart(e.target.value)}
-                    required
-                  />
-                </div>
-
-                <div className={styles.formGroup}>
-                  <label className={styles.label}>End Date & Time</label>
-                  <input
-                    type="datetime-local"
-                    className={styles.input}
-                    value={newEvtEnd}
-                    onChange={(e) => setNewEvtEnd(e.target.value)}
-                    required
-                  />
-                </div>
-              </div>
-
-              <button type="submit" className={styles.btnPrimary} style={{ width: "100%", padding: "0.75rem", marginTop: "0.5rem" }}>
-                Schedule Event
-              </button>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Create Sprint Modal */}
-      {showSprintModal && (
-        <div className={styles.modalOverlay} onClick={() => setShowSprintModal(false)}>
-          <div className={`${styles.modal} glass-panel`} onClick={(e) => e.stopPropagation()}>
-            <span className={styles.closeBtn} onClick={() => setShowSprintModal(false)}>×</span>
-            
-            <h2 style={{ fontSize: "1.25rem", fontWeight: 800 }}>
-              <i className="fa-solid fa-diagram-project" style={{ color: "var(--color-primary)", marginRight: "0.4rem" }}></i> Plan New Sprint
-            </h2>
-            
-            <form onSubmit={handleCreateSprint} style={{ display: "flex", flexDirection: "column", gap: "1rem", marginTop: "0.5rem" }}>
-              <div className={styles.formGroup}>
-                <label className={styles.label}>Sprint Name</label>
-                <input
-                  type="text"
-                  placeholder="e.g. Sprint 3 - Core APIs"
-                  className={styles.input}
-                  value={newSprintName}
-                  onChange={(e) => setNewSprintName(e.target.value)}
-                  required
-                />
-              </div>
-
-              <div className={styles.formGroup}>
-                <label className={styles.label}>Sprint Goal</label>
-                <textarea
-                  placeholder="Key milestones and deliverables..."
-                  className={styles.input}
-                  style={{ height: "60px", resize: "none" }}
-                  value={newSprintGoal}
-                  onChange={(e) => setNewSprintGoal(e.target.value)}
-                />
-              </div>
-
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
-                <div className={styles.formGroup}>
-                  <label className={styles.label}>Start Date</label>
-                  <input
-                    type="date"
-                    className={styles.input}
-                    value={newSprintStart}
-                    onChange={(e) => setNewSprintStart(e.target.value)}
-                    required
-                  />
-                </div>
-
-                <div className={styles.formGroup}>
-                  <label className={styles.label}>End Date</label>
-                  <input
-                    type="date"
-                    className={styles.input}
-                    value={newSprintEnd}
-                    onChange={(e) => setNewSprintEnd(e.target.value)}
-                    required
-                  />
-                </div>
-              </div>
-
-              <button type="submit" className={styles.btnPrimary} style={{ width: "100%", padding: "0.75rem", marginTop: "0.5rem" }}>
-                Plan Sprint
-              </button>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Floating Toast Notification */}
-      {toast && (
-        <div className={`${styles.toast} ${toast.type === "success" ? styles.toastSuccess : styles.toastError}`}>
-          <i className={toast.type === "success" ? "fa-solid fa-circle-check" : "fa-solid fa-circle-xmark"}></i>
-          {toast.message}
-        </div>
+        </Card>
       )}
     </div>
   );
