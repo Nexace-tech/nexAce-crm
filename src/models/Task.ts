@@ -55,11 +55,11 @@ const HistorySchema = new Schema<IHistory>({
 
 const TaskSchema = new Schema<ITask>(
   {
-    title: { type: String, required: true },
-    description: { type: String },
-    projectId: { type: Schema.Types.ObjectId, ref: "Project", required: true },
-    sprintId: { type: Schema.Types.ObjectId, ref: "Sprint" },
-    assignee: { type: Schema.Types.ObjectId, ref: "User" },
+    title: { type: String, required: true, trim: true },
+    description: { type: String, trim: true },
+    projectId: { type: Schema.Types.ObjectId, ref: "Project", required: true, index: true },
+    sprintId: { type: Schema.Types.ObjectId, ref: "Sprint", index: true },
+    assignee: { type: Schema.Types.ObjectId, ref: "User", index: true },
     dueDate: { type: Date },
     priority: {
       type: String,
@@ -74,10 +74,15 @@ const TaskSchema = new Schema<ITask>(
     subtasks: [SubtaskSchema],
     comments: [CommentSchema],
     history: [HistorySchema],
-    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true },
+    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true, index: true },
   },
   { timestamps: true }
 );
+
+// Performance indexes for Kanban board & filters
+TaskSchema.index({ tenantId: 1, projectId: 1, status: 1 });
+TaskSchema.index({ tenantId: 1, sprintId: 1 });
+TaskSchema.index({ tenantId: 1, assignee: 1 });
 
 export const Task: Model<ITask> =
   mongoose.models.Task || mongoose.model<ITask>("Task", TaskSchema);

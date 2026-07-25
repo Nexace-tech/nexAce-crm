@@ -28,7 +28,9 @@
   --border-dark: 1px solid rgba(39, 39, 42, 0.8);
   
   /* Typography */
-  --font-family: 'Outfit', 'Inter', system-ui, -apple-system, sans-serif;
+  --font-heading: 'Satoshi', 'Santoshi', system-ui, -apple-system, sans-serif;
+  --font-body: var(--font-inter), 'Inter', system-ui, -apple-system, sans-serif;
+  --font-family: var(--font-body);
   
   /* Radius & Shadows */
   --radius-sm: 6px;

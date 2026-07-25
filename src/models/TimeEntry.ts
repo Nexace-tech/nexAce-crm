@@ -16,9 +16,9 @@ export interface ITimeEntry extends Document {
 
 const TimeEntrySchema = new Schema<ITimeEntry>(
   {
-    userId: { type: Schema.Types.ObjectId, ref: "User", required: true },
-    project: { type: String, required: true },
-    taskName: { type: String, required: true },
+    userId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
+    project: { type: String, required: true, trim: true },
+    taskName: { type: String, required: true, trim: true },
     hours: { type: Number, required: true, min: 0.1, max: 24 },
     date: { type: Date, required: true },
     isBillable: { type: Boolean, default: true },
@@ -28,10 +28,14 @@ const TimeEntrySchema = new Schema<ITimeEntry>(
       default: "Draft",
     },
     approvedBy: { type: Schema.Types.ObjectId, ref: "User" },
-    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true },
+    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true, index: true },
   },
   { timestamps: true }
 );
+
+// Performance indexes for timesheets & approval workflows
+TimeEntrySchema.index({ tenantId: 1, userId: 1, date: -1 });
+TimeEntrySchema.index({ tenantId: 1, status: 1 });
 
 export const TimeEntry: Model<ITimeEntry> =
   mongoose.models.TimeEntry || mongoose.model<ITimeEntry>("TimeEntry", TimeEntrySchema);

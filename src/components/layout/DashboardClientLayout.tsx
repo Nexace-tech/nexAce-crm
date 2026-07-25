@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import styles from "@/app/dashboard/layout.module.css";
 import { UserProfileCard } from "@/components/layout/UserProfileCard";
 import { LogoutHeaderBtn } from "@/components/layout/LogoutHeaderBtn";
+import { NotificationBell } from "@/components/layout/NotificationBell";
 
 interface MenuItem {
   name: string;
@@ -97,9 +98,7 @@ export function DashboardClientLayout({ session, menuItems, children }: Dashboar
           </div>
 
           <div className={styles.headerActions}>
-            <button className={styles.iconBtn} title="Notifications">
-              <i className="fa-solid fa-bell"></i>
-            </button>
+            <NotificationBell />
             <LogoutHeaderBtn />
           </div>
         </header>

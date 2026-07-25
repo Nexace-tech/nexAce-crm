@@ -14,9 +14,9 @@ export interface IActivityLog extends Document {
 
 const ActivityLogSchema = new Schema<IActivityLog>(
   {
-    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true },
-    projectId: { type: Schema.Types.ObjectId, ref: "Project" },
-    userId: { type: Schema.Types.ObjectId, ref: "User", required: true },
+    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true, index: true },
+    projectId: { type: Schema.Types.ObjectId, ref: "Project", index: true },
+    userId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
     userName: { type: String, required: true },
     userRole: { type: String },
     action: { type: String, required: true },
@@ -25,6 +25,10 @@ const ActivityLogSchema = new Schema<IActivityLog>(
   },
   { timestamps: true }
 );
+
+// Performance indexes for paginated timeline lookups
+ActivityLogSchema.index({ tenantId: 1, createdAt: -1 });
+ActivityLogSchema.index({ projectId: 1, createdAt: -1 });
 
 export const ActivityLog: Model<IActivityLog> =
   mongoose.models.ActivityLog || mongoose.model<IActivityLog>("ActivityLog", ActivityLogSchema);

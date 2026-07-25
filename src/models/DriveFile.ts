@@ -14,16 +14,20 @@ export interface IDriveFile extends Document {
 
 const DriveFileSchema = new Schema<IDriveFile>(
   {
-    name: { type: String, required: true },
+    name: { type: String, required: true, trim: true },
     size: { type: Number, required: true },
     mimeType: { type: String, required: true },
     filePath: { type: String, required: true },
-    folder: { type: String, default: "/" },
-    uploadedBy: { type: Schema.Types.ObjectId, ref: "User", required: true },
-    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true },
+    folder: { type: String, default: "/", trim: true },
+    uploadedBy: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
+    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true, index: true },
   },
   { timestamps: true }
 );
+
+// Performance indexes for folder navigation & recent file lookups
+DriveFileSchema.index({ tenantId: 1, folder: 1 });
+DriveFileSchema.index({ tenantId: 1, createdAt: -1 });
 
 export const DriveFile: Model<IDriveFile> =
   mongoose.models.DriveFile || mongoose.model<IDriveFile>("DriveFile", DriveFileSchema);
