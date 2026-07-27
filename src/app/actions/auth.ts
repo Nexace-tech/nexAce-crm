@@ -7,19 +7,29 @@ import { User } from "@/models/User";
 import { EmailVerification } from "@/models/EmailVerification";
 import { createSession, deleteSession } from "@/lib/session";
 import { redirect } from "next/navigation";
+import { sendEmail } from "@/lib/mail";
+import { Notification } from "@/models/Notification";
+import { validatePasswordPattern } from "@/lib/utils";
 
 export interface FormState {
   errors?: {
     companyName?: string[];
     companySlug?: string[];
     adminName?: string[];
+    username?: string[];
     adminEmail?: string[];
     adminPassword?: string[];
     email?: string[];
     password?: string[];
+    code?: string[];
+    newPassword?: string[];
   };
   message?: string;
   success?: boolean;
+  step?: "request" | "reset" | "completed";
+  resetEmail?: string;
+  devCode?: string;
+  previewUrl?: string;
 }
 
 /**
@@ -57,6 +67,7 @@ export async function registerAction(state: FormState | undefined, formData: For
   const companyName = formData.get("companyName") as string;
   const companySlug = formData.get("companySlug") as string;
   const adminName = formData.get("adminName") as string;
+  const usernameRaw = (formData.get("username") as string)?.trim()?.toLowerCase()?.replace(/^@/, "");
   const adminEmail = formData.get("adminEmail") as string;
   const adminPassword = formData.get("adminPassword") as string;
   const code = formData.get("code") as string;
@@ -64,24 +75,21 @@ export async function registerAction(state: FormState | undefined, formData: For
   // 1. Simple Server-Side Validation
   const errors: NonNullable<FormState["errors"]> = {};
 
-  if (!companyName || companyName.trim().length < 2) {
-    errors.companyName = ["Company name must be at least 2 characters long."];
-  }
-
-  if (!companySlug || !/^[a-z0-9-]+$/.test(companySlug)) {
-    errors.companySlug = ["Slug must contain only lowercase letters, numbers, and hyphens."];
-  }
-
   if (!adminName || adminName.trim().length < 2) {
     errors.adminName = ["Name must be at least 2 characters long."];
+  }
+
+  if (!usernameRaw || !/^[a-z0-9_.]+$/.test(usernameRaw) || usernameRaw.length < 3) {
+    errors.username = ["Username must be at least 3 characters (lowercase letters, numbers, underscores, dots)."];
   }
 
   if (!adminEmail || !adminEmail.includes("@")) {
     errors.adminEmail = ["Please enter a valid email address."];
   }
 
-  if (!adminPassword || adminPassword.length < 6) {
-    errors.adminPassword = ["Password must be at least 6 characters long."];
+  const pwdValidation = validatePasswordPattern(adminPassword);
+  if (!pwdValidation.isValid) {
+    errors.adminPassword = [pwdValidation.error!];
   }
 
   if (Object.keys(errors).length > 0) {
@@ -99,49 +107,94 @@ export async function registerAction(state: FormState | undefined, formData: For
       };
     }
 
-    // 2. Check for existing Tenant slug
-    const existingTenant = await Tenant.findOne({ slug: companySlug.toLowerCase() });
-    if (existingTenant) {
-      return {
-        errors: { companySlug: ["This company slug is already taken."] }
-      };
-    }
-
-    // 3. Check for existing User email
+    // 2. Check for existing User email & redirect to login if user already exists
     const existingUser = await User.findOne({ email: adminEmail.toLowerCase() });
     if (existingUser) {
+      redirect(`/login?email=${encodeURIComponent(adminEmail.toLowerCase())}&redirected=true`);
+    }
+
+    // Check for existing Username
+    const existingUsername = await User.findOne({ username: usernameRaw });
+    if (existingUsername) {
       return {
-        errors: { adminEmail: ["This email is already registered."] }
+        errors: { username: ["This username is already taken. Please choose another."] }
       };
     }
 
     // Clear verification code after successful verification
     await EmailVerification.deleteOne({ _id: verification._id });
 
-    // 4. Create Tenant
-    const tenant = await Tenant.create({
-      name: companyName,
-      slug: companySlug.toLowerCase()
-    });
+    // 3. Find or Create Default Tenant
+    let tenant;
+    if (companySlug) {
+      tenant = await Tenant.findOne({ slug: companySlug.toLowerCase() });
+    }
+    if (!tenant) {
+      tenant = await Tenant.findOne();
+    }
+    if (!tenant) {
+      tenant = await Tenant.create({
+        name: companyName || "NexAce CRM",
+        slug: companySlug?.toLowerCase() || "nexace"
+      });
+    }
 
-    // 5. Hash Password & Create User
+    // 5. Hash Password & Create User with status: "Pending"
     const passwordHash = await bcrypt.hash(adminPassword, 10);
     const user = await User.create({
       name: adminName,
+      username: usernameRaw,
       email: adminEmail.toLowerCase(),
       passwordHash,
-      role: "Admin",
+      role: "Employee",
+      status: "Pending",
       tenantId: tenant._id
     });
 
-    // 6. Create session
-    await createSession(
-      String(user._id),
-      String(tenant._id),
-      user.name,
-      tenant.name,
-      user.role
-    );
+    // Notify all Admins in the workspace about the pending approval
+    const adminUsers = await User.find({ tenantId: tenant._id, role: "Admin" });
+    
+    for (const admin of adminUsers) {
+      await Notification.create({
+        tenantId: tenant._id,
+        recipientId: admin._id,
+        title: "New Employee Registration Approval",
+        message: `${adminName} (@${usernameRaw}) has registered as an Employee and is waiting for your approval.`,
+        type: "system",
+        linkUrl: "/dashboard/team"
+      });
+
+      if (admin.email) {
+        const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+        try {
+          await sendEmail({
+            to: admin.email,
+            subject: `✦ Action Required: New Employee Signup Approval (${adminName})`,
+            text: `New employee signup: ${adminName} (@${usernameRaw}, ${adminEmail}). Please review and approve in your admin workspace.`,
+            html: `
+              <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff;">
+                <h2 style="color: #0f172a; margin-top: 0;">Employee Registration Approval Needed</h2>
+                <p style="color: #475569; font-size: 14px; line-height: 1.5;">
+                  A new employee has completed email verification and registered on <strong>${tenant.name}</strong>:
+                </p>
+                <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 16px; border-radius: 8px; margin: 16px 0;">
+                  <p style="margin: 4px 0; font-size: 14px; color: #1e293b;"><strong>Name:</strong> ${adminName}</p>
+                  <p style="margin: 4px 0; font-size: 14px; color: #1e293b;"><strong>Username:</strong> @${usernameRaw}</p>
+                  <p style="margin: 4px 0; font-size: 14px; color: #1e293b;"><strong>Email:</strong> ${adminEmail}</p>
+                  <p style="margin: 4px 0; font-size: 14px; color: #d97706;"><strong>Status:</strong> Pending Approval</p>
+                </div>
+                <p style="color: #475569; font-size: 14px;">Please sign in to your admin dashboard to approve or manage this account.</p>
+                <div style="margin-top: 24px;">
+                  <a href="${appUrl}/dashboard/team" style="display: inline-block; padding: 10px 20px; background-color: #2563eb; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 14px;">Review & Approve Employee</a>
+                </div>
+              </div>
+            `
+          });
+        } catch (mailErr) {
+          console.error("Failed to send admin approval email:", mailErr);
+        }
+      }
+    }
   } catch (error: any) {
     console.error("Registration error:", error);
     return {
@@ -149,8 +202,8 @@ export async function registerAction(state: FormState | undefined, formData: For
     };
   }
 
-  // 7. Redirect to dashboard
-  redirect("/dashboard");
+  // 6. Redirect to Login with pending approval notification
+  redirect(`/login?pending=true&email=${encodeURIComponent(adminEmail.toLowerCase())}`);
 }
 
 /**
@@ -193,6 +246,18 @@ export async function loginAction(state: FormState | undefined, formData: FormDa
       };
     }
 
+    // Check account approval status
+    if (user.status === "Pending") {
+      return {
+        message: "Your employee account registration is currently pending administrator approval. Please wait for an admin to approve your account."
+      };
+    }
+    if (user.status === "Suspended") {
+      return {
+        message: "Your employee account has been suspended. Please contact your workspace administrator."
+      };
+    }
+
     // Get tenant details
     const tenant = user.tenantId as any; // Cast populated tenantId
     if (!tenant) {
@@ -229,10 +294,10 @@ export async function logoutAction() {
 }
 
 /**
- * Server Action to handle forgot password requests (mocked).
+ * Server Action to handle forgot password requests — generates 6-digit code and dispatches email via SMTP.
  */
 export async function forgotPasswordAction(state: FormState | undefined, formData: FormData): Promise<FormState> {
-  const email = formData.get("email") as string;
+  const email = (formData.get("email") as string)?.trim()?.toLowerCase();
 
   const errors: NonNullable<FormState["errors"]> = {};
 
@@ -245,19 +310,73 @@ export async function forgotPasswordAction(state: FormState | undefined, formDat
     await connectToDatabase();
 
     // Check if the user exists
-    const user = await User.findOne({ email: email.toLowerCase() });
+    const user = await User.findOne({ email });
     if (!user) {
-      // Return success even if user not found for security reasons,
-      // but mention that we sent a reset link to prevent enumeration.
+      // Security measure: do not disclose user non-existence
       return {
         success: true,
-        message: "If an account exists with that email, a password reset link has been sent."
+        step: "reset",
+        resetEmail: email,
+        message: `If an account exists for ${email}, a 6-digit verification code has been sent.`,
       };
     }
 
+    // Generate random 6-digit verification code
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+
+    // Save or update code in EmailVerification collection (expires in 10 mins)
+    await EmailVerification.findOneAndUpdate(
+      { email },
+      { code, createdAt: new Date() },
+      { upsert: true, new: true }
+    );
+
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+    const resetLink = `${baseUrl}/forgot-password?email=${encodeURIComponent(email)}&code=${code}`;
+
+    // Send reset email via Nodemailer
+    const mailResult = await sendEmail({
+      to: email,
+      subject: "[NexAce CRM] Reset Your Password",
+      text: `Reset your password: ${resetLink} (Verification Code: ${code})`,
+      html: `
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; padding: 2.5rem 1.5rem; background-color: #f8fafc; color: #1e293b;">
+          <div style="max-width: 520px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px; padding: 2.5rem; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05);">
+            <div style="text-align: center; margin-bottom: 2rem;">
+              <h2 style="color: #4f46e5; margin: 0; font-size: 1.6rem; font-weight: 800; letter-spacing: -0.025em;">✦ NexAce CRM</h2>
+              <p style="color: #64748b; font-size: 0.875rem; margin-top: 0.25rem; font-weight: 500;">Account Security & Password Recovery</p>
+            </div>
+
+            <p style="font-size: 0.95rem; color: #0f172a; line-height: 1.6; margin-bottom: 0.75rem;">Hello <strong>${user.name}</strong>,</p>
+            <p style="font-size: 0.95rem; color: #334155; line-height: 1.6; margin-bottom: 1.75rem;">We received a request to reset the password for your NexAce CRM account. Click the button below to reset your password directly:</p>
+
+            <div style="text-align: center; margin: 2rem 0;">
+              <a href="${resetLink}" target="_blank" style="background-color: #4f46e5; color: #ffffff; padding: 0.9rem 2.25rem; border-radius: 10px; font-weight: 700; font-size: 0.95rem; text-decoration: none; display: inline-block; box-shadow: 0 4px 12px 0 rgba(79, 70, 229, 0.35);">
+                Reset Password Now →
+              </a>
+            </div>
+
+            <div style="background-color: #f1f5f9; border: 1px solid #cbd5e1; padding: 1.25rem; border-radius: 12px; text-align: center; margin: 1.75rem 0;">
+              <p style="font-size: 0.75rem; color: #64748b; margin: 0 0 0.5rem 0; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;">Or Enter This 6-Digit Code Manually:</p>
+              <span style="font-size: 2.2rem; font-weight: 800; letter-spacing: 6px; color: #4338ca; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;">${code}</span>
+            </div>
+
+            <p style="font-size: 0.8rem; color: #94a3b8; text-align: center; margin-top: 2rem; line-height: 1.5;">
+              This link and code will expire in 10 minutes.<br/>
+              If you did not request a password reset, you can safely ignore this email.
+            </p>
+          </div>
+        </div>
+      `,
+    });
+
     return {
       success: true,
-      message: `A password reset link has been sent to ${email}. (In a production environment, this would send a secure JWT reset token link via email).`
+      step: "reset",
+      resetEmail: email,
+      devCode: mailResult.isDev ? code : undefined,
+      previewUrl: mailResult.isDev ? mailResult.previewUrl : undefined,
+      message: `A 6-digit verification code has been sent to ${email}.`,
     };
   } catch (error: any) {
     console.error("Forgot password error:", error);
@@ -267,3 +386,73 @@ export async function forgotPasswordAction(state: FormState | undefined, formDat
   }
 }
 
+/**
+ * Server Action to handle resetting user password with verification code.
+ */
+export async function resetPasswordAction(state: FormState | undefined, formData: FormData): Promise<FormState> {
+  const email = (formData.get("email") as string)?.trim()?.toLowerCase();
+  const code = (formData.get("code") as string)?.trim();
+  const newPassword = formData.get("newPassword") as string;
+
+  const errors: NonNullable<FormState["errors"]> = {};
+
+  if (!email || !email.includes("@")) {
+    errors.email = ["Please enter a valid email address."];
+  }
+
+  if (!code || code.length !== 6) {
+    errors.code = ["Verification code must be 6 digits."];
+  }
+
+  const pwdValidation = validatePasswordPattern(newPassword);
+  if (!pwdValidation.isValid) {
+    errors.newPassword = [pwdValidation.error!];
+  }
+
+  if (Object.keys(errors).length > 0) {
+    return { errors, step: "reset", resetEmail: email };
+  }
+
+  try {
+    await connectToDatabase();
+
+    // Verify code in DB
+    const verification = await EmailVerification.findOne({ email });
+    if (!verification || verification.code !== code) {
+      return {
+        step: "reset",
+        resetEmail: email,
+        message: "Incorrect or expired verification code. Please check your email or request a new code.",
+      };
+    }
+
+    // Find User
+    const user = await User.findOne({ email });
+    if (!user) {
+      return {
+        message: "User account not found.",
+      };
+    }
+
+    // Hash new password & update User record
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+    user.passwordHash = passwordHash;
+    await user.save();
+
+    // Delete verification record
+    await EmailVerification.deleteOne({ _id: verification._id });
+
+    return {
+      success: true,
+      step: "completed",
+      message: "Password reset successfully! You can now sign in with your new password.",
+    };
+  } catch (error: any) {
+    console.error("Reset password error:", error);
+    return {
+      step: "reset",
+      resetEmail: email,
+      message: getDescriptiveErrorMessage(error, "An error occurred while resetting password. Please try again.")
+    };
+  }
+}

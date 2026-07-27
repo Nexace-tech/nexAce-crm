@@ -2,24 +2,6 @@
 
 import React, { useState, useEffect, startTransition } from "react";
 import { useAuth } from "@/hooks/useAuth";
-import { 
-  FolderGit2, 
-  GanttChart, 
-  BookOpen, 
-  HardDrive, 
-  PieChart, 
-  History, 
-  Plus, 
-  Download, 
-  CheckCircle, 
-  AlertCircle,
-  FileText,
-  Trash2,
-  Upload,
-  FolderPlus,
-  Search,
-  Filter
-} from "lucide-react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -74,13 +56,48 @@ export default function ProjectsPage() {
   const [newTaskDueDate, setNewTaskDueDate] = useState("");
   const [newTaskSprint, setNewTaskSprint] = useState("");
 
-  const [wikiArticles, setWikiArticles] = useState<any[]>([]);
+  const [wikiArticles, setWikiArticles] = useState<any[]>([
+    {
+      _id: "sop-1",
+      title: "Client Onboarding & Initial Setup Workflow",
+      category: "Operations",
+      content: "Step 1: Create client account in CRM dashboard.\nStep 2: Assign dedicated Account Manager and Technical Lead.\nStep 3: Schedule kick-off discovery call within 48 hours.\nStep 4: Share Workspace Drive folder & project portal credentials.",
+      author: "NexAce Admin",
+      updatedAt: new Date().toISOString()
+    },
+    {
+      _id: "sop-2",
+      title: "Sprint Planning & Code Review SOP",
+      category: "Engineering",
+      content: "All feature branches must have corresponding unit test coverage.\nPull Requests require approval from at least 1 Senior Lead before merging to production.\nPerform database schema migrations during scheduled maintenance windows.",
+      author: "Tech Lead",
+      updatedAt: new Date().toISOString()
+    },
+    {
+      _id: "sop-3",
+      title: "Customer Support Escalation SLA Matrix",
+      category: "Support",
+      content: "Priority 1 (Critical Outage): Initial response within 15 minutes. Resolution SLA: 2 hours.\nPriority 2 (High Severity): Initial response within 1 hour. Resolution SLA: 6 hours.\nPriority 3 (General Query): Initial response within 4 hours. Resolution SLA: 24 hours.",
+      author: "Support Operations",
+      updatedAt: new Date().toISOString()
+    }
+  ]);
   const [selectedArticle, setSelectedArticle] = useState<any | null>(null);
+  const [showWikiForm, setShowWikiForm] = useState(false);
+  const [newWikiTitle, setNewWikiTitle] = useState("");
+  const [newWikiCategory, setNewWikiCategory] = useState("Operations");
+  const [newWikiContent, setNewWikiContent] = useState("");
 
   const [driveFiles, setDriveFiles] = useState<any[]>([]);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadName, setUploadName] = useState("");
   const [driveFolder, setDriveFolder] = useState<string>("/");
+  const [deleteConfirmFile, setDeleteConfirmFile] = useState<any | null>(null);
+
+  // Project Activity History Pagination state
+  const [historyPage, setHistoryPage] = useState<number>(1);
+  const [historyRowsPerPage, setHistoryRowsPerPage] = useState<number>(5);
+  const [historyShowAll, setHistoryShowAll] = useState<boolean>(false);
 
   const columns = ["To Do", "In Progress", "Review", "Done"];
 
@@ -157,6 +174,23 @@ export default function ProjectsPage() {
     }
   };
 
+  const fetchWikiArticles = async () => {
+    try {
+      const res = await fetch("/api/wiki");
+      if (res.ok) {
+        const data = await res.json();
+        if (data.articles && data.articles.length > 0) {
+          setWikiArticles(data.articles.map((art: any) => ({
+            ...art,
+            author: art.createdBy?.name || "Team Member"
+          })));
+        }
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   const handleFileUpload = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!uploadFile) return;
@@ -194,8 +228,10 @@ export default function ProjectsPage() {
       });
 
       if (res.ok) {
-        showToast("File deleted", "success");
+        showToast("File deleted successfully!", "success");
+        setDeleteConfirmFile(null);
         await fetchDriveFiles();
+        fetchActivityLogs();
       } else {
         const err = await res.json();
         showToast(err.error || "Failed to delete file", "error");
@@ -212,6 +248,7 @@ export default function ProjectsPage() {
       await fetchProjects();
       await fetchTeam();
       await fetchDriveFiles();
+      await fetchWikiArticles();
       setLoading(false);
     };
     init();
@@ -356,7 +393,7 @@ export default function ProjectsPage() {
               : "bg-destructive/90 text-white border-destructive"
           )}
         >
-          {toast.type === "success" ? <CheckCircle className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
+          <i className={cn("fa-solid text-sm", toast.type === "success" ? "fa-circle-check" : "fa-circle-exclamation")} />
           {toast.message}
         </div>
       )}
@@ -371,11 +408,11 @@ export default function ProjectsPage() {
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          <Button variant="outline" size="sm" onClick={() => setShowProjectForm(true)} className="gap-2">
-            <FolderPlus className="w-4 h-4" /> New Project
+          <Button variant="outline" size="sm" onClick={() => setShowProjectForm(true)} className="gap-2 font-semibold">
+            <i className="fa-solid fa-folder-plus text-xs" /> New Project
           </Button>
-          <Button color="primary" size="sm" onClick={() => setShowTaskForm(true)} className="gap-2">
-            <Plus className="w-4 h-4" /> Create Task
+          <Button color="primary" size="sm" onClick={() => setShowTaskForm(true)} className="gap-2 font-semibold">
+            <i className="fa-solid fa-plus text-xs" /> Create Task
           </Button>
         </div>
       </div>
@@ -391,7 +428,7 @@ export default function ProjectsPage() {
               : "border-transparent text-muted-foreground hover:text-foreground"
           )}
         >
-          <FolderGit2 className="w-4 h-4" /> Kanban Board
+          <i className="fa-solid fa-square-kanban text-sm" /> Kanban Board
         </button>
 
         <button
@@ -403,7 +440,7 @@ export default function ProjectsPage() {
               : "border-transparent text-muted-foreground hover:text-foreground"
           )}
         >
-          <GanttChart className="w-4 h-4" /> Gantt Timeline
+          <i className="fa-solid fa-chart-gantt text-sm" /> Gantt Timeline
         </button>
 
         <button
@@ -415,7 +452,7 @@ export default function ProjectsPage() {
               : "border-transparent text-muted-foreground hover:text-foreground"
           )}
         >
-          <BookOpen className="w-4 h-4" /> SOP Wiki
+          <i className="fa-solid fa-book text-sm" /> SOP Wiki
         </button>
 
         <button
@@ -427,7 +464,7 @@ export default function ProjectsPage() {
               : "border-transparent text-muted-foreground hover:text-foreground"
           )}
         >
-          <HardDrive className="w-4 h-4" /> Drive Space
+          <i className="fa-solid fa-hard-drive text-sm" /> Drive Space
         </button>
 
         <button
@@ -439,7 +476,7 @@ export default function ProjectsPage() {
               : "border-transparent text-muted-foreground hover:text-foreground"
           )}
         >
-          <History className="w-4 h-4" /> Project History
+          <i className="fa-solid fa-clock-rotate-left text-sm" /> Project History
         </button>
       </div>
 
@@ -475,14 +512,20 @@ export default function ProjectsPage() {
             const isOver = dragOverCol === col;
 
             const colAccentMap: Record<string, string> = {
-              "To Do": "border-slate-400",
-              "In Progress": "border-blue-500",
+              "To Do": "border-sky-400",
+              "In Progress": "border-indigo-500",
               "Review": "border-amber-500",
               "Done": "border-emerald-500",
             };
+            const colBorderMap: Record<string, string> = {
+              "To Do": "border-sky-500/40 dark:border-sky-500/50 hover:border-sky-500/80 shadow-sky-500/5",
+              "In Progress": "border-indigo-500/40 dark:border-indigo-500/50 hover:border-indigo-500/80 shadow-indigo-500/5",
+              "Review": "border-amber-500/40 dark:border-amber-500/50 hover:border-amber-500/80 shadow-amber-500/5",
+              "Done": "border-emerald-500/40 dark:border-emerald-500/50 hover:border-emerald-500/80 shadow-emerald-500/5",
+            };
             const colDotMap: Record<string, string> = {
-              "To Do": "bg-slate-400",
-              "In Progress": "bg-blue-500",
+              "To Do": "bg-sky-400",
+              "In Progress": "bg-indigo-500",
               "Review": "bg-amber-500",
               "Done": "bg-emerald-500",
             };
@@ -510,10 +553,9 @@ export default function ProjectsPage() {
                   }
                 }}
                 className={cn(
-                  "flex flex-col rounded-xl border-2 bg-card p-4 space-y-3 transition-all duration-150",
-                  isOver
-                    ? `${colAccentMap[col]} bg-primary/5 scale-[1.01] shadow-lg`
-                    : "border-border"
+                  "flex flex-col rounded-xl border-2 bg-card/90 dark:bg-slate-900/90 p-4 space-y-3 transition-all duration-200 shadow-md",
+                  colBorderMap[col],
+                  isOver && `${colAccentMap[col]} bg-primary/10 scale-[1.02] shadow-xl border-4`
                 )}
               >
                 <div className="flex items-center justify-between pb-2 border-b border-border">
@@ -551,24 +593,29 @@ export default function ProjectsPage() {
                         }}
                         onClick={() => setSelectedTask(t)}
                         className={cn(
-                          "cursor-grab active:cursor-grabbing hover:shadow-md transition-all p-3 space-y-2 border-l-2",
-                          colAccentMap[col],
-                          draggedTaskId === t._id && "opacity-40 scale-95"
+                          "cursor-grab active:cursor-grabbing hover:shadow-md transition-all p-3.5 space-y-2.5 border-l-4 bg-card dark:bg-slate-800 border border-border/80 shadow-sm opacity-100",
+                          colAccentMap[col]
                         )}
                       >
                         <div className="flex items-start justify-between gap-2">
-                          <p className="font-semibold text-xs text-foreground line-clamp-2">{t.title}</p>
+                          <p className="font-bold text-xs text-foreground leading-snug line-clamp-2">{t.title}</p>
                           <Badge
                             color={t.priority === "High" ? "destructive" : t.priority === "Medium" ? "warning" : "info"}
-                            className="text-[10px] px-1.5 py-0 shrink-0"
+                            className="text-[10px] px-1.5 py-0 shrink-0 font-semibold"
                           >
                             {t.priority}
                           </Badge>
                         </div>
-                        {t.description && <p className="text-[11px] text-muted-foreground line-clamp-2">{t.description}</p>}
-                        <div className="flex items-center justify-between text-[10px] text-muted-foreground pt-1">
-                          <span>{t.assignee?.name || "Unassigned"}</span>
-                          {t.dueDate && <span>Due: {new Date(t.dueDate).toLocaleDateString()}</span>}
+                        {t.description && <p className="text-[11px] text-foreground/80 leading-relaxed line-clamp-2">{t.description}</p>}
+                        <div className="flex items-center justify-between text-[10px] text-foreground/70 font-medium pt-1.5 border-t border-border/40">
+                          <span className="flex items-center gap-1">
+                            <i className="fa-solid fa-user text-[9px] text-primary" /> {t.assignee?.name || "Unassigned"}
+                          </span>
+                          {t.dueDate && (
+                            <span className="flex items-center gap-1 font-mono">
+                              <i className="fa-solid fa-calendar-day text-[9px] text-muted-foreground" /> Due: {new Date(t.dueDate).toLocaleDateString()}
+                            </span>
+                          )}
                         </div>
                       </Card>
                     ))
@@ -580,15 +627,175 @@ export default function ProjectsPage() {
         </div>
       )}
 
-      {/* Drive Space Tab View */}
+      {/* Gantt Timeline View */}
+      {activeTab === "gantt" && (
+        <Card className="p-6 border border-border/80 bg-card space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-border">
+            <div>
+              <h3 className="text-base font-bold text-foreground flex items-center gap-2">
+                <i className="fa-solid fa-chart-gantt text-primary text-sm" /> Interactive Gantt Schedule & Workload Timeline
+              </h3>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Visual timeline mapping task schedules, assignees, priorities, and project deadlines.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Badge variant="outline" className="text-xs font-semibold bg-primary/10 text-primary border-primary/30">
+                {tasks.length} Scheduled Tasks
+              </Badge>
+            </div>
+          </div>
+
+          {tasks.length === 0 ? (
+            <div className="py-16 text-center text-muted-foreground space-y-2">
+              <i className="fa-solid fa-chart-gantt text-4xl opacity-40 text-primary block mb-2" />
+              <p className="font-semibold text-foreground">No tasks scheduled for Gantt view</p>
+              <p className="text-xs">Create tasks for this project to visualize timeline dependencies and due dates.</p>
+              <Button color="primary" size="sm" onClick={() => setShowTaskForm(true)} className="gap-2 mt-3">
+                <i className="fa-solid fa-plus text-xs" /> Create First Task
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {/* Gantt Schedule Header Legend */}
+              <div className="grid grid-cols-12 gap-3 text-xs font-bold text-muted-foreground uppercase border-b border-border pb-2 px-2">
+                <div className="col-span-4 sm:col-span-3">Task Name</div>
+                <div className="col-span-3 sm:col-span-2">Assignee</div>
+                <div className="col-span-2 sm:col-span-2 text-center">Status</div>
+                <div className="col-span-3 sm:col-span-5">Timeline Schedule Bar</div>
+              </div>
+
+              {/* Gantt Task Rows */}
+              <div className="space-y-3">
+                {tasks.map((task) => {
+                  const created = new Date(task.createdAt || Date.now());
+                  const due = task.dueDate ? new Date(task.dueDate) : new Date(Date.now() + 86400000 * 7);
+
+                  const today = new Date();
+                  const totalDays = Math.max(1, Math.ceil((due.getTime() - created.getTime()) / (1000 * 3600 * 24)));
+                  const elapsedDays = Math.max(0, Math.ceil((today.getTime() - created.getTime()) / (1000 * 3600 * 24)));
+                  const progressPct = task.status === "Done" ? 100 : Math.min(100, Math.max(10, Math.round((elapsedDays / totalDays) * 100)));
+
+                  const statusColorMap: Record<string, string> = {
+                    "To Do": "bg-sky-500",
+                    "In Progress": "bg-indigo-500",
+                    "Review": "bg-amber-500",
+                    "Done": "bg-emerald-500",
+                  };
+
+                  return (
+                    <div
+                      key={task._id}
+                      onClick={() => setSelectedTask(task)}
+                      className="grid grid-cols-12 gap-3 items-center p-3 rounded-lg border border-border/70 bg-muted/20 hover:bg-accent/30 transition-all cursor-pointer text-xs group"
+                    >
+                      <div className="col-span-4 sm:col-span-3 font-semibold text-foreground truncate flex items-center gap-2">
+                        <span className={cn("w-2 h-2 rounded-full shrink-0", statusColorMap[task.status] || "bg-primary")} />
+                        <span className="truncate group-hover:text-primary transition-colors">{task.title}</span>
+                      </div>
+
+                      <div className="col-span-3 sm:col-span-2 text-muted-foreground truncate flex items-center gap-1.5">
+                        <i className="fa-solid fa-user-circle text-primary/70 text-xs" />
+                        <span className="truncate">{task.assignee?.name || "Unassigned"}</span>
+                      </div>
+
+                      <div className="col-span-2 sm:col-span-2 text-center">
+                        <Badge
+                          color={task.status === "Done" ? "success" : task.status === "Review" ? "warning" : task.status === "In Progress" ? "primary" : "info"}
+                          variant="soft"
+                          className="text-[10px] px-2 py-0.5"
+                        >
+                          {task.status}
+                        </Badge>
+                      </div>
+
+                      <div className="col-span-3 sm:col-span-5 space-y-1">
+                        <div className="flex justify-between items-center text-[10px] text-muted-foreground">
+                          <span className="font-mono">Start: {created.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
+                          <span className="font-bold text-foreground font-mono">{progressPct}%</span>
+                          <span className="font-mono">Due: {due.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
+                        </div>
+                        <div className="h-3 w-full bg-muted/70 rounded-full overflow-hidden p-0.5 border border-border/50">
+                          <div
+                            className={cn("h-full rounded-full transition-all duration-500 shadow-xs", statusColorMap[task.status] || "bg-primary")}
+                            style={{ width: `${progressPct}%` }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </Card>
+      )}
+
+      {/* SOP Wiki Knowledgebase Tab View */}
+      {activeTab === "wiki" && (
+        <div className="space-y-6">
+          <Card className="p-6 border border-border/80 bg-card space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-border">
+              <div>
+                <h3 className="text-base font-bold text-foreground flex items-center gap-2">
+                  <i className="fa-solid fa-book text-primary text-sm" /> SOP Knowledgebase & Internal Wiki
+                </h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Standard operating procedures, team documentation, and organizational playbooks.
+                </p>
+              </div>
+              <Button color="primary" size="sm" onClick={() => setShowWikiForm(true)} className="gap-2 font-semibold">
+                <i className="fa-solid fa-plus text-xs" /> Publish New SOP Article
+              </Button>
+            </div>
+
+            {/* SOP Articles Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+              {wikiArticles.map((article) => (
+                <div
+                  key={article._id}
+                  onClick={() => setSelectedArticle(article)}
+                  className="p-5 rounded-xl border border-border/80 bg-muted/20 hover:bg-accent/30 hover:border-primary/50 transition-all cursor-pointer flex flex-col justify-between space-y-4 group shadow-xs"
+                >
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Badge color="primary" variant="soft" className="text-[10px] font-semibold">
+                        {article.category}
+                      </Badge>
+                      <span className="text-[10px] text-muted-foreground font-mono">
+                        {new Date(article.updatedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                      </span>
+                    </div>
+                    <h4 className="font-bold text-sm text-foreground group-hover:text-primary transition-colors line-clamp-2">
+                      {article.title}
+                    </h4>
+                    <p className="text-xs text-muted-foreground line-clamp-3 leading-relaxed whitespace-pre-line">
+                      {article.content}
+                    </p>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-3 border-t border-border/50 text-[11px] text-muted-foreground font-medium">
+                    <span className="flex items-center gap-1.5">
+                      <i className="fa-solid fa-feather-pointed text-primary text-xs" /> {article.author}
+                    </span>
+                    <span className="text-primary font-semibold flex items-center gap-1 group-hover:translate-x-1 transition-transform">
+                      Read SOP <i className="fa-solid fa-arrow-right text-[10px]" />
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Card>
+        </div>
+      )}
       {activeTab === "drive" && (
         <div className="space-y-6">
           <Card className="p-5">
             <CardHeader className="px-0 pt-0">
               <CardTitle className="text-base font-bold flex items-center gap-2">
-                <Upload className="w-4 h-4 text-primary" /> Upload File to Drive
+                <i className="fa-solid fa-cloud-arrow-up text-primary text-sm" /> Upload File to Drive
               </CardTitle>
-              <CardDescription font-normal text-xs>Store assets, project specs, and documents securely in workspace drive storage.</CardDescription>
+              <CardDescription className="font-normal text-xs">Store assets, project specs, and documents securely in workspace drive storage.</CardDescription>
             </CardHeader>
             <CardContent className="px-0 pt-2">
               <form onSubmit={handleFileUpload} className="flex flex-col sm:flex-row items-end gap-3">
@@ -614,8 +821,8 @@ export default function ProjectsPage() {
                     placeholder="e.g. Project_Brief_v2.pdf"
                   />
                 </div>
-                <Button color="primary" size="sm" type="submit" disabled={!uploadFile} className="gap-2 shrink-0 h-9">
-                  <Upload className="w-4 h-4" /> Upload
+                <Button color="primary" size="sm" type="submit" disabled={!uploadFile} className="gap-2 shrink-0 h-9 font-semibold">
+                  <i className="fa-solid fa-upload text-xs" /> Upload
                 </Button>
               </form>
             </CardContent>
@@ -625,15 +832,16 @@ export default function ProjectsPage() {
             <CardHeader className="px-0 pt-0 flex flex-row items-center justify-between">
               <div>
                 <CardTitle className="text-base font-bold flex items-center gap-2">
-                  <HardDrive className="w-4 h-4 text-primary" /> Drive Files & Assets ({driveFiles.length})
+                  <i className="fa-solid fa-hard-drive text-primary text-sm" /> Drive Files & Assets ({driveFiles.length})
                 </CardTitle>
                 <CardDescription>File repository accessible across your workspace</CardDescription>
               </div>
             </CardHeader>
+
             <CardContent className="px-0 pt-2">
               {driveFiles.length === 0 ? (
                 <div className="py-12 text-center text-muted-foreground text-sm space-y-1">
-                  <HardDrive className="w-8 h-8 mx-auto stroke-1 opacity-50 text-primary" />
+                  <i className="fa-solid fa-folder-open text-3xl opacity-50 text-primary mb-2 block" />
                   <p className="font-medium">No files uploaded yet.</p>
                   <p className="text-xs">Use the upload box above to add your first file to Drive Space.</p>
                 </div>
@@ -643,8 +851,8 @@ export default function ProjectsPage() {
                     <div key={file._id} className="p-4 rounded-xl border border-border bg-card hover:shadow-md transition-all flex flex-col justify-between space-y-3">
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex items-center gap-3 min-w-0">
-                          <div className="p-2.5 bg-primary/10 text-primary rounded-lg shrink-0">
-                            <FileText className="w-5 h-5" />
+                          <div className="p-2.5 bg-primary/10 text-primary rounded-lg shrink-0 flex items-center justify-center w-10 h-10">
+                            <i className="fa-solid fa-file-lines text-lg" />
                           </div>
                           <div className="min-w-0">
                             <p className="font-semibold text-xs text-foreground truncate" title={file.name}>
@@ -655,14 +863,15 @@ export default function ProjectsPage() {
                             </p>
                           </div>
                         </div>
+
                         <Button
                           variant="ghost"
                           size="icon"
-                          onClick={() => handleDeleteFile(file._id)}
+                          onClick={() => setDeleteConfirmFile(file)}
                           className="h-7 w-7 text-destructive hover:bg-destructive/10 shrink-0"
                           title="Delete File"
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
+                          <i className="fa-solid fa-trash-can text-xs" />
                         </Button>
                       </div>
 
@@ -683,38 +892,420 @@ export default function ProjectsPage() {
 
       {/* Project History Tab View */}
       {activeTab === "history" && (
-        <Card className="p-5">
-          <CardHeader className="px-0 pt-0">
-            <CardTitle className="text-base font-bold flex items-center gap-2">
-              <History className="w-4 h-4 text-primary" /> Project Activity History
-            </CardTitle>
-            <CardDescription>Audit timeline of actions and changes within this project</CardDescription>
+        <Card className="p-5 space-y-4">
+          <CardHeader className="px-0 pt-0 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border pb-4">
+            <div>
+              <CardTitle className="text-base font-bold flex items-center gap-2">
+                <i className="fa-solid fa-clock-rotate-left text-primary text-sm" /> Project Activity History
+              </CardTitle>
+              <CardDescription>Audit timeline of actions and changes within this project</CardDescription>
+            </div>
+
+            <div className="flex items-center gap-3 flex-wrap">
+              <div className="flex items-center gap-2 text-xs">
+                <span className="text-muted-foreground font-medium">Rows:</span>
+                <select
+                  value={historyRowsPerPage}
+                  onChange={(e) => {
+                    setHistoryRowsPerPage(Number(e.target.value));
+                    setHistoryPage(1);
+                  }}
+                  disabled={historyShowAll}
+                  className="h-8 rounded-md border border-input bg-background px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
+                >
+                  <option value={5}>5</option>
+                  <option value={10}>10</option>
+                  <option value={20}>20</option>
+                </select>
+              </div>
+
+              <Button
+                variant={historyShowAll ? "soft" : "outline"}
+                color={historyShowAll ? "primary" : "default"}
+                size="sm"
+                onClick={() => {
+                  setHistoryShowAll(!historyShowAll);
+                  setHistoryPage(1);
+                }}
+                className="gap-2 font-semibold text-xs h-8"
+              >
+                <i className={cn("fa-solid text-xs", historyShowAll ? "fa-list" : "fa-expand")} />
+                {historyShowAll ? "Paginated View" : "Show All Records"}
+              </Button>
+            </div>
           </CardHeader>
-          <CardContent className="px-0">
-            {activityLogs.length === 0 ? (
-              <div className="py-12 text-center text-muted-foreground text-sm space-y-1">
-                <History className="w-8 h-8 mx-auto stroke-1 opacity-50" />
-                <p>No activity logged for this project yet.</p>
-              </div>
-            ) : (
-              <div className="space-y-4 relative before:absolute before:inset-0 before:left-3.5 before:w-0.5 before:bg-border">
-                {activityLogs.map((log) => (
-                  <div key={log._id} className="relative flex items-start gap-4 pl-8">
-                    <div className="absolute left-1.5 top-1.5 w-4 h-4 rounded-full bg-primary/20 border-2 border-primary" />
-                    <div className="p-3 rounded-lg border border-border bg-card shadow-xs flex-1 space-y-1">
-                      <div className="flex items-center justify-between">
-                        <span className="font-semibold text-xs text-foreground">{log.userName} ({log.userRole || "Member"})</span>
-                        <span className="text-[10px] text-muted-foreground">{new Date(log.createdAt).toLocaleString()}</span>
-                      </div>
-                      <p className="text-xs font-semibold text-primary">{log.action}: {log.targetName}</p>
-                      {log.details && <p className="text-xs text-muted-foreground">{log.details}</p>}
+
+          <CardContent className="px-0 pt-2 space-y-4">
+            {(() => {
+              const totalItems = activityLogs.length;
+              const effectiveRowsPerPage = historyShowAll ? (totalItems || 1) : historyRowsPerPage;
+              const totalPages = Math.ceil(totalItems / effectiveRowsPerPage) || 1;
+              const startIndex = (historyPage - 1) * effectiveRowsPerPage;
+              const paginatedLogs = activityLogs.slice(startIndex, startIndex + effectiveRowsPerPage);
+
+              return (
+                <>
+                  {activityLogs.length === 0 ? (
+                    <div className="py-12 text-center text-muted-foreground text-sm space-y-1">
+                      <i className="fa-solid fa-clock-rotate-left text-3xl opacity-50 block mb-2" />
+                      <p>No activity logged for this project yet.</p>
                     </div>
-                  </div>
-                ))}
-              </div>
-            )}
+                  ) : (
+                    <>
+                      <div className="space-y-4 relative before:absolute before:inset-0 before:left-3.5 before:w-0.5 before:bg-border">
+                        {paginatedLogs.map((log) => (
+                          <div key={log._id} className="relative flex items-start gap-4 pl-8 group">
+                            <div className="absolute left-1.5 top-1.5 w-4 h-4 rounded-full bg-primary/20 border-2 border-primary group-hover:scale-110 transition-transform" />
+                            <div className="p-3.5 rounded-lg border border-border bg-card hover:bg-accent/20 transition-colors shadow-xs flex-1 space-y-1">
+                              <div className="flex items-center justify-between">
+                                <span className="font-bold text-xs text-foreground flex items-center gap-1.5">
+                                  <i className="fa-solid fa-user-circle text-primary text-xs" /> {log.userName} ({log.userRole || "Member"})
+                                </span>
+                                <span className="text-[10px] text-muted-foreground font-mono">
+                                  {new Date(log.createdAt).toLocaleString(undefined, { hour12: true })}
+                                </span>
+                              </div>
+                              <p className="text-xs font-semibold text-primary">{log.action}: {log.targetName}</p>
+                              {log.details && <p className="text-xs text-muted-foreground">{log.details}</p>}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Pagination Footer */}
+                      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-border/60 text-xs text-muted-foreground">
+                        <div>
+                          Showing <strong className="text-foreground">{totalItems === 0 ? 0 : startIndex + 1}</strong> to <strong className="text-foreground">{Math.min(startIndex + effectiveRowsPerPage, totalItems)}</strong> of <strong className="text-foreground">{totalItems}</strong> history logs
+                        </div>
+
+                        {!historyShowAll && totalPages > 1 && (
+                          <div className="flex items-center gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              disabled={historyPage <= 1}
+                              onClick={() => setHistoryPage((prev) => Math.max(1, prev - 1))}
+                              className="h-8 gap-1"
+                            >
+                              <i className="fa-solid fa-chevron-left text-[10px]" /> Previous
+                            </Button>
+
+                            <span className="font-semibold text-foreground px-2 font-mono">
+                              Page {historyPage} of {totalPages}
+                            </span>
+
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              disabled={historyPage >= totalPages}
+                              onClick={() => setHistoryPage((prev) => Math.min(totalPages, prev + 1))}
+                              className="h-8 gap-1"
+                            >
+                              Next <i className="fa-solid fa-chevron-right text-[10px]" />
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </>
+              );
+            })()}
           </CardContent>
         </Card>
+      )}
+
+      {/* Selected SOP Article Detail Modal */}
+      {selectedArticle && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in" onClick={() => setSelectedArticle(null)}>
+          <div className="w-full max-w-2xl bg-card border border-border rounded-xl p-6 shadow-2xl space-y-4 animate-in zoom-in-95" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-start border-b border-border/60 pb-3">
+              <div className="space-y-1">
+                <Badge color="primary" className="mb-1">{selectedArticle.category}</Badge>
+                <h3 className="text-lg font-bold text-foreground">{selectedArticle.title}</h3>
+                <p className="text-xs text-muted-foreground">
+                  Published by <strong className="text-foreground">{selectedArticle.author}</strong> on {new Date(selectedArticle.updatedAt).toLocaleDateString(undefined, { dateStyle: 'medium' })}
+                </p>
+              </div>
+              <Button variant="ghost" size="sm" onClick={() => setSelectedArticle(null)}>
+                <i className="fa-solid fa-xmark text-sm" />
+              </Button>
+            </div>
+
+            <div className="p-4 rounded-lg bg-muted/20 border border-border/60 text-xs text-foreground leading-relaxed whitespace-pre-line font-normal space-y-2">
+              {selectedArticle.content}
+            </div>
+
+            <div className="flex justify-end pt-2 border-t border-border">
+              <Button variant="outline" size="sm" onClick={() => setSelectedArticle(null)}>
+                Close SOP
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Publish New SOP Modal */}
+      {showWikiForm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in" onClick={() => setShowWikiForm(false)}>
+          <div className="w-full max-w-lg bg-card border border-border rounded-xl p-6 shadow-2xl space-y-4 animate-in zoom-in-95" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-center border-b border-border/60 pb-3">
+              <h3 className="text-base font-bold text-foreground flex items-center gap-2">
+                <i className="fa-solid fa-book-bookmark text-primary" /> Publish Standard Operating Procedure (SOP)
+              </h3>
+              <Button variant="ghost" size="sm" onClick={() => setShowWikiForm(false)}>
+                <i className="fa-solid fa-xmark text-sm" />
+              </Button>
+            </div>
+
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                try {
+                  const res = await fetch("/api/wiki", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      title: newWikiTitle,
+                      category: newWikiCategory,
+                      content: newWikiContent,
+                    }),
+                  });
+                  if (res.ok) {
+                    showToast("SOP article published successfully!", "success");
+                    setShowWikiForm(false);
+                    setNewWikiTitle("");
+                    setNewWikiContent("");
+                    await fetchWikiArticles();
+                  } else {
+                    const err = await res.json();
+                    showToast(err.error || "Failed to publish article", "error");
+                  }
+                } catch (err) {
+                  showToast("Error publishing SOP article", "error");
+                }
+              }}
+              className="space-y-4 text-xs"
+            >
+              <div className="space-y-1.5">
+                <label className="font-semibold text-foreground">SOP Document Title</label>
+                <Input
+                  value={newWikiTitle}
+                  onChange={(e) => setNewWikiTitle(e.target.value)}
+                  placeholder="e.g. Incident Escalation & Response Protocol"
+                  required
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="font-semibold text-foreground">Category / Department</label>
+                <select
+                  value={newWikiCategory}
+                  onChange={(e) => setNewWikiCategory(e.target.value)}
+                  className="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                >
+                  <option value="Operations">Operations</option>
+                  <option value="Engineering">Engineering</option>
+                  <option value="Support">Support</option>
+                  <option value="Sales & CRM">Sales & CRM</option>
+                  <option value="HR & Payroll">HR & Payroll</option>
+                </select>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="font-semibold text-foreground">SOP Content & Guidelines</label>
+                <textarea
+                  value={newWikiContent}
+                  onChange={(e) => setNewWikiContent(e.target.value)}
+                  rows={6}
+                  className="w-full rounded-md border border-input bg-background p-3 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                  placeholder="Detail step-by-step procedures, execution guidelines, and team expectations..."
+                  required
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-border">
+                <Button variant="outline" size="sm" type="button" onClick={() => setShowWikiForm(false)}>
+                  Cancel
+                </Button>
+                <Button color="primary" size="sm" type="submit" className="font-semibold">
+                  Publish Article
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Create New Project Modal */}
+      {showProjectForm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in" onClick={() => setShowProjectForm(false)}>
+          <div className="w-full max-w-md bg-card border border-border rounded-xl p-6 shadow-2xl space-y-4 animate-in zoom-in-95" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-center border-b border-border/60 pb-3">
+              <h3 className="text-base font-bold text-foreground flex items-center gap-2">
+                <i className="fa-solid fa-folder-plus text-primary" /> Create Workspace Project
+              </h3>
+              <Button variant="ghost" size="sm" onClick={() => setShowProjectForm(false)}>
+                <i className="fa-solid fa-xmark text-sm" />
+              </Button>
+            </div>
+
+            <form onSubmit={handleCreateProject} className="space-y-4 text-xs">
+              <div className="space-y-1.5">
+                <label className="font-semibold text-foreground">Project Name</label>
+                <Input
+                  value={newProjName}
+                  onChange={(e) => setNewProjName(e.target.value)}
+                  placeholder="e.g. Q3 Mobile App Redesign"
+                  required
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="font-semibold text-foreground">Description & Objectives</label>
+                <textarea
+                  value={newProjDesc}
+                  onChange={(e) => setNewProjDesc(e.target.value)}
+                  rows={4}
+                  className="w-full rounded-md border border-input bg-background p-3 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                  placeholder="Outline key deliverables, scope, and target outcomes..."
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-border">
+                <Button variant="outline" size="sm" type="button" onClick={() => setShowProjectForm(false)}>
+                  Cancel
+                </Button>
+                <Button color="primary" size="sm" type="submit" className="font-semibold">
+                  Launch Project
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Create New Task Modal */}
+      {showTaskForm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in" onClick={() => setShowTaskForm(false)}>
+          <div className="w-full max-w-lg bg-card border border-border rounded-xl p-6 shadow-2xl space-y-4 animate-in zoom-in-95" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-center border-b border-border/60 pb-3">
+              <h3 className="text-base font-bold text-foreground flex items-center gap-2">
+                <i className="fa-solid fa-square-plus text-primary" /> Create New Sprint Task
+              </h3>
+              <Button variant="ghost" size="sm" onClick={() => setShowTaskForm(false)}>
+                <i className="fa-solid fa-xmark text-sm" />
+              </Button>
+            </div>
+
+            <form onSubmit={handleCreateTask} className="space-y-4 text-xs">
+              <div className="space-y-1.5">
+                <label className="font-semibold text-foreground">Task Title</label>
+                <Input
+                  value={newTaskTitle}
+                  onChange={(e) => setNewTaskTitle(e.target.value)}
+                  placeholder="e.g. Implement OAuth Authentication API"
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className="font-semibold text-foreground">Assignee</label>
+                  <select
+                    value={newTaskAssignee}
+                    onChange={(e) => setNewTaskAssignee(e.target.value)}
+                    className="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                  >
+                    <option value="">Unassigned</option>
+                    {teamMembers.map((m) => (
+                      <option key={m._id} value={m._id}>{m.name || m.email}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="font-semibold text-foreground">Priority Level</label>
+                  <select
+                    value={newTaskPriority}
+                    onChange={(e) => setNewTaskPriority(e.target.value)}
+                    className="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                  >
+                    <option value="Low">Low</option>
+                    <option value="Medium">Medium</option>
+                    <option value="High">High</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="font-semibold text-foreground">Due Date</label>
+                <Input
+                  type="date"
+                  value={newTaskDueDate}
+                  onChange={(e) => setNewTaskDueDate(e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="font-semibold text-foreground">Task Details & Description</label>
+                <textarea
+                  value={newTaskDesc}
+                  onChange={(e) => setNewTaskDesc(e.target.value)}
+                  rows={4}
+                  className="w-full rounded-md border border-input bg-background p-3 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                  placeholder="Provide technical guidelines or acceptance criteria..."
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-border">
+                <Button variant="outline" size="sm" type="button" onClick={() => setShowTaskForm(false)}>
+                  Cancel
+                </Button>
+                <Button color="primary" size="sm" type="submit" className="font-semibold">
+                  Add Task to Sprint
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal Dialog */}
+      {deleteConfirmFile && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in" onClick={() => setDeleteConfirmFile(null)}>
+          <div className="w-full max-w-md bg-card border border-border rounded-xl p-6 shadow-2xl space-y-4 animate-in zoom-in-95" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-3 border-b border-border/60 pb-3">
+              <div className="p-2.5 bg-rose-500/10 text-rose-500 rounded-lg shrink-0 flex items-center justify-center">
+                <i className="fa-solid fa-triangle-exclamation text-lg" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-foreground">Confirm File Deletion</h3>
+                <p className="text-xs text-muted-foreground truncate max-w-[240px]">
+                  {deleteConfirmFile.name}
+                </p>
+              </div>
+            </div>
+
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              Are you sure you want to delete this file from Drive Space? This action will permanently remove the document from workspace storage.
+            </p>
+
+            <div className="flex justify-end gap-2 pt-3 border-t border-border">
+              <Button variant="outline" size="sm" type="button" onClick={() => setDeleteConfirmFile(null)}>
+                Cancel
+              </Button>
+              <Button
+                color="destructive"
+                size="sm"
+                onClick={() => handleDeleteFile(deleteConfirmFile._id)}
+                className="gap-2 font-semibold"
+              >
+                <i className="fa-solid fa-trash-can text-xs" /> Delete File
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

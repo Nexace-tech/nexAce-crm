@@ -16,7 +16,7 @@ const SHIFT_TARGET_HOURS = 8.0;
 /**
  * GET: Get current user's attendance status for today, standard shift metadata, and attendance history logs.
  */
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const session = await getSession();
     if (!session) {
@@ -35,12 +35,19 @@ export async function GET() {
       date: todayDate,
     });
 
-    const history = await Attendance.find({
+    const { searchParams } = new URL(request.url);
+    const limitParam = searchParams.get("limit");
+
+    let historyQuery = Attendance.find({
       userId: userObjectId,
       tenantId: tenantObjectId,
-    })
-      .sort({ date: -1 })
-      .limit(14);
+    }).sort({ date: -1 });
+
+    if (limitParam !== "all") {
+      historyQuery = historyQuery.limit(limitParam ? parseInt(limitParam) : 30);
+    }
+
+    const history = await historyQuery;
 
     const shiftInfo = {
       shiftName: "Standard Regular Shift",

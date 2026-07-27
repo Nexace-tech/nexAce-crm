@@ -1,19 +1,6 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import { 
-  MessageSquare, 
-  Mail, 
-  Send, 
-  Megaphone, 
-  Hash, 
-  Circle, 
-  User, 
-  Plus, 
-  Pin, 
-  X,
-  PhoneCall
-} from "lucide-react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -27,6 +14,9 @@ interface ChatMsg {
   senderName: string;
   senderRole?: string;
   content: string;
+  parentId?: string;
+  mentions?: string[];
+  reactions?: Array<{ emoji: string; users: string[] }>;
   createdAt: string;
 }
 
@@ -104,22 +94,54 @@ const INITIAL_WA_THREADS: WAThread[] = [
   },
 ];
 
-export default function CommunicationHub() {
-  const [activeTab, setActiveTab] = useState<"chat" | "mail" | "whatsapp" | "announcements">("chat");
+const REACTION_COLOR_MAP: Record<string, string> = {
+  "fa-thumbs-up": "text-primary",
+  "fa-heart": "text-rose-500",
+  "fa-fire": "text-amber-500",
+  "fa-rocket": "text-indigo-500",
+  "fa-face-smile": "text-yellow-500",
+  "fa-hands-clapping": "text-emerald-500",
+};
 
+export default function CommunicationHub() {
+  const [activeTab, setActiveTab] = useState<"chat" | "mail" | "whatsapp" | "video" | "announcements" | "settings">("chat");
+
+  // Chat State
   const [selectedChannel, setSelectedChannel] = useState<string>("general");
   const [messages, setMessages] = useState<ChatMsg[]>([]);
   const [newMessageText, setNewMessageText] = useState("");
+  const [replyingToMsg, setReplyingToMsg] = useState<ChatMsg | null>(null);
   const [loadingChat, setLoadingChat] = useState(false);
+  const [selectedMsgId, setSelectedMsgId] = useState<string | null>(null);
+  const [showMentionPopup, setShowMentionPopup] = useState(false);
+  const [mentionSearch, setMentionSearch] = useState("");
+  const [mentionIndex, setMentionIndex] = useState(-1);
+  const [activeReactionModal, setActiveReactionModal] = useState<{ messageId: string; emoji: string; users: string[] } | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const chatInputRef = useRef<HTMLInputElement>(null);
 
+  // Mail State
   const [mails, setMails] = useState<MailItem[]>(INITIAL_MAILS);
   const [selectedMailId, setSelectedMailId] = useState<string>("m1");
+  const [mailFilter, setMailFilter] = useState<"inbox" | "sent" | "starred">("inbox");
+  const [showComposeMail, setShowComposeMail] = useState(false);
+  const [composeTo, setComposeTo] = useState("");
+  const [composeSubject, setComposeSubject] = useState("");
+  const [composeBody, setComposeBody] = useState("");
 
+  // WhatsApp State
   const [waThreads, setWaThreads] = useState<WAThread[]>(INITIAL_WA_THREADS);
   const [selectedWaId, setSelectedWaId] = useState<string>("wa1");
   const [waReplyText, setWaReplyText] = useState("");
 
+  // Video Call State
+  const [inCall, setInCall] = useState(false);
+  const [micMuted, setMicMuted] = useState(false);
+  const [camOff, setCamOff] = useState(false);
+  const [screenSharing, setScreenSharing] = useState(false);
+  const [callRoomName, setCallRoomName] = useState("Project Alpha Huddle");
+
+  // Announcements State
   const [announcements, setAnnouncements] = useState<AnnouncementData[]>([]);
   const [showAnnModal, setShowAnnModal] = useState(false);
   const [annForm, setAnnForm] = useState({
@@ -129,9 +151,31 @@ export default function CommunicationHub() {
     pinned: false,
   });
 
-  const fetchMessages = async (channel: string) => {
+  // Notification Preferences State
+  const [teamMembers, setTeamMembers] = useState<any[]>([]);
+  const [notifyPrefs, setNotifyPrefs] = useState({
+    chatPings: true,
+    mailAlerts: true,
+    hrApprovals: false,
+    announcementPins: true,
+    soundEnabled: true,
+  });
+
+  const fetchTeam = async () => {
     try {
-      setLoadingChat(true);
+      const res = await fetch("/api/team");
+      if (res.ok) {
+        const data = await res.json();
+        setTeamMembers(data.users || []);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const fetchMessages = async (channel: string, silent = false) => {
+    try {
+      if (!silent) setLoadingChat(true);
       const res = await fetch(`/api/chat/messages?channel=${channel}`);
       if (res.ok) {
         const data = await res.json();
@@ -140,7 +184,7 @@ export default function CommunicationHub() {
     } catch (err) {
       console.error("Fetch chat messages error:", err);
     } finally {
-      setLoadingChat(false);
+      if (!silent) setLoadingChat(false);
     }
   };
 
@@ -157,10 +201,11 @@ export default function CommunicationHub() {
   };
 
   useEffect(() => {
+    fetchTeam();
     if (activeTab === "chat") {
-      fetchMessages(selectedChannel);
+      fetchMessages(selectedChannel, false);
       const interval = setInterval(() => {
-        fetchMessages(selectedChannel);
+        fetchMessages(selectedChannel, true);
       }, 3000);
       return () => clearInterval(interval);
     } else if (activeTab === "announcements") {
@@ -172,9 +217,132 @@ export default function CommunicationHub() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  const handleToggleReaction = async (messageId: string, emoji: string) => {
+    try {
+      const res = await fetch("/api/chat/messages", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messageId, emoji }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        const updatedMessage = data.message;
+        // Directly patch the single message in local state — no full re-fetch
+        // This avoids the race condition where background polling overwrites the update
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg._id === messageId
+              ? { ...msg, reactions: updatedMessage.reactions || [] }
+              : msg
+          )
+        );
+      }
+    } catch (err) {
+      console.error("Toggle reaction error:", err);
+    }
+  };
+
+  const handleChatInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setNewMessageText(value);
+
+    const cursorPos = e.target.selectionStart || value.length;
+    const textBeforeCursor = value.substring(0, cursorPos);
+    const lastAtPos = textBeforeCursor.lastIndexOf("@");
+
+    if (lastAtPos !== -1) {
+      const query = textBeforeCursor.substring(lastAtPos + 1);
+      if (!query.includes(" ")) {
+        setMentionSearch(query.toLowerCase());
+        setMentionIndex(lastAtPos);
+        setShowMentionPopup(true);
+        return;
+      }
+    }
+    setShowMentionPopup(false);
+  };
+
+  const handleTriggerMention = () => {
+    const updatedText = newMessageText + (newMessageText.endsWith(" ") || !newMessageText ? "@" : " @");
+    setNewMessageText(updatedText);
+    setMentionSearch("");
+    setMentionIndex(updatedText.lastIndexOf("@"));
+    setShowMentionPopup(true);
+    if (chatInputRef.current) {
+      chatInputRef.current.focus();
+    }
+  };
+
+  const insertMention = (name: string) => {
+    if (mentionIndex === -1) return;
+    const beforeAt = newMessageText.substring(0, mentionIndex);
+    const updatedText = `${beforeAt}@${name} `;
+    setNewMessageText(updatedText);
+    setShowMentionPopup(false);
+    if (chatInputRef.current) {
+      chatInputRef.current.focus();
+    }
+  };
+
+  const filteredMentions = [
+    { _id: "everyone", name: "everyone", role: "Broadcast", email: "All channel members", isEveryone: true },
+    ...teamMembers,
+  ].filter((member) => {
+    const name = member.name || "";
+    const email = member.email || "";
+    return name.toLowerCase().includes(mentionSearch) || email.toLowerCase().includes(mentionSearch);
+  });
+
+  const renderFormattedContent = (content: string, msgMentions?: string[]) => {
+    if (!content) return null;
+
+    const targets = Array.from(
+      new Set([
+        "everyone",
+        ...teamMembers.map((tm: any) => tm.name),
+        ...(msgMentions || []),
+      ])
+    )
+      .filter(Boolean)
+      .sort((a, b) => b.length - a.length);
+
+    const escapedTargets = targets.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+    const regexPattern = new RegExp(`(@(?:${escapedTargets.join("|")})|@[A-Za-z0-9_.-]+)`, "gi");
+
+    const parts = content.split(regexPattern);
+
+    return parts.map((part, idx) => {
+      if (part && part.startsWith("@")) {
+        return (
+          <span
+            key={idx}
+            className="inline-flex items-center gap-0.5 font-bold text-primary bg-primary/15 dark:bg-primary/25 px-1.5 py-0.5 rounded border border-primary/30 text-xs mx-0.5"
+          >
+            <i className="fa-solid fa-at text-[10px]" />
+            {part.substring(1)}
+          </span>
+        );
+      }
+      return part;
+    });
+  };
+
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMessageText.trim()) return;
+
+    const mentions: string[] = [];
+    const allTargets = Array.from(
+      new Set(["everyone", ...teamMembers.map((tm: any) => tm.name)])
+    ).sort((a, b) => b.length - a.length);
+
+    allTargets.forEach((target) => {
+      const regex = new RegExp(`@${target.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "i");
+      if (regex.test(newMessageText)) {
+        mentions.push(target);
+      }
+    });
 
     try {
       const res = await fetch("/api/chat/messages", {
@@ -183,15 +351,40 @@ export default function CommunicationHub() {
         body: JSON.stringify({
           channel: selectedChannel,
           content: newMessageText,
+          parentId: replyingToMsg?._id,
+          mentions,
         }),
       });
 
       if (res.ok) {
         setNewMessageText("");
+        setReplyingToMsg(null);
+        setShowMentionPopup(false);
         fetchMessages(selectedChannel);
       }
     } catch (err) {
       console.error("Send message error:", err);
+    }
+  };
+
+  const handleCreateAnnouncement = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!annForm.title || !annForm.content) return;
+
+    try {
+      const res = await fetch("/api/chat/announcements", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(annForm),
+      });
+
+      if (res.ok) {
+        setShowAnnModal(false);
+        setAnnForm({ title: "", content: "", category: "Company News", pinned: false });
+        fetchAnnouncements();
+      }
+    } catch (err) {
+      console.error("Create announcement error:", err);
     }
   };
 
@@ -216,20 +409,45 @@ export default function CommunicationHub() {
     setWaReplyText("");
   };
 
+  const handleSendMail = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!composeTo || !composeSubject) return;
+
+    const newMail: MailItem = {
+      id: `m-${Date.now()}`,
+      sender: "Me (You)",
+      email: composeTo,
+      subject: composeSubject,
+      preview: composeBody.slice(0, 80) + "...",
+      body: composeBody,
+      date: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      folder: "sent",
+      read: true,
+    };
+
+    setMails([newMail, ...mails]);
+    setShowComposeMail(false);
+    setComposeTo("");
+    setComposeSubject("");
+    setComposeBody("");
+  };
+
   const selectedMail = mails.find((m) => m.id === selectedMailId);
   const selectedWaThread = waThreads.find((w) => w.id === selectedWaId);
 
   return (
     <div className="space-y-6">
-      {/* Title */}
+      {/* Module Title */}
       <div>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">Communication Hub</h1>
+        <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2.5">
+          <i className="fa-solid fa-comments text-primary" /> Communication Hub
+        </h1>
         <p className="text-sm text-muted-foreground mt-0.5">
-          Real-time team chat, Mail Center, WhatsApp Business threads, and company announcements.
+          Unified real-time chat, Mail Center, WhatsApp Business API threads, Video Conferencing, Announcements, and Notification Preferences.
         </p>
       </div>
 
-      {/* Tabs */}
+      {/* Tabs Bar */}
       <div className="flex border-b border-border space-x-1 overflow-x-auto no-scrollbar">
         <button
           onClick={() => setActiveTab("chat")}
@@ -240,7 +458,7 @@ export default function CommunicationHub() {
               : "border-transparent text-muted-foreground hover:text-foreground"
           )}
         >
-          <MessageSquare className="w-4 h-4" /> Workspace Chat
+          <i className="fa-solid fa-comments text-sm" /> Workspace Chat
         </button>
 
         <button
@@ -252,7 +470,7 @@ export default function CommunicationHub() {
               : "border-transparent text-muted-foreground hover:text-foreground"
           )}
         >
-          <Mail className="w-4 h-4" /> Mail Center
+          <i className="fa-solid fa-envelope text-sm" /> Mail Center
         </button>
 
         <button
@@ -264,7 +482,19 @@ export default function CommunicationHub() {
               : "border-transparent text-muted-foreground hover:text-foreground"
           )}
         >
-          <PhoneCall className="w-4 h-4 text-emerald-500" /> WhatsApp Panel
+          <i className="fa-brands fa-whatsapp text-sm text-emerald-500" /> WhatsApp Panel
+        </button>
+
+        <button
+          onClick={() => setActiveTab("video")}
+          className={cn(
+            "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer",
+            activeTab === "video"
+              ? "border-primary text-primary font-semibold"
+              : "border-transparent text-muted-foreground hover:text-foreground"
+          )}
+        >
+          <i className="fa-solid fa-video text-sm text-indigo-500" /> Virtual Huddle / Video
         </button>
 
         <button
@@ -276,66 +506,939 @@ export default function CommunicationHub() {
               : "border-transparent text-muted-foreground hover:text-foreground"
           )}
         >
-          <Megaphone className="w-4 h-4" /> Announcements
+          <i className="fa-solid fa-bullhorn text-sm text-amber-500" /> Announcements
+        </button>
+
+        <button
+          onClick={() => setActiveTab("settings")}
+          className={cn(
+            "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer",
+            activeTab === "settings"
+              ? "border-primary text-primary font-semibold"
+              : "border-transparent text-muted-foreground hover:text-foreground"
+          )}
+        >
+          <i className="fa-solid fa-sliders text-sm text-slate-400" /> Notification Controls
         </button>
       </div>
 
-      {/* Chat Tab */}
+      {/* ========================================================================= */}
+      {/* TAB 1: WORKSPACE CHAT (Direct Messages & Channels, Threads, @mentions)   */}
+      {/* ========================================================================= */}
       {activeTab === "chat" && (
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 h-[600px]">
-          <Card className="p-4 space-y-4 flex flex-col">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Channels</h3>
-            <div className="space-y-1">
-              {["general", "projects", "engineering", "random"].map((ch) => (
-                <button
-                  key={ch}
-                  onClick={() => setSelectedChannel(ch)}
-                  className={cn(
-                    "w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer text-left",
-                    selectedChannel === ch ? "bg-primary text-primary-foreground font-semibold" : "text-muted-foreground hover:bg-accent hover:text-foreground"
-                  )}
-                >
-                  <Hash className="w-4 h-4" /> {ch}
-                </button>
-              ))}
+          {/* Channels & DMs Sidebar */}
+          <Card className="p-4 space-y-4 flex flex-col justify-between">
+            <div className="space-y-4">
+              <div>
+                <h3 className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
+                  <i className="fa-solid fa-hashtag text-xs text-primary" /> Channels
+                </h3>
+                <div className="space-y-1">
+                  {["general", "projects", "engineering", "random"].map((ch) => (
+                    <button
+                      key={ch}
+                      onClick={() => setSelectedChannel(ch)}
+                      className={cn(
+                        "w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-semibold transition-colors cursor-pointer text-left",
+                        selectedChannel === ch
+                          ? "bg-primary text-primary-foreground font-bold shadow-xs"
+                          : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                      )}
+                    >
+                      <i className="fa-solid fa-hashtag text-xs" /> {ch}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <h3 className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
+                  <i className="fa-solid fa-user-group text-xs text-emerald-500" /> Direct Messages
+                </h3>
+                <div className="space-y-1">
+                  {(teamMembers.length > 0
+                    ? teamMembers.map((m, idx) => ({
+                        name: m.name || m.email,
+                        role: m.role || "Member",
+                        _id: m._id,
+                        online: m.status ? m.status === "Active" : idx % 2 === 0,
+                      }))
+                    : [
+                        { name: "Sarah Jenkins", role: "Product Designer", _id: "u1", online: true },
+                        { name: "Alex Rivera", role: "Frontend Dev", _id: "u2", online: true },
+                        { name: "David Kim", role: "Operations Lead", _id: "u3", online: false },
+                      ]
+                  ).map((user) => {
+                    const dmChannel = `dm_${user.name.toLowerCase().replace(/[^a-z0-9]/g, "_")}`;
+                    return (
+                      <button
+                        key={user._id || user.name}
+                        onClick={() => setSelectedChannel(dmChannel)}
+                        className={cn(
+                          "w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-colors cursor-pointer text-left",
+                          selectedChannel === dmChannel
+                            ? "bg-primary text-primary-foreground font-bold shadow-xs"
+                            : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                        )}
+                      >
+                        <span className="flex items-center gap-2 truncate">
+                          <i className="fa-solid fa-circle-user text-sm" /> {user.name}
+                        </span>
+                        <span className="relative flex h-2.5 w-2.5 shrink-0 items-center justify-center">
+                          {user.online ? (
+                            <>
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                            </>
+                          ) : (
+                            <>
+                              <span className="animate-pulse absolute inline-flex h-full w-full rounded-full bg-slate-400/40 opacity-50" />
+                              <span className="relative inline-flex rounded-full h-2 w-2 bg-slate-400 dark:bg-slate-500 opacity-70" />
+                            </>
+                          )}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            <div className="p-2.5 rounded-lg border border-border/80 bg-muted/20 text-[11px] text-muted-foreground space-y-1">
+              <p className="font-semibold text-foreground flex items-center gap-1">
+                <i className="fa-solid fa-circle-info text-primary" /> Pro-Tip
+              </p>
+              <p>Type <code className="text-primary font-mono bg-primary/10 px-1 rounded">@username</code> to mention teammates in chat messages.</p>
             </div>
           </Card>
 
+          {/* Chat Feed */}
           <Card className="md:col-span-3 p-4 flex flex-col justify-between">
-            <div className="flex items-center gap-2 pb-3 border-b border-border font-semibold text-foreground">
-              <Hash className="w-4 h-4 text-primary" /> {selectedChannel}
+            <div className="flex items-center justify-between pb-3 border-b border-border font-semibold text-foreground text-sm">
+              <div className="flex items-center gap-2">
+                <i className="fa-solid fa-hashtag text-primary" />
+                <span>{selectedChannel}</span>
+                <Badge variant="outline" className="text-[10px] uppercase font-mono">
+                  {selectedChannel.startsWith("dm_") ? "Direct Message" : "Public Channel"}
+                </Badge>
+              </div>
+              <span className="text-xs text-muted-foreground flex items-center gap-1.5">
+                <i className="fa-solid fa-signal text-emerald-500 text-[10px]" /> Realtime Sync
+              </span>
             </div>
 
+            {/* Messages Scroll Area */}
             <div className="flex-1 overflow-y-auto py-4 space-y-4 no-scrollbar">
               {loadingChat ? (
-                <div className="text-center text-xs text-muted-foreground py-8">Loading messages...</div>
+                <div className="text-center text-xs text-muted-foreground py-12 space-y-2">
+                  <i className="fa-solid fa-spinner fa-spin text-xl text-primary" />
+                  <p>Syncing channel history...</p>
+                </div>
               ) : messages.length === 0 ? (
-                <div className="text-center text-xs text-muted-foreground py-8">No messages in #{selectedChannel} yet.</div>
+                <div className="text-center text-xs text-muted-foreground py-16 space-y-2">
+                  <i className="fa-solid fa-comments text-3xl opacity-40 text-primary" />
+                  <p className="font-medium">No messages in #{selectedChannel} yet.</p>
+                  <p className="text-[11px]">Start the conversation below!</p>
+                </div>
               ) : (
-                messages.map((m) => (
-                  <div key={m._id} className="space-y-0.5">
-                    <div className="flex items-center gap-2 text-xs">
-                      <span className="font-bold text-foreground">{m.senderName}</span>
-                      <span className="text-[10px] text-muted-foreground">{new Date(m.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+                messages.map((m) => {
+                  const isSelected = selectedMsgId === m._id;
+                  const reactionColorMap: Record<string, string> = {
+                    "fa-thumbs-up": "text-primary",
+                    "fa-heart": "text-rose-500",
+                    "fa-fire": "text-amber-500",
+                    "fa-rocket": "text-indigo-500",
+                    "fa-face-smile": "text-yellow-500",
+                    "fa-hands-clapping": "text-emerald-500",
+                  };
+                  return (
+                    <div key={m._id} className="group">
+                      {/* Chat Bubble Row: Avatar + Bubble */}
+                      <div className="flex items-start gap-3">
+                        {/* Avatar */}
+                        <div className="h-9 w-9 rounded-full bg-gradient-to-br from-primary/40 to-primary/10 flex items-center justify-center text-primary font-bold text-sm uppercase flex-shrink-0 mt-0.5 border border-primary/20">
+                          {m.senderName.charAt(0)}
+                        </div>
+
+                        {/* Bubble */}
+                        <div className="flex-1 min-w-0">
+                          <div
+                            className={cn(
+                              "rounded-2xl rounded-tl-sm px-4 py-3 border transition-colors duration-150 cursor-pointer",
+                              isSelected
+                                ? "bg-slate-100 border-primary/50 shadow-md dark:bg-[hsl(215,30%,22%)]"
+                                : "bg-slate-50 border-slate-200 hover:bg-slate-100 dark:bg-[hsl(215,30%,20%)] dark:border-[hsl(215,25%,25%)] dark:hover:bg-[hsl(215,30%,22%)]"
+                            )}
+                            onClick={() => setSelectedMsgId(isSelected ? null : m._id)}
+                          >
+                            {/* Name + Role + Reply */}
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="font-bold text-sm text-foreground">{m.senderName}</span>
+                              {m.senderRole && (
+                                <span className="text-[9px] font-bold uppercase tracking-wider bg-primary/20 text-primary px-1.5 py-0.5 rounded">
+                                  {m.senderRole}
+                                </span>
+                              )}
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setReplyingToMsg(m); }}
+                                className="ml-auto text-[10px] text-muted-foreground hover:text-primary flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                              >
+                                <i className="fa-solid fa-reply text-[9px]" />
+                              </button>
+                            </div>
+
+                            {/* Thread Indicator */}
+                            {m.parentId && (
+                              <div className="text-[11px] text-muted-foreground bg-background/50 p-1.5 rounded border-l-2 border-l-primary flex items-center gap-1.5 mb-2">
+                                <i className="fa-solid fa-quote-left text-[9px] text-primary" /> Replying to thread
+                              </div>
+                            )}
+
+                            {/* Message Body */}
+                            <div className="flex items-end gap-2">
+                              <p className="text-sm text-foreground leading-relaxed flex-1 whitespace-pre-wrap">
+                                {renderFormattedContent(m.content, m.mentions)}
+                              </p>
+                              <span className="text-[10px] text-muted-foreground font-mono whitespace-nowrap flex-shrink-0 pb-0.5">
+                                {new Date(m.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Reaction Badges — below the bubble */}
+                          {m.reactions && m.reactions.length > 0 && (
+                            <div className="flex items-center flex-wrap gap-1.5 mt-2 pl-1">
+                              {m.reactions.map((r, rIdx) => {
+                                const iconColor = REACTION_COLOR_MAP[r.emoji] || "text-primary";
+                                return (
+                                  <button
+                                    key={rIdx}
+                                    type="button"
+                                    onClick={() => setActiveReactionModal({ messageId: m._id, emoji: r.emoji, users: r.users })}
+                                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-100 border border-slate-200 shadow-sm hover:bg-slate-200 dark:bg-[hsl(215,30%,20%)] dark:border-[hsl(215,25%,25%)] dark:hover:bg-[hsl(215,30%,24%)] cursor-pointer transition-colors"
+                                    title="Click to view members who reacted"
+                                  >
+                                    <i className={cn("fa-solid text-sm", r.emoji, iconColor)} />
+                                    <span className="text-xs font-bold text-foreground">{r.users.length}</span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          )}
+
+                          {/* Reaction Picker — appears on click */}
+                          {isSelected && (
+                            <div className="flex items-center gap-0.5 mt-2 pl-1">
+                              <div className="inline-flex items-center gap-0.5 bg-white border border-slate-200 rounded-full px-2.5 py-1.5 shadow-md dark:bg-[hsl(215,30%,20%)] dark:border-[hsl(215,25%,25%)]">
+                                {[
+                                  { icon: "fa-thumbs-up",     label: "Like",   color: "text-primary" },
+                                  { icon: "fa-heart",          label: "Love",   color: "text-rose-500" },
+                                  { icon: "fa-fire",           label: "Fire",   color: "text-amber-500" },
+                                  { icon: "fa-rocket",         label: "Rocket", color: "text-indigo-500" },
+                                  { icon: "fa-face-smile",     label: "Smile",  color: "text-yellow-500" },
+                                  { icon: "fa-hands-clapping", label: "Clap",   color: "text-emerald-500" },
+                                ].map((item) => (
+                                  <button
+                                    key={item.icon}
+                                    onClick={() => { handleToggleReaction(m._id, item.icon); setSelectedMsgId(null); }}
+                                    className="h-7 w-7 rounded-full hover:bg-background hover:scale-125 flex items-center justify-center transition-all duration-150 cursor-pointer"
+                                    title={item.label}
+                                  >
+                                    <i className={cn("fa-solid text-sm", item.icon, item.color)} />
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                    <p className="text-sm text-foreground/90">{m.content}</p>
-                  </div>
-                ))
+                  );
+                })
+
               )}
               <div ref={messagesEndRef} />
             </div>
 
-            <form onSubmit={handleSendMessage} className="flex gap-2 pt-3 border-t border-border">
-              <Input
-                type="text"
-                placeholder={`Message #${selectedChannel}...`}
-                value={newMessageText}
-                onChange={(e) => setNewMessageText(e.target.value)}
-              />
-              <Button color="primary" type="submit">
-                <Send className="w-4 h-4" />
+            {/* Replying Context Bar */}
+            {replyingToMsg && (
+              <div className="flex items-center justify-between px-3 py-1.5 bg-primary/10 border-t border-border text-xs rounded-t-md">
+                <span className="text-primary font-medium flex items-center gap-1.5">
+                  <i className="fa-solid fa-reply text-xs" /> Replying to thread from <strong>{replyingToMsg.senderName}</strong>
+                </span>
+                <button onClick={() => setReplyingToMsg(null)} className="text-muted-foreground hover:text-foreground">
+                  <i className="fa-solid fa-xmark" />
+                </button>
+              </div>
+            )}
+
+            {/* Send Message Form */}
+            <div className="relative pt-3 border-t border-border">
+              {/* Mention Autocomplete Popup */}
+              {showMentionPopup && (
+                <div className="absolute bottom-full mb-2 left-0 w-72 max-h-56 overflow-y-auto bg-card border border-border shadow-xl rounded-xl p-1 z-50 animate-in fade-in slide-in-from-bottom-2 duration-150">
+                  <div className="px-2.5 py-1.5 text-[10px] font-bold text-muted-foreground uppercase tracking-wider flex items-center justify-between border-b border-border/50">
+                    <span className="flex items-center gap-1.5 text-primary font-bold">
+                      <i className="fa-solid fa-at text-xs" /> Mention Team Member
+                    </span>
+                    <span className="text-[9px] font-mono text-muted-foreground">{filteredMentions.length} matches</span>
+                  </div>
+                  {filteredMentions.length === 0 ? (
+                    <div className="px-3 py-3 text-xs text-muted-foreground text-center">
+                      No matching members found
+                    </div>
+                  ) : (
+                    <div className="py-1 space-y-0.5">
+                      {filteredMentions.map((member) => (
+                        <button
+                          key={member._id || member.name}
+                          type="button"
+                          onClick={() => insertMention(member.name)}
+                          className="w-full text-left px-2.5 py-1.5 rounded-lg text-xs hover:bg-primary/10 flex items-center justify-between transition-colors cursor-pointer group"
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="h-6 w-6 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-[10px] uppercase flex-shrink-0">
+                              {member.isEveryone ? <i className="fa-solid fa-bullhorn text-[10px]" /> : member.name.charAt(0)}
+                            </span>
+                            <div className="min-w-0">
+                              <p className="font-bold text-foreground truncate group-hover:text-primary transition-colors">
+                                @{member.name}
+                              </p>
+                              {member.email && (
+                                <p className="text-[10px] text-muted-foreground truncate">{member.email}</p>
+                              )}
+                            </div>
+                          </div>
+                          {member.role && (
+                            <span className="text-[9px] font-semibold bg-secondary px-1.5 py-0.5 rounded text-secondary-foreground flex-shrink-0 ml-2">
+                              {member.role}
+                            </span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <form onSubmit={handleSendMessage} className="flex gap-2">
+                <div className="relative flex-1">
+                  <Input
+                    ref={chatInputRef}
+                    type="text"
+                    placeholder={`Message #${selectedChannel}... (Type @ to mention)`}
+                    value={newMessageText}
+                    onChange={handleChatInputChange}
+                    className="text-xs pr-8"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleTriggerMention}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-primary transition-colors p-1 text-xs cursor-pointer"
+                    title="Mention someone"
+                  >
+                    <i className="fa-solid fa-at" />
+                  </button>
+                </div>
+                <Button color="primary" type="submit" className="gap-2 font-semibold">
+                  <i className="fa-solid fa-paper-plane text-xs" /> Send
+                </Button>
+              </form>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 2: MAIL CENTER (Inbox, Sent, Starred, Compose Modal)                 */}
+      {/* ========================================================================= */}
+      {activeTab === "mail" && (
+        <div className="space-y-4">
+          <div className="flex justify-between items-center bg-card border border-border rounded-xl p-4 shadow-2xs">
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setMailFilter("inbox")}
+                className={cn(
+                  "px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 cursor-pointer",
+                  mailFilter === "inbox" ? "bg-primary text-primary-foreground" : "bg-muted/40 text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <i className="fa-solid fa-inbox text-xs" /> Inbox
+              </button>
+              <button
+                onClick={() => setMailFilter("sent")}
+                className={cn(
+                  "px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 cursor-pointer",
+                  mailFilter === "sent" ? "bg-primary text-primary-foreground" : "bg-muted/40 text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <i className="fa-solid fa-paper-plane text-xs" /> Sent Items
+              </button>
+            </div>
+
+            <Button color="primary" size="sm" onClick={() => setShowComposeMail(true)} className="gap-2 font-semibold">
+              <i className="fa-solid fa-pen-to-square text-xs" /> Compose Email
+            </Button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 h-[520px]">
+            {/* Mail List */}
+            <Card className="p-3 space-y-2 overflow-y-auto no-scrollbar">
+              <h3 className="text-xs font-bold text-muted-foreground uppercase px-2 pb-1 border-b border-border">
+                {mailFilter === "inbox" ? "Inbox Messages" : "Sent Messages"}
+              </h3>
+              {mails
+                .filter((m) => (mailFilter === "inbox" ? m.folder === "inbox" : m.folder === "sent"))
+                .map((m) => (
+                  <div
+                    key={m.id}
+                    onClick={() => setSelectedMailId(m.id)}
+                    className={cn(
+                      "p-3 rounded-lg border transition-all cursor-pointer space-y-1",
+                      selectedMailId === m.id
+                        ? "bg-primary/10 border-primary shadow-2xs"
+                        : "bg-card border-border hover:bg-muted/30"
+                    )}
+                  >
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="font-bold text-foreground truncate">{m.sender}</span>
+                      <span className="text-[10px] text-muted-foreground">{m.date}</span>
+                    </div>
+                    <p className="font-semibold text-xs text-foreground truncate">{m.subject}</p>
+                    <p className="text-[11px] text-muted-foreground line-clamp-2">{m.preview}</p>
+                  </div>
+                ))}
+            </Card>
+
+            {/* Mail Detail Pane */}
+            <Card className="md:col-span-2 p-6 flex flex-col justify-between">
+              {selectedMail ? (
+                <div className="space-y-4">
+                  <div className="border-b border-border pb-4 space-y-2">
+                    <div className="flex justify-between items-start">
+                      <h2 className="text-base font-bold text-foreground">{selectedMail.subject}</h2>
+                      <Badge variant="outline" className="text-[10px] font-mono">
+                        {selectedMail.email}
+                      </Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground">From: <span className="font-semibold text-foreground">{selectedMail.sender}</span></p>
+                  </div>
+
+                  <div className="text-xs text-foreground leading-relaxed whitespace-pre-line py-2">
+                    {selectedMail.body}
+                  </div>
+                </div>
+              ) : (
+                <div className="py-24 text-center text-muted-foreground text-xs space-y-2">
+                  <i className="fa-solid fa-envelope-open text-3xl opacity-40 text-primary" />
+                  <p>Select an email from the left to read conversation thread.</p>
+                </div>
+              )}
+
+              <div className="flex justify-end gap-2 pt-4 border-t border-border">
+                <Button variant="outline" size="sm" className="gap-2 text-xs">
+                  <i className="fa-solid fa-reply text-xs" /> Reply
+                </Button>
+                <Button variant="outline" size="sm" className="gap-2 text-xs">
+                  <i className="fa-solid fa-share text-xs" /> Forward
+                </Button>
+              </div>
+            </Card>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 3: WHATSAPP BUSINESS PANEL (Client & Team WhatsApp Threads)          */}
+      {/* ========================================================================= */}
+      {activeTab === "whatsapp" && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 h-[550px]">
+          {/* Threads List */}
+          <Card className="p-4 space-y-3 flex flex-col">
+            <div className="flex items-center justify-between pb-2 border-b border-border">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+                <i className="fa-brands fa-whatsapp text-emerald-500 text-sm" /> WhatsApp API Threads
+              </h3>
+              <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-500 border-emerald-500/20">
+                Live API Connected
+              </Badge>
+            </div>
+
+            <div className="space-y-2 overflow-y-auto no-scrollbar flex-1">
+              {waThreads.map((thread) => (
+                <div
+                  key={thread.id}
+                  onClick={() => setSelectedWaId(thread.id)}
+                  className={cn(
+                    "p-3 rounded-lg border transition-all cursor-pointer space-y-1.5",
+                    selectedWaId === thread.id
+                      ? "bg-emerald-500/10 border-emerald-500/50 shadow-2xs"
+                      : "bg-card border-border hover:bg-muted/30"
+                  )}
+                >
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="font-bold text-foreground">{thread.contactName}</span>
+                    <span className="text-[10px] text-muted-foreground font-mono">{thread.time}</span>
+                  </div>
+                  <p className="text-[10px] font-mono text-muted-foreground">{thread.phone}</p>
+                  <p className="text-xs text-foreground/80 truncate">{thread.lastMessage}</p>
+                </div>
+              ))}
+            </div>
+          </Card>
+
+          {/* Active Thread Chat */}
+          <Card className="md:col-span-2 p-4 flex flex-col justify-between">
+            {selectedWaThread ? (
+              <>
+                <div className="flex items-center justify-between pb-3 border-b border-border">
+                  <div>
+                    <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
+                      <i className="fa-brands fa-whatsapp text-emerald-500" /> {selectedWaThread.contactName}
+                    </h3>
+                    <p className="text-[11px] text-muted-foreground font-mono">{selectedWaThread.phone}</p>
+                  </div>
+                  <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-500">
+                    {selectedWaThread.status} Session
+                  </Badge>
+                </div>
+
+                <div className="flex-1 overflow-y-auto py-4 space-y-3 no-scrollbar">
+                  {selectedWaThread.messages.map((msg, idx) => (
+                    <div
+                      key={idx}
+                      className={cn(
+                        "max-w-[75%] p-3 rounded-xl text-xs space-y-1",
+                        msg.sender === "agent"
+                          ? "ml-auto bg-emerald-600 text-white rounded-br-none shadow-2xs"
+                          : "mr-auto bg-muted/60 text-foreground rounded-bl-none border border-border/80"
+                      )}
+                    >
+                      <p>{msg.text}</p>
+                      <span className="text-[9px] opacity-75 block text-right font-mono">{msg.time}</span>
+                    </div>
+                  ))}
+                </div>
+
+                <form onSubmit={handleSendWaReply} className="flex gap-2 pt-3 border-t border-border">
+                  <Input
+                    type="text"
+                    placeholder="Reply via WhatsApp Business API..."
+                    value={waReplyText}
+                    onChange={(e) => setWaReplyText(e.target.value)}
+                    className="text-xs"
+                  />
+                  <Button color="primary" type="submit" className="gap-2 bg-emerald-600 hover:bg-emerald-700 font-semibold text-white">
+                    <i className="fa-solid fa-paper-plane text-xs" /> Reply
+                  </Button>
+                </form>
+              </>
+            ) : (
+              <div className="py-24 text-center text-muted-foreground text-xs">Select a WhatsApp thread.</div>
+            )}
+          </Card>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 4: VIRTUAL OFFICE / VIDEO CONFERENCING HUDDLE                         */}
+      {/* ========================================================================= */}
+      {activeTab === "video" && (
+        <Card className="p-6 space-y-6">
+          <div className="flex justify-between items-center border-b border-border pb-4">
+            <div>
+              <h2 className="text-base font-bold text-foreground flex items-center gap-2">
+                <i className="fa-solid fa-video text-indigo-500" /> Virtual Huddle & Project Video Room
+              </h2>
+              <p className="text-xs text-muted-foreground">High-definition audio/video calls directly tied to active projects and team channels.</p>
+            </div>
+            <Badge variant="outline" className="text-[10px] font-mono bg-indigo-500/10 text-indigo-500 border-indigo-500/20">
+              WebRTC Room Active
+            </Badge>
+          </div>
+
+          {!inCall ? (
+            <div className="py-16 text-center space-y-4 max-w-md mx-auto">
+              <div className="w-16 h-16 bg-indigo-500/10 text-indigo-500 rounded-full flex items-center justify-center mx-auto">
+                <i className="fa-solid fa-users-viewfinder text-2xl" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-foreground">Launch Video Meeting</h3>
+                <p className="text-xs text-muted-foreground">Start an instant huddle room for project standups or client reviews.</p>
+              </div>
+
+              <div className="space-y-3 pt-2">
+                <Input
+                  value={callRoomName}
+                  onChange={(e) => setCallRoomName(e.target.value)}
+                  placeholder="Enter Video Room Title"
+                  className="text-xs text-center"
+                />
+                <Button color="primary" onClick={() => setInCall(true)} className="w-full gap-2 font-semibold bg-indigo-600 hover:bg-indigo-700">
+                  <i className="fa-solid fa-video text-xs" /> Join Video Room
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {/* Main Video View Canvas */}
+              <div className="relative aspect-video w-full bg-slate-950 rounded-xl border border-indigo-500/30 overflow-hidden flex items-center justify-center shadow-2xl">
+                {!camOff ? (
+                  <div className="text-center text-slate-400 space-y-2">
+                    <i className="fa-solid fa-circle-user text-6xl text-indigo-400 animate-pulse block" />
+                    <p className="text-xs font-semibold text-white">{callRoomName} • Connected</p>
+                    <Badge variant="outline" className="text-[10px] border-emerald-500 text-emerald-400">
+                      720p HD Stream Active
+                    </Badge>
+                  </div>
+                ) : (
+                  <div className="text-center text-slate-500 space-y-1">
+                    <i className="fa-solid fa-video-slash text-4xl block" />
+                    <p className="text-xs">Camera Turned Off</p>
+                  </div>
+                )}
+
+                {/* Participant Thumbnails */}
+                <div className="absolute bottom-3 right-3 flex gap-2">
+                  <div className="w-24 h-16 bg-slate-800 border border-slate-700 rounded-lg flex items-center justify-center text-[10px] text-slate-300 font-semibold shadow-md">
+                    Sarah J.
+                  </div>
+                  <div className="w-24 h-16 bg-slate-800 border border-slate-700 rounded-lg flex items-center justify-center text-[10px] text-slate-300 font-semibold shadow-md">
+                    Alex R.
+                  </div>
+                </div>
+              </div>
+
+              {/* Call Control Toolbar */}
+              <div className="flex justify-center items-center gap-3 bg-muted/40 p-3 rounded-xl border border-border">
+                <Button
+                  color={micMuted ? "destructive" : "default"}
+                  variant={micMuted ? "default" : "outline"}
+                  size="icon"
+                  onClick={() => setMicMuted(!micMuted)}
+                  title={micMuted ? "Unmute Mic" : "Mute Mic"}
+                >
+                  <i className={cn("fa-solid text-xs", micMuted ? "fa-microphone-slash" : "fa-microphone")} />
+                </Button>
+
+                <Button
+                  color={camOff ? "destructive" : "default"}
+                  variant={camOff ? "default" : "outline"}
+                  size="icon"
+                  onClick={() => setCamOff(!camOff)}
+                  title={camOff ? "Turn Cam On" : "Turn Cam Off"}
+                >
+                  <i className={cn("fa-solid text-xs", camOff ? "fa-video-slash" : "fa-video")} />
+                </Button>
+
+                <Button
+                  variant={screenSharing ? "default" : "outline"}
+                  size="icon"
+                  onClick={() => setScreenSharing(!screenSharing)}
+                  title="Share Screen"
+                >
+                  <i className="fa-solid fa-desktop text-xs" />
+                </Button>
+
+                <Button color="destructive" size="sm" onClick={() => setInCall(false)} className="gap-2 font-semibold">
+                  <i className="fa-solid fa-phone-slash text-xs" /> Leave Call
+                </Button>
+              </div>
+            </div>
+          )}
+        </Card>
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 5: ANNOUNCEMENTS BOARD (Company Updates, Pinned Announcements)        */}
+      {/* ========================================================================= */}
+      {activeTab === "announcements" && (
+        <div className="space-y-4">
+          <div className="flex justify-between items-center bg-card border border-border rounded-xl p-4 shadow-2xs">
+            <div>
+              <h2 className="text-base font-bold text-foreground flex items-center gap-2">
+                <i className="fa-solid fa-bullhorn text-amber-500" /> Company Announcements Board
+              </h2>
+              <p className="text-xs text-muted-foreground">Official team updates and pinned policy notices, distinct from general chat noise.</p>
+            </div>
+            <Button color="primary" size="sm" onClick={() => setShowAnnModal(true)} className="gap-2 font-semibold bg-amber-600 hover:bg-amber-700 border-none">
+              <i className="fa-solid fa-plus text-xs" /> Post Announcement
+            </Button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {announcements.map((ann) => (
+              <Card key={ann._id} className={cn("p-5 space-y-3 transition-all", ann.pinned ? "border-amber-500/50 bg-amber-500/5 shadow-2xs" : "bg-card")}>
+                <div className="flex justify-between items-start">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      {ann.pinned && (
+                        <Badge color="warning" variant="outline" className="text-[9px] bg-amber-500/20 text-amber-500 border-amber-500/30 flex items-center gap-1">
+                          <i className="fa-solid fa-thumbtack text-[9px]" /> Pinned
+                        </Badge>
+                      )}
+                      <Badge variant="outline" className="text-[9px]">
+                        {ann.category}
+                      </Badge>
+                    </div>
+                    <h3 className="text-sm font-bold text-foreground">{ann.title}</h3>
+                  </div>
+                  <span className="text-[10px] text-muted-foreground font-mono">
+                    {new Date(ann.createdAt).toLocaleDateString()}
+                  </span>
+                </div>
+
+                <p className="text-xs text-foreground/80 leading-relaxed">{ann.content}</p>
+
+                <div className="text-[10px] text-muted-foreground pt-2 border-t border-border flex justify-between items-center">
+                  <span>By <strong className="text-foreground">{ann.authorName}</strong></span>
+                  <span className="flex items-center gap-1 text-primary">
+                    <i className="fa-solid fa-eye text-[10px]" /> Published to Tenant
+                  </span>
+                </div>
+              </Card>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 6: NOTIFICATION PREFERENCES PER MODULE                                 */}
+      {/* ========================================================================= */}
+      {activeTab === "settings" && (
+        <Card className="p-6 space-y-6 max-w-2xl">
+          <div className="border-b border-border pb-4">
+            <h2 className="text-base font-bold text-foreground flex items-center gap-2">
+              <i className="fa-solid fa-sliders text-primary" /> Notification Preferences per Module
+            </h2>
+            <p className="text-xs text-muted-foreground">Control notification alerts independently so chat pings and HR approvals don't compete for attention.</p>
+          </div>
+
+          <div className="space-y-4 text-xs">
+            {[
+              { key: "chatPings", label: "Workspace Chat @Mentions & Direct Messages", desc: "Receive immediate popups and sound chimes for direct pings" },
+              { key: "mailAlerts", label: "Mail Center Inbound Emails", desc: "Alert when new client emails arrive in the CRM inbox" },
+              { key: "hrApprovals", label: "HR Leave & Expense Approvals", desc: "Separate quiet alerts for manager approval requests" },
+              { key: "announcementPins", label: "Pinned Company Announcements", desc: "Always notify on high-priority company updates" },
+              { key: "soundEnabled", label: "Audible Notification Chimes", desc: "Play sound chime on high-priority incoming alerts" },
+            ].map((pref) => (
+              <div key={pref.key} className="flex items-center justify-between p-3 rounded-lg border border-border/80 bg-muted/20">
+                <div>
+                  <p className="font-bold text-foreground">{pref.label}</p>
+                  <p className="text-[11px] text-muted-foreground">{pref.desc}</p>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={(notifyPrefs as any)[pref.key]}
+                  onChange={(e) => setNotifyPrefs({ ...notifyPrefs, [pref.key]: e.target.checked })}
+                  className="w-4 h-4 rounded text-primary border-input focus:ring-primary cursor-pointer"
+                />
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL: POST ANNOUNCEMENT FORM                                            */}
+      {/* ========================================================================= */}
+      {showAnnModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in" onClick={() => setShowAnnModal(false)}>
+          <div className="w-full max-w-md bg-card border border-border rounded-xl p-6 shadow-2xl space-y-4 animate-in zoom-in-95" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-center border-b border-border pb-3">
+              <h3 className="text-base font-bold text-foreground flex items-center gap-2">
+                <i className="fa-solid fa-bullhorn text-amber-500" /> Post Company Announcement
+              </h3>
+              <Button variant="ghost" size="sm" onClick={() => setShowAnnModal(false)}>
+                <i className="fa-solid fa-xmark" />
               </Button>
+            </div>
+
+            <form onSubmit={handleCreateAnnouncement} className="space-y-4 text-xs">
+              <div className="space-y-1.5">
+                <label className="font-semibold text-foreground">Announcement Title</label>
+                <Input
+                  value={annForm.title}
+                  onChange={(e) => setAnnForm({ ...annForm, title: e.target.value })}
+                  placeholder="e.g. Q3 Townhall Meeting & Policy Updates"
+                  required
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="font-semibold text-foreground">Category</label>
+                <select
+                  value={annForm.category}
+                  onChange={(e) => setAnnForm({ ...annForm, category: e.target.value as any })}
+                  className="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-xs text-foreground focus:outline-none"
+                >
+                  <option value="Company News">Company News</option>
+                  <option value="Policy Update">Policy Update</option>
+                  <option value="Event">Event</option>
+                  <option value="Urgent">Urgent</option>
+                </select>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="font-semibold text-foreground">Announcement Details</label>
+                <textarea
+                  value={annForm.content}
+                  onChange={(e) => setAnnForm({ ...annForm, content: e.target.value })}
+                  rows={4}
+                  className="w-full rounded-md border border-input bg-background p-3 text-xs text-foreground focus:outline-none"
+                  placeholder="Write clear company update details..."
+                  required
+                />
+              </div>
+
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="pinnedCheck"
+                  checked={annForm.pinned}
+                  onChange={(e) => setAnnForm({ ...annForm, pinned: e.target.checked })}
+                  className="w-4 h-4 rounded text-primary border-input cursor-pointer"
+                />
+                <label htmlFor="pinnedCheck" className="font-semibold text-foreground cursor-pointer">
+                  Pin to Top of Announcements Board
+                </label>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-border">
+                <Button variant="outline" size="sm" type="button" onClick={() => setShowAnnModal(false)}>
+                  Cancel
+                </Button>
+                <Button color="primary" size="sm" type="submit" className="font-semibold bg-amber-600 hover:bg-amber-700 text-white border-none">
+                  Publish Notice
+                </Button>
+              </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL: COMPOSE MAIL FORM                                                 */}
+      {/* ========================================================================= */}
+      {showComposeMail && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in" onClick={() => setShowComposeMail(false)}>
+          <div className="w-full max-w-lg bg-card border border-border rounded-xl p-6 shadow-2xl space-y-4 animate-in zoom-in-95" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-center border-b border-border pb-3">
+              <h3 className="text-base font-bold text-foreground flex items-center gap-2">
+                <i className="fa-solid fa-pen-to-square text-primary" /> Compose Email Message
+              </h3>
+              <Button variant="ghost" size="sm" onClick={() => setShowComposeMail(false)}>
+                <i className="fa-solid fa-xmark" />
+              </Button>
+            </div>
+
+            <form onSubmit={handleSendMail} className="space-y-4 text-xs">
+              <div className="space-y-1.5">
+                <label className="font-semibold text-foreground">To (Recipient Email)</label>
+                <Input
+                  type="email"
+                  value={composeTo}
+                  onChange={(e) => setComposeTo(e.target.value)}
+                  placeholder="client@company.com"
+                  required
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="font-semibold text-foreground">Subject Line</label>
+                <Input
+                  value={composeSubject}
+                  onChange={(e) => setComposeSubject(e.target.value)}
+                  placeholder="e.g. Project Scope Update & Retainer Signoff"
+                  required
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="font-semibold text-foreground">Email Body</label>
+                <textarea
+                  value={composeBody}
+                  onChange={(e) => setComposeBody(e.target.value)}
+                  rows={5}
+                  className="w-full rounded-md border border-input bg-background p-3 text-xs text-foreground focus:outline-none"
+                  placeholder="Write email contents..."
+                  required
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-border">
+                <Button variant="outline" size="sm" type="button" onClick={() => setShowComposeMail(false)}>
+                  Cancel
+                </Button>
+                <Button color="primary" size="sm" type="submit" className="font-semibold gap-2">
+                  <i className="fa-solid fa-paper-plane text-xs" /> Send Email
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      {/* Reaction Users Modal — opens on clicking a reaction badge */}
+      {activeReactionModal && (
+        <div
+          className="fixed inset-0 bg-background/80 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-150 cursor-pointer"
+          onClick={() => setActiveReactionModal(null)}
+        >
+          <Card
+            className="w-full max-w-xs p-4 space-y-4 shadow-2xl border-border animate-in zoom-in-95 duration-150 cursor-default"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-border/60 pb-3">
+              <div className="flex items-center gap-2">
+                <span className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
+                  <i className={cn("fa-solid text-base", activeReactionModal.emoji, REACTION_COLOR_MAP[activeReactionModal.emoji] || "text-primary")} />
+                </span>
+                <div>
+                  <h3 className="font-bold text-sm text-foreground">
+                    Reactions ({activeReactionModal.users.length})
+                  </h3>
+                  <p className="text-[10px] text-muted-foreground">People who reacted with this icon</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActiveReactionModal(null)}
+                className="text-muted-foreground hover:text-foreground p-1 rounded-md transition-colors cursor-pointer"
+              >
+                <i className="fa-solid fa-xmark text-sm" />
+              </button>
+            </div>
+
+            {/* Users List */}
+            <div className="max-h-56 overflow-y-auto space-y-1.5 py-1 pr-1">
+              {activeReactionModal.users.map((userName, uIdx) => (
+                <div key={uIdx} className="flex items-center justify-between p-2 rounded-lg bg-muted/40 border border-border/50">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <span className="h-7 w-7 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-xs uppercase flex-shrink-0">
+                      {userName.charAt(0)}
+                    </span>
+                    <span className="font-bold text-xs text-foreground truncate">{userName}</span>
+                  </div>
+                  <span className="text-[9px] font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-full border border-primary/20">
+                    Reacted
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="pt-2 border-t border-border/60 flex justify-end">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setActiveReactionModal(null)}
+                className="text-xs font-semibold"
+              >
+                Close
+              </Button>
+            </div>
           </Card>
         </div>
       )}

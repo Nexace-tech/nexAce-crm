@@ -1,5 +1,3 @@
-<!-- BEGIN:nextjs-agent-rules -->
-# This is NOT the Next.js you know
+# Default Icon System Rule
 
-This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
-<!-- END:nextjs-agent-rules -->
+- **FontAwesome Icons Only**: ALWAYS use FontAwesome 6 icon classes (`<i className="fa-solid fa-..." />`) by default for all UI components, buttons, tabs, tables, cards, and navigation items. Do NOT use Lucide icons or raw SVG/emoji icon substitutes unless explicitly requested.

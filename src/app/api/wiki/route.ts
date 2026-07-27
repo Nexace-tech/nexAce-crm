@@ -40,7 +40,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { title, content } = body;
+    const { title, content, category } = body;
 
     if (!title || !content) {
       return NextResponse.json({ error: "Title and content are required fields" }, { status: 400 });
@@ -50,6 +50,7 @@ export async function POST(request: Request) {
 
     const newArticle = await Wiki.create({
       title,
+      category: category || "Operations",
       content,
       createdBy: new mongoose.Types.ObjectId(session.userId),
       tenantId: new mongoose.Types.ObjectId(session.tenantId),

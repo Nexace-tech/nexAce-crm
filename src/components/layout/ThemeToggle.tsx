@@ -2,7 +2,6 @@
 
 import * as React from "react";
 import { useTheme } from "next-themes";
-import { Sun, Moon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export function ThemeToggle() {
@@ -22,9 +21,9 @@ export function ThemeToggle() {
       title="Toggle Theme"
     >
       {mounted && resolvedTheme === "dark" ? (
-        <Moon className="h-5 w-5 text-blue-400" />
+        <i className="fa-solid fa-moon text-base text-blue-400" />
       ) : (
-        <Sun className="h-5 w-5 text-amber-500" />
+        <i className="fa-solid fa-sun text-base text-amber-500" />
       )}
       <span className="sr-only">Toggle theme</span>
     </Button>

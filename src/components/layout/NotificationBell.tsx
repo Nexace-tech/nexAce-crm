@@ -24,19 +24,23 @@ export function NotificationBell() {
   const fetchNotifications = async () => {
     try {
       const res = await fetch("/api/notifications");
+      if (res.status === 401 || res.status === 403) {
+        // Unauthenticated user - skip polling error
+        return;
+      }
       if (res.ok) {
         const data = await res.json();
         setNotifications(data.notifications || []);
         setUnreadCount(data.unreadCount || 0);
       }
-    } catch (err) {
-      console.error("Fetch notifications error:", err);
+    } catch {
+      // Quietly swallow transient fetch errors (e.g. dev server reloads or network changes)
     }
   };
 
   useEffect(() => {
     fetchNotifications();
-    const interval = setInterval(fetchNotifications, 5000);
+    const interval = setInterval(fetchNotifications, 10000);
     return () => clearInterval(interval);
   }, []);
 

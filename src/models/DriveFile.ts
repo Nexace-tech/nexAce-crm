@@ -6,6 +6,8 @@ export interface IDriveFile extends Document {
   mimeType: string;
   filePath: string;
   folder: string;
+  isRecycled?: boolean;
+  deletedAt?: Date;
   uploadedBy: mongoose.Types.ObjectId;
   tenantId: mongoose.Types.ObjectId;
   createdAt: Date;
@@ -19,6 +21,8 @@ const DriveFileSchema = new Schema<IDriveFile>(
     mimeType: { type: String, required: true },
     filePath: { type: String, required: true },
     folder: { type: String, default: "/", trim: true },
+    isRecycled: { type: Boolean, default: false },
+    deletedAt: { type: Date },
     uploadedBy: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
     tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true, index: true },
   },

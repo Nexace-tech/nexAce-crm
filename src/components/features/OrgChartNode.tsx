@@ -137,9 +137,10 @@ export function OrgChartNode({ node, onReassign, isAdmin, onSelectMember }: OrgC
           {/* Vertical line from manager card down */}
           <div
             style={{
-              width: "2px",
+              width: "1px",
               height: "32px",
-              backgroundColor: "hsl(var(--border))",
+              backgroundColor: "var(--color-primary, #6366f1)",
+              opacity: 0.6,
               position: "absolute",
               top: "-32px",
               left: "50%",
@@ -160,8 +161,9 @@ export function OrgChartNode({ node, onReassign, isAdmin, onSelectMember }: OrgC
                   {hasSiblings && (
                     <div
                       style={{
-                        height: "2px",
-                        backgroundColor: "hsl(var(--border))",
+                        height: "1px",
+                        backgroundColor: "var(--color-primary, #6366f1)",
+                        opacity: 0.6,
                         position: "absolute",
                         top: "0",
                         left: isFirst ? "50%" : "-1rem",
@@ -173,9 +175,10 @@ export function OrgChartNode({ node, onReassign, isAdmin, onSelectMember }: OrgC
                   {/* Vertical line down to child card */}
                   <div
                     style={{
-                      width: "2px",
+                      width: "1px",
                       height: "24px",
-                      backgroundColor: "hsl(var(--border))",
+                      backgroundColor: "var(--color-primary, #6366f1)",
+                      opacity: 0.6,
                       position: "absolute",
                       top: "0",
                       left: "50%",

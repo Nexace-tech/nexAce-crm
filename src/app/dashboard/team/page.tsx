@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, startTransition } from "react";
+import React, { useState, useEffect, useMemo, startTransition } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { OrgChartNode, OrgNode } from "@/components/features/OrgChartNode";
 import { 
@@ -386,7 +386,7 @@ export default function TeamDashboardPage() {
         photoUrl: editPhotoUrl,
       };
 
-      if (currentUser?.role === "Admin") {
+      if (isAdmin) {
         updateData.departments = editDepts;
         updateData.department = editDepts[0] || "General";
         updateData.role = editRole;
@@ -562,7 +562,7 @@ export default function TeamDashboardPage() {
     }
   };
 
-  const buildOrgTree = (): OrgNode[] => {
+  const orgTreeRoots = useMemo(() => {
     const userMap: { [key: string]: OrgNode } = {};
     const rootNodes: OrgNode[] = [];
 
@@ -583,7 +583,7 @@ export default function TeamDashboardPage() {
     users.forEach((u) => {
       const node = userMap[u._id];
       const managerId = u.managerId?._id || u.managerId;
-      if (managerId && userMap[managerId]) {
+      if (managerId && userMap[managerId] && managerId !== u._id) {
         userMap[managerId].reports.push(node);
       } else {
         rootNodes.push(node);
@@ -591,16 +591,18 @@ export default function TeamDashboardPage() {
     });
 
     return rootNodes;
-  };
+  }, [users]);
 
-  const orgTreeRoots = buildOrgTree();
-  const isAdmin = currentUser?.role === "Admin";
-  const isManagerOrAdmin = currentUser?.role === "Admin" || currentUser?.role === "Manager";
+  const userRole = useMemo(() => (currentUser?.role || "").trim().toLowerCase(), [currentUser?.role]);
+  const isAdmin = userRole === "admin";
+  const isManagerOrAdmin = userRole === "admin" || userRole === "manager";
 
-  const directReports = users.filter((u) => {
-    const mgrId = u.managerId?._id || u.managerId;
-    return mgrId === currentUser?._id;
-  });
+  const directReports = useMemo(() => {
+    return users.filter((u) => {
+      const mgrId = u.managerId?._id || u.managerId;
+      return mgrId === currentUser?._id;
+    });
+  }, [users, currentUser?._id]);
 
   if (!mounted || authLoading) {
     return (

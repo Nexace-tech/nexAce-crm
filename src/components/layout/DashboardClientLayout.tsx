@@ -24,6 +24,7 @@ import {
   ChevronLeft
 } from "lucide-react";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
+import { ZoomControl } from "@/components/layout/ZoomControl";
 import { NotificationBell } from "@/components/layout/NotificationBell";
 import { LogoutHeaderBtn } from "@/components/layout/LogoutHeaderBtn";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -45,19 +46,19 @@ interface DashboardClientLayoutProps {
   children: React.ReactNode;
 }
 
-// Map menu names to Lucide icons
-const iconMap: Record<string, React.ReactNode> = {
-  "Overview": <LayoutDashboard className="w-5 h-5" />,
-  "My Team": <Users className="w-5 h-5" />,
-  "Calendar & Timesheets": <CalendarDays className="w-5 h-5" />,
-  "Projects & Drive": <FolderGit2 className="w-5 h-5" />,
-  "Chat & Mail": <MessageSquare className="w-5 h-5" />,
-  "HR Portal": <Briefcase className="w-5 h-5" />,
-  "Goals & OKRs": <Target className="w-5 h-5" />,
-  "Analytics Logs": <BarChart3 className="w-5 h-5" />,
-  "CRM Retainers": <Handshake className="w-5 h-5" />,
-  "Referral Pipeline": <Share2 className="w-5 h-5" />,
-  "Settings & Security": <Settings className="w-5 h-5" />,
+// Map menu names to FontAwesome icons or use item.icon directly
+const fontAwesomeIconMap: Record<string, string> = {
+  "Overview": "fa-solid fa-chart-simple",
+  "My Team": "fa-solid fa-users",
+  "Calendar & Timesheets": "fa-solid fa-calendar-days",
+  "Projects & Drive": "fa-solid fa-folder-tree",
+  "Chat & Mail": "fa-solid fa-comments",
+  "HR Portal": "fa-solid fa-briefcase",
+  "Goals & OKRs": "fa-solid fa-bullseye",
+  "Analytics Logs": "fa-solid fa-chart-line",
+  "CRM Retainers": "fa-solid fa-handshake",
+  "Referral Pipeline": "fa-solid fa-link",
+  "Settings & Security": "fa-solid fa-gear",
 };
 
 export function DashboardClientLayout({ session, menuItems, children }: DashboardClientLayoutProps) {
@@ -136,7 +137,7 @@ export function DashboardClientLayout({ session, menuItems, children }: Dashboar
         <nav className="flex-1 px-4 py-4 space-y-1.5 overflow-y-auto no-scrollbar">
           {menuItems.map((item) => {
             const isActive = pathname === item.href;
-            const icon = iconMap[item.name] || <LayoutDashboard className="w-5 h-5" />;
+            const faClass = item.icon || fontAwesomeIconMap[item.name] || "fa-solid fa-chart-simple";
             return (
               <Link
                 key={item.name}
@@ -149,8 +150,8 @@ export function DashboardClientLayout({ session, menuItems, children }: Dashboar
                     : "text-muted-foreground hover:bg-accent hover:text-foreground"
                 )}
               >
-                <span className={cn("transition-transform group-hover:scale-110", isActive ? "text-primary-foreground" : "text-muted-foreground group-hover:text-foreground")}>
-                  {icon}
+                <span className={cn("w-5 text-center text-base transition-transform group-hover:scale-110 flex items-center justify-center", isActive ? "text-primary-foreground" : "text-muted-foreground group-hover:text-foreground")}>
+                  <i className={faClass} />
                 </span>
                 <span className="truncate">{item.name}</span>
                 {isActive && (
@@ -213,16 +214,19 @@ export function DashboardClientLayout({ session, menuItems, children }: Dashboar
               <input
                 type="text"
                 placeholder="Search team, projects, tasks..."
-                className="w-full pl-9 pr-4 py-2 text-sm bg-muted/50 hover:bg-muted border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:bg-background transition-all placeholder:text-muted-foreground"
+                className="w-full pl-9 pr-4 py-2 text-sm bg-muted/60 dark:bg-slate-800/80 hover:bg-muted/80 dark:hover:bg-slate-800 border border-border/80 dark:border-slate-700/80 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:bg-background dark:focus:bg-slate-900 transition-all placeholder:text-muted-foreground shadow-xs"
               />
             </div>
           </div>
 
           {/* Right Header Actions */}
-          <div className="flex items-center gap-2 md:gap-3">
-            <ThemeToggle />
-            <NotificationBell />
-            <div className="h-6 w-px bg-border mx-1" />
+          <div className="flex items-center gap-1.5 md:gap-2">
+            <ZoomControl />
+            <div className="flex items-center gap-1 bg-muted/60 dark:bg-slate-800/80 border border-border/80 dark:border-slate-700/80 rounded-lg p-0.5 shadow-xs">
+              <ThemeToggle />
+              <NotificationBell />
+            </div>
+            <div className="h-6 w-px bg-border/60 mx-1" />
             <LogoutHeaderBtn />
           </div>
         </header>

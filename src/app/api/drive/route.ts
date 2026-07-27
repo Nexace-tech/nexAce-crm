@@ -106,7 +106,7 @@ export async function POST(request: Request) {
 
 /**
  * DELETE: Remove file from disk and database metadata.
- * Body: { fileId: string }
+ * Body/Query: ?fileId=XYZ
  */
 export async function DELETE(request: Request) {
   try {
@@ -139,11 +139,21 @@ export async function DELETE(request: Request) {
     // Remove file from disk
     const diskPath = path.join(UPLOAD_DIR, file.filePath);
     if (fs.existsSync(diskPath)) {
-      fs.unlinkSync(diskPath);
+      try { fs.unlinkSync(diskPath); } catch (e) { console.error(e); }
     }
 
     // Remove from DB
     await file.deleteOne();
+
+    await ActivityLog.create({
+      tenantId: new mongoose.Types.ObjectId(session.tenantId),
+      userId: new mongoose.Types.ObjectId(session.userId),
+      userName: session.userName,
+      userRole: session.role,
+      action: "FILE_DELETED",
+      targetName: file.name,
+      details: `Deleted file '${file.name}' from Drive Space`,
+    });
 
     return NextResponse.json({ success: true, message: "File deleted successfully" });
   } catch (error: any) {
