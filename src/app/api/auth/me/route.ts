@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
-import { getSession, deleteSession } from "@/lib/session";
+import { getSession } from "@/lib/session";
 import { connectToDatabase } from "@/lib/db";
 import { User } from "@/models/User";
 import "@/models/Tenant";
+
+export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
@@ -15,13 +17,30 @@ export async function GET() {
     
     let user = null;
     try {
-      user = await User.findById(session.userId).select("-passwordHash").populate("tenantId");
-    } catch {
+      user = await User.findById(session.userId)
+        .select("-passwordHash")
+        .populate("tenantId")
+        .lean();
+    } catch (err) {
+      console.error("Error finding user in /api/auth/me:", err);
       user = null;
     }
 
+    if (!user && session) {
+      user = {
+        _id: session.userId,
+        name: session.userName,
+        role: session.role,
+        tenantId: {
+          _id: session.tenantId,
+          name: session.tenantName,
+          slug: session.tenantName?.toLowerCase().replace(/\s+/g, "-") || "workspace"
+        },
+        status: "Active"
+      };
+    }
+
     if (!user) {
-      await deleteSession();
       return NextResponse.json({ user: null }, { status: 401 });
     }
 
@@ -31,4 +50,5 @@ export async function GET() {
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
   }
 }
+
 

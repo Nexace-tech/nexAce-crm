@@ -265,8 +265,15 @@ export default function SettingsPage() {
     }
   };
 
-  if (authLoading || !user) {
+  if (authLoading) {
     return <Preloader label="Loading Settings & Profile..." />;
+  }
+
+  if (!user) {
+    if (typeof window !== "undefined") {
+      window.location.href = "/login";
+    }
+    return <Preloader label="Redirecting to Login..." />;
   }
 
   return (

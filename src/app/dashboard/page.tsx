@@ -16,7 +16,10 @@ export default function DashboardHome() {
   }
 
   if (!user) {
-    return <Preloader label="Synchronizing Session Details" />;
+    if (typeof window !== "undefined") {
+      window.location.href = "/login";
+    }
+    return <Preloader label="Redirecting to Login..." />;
   }
 
   const role = user.role?.toLowerCase();
