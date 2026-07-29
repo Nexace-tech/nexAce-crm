@@ -1,5 +1,8 @@
-import { getSession } from "@/lib/session";
+import { getSession, deleteSession } from "@/lib/session";
 import { redirect } from "next/navigation";
+import { connectToDatabase } from "@/lib/db";
+import { User } from "@/models/User";
+import "@/models/Tenant";
 import { DashboardClientLayout } from "@/components/layout/DashboardClientLayout";
 
 interface DashboardLayoutProps {
@@ -9,11 +12,34 @@ interface DashboardLayoutProps {
 export default async function DashboardLayout({ children }: DashboardLayoutProps) {
   const session = await getSession();
 
-  if (!session) {
+  if (!session || !session.userId) {
     redirect("/login");
   }
 
-  const role = session.role;
+  // Validate session against database user to prevent stale cookie desync
+  await connectToDatabase();
+  let dbUser = null;
+  try {
+    dbUser = await User.findById(session.userId).select("name role tenantId").populate("tenantId");
+  } catch {
+    dbUser = null;
+  }
+
+  if (!dbUser) {
+    await deleteSession();
+    redirect("/login");
+  }
+
+  const role = dbUser.role || session.role;
+  const userName = dbUser.name || session.userName;
+  const tenantName = (dbUser.tenantId as any)?.name || session.tenantName || "Workspace";
+
+  const updatedSession = {
+    ...session,
+    userName,
+    role,
+    tenantName,
+  };
 
   // Role-aware navigation menu items for Admin, Manager, and Employee
   let menuItems = [];
@@ -58,8 +84,9 @@ export default async function DashboardLayout({ children }: DashboardLayoutProps
   }
 
   return (
-    <DashboardClientLayout session={session} menuItems={menuItems}>
+    <DashboardClientLayout session={updatedSession} menuItems={menuItems}>
       {children}
     </DashboardClientLayout>
   );
 }
+

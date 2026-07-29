@@ -46,19 +46,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } else {
         setUser(null);
         if (typeof window !== "undefined" && window.location.pathname.startsWith("/dashboard")) {
-          router.push("/login");
+          window.location.href = "/login";
         }
       }
     } catch (error) {
       console.error("Error fetching user session:", error);
       setUser(null);
       if (typeof window !== "undefined" && window.location.pathname.startsWith("/dashboard")) {
-        router.push("/login");
+        window.location.href = "/login";
       }
     } finally {
       setLoading(false);
     }
-  }, [router]);
+  }, []);
 
   useEffect(() => {
     fetchUser();

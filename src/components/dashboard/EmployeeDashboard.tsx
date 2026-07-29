@@ -60,7 +60,7 @@ export function EmployeeDashboard({ user }: { user: any }) {
             <UserCheck className="w-4 h-4 text-emerald-500" /> Employee Portal
           </div>
           <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground flex items-center gap-2">
-            Hello, <span className="text-emerald-500">{user?.name?.split(" ")[0] || "Employee"}</span> 👋
+            Hello, <span className="text-emerald-500">{user?.name || "Employee"}</span> 👋
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
             Welcome to your personal workspace portal. Here are your shift details, active tasks, and attendance.

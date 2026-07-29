@@ -23,6 +23,7 @@ import {
   ChevronDown,
   ChevronLeft
 } from "lucide-react";
+import { useAuthContext } from "@/context/AuthContext";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import { ZoomControl } from "@/components/layout/ZoomControl";
 import { NotificationBell } from "@/components/layout/NotificationBell";
@@ -62,12 +63,17 @@ const fontAwesomeIconMap: Record<string, string> = {
 };
 
 export function DashboardClientLayout({ session, menuItems, children }: DashboardClientLayoutProps) {
+  const { user } = useAuthContext();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const pathname = usePathname();
 
-  const initials = session.userName
-    ? session.userName
+  const userName = user?.name || session.userName;
+  const role = user?.role || session.role;
+  const tenantName = (user?.tenantId as any)?.name || session.tenantName;
+
+  const initials = userName
+    ? userName
         .split(" ")
         .map((n) => n[0])
         .join("")
@@ -129,7 +135,7 @@ export function DashboardClientLayout({ session, menuItems, children }: Dashboar
         <div className="px-6 py-3 border-b border-border/50 bg-muted/40 flex items-center justify-between">
           <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Workspace</span>
           <span className="text-xs font-medium bg-primary/10 text-primary px-2 py-0.5 rounded-md truncate max-w-[140px]">
-            {session.tenantName}
+            {tenantName}
           </span>
         </div>
 
@@ -171,8 +177,8 @@ export function DashboardClientLayout({ session, menuItems, children }: Dashboar
               </AvatarFallback>
             </Avatar>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate text-foreground leading-none">{session.userName}</p>
-              <p className="text-xs text-muted-foreground capitalize mt-1 truncate">{session.role}</p>
+              <p className="text-sm font-medium truncate text-foreground leading-none">{userName}</p>
+              <p className="text-xs text-muted-foreground capitalize mt-1 truncate">{role}</p>
             </div>
             <Link
               href="/dashboard/settings"

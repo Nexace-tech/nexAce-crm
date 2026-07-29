@@ -60,7 +60,7 @@ export function ManagerDashboard({ user }: { user: any }) {
             <Users className="w-4 h-4 text-blue-500" /> Department Manager Portal
           </div>
           <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground">
-            Hello, <span className="text-blue-500">{user?.name?.split(" ")[0] || "Manager"}</span> 👋
+            Hello, <span className="text-blue-500">{user?.name || "Manager"}</span> 👋
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
             Overview of team performance, active projects, task delegations, and department shifts.

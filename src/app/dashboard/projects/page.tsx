@@ -6,6 +6,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Preloader } from "@/components/ui/Preloader";
 import { cn } from "@/lib/utils";
 
 import { useTabPersistence } from "@/hooks/useTabPersistence";
@@ -379,12 +380,7 @@ export default function ProjectsPage() {
   };
 
   if (!mounted || authLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-[300px] text-muted-foreground text-sm">
-        <div className="animate-spin w-5 h-5 border-2 border-primary border-t-transparent rounded-full mr-3" />
-        Loading Projects Workspace...
-      </div>
-    );
+    return <Preloader label="Loading Projects Workspace..." />;
   }
 
   return (

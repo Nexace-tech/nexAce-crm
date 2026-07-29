@@ -10,6 +10,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Preloader } from "@/components/ui/Preloader";
 import { cn } from "@/lib/utils";
 
 interface LeaveData {
@@ -163,12 +164,7 @@ export default function HRPage() {
   };
 
   if (authLoading || loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[300px] text-muted-foreground text-sm">
-        <div className="animate-spin w-5 h-5 border-2 border-primary border-t-transparent rounded-full mr-3" />
-        Loading HR Portal...
-      </div>
-    );
+    return <Preloader label="Loading HR Portal & Policy Records..." />;
   }
 
   const pendingLeaves = leaves.filter((l) => l.status === "Pending").length;

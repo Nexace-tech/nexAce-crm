@@ -7,16 +7,22 @@ import "@/models/Tenant";
 export async function GET() {
   try {
     const session = await getSession();
-    if (!session) {
+    if (!session || !session.userId) {
       return NextResponse.json({ user: null }, { status: 401 });
     }
 
     await connectToDatabase();
-    const user = await User.findById(session.userId).select("-passwordHash").populate("tenantId");
+    
+    let user = null;
+    try {
+      user = await User.findById(session.userId).select("-passwordHash").populate("tenantId");
+    } catch {
+      user = null;
+    }
 
     if (!user) {
       await deleteSession();
-      return NextResponse.json({ user: null }, { status: 404 });
+      return NextResponse.json({ user: null }, { status: 401 });
     }
 
     return NextResponse.json({ user });
@@ -25,3 +31,4 @@ export async function GET() {
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
   }
 }
+

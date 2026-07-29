@@ -21,6 +21,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Preloader } from "@/components/ui/Preloader";
 import { cn } from "@/lib/utils";
 
 import { useTabPersistence } from "@/hooks/useTabPersistence";
@@ -526,12 +527,7 @@ export default function CalendarPage() {
   };
 
   if (!mounted || authLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-[300px] text-muted-foreground text-sm">
-        <div className="animate-spin w-5 h-5 border-2 border-primary border-t-transparent rounded-full mr-3" />
-        Loading Calendar & Operations...
-      </div>
-    );
+    return <Preloader label="Loading Calendar & Operations..." />;
   }
 
   return (
@@ -670,59 +666,108 @@ export default function CalendarPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-7 gap-px bg-border rounded-lg overflow-hidden border border-border">
-            {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
-              <div key={day} className="bg-muted/60 p-2.5 text-center text-xs font-semibold text-muted-foreground uppercase">
-                {day}
-              </div>
-            ))}
+          {/* Enhanced Calendar Month Grid */}
+          {(() => {
+            const getEventTypeStyle = (type: string) => {
+              switch (type) {
+                case "Holiday":
+                  return "bg-emerald-500/15 text-emerald-500 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/25";
+                case "Deadline":
+                  return "bg-rose-500/15 text-rose-500 dark:text-rose-400 border-rose-500/30 hover:bg-rose-500/25";
+                case "Birthday":
+                  return "bg-amber-500/15 text-amber-500 dark:text-amber-400 border-amber-500/30 hover:bg-amber-500/25";
+                case "Personal":
+                  return "bg-sky-500/15 text-sky-500 dark:text-sky-400 border-sky-500/30 hover:bg-sky-500/25";
+                case "Meeting":
+                default:
+                  return "bg-primary/15 text-primary border-primary/30 hover:bg-primary/25";
+              }
+            };
 
-            {daysArray.map((day, idx) => {
-              if (!day) return <div key={`empty-${idx}`} className="bg-card/40 min-h-[90px] p-2" />;
-              
-              const dayStr = day.getDate();
-              const isToday = new Date().toDateString() === day.toDateString();
-              
-              const dayEvents = events.filter((evt) => {
-                const start = new Date(evt.startDate);
-                start.setHours(0,0,0,0);
-                const end = new Date(evt.endDate);
-                end.setHours(23,59,59,999);
-
-                const matchesDate = day >= start && day <= end;
-                const matchesType = filterType === "All" || evt.type === filterType;
-                const matchesDept = filterDept === "All" || evt.department === filterDept || evt.department === "All";
-
-                return matchesDate && matchesType && matchesDept;
-              });
-
-              return (
-                <div
-                  key={idx}
-                  className={cn(
-                    "bg-card p-2 min-h-[100px] flex flex-col justify-start gap-1 transition-colors hover:bg-accent/30",
-                    isToday && "bg-primary/5 ring-1 ring-primary inset-0"
-                  )}
-                >
-                  <span className={cn("text-xs font-bold w-5 h-5 flex items-center justify-center rounded-full", isToday ? "bg-primary text-primary-foreground" : "text-muted-foreground")}>
-                    {dayStr}
-                  </span>
-                  <div className="space-y-1 overflow-y-auto max-h-[70px] no-scrollbar">
-                    {dayEvents.map((evt) => (
-                      <div
-                        key={evt._id}
-                        onClick={() => setSelectedEvent(evt)}
-                        className="text-[11px] font-semibold px-1.5 py-0.5 rounded truncate cursor-pointer bg-primary/10 text-primary hover:bg-primary/20 transition-colors flex items-center gap-1"
-                      >
-                        <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />
-                        <span className="truncate">{evt.title}</span>
-                      </div>
-                    ))}
+            return (
+              <div className="grid grid-cols-7 gap-2 bg-transparent">
+                {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
+                  <div key={day} className="bg-muted/80 dark:bg-slate-800/90 p-2.5 text-center text-xs font-bold text-foreground uppercase rounded-xl border border-border/80 dark:border-slate-700/80 shadow-xs">
+                    {day}
                   </div>
-                </div>
-              );
-            })}
-          </div>
+                ))}
+
+                {daysArray.map((day, idx) => {
+                  if (!day) return <div key={`empty-${idx}`} className="bg-muted/10 dark:bg-slate-900/20 border border-border/40 dark:border-slate-800/40 rounded-xl min-h-[110px] p-2 opacity-25" />;
+                  
+                  const dayStr = day.getDate();
+                  const isToday = new Date().toDateString() === day.toDateString();
+                  
+                  const dayEvents = events.filter((evt) => {
+                    const start = new Date(evt.startDate);
+                    start.setHours(0,0,0,0);
+                    const end = new Date(evt.endDate);
+                    end.setHours(23,59,59,999);
+
+                    const matchesDate = day >= start && day <= end;
+                    const matchesType = filterType === "All" || evt.type === filterType;
+                    const matchesDept = filterDept === "All" || evt.department === filterDept || evt.department === "All";
+
+                    return matchesDate && matchesType && matchesDept;
+                  });
+
+                  const hasEvents = dayEvents.length > 0;
+
+                  return (
+                    <div
+                      key={idx}
+                      className={cn(
+                        "relative p-2.5 min-h-[110px] rounded-xl border flex flex-col justify-start gap-1.5 transition-all duration-200 group shadow-2xs",
+                        isToday
+                          ? "bg-primary/15 border-2 border-primary ring-2 ring-primary/40 shadow-md shadow-primary/20"
+                          : hasEvents
+                          ? "bg-card dark:bg-slate-900/95 border-primary/40 dark:border-primary/30 shadow-xs hover:border-primary/70 hover:shadow-md hover:bg-accent/50"
+                          : "bg-card/90 dark:bg-slate-900/60 border-border dark:border-slate-800/90 hover:border-primary/50 hover:bg-accent/40"
+                      )}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span
+                          className={cn(
+                            "text-xs font-bold w-6 h-6 flex items-center justify-center rounded-full transition-transform group-hover:scale-105",
+                            isToday
+                              ? "bg-primary text-primary-foreground font-extrabold shadow-xs"
+                              : hasEvents
+                              ? "bg-primary/15 text-primary font-bold"
+                              : "text-muted-foreground group-hover:text-foreground font-semibold"
+                          )}
+                        >
+                          {dayStr}
+                        </span>
+                        {hasEvents && (
+                          <span className="flex h-2 w-2 relative" title={`${dayEvents.length} Event(s)`}>
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="space-y-1 overflow-y-auto max-h-[75px] no-scrollbar">
+                        {dayEvents.map((evt) => (
+                          <div
+                            key={evt._id}
+                            onClick={() => setSelectedEvent(evt)}
+                            className={cn(
+                              "text-[11px] font-semibold px-2 py-1 rounded-md truncate cursor-pointer transition-all duration-150 flex items-center gap-1.5 border shadow-2xs",
+                              getEventTypeStyle(evt.type)
+                            )}
+                            title={evt.title}
+                          >
+                            <span className="w-1.5 h-1.5 rounded-full shrink-0 bg-current" />
+                            <span className="truncate">{evt.title}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
 
           {/* Calendar Analytics & Event Breakdown Graph */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-4 border-t border-border">

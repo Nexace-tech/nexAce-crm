@@ -146,9 +146,9 @@ export function TeamShiftOverviewCard() {
                       </td>
 
                       <td className="py-3 px-3">
-                        <Badge variant="outline" className="text-[10px] font-medium">
-                          {m.department || "General"}
-                        </Badge>
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-[11px] font-semibold bg-primary/10 text-primary border border-primary/20">
+                          {m.department || "Management"}
+                        </span>
                       </td>
 
                       <td className="py-3 px-3">

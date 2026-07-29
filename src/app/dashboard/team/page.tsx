@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useMemo, startTransition } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
+import { Preloader } from "@/components/ui/Preloader";
 import { OrgChartNode, OrgNode } from "@/components/features/OrgChartNode";
 import { 
   Users, 
@@ -631,12 +632,7 @@ export default function TeamDashboardPage() {
   }, [users, currentUser?._id]);
 
   if (!mounted || authLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-[300px] text-muted-foreground text-sm">
-        <div className="animate-spin w-5 h-5 border-2 border-primary border-t-transparent rounded-full mr-3" />
-        Loading Team Directory...
-      </div>
-    );
+    return <Preloader label="Loading Team Directory & Hierarchy..." />;
   }
 
   return (
