@@ -34,7 +34,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
-
+  // check the session is valid or not
+  // if not valid redirect to the login page
+  // if valid set the user
   const fetchUser = useCallback(async () => {
     try {
       const response = await fetch("/api/auth/me");
