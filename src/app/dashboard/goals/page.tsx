@@ -39,9 +39,15 @@ interface KudosData {
   createdAt: string;
 }
 
+import { useTabPersistence } from "@/hooks/useTabPersistence";
+
 export default function GoalsPage() {
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState<"okrs" | "kudos">("okrs");
+  const [activeTab, setActiveTab] = useTabPersistence<"okrs" | "kudos">(
+    "goals_active_tab",
+    "okrs",
+    ["okrs", "kudos"]
+  );
   const [okrs, setOkrs] = useState<OKRData[]>([]);
   const [kudosList, setKudosList] = useState<KudosData[]>([]);
   const [teamMembers, setTeamMembers] = useState<any[]>([]);

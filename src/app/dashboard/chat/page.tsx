@@ -103,8 +103,16 @@ const REACTION_COLOR_MAP: Record<string, string> = {
   "fa-hands-clapping": "text-emerald-500",
 };
 
+import { useTabPersistence } from "@/hooks/useTabPersistence";
+import { useAuthContext } from "@/context/AuthContext";
+
 export default function CommunicationHub() {
-  const [activeTab, setActiveTab] = useState<"chat" | "mail" | "whatsapp" | "video" | "announcements" | "settings">("chat");
+  const { user } = useAuthContext();
+  const [activeTab, setActiveTab] = useTabPersistence<"chat" | "mail" | "whatsapp" | "video" | "announcements" | "settings">(
+    "chat_active_tab",
+    "chat",
+    ["chat", "mail", "whatsapp", "video", "announcements", "settings"]
+  ); 
 
   // Chat State
   const [selectedChannel, setSelectedChannel] = useState<string>("general");
@@ -120,6 +128,15 @@ export default function CommunicationHub() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatInputRef = useRef<HTMLInputElement>(null);
 
+  // Dynamic Channels State
+  const [channelsList, setChannelsList] = useState<any[]>([]);
+  const [showCreateChannelModal, setShowCreateChannelModal] = useState(false);
+  const [newChannelName, setNewChannelName] = useState("");
+  const [newChannelDesc, setNewChannelDesc] = useState("");
+  const [channelError, setChannelError] = useState("");
+  const [isSubmittingChannel, setIsSubmittingChannel] = useState(false);
+  const [channelDeleteConfirm, setChannelDeleteConfirm] = useState<{ channelId: string; channelName: string } | null>(null);
+
   // Mail State
   const [mails, setMails] = useState<MailItem[]>(INITIAL_MAILS);
   const [selectedMailId, setSelectedMailId] = useState<string>("m1");
@@ -128,6 +145,33 @@ export default function CommunicationHub() {
   const [composeTo, setComposeTo] = useState("");
   const [composeSubject, setComposeSubject] = useState("");
   const [composeBody, setComposeBody] = useState("");
+
+  const selectedMail = mails.find((m) => m.id === selectedMailId) || mails[0] || null;
+
+  const handleSendMail = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!composeTo.trim() || !composeSubject.trim() || !composeBody.trim()) return;
+
+    const newMail: MailItem = {
+      id: `m_${Date.now()}`,
+      sender: user?.name || "You",
+      email: composeTo.trim(),
+      subject: composeSubject.trim(),
+      preview: composeBody.trim().substring(0, 80) + "...",
+      body: composeBody.trim(),
+      date: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: true }),
+      folder: "sent",
+      read: true,
+    };
+
+    setMails((prev) => [newMail, ...prev]);
+    setSelectedMailId(newMail.id);
+    setMailFilter("sent");
+    setShowComposeMail(false);
+    setComposeTo("");
+    setComposeSubject("");
+    setComposeBody("");
+  };
 
   // WhatsApp State
   const [waThreads, setWaThreads] = useState<WAThread[]>(INITIAL_WA_THREADS);
@@ -200,12 +244,138 @@ export default function CommunicationHub() {
     }
   };
 
+  const fetchChannels = async () => {
+    try {
+      const res = await fetch("/api/chat/channels");
+      if (res.ok) {
+        const data = await res.json();
+        setChannelsList(data.channels || []);
+      }
+    } catch (e) {
+      console.error("Fetch channels error:", e);
+    }
+  };
+
+  const handleCreateChannel = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newChannelName.trim()) return;
+
+    setIsSubmittingChannel(true);
+    setChannelError("");
+    try {
+      const res = await fetch("/api/chat/channels", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: newChannelName, description: newChannelDesc }),
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        setShowCreateChannelModal(false);
+        setNewChannelName("");
+        setNewChannelDesc("");
+        await fetchChannels();
+        if (data.channel?.name) {
+          setSelectedChannel(data.channel.name);
+        }
+      } else {
+        setChannelError(data.error || "Failed to create channel.");
+      }
+    } catch (err) {
+      console.error("Create channel error:", err);
+      setChannelError("An error occurred while creating channel.");
+    } finally {
+      setIsSubmittingChannel(false);
+    }
+  };
+
+  const handleTogglePinChannel = async (channelId: string, currentPinStatus: boolean) => {
+    try {
+      const res = await fetch("/api/chat/channels", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ channelId, isPinned: !currentPinStatus }),
+      });
+
+      if (res.ok) {
+        await fetchChannels();
+      }
+    } catch (err) {
+      console.error("Toggle pin channel error:", err);
+    }
+  };
+
+  const handleReactivateChannel = async (channelId: string) => {
+    try {
+      const res = await fetch("/api/chat/channels", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ channelId, isActive: true }),
+      });
+
+      if (res.ok) {
+        await fetchChannels();
+      }
+    } catch (err) {
+      console.error("Reactivate channel error:", err);
+    }
+  };
+
+  const handleDeleteChannel = (channelId: string, channelName: string) => {
+    if (channelName === "general") {
+      setChannelError("The #general channel cannot be removed.");
+      return;
+    }
+    setChannelDeleteConfirm({ channelId, channelName });
+  };
+
+  const confirmExecuteDelete = async () => {
+    if (!channelDeleteConfirm) return;
+    const { channelId, channelName } = channelDeleteConfirm;
+
+    try {
+      const res = await fetch(`/api/chat/channels?id=${channelId}`, {
+        method: "DELETE",
+      });
+
+      if (res.ok) {
+        if (selectedChannel === channelName) {
+          setSelectedChannel("general");
+        }
+        await fetchChannels();
+      } else {
+        const data = await res.json();
+        setChannelError(data.error || "Failed to delete channel.");
+      }
+    } catch (err) {
+      console.error("Delete channel error:", err);
+    } finally {
+      setChannelDeleteConfirm(null);
+    }
+  };
+
+  const chatContainerRef = useRef<HTMLDivElement>(null);
+  const isUserNearBottomRef = useRef<boolean>(true);
+  const prevMsgLengthRef = useRef<number>(0);
+
+  const handleChatScroll = () => {
+    if (chatContainerRef.current) {
+      const { scrollTop, scrollHeight, clientHeight } = chatContainerRef.current;
+      // Consider "near bottom" if within 120px of bottom
+      isUserNearBottomRef.current = scrollHeight - scrollTop - clientHeight < 120;
+    }
+  };
+
   useEffect(() => {
     fetchTeam();
     if (activeTab === "chat") {
+      fetchChannels();
+      // Force auto-scroll to bottom on channel change
+      isUserNearBottomRef.current = true;
       fetchMessages(selectedChannel, false);
       const interval = setInterval(() => {
         fetchMessages(selectedChannel, true);
+        fetchChannels();
       }, 3000);
       return () => clearInterval(interval);
     } else if (activeTab === "announcements") {
@@ -214,7 +384,15 @@ export default function CommunicationHub() {
   }, [activeTab, selectedChannel]);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    // Only scroll to bottom if user is already near bottom, or if a new message was added
+    if (messages.length > 0) {
+      if (isUserNearBottomRef.current || messages.length > prevMsgLengthRef.current) {
+        if (chatContainerRef.current) {
+          chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+        }
+      }
+    }
+    prevMsgLengthRef.current = messages.length;
   }, [messages]);
 
   const handleToggleReaction = async (messageId: string, emoji: string) => {
@@ -241,6 +419,58 @@ export default function CommunicationHub() {
     } catch (err) {
       console.error("Toggle reaction error:", err);
     }
+  };
+
+  const handleExportChat = (format: "json" | "txt") => {
+    if (!messages || messages.length === 0) {
+      alert("No messages to export in this channel.");
+      return;
+    }
+
+    let fileContent = "";
+    let mimeType = "text/plain";
+    let extension = "txt";
+
+    if (format === "json") {
+      fileContent = JSON.stringify(
+        messages.map((m) => ({
+          sender: m.senderName,
+          role: m.senderRole || "Member",
+          content: m.content,
+          timestamp: m.createdAt,
+          mentions: m.mentions || [],
+          reactions: m.reactions || [],
+        })),
+        null,
+        2
+      );
+      mimeType = "application/json";
+      extension = "json";
+    } else {
+      const header = `====================================================\nCHAT EXPORT: #${selectedChannel.toUpperCase()}\nExported on: ${new Date().toLocaleString()}\nTotal Messages: ${messages.length}\n====================================================\n\n`;
+      const body = messages
+        .map((m) => {
+          const timeStr = new Date(m.createdAt).toLocaleString([], {
+            dateStyle: "short",
+            timeStyle: "short",
+          });
+          return `[${timeStr}] ${m.senderName}${m.senderRole ? ` (${m.senderRole})` : ""}:\n  ${m.content}\n`;
+        })
+        .join("\n");
+      fileContent = header + body;
+      mimeType = "text/plain";
+      extension = "txt";
+    }
+
+    const blob = new Blob([fileContent], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `chat_export_${selectedChannel}_${new Date().toISOString().slice(0, 10)}.${extension}`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   };
 
   const handleChatInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -360,6 +590,7 @@ export default function CommunicationHub() {
         setNewMessageText("");
         setReplyingToMsg(null);
         setShowMentionPopup(false);
+        isUserNearBottomRef.current = true;
         fetchMessages(selectedChannel);
       }
     } catch (err) {
@@ -409,30 +640,6 @@ export default function CommunicationHub() {
     setWaReplyText("");
   };
 
-  const handleSendMail = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!composeTo || !composeSubject) return;
-
-    const newMail: MailItem = {
-      id: `m-${Date.now()}`,
-      sender: "Me (You)",
-      email: composeTo,
-      subject: composeSubject,
-      preview: composeBody.slice(0, 80) + "...",
-      body: composeBody,
-      date: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-      folder: "sent",
-      read: true,
-    };
-
-    setMails([newMail, ...mails]);
-    setShowComposeMail(false);
-    setComposeTo("");
-    setComposeSubject("");
-    setComposeBody("");
-  };
-
-  const selectedMail = mails.find((m) => m.id === selectedMailId);
   const selectedWaThread = waThreads.find((w) => w.id === selectedWaId);
 
   return (
@@ -526,30 +733,140 @@ export default function CommunicationHub() {
       {/* TAB 1: WORKSPACE CHAT (Direct Messages & Channels, Threads, @mentions)   */}
       {/* ========================================================================= */}
       {activeTab === "chat" && (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 h-[600px]">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 h-[calc(100vh-220px)] min-h-[520px] max-h-[720px]">
           {/* Channels & DMs Sidebar */}
-          <Card className="p-4 space-y-4 flex flex-col justify-between">
+          <Card className="p-4 space-y-4 flex flex-col justify-between overflow-hidden">
             <div className="space-y-4">
               <div>
-                <h3 className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
-                  <i className="fa-solid fa-hashtag text-xs text-primary" /> Channels
-                </h3>
-                <div className="space-y-1">
-                  {["general", "projects", "engineering", "random"].map((ch) => (
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                    <i className="fa-solid fa-hashtag text-xs text-primary" /> Channels
+                  </h3>
+                  {(user?.role === "Admin" || user?.role === "Manager") && (
                     <button
-                      key={ch}
-                      onClick={() => setSelectedChannel(ch)}
-                      className={cn(
-                        "w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-semibold transition-colors cursor-pointer text-left",
-                        selectedChannel === ch
-                          ? "bg-primary text-primary-foreground font-bold shadow-xs"
-                          : "text-muted-foreground hover:bg-accent hover:text-foreground"
-                      )}
+                      onClick={() => setShowCreateChannelModal(true)}
+                      className="text-[10px] text-primary hover:underline font-semibold flex items-center gap-1 cursor-pointer"
+                      title="Create Channel"
                     >
-                      <i className="fa-solid fa-hashtag text-xs" /> {ch}
+                      <i className="fa-solid fa-plus text-[9px]" /> New
                     </button>
-                  ))}
+                  )}
                 </div>
+
+                <div className="space-y-1 max-h-[140px] overflow-y-auto no-scrollbar">
+                  {(() => {
+                    const activeChannels = channelsList.length > 0
+                      ? channelsList.filter((ch: any) => ch.isActive !== false)
+                      : [
+                          { name: "general", _id: "c1", isPinned: true, isActive: true },
+                          { name: "projects", _id: "c2", isPinned: true, isActive: true },
+                          { name: "engineering", _id: "c3", isPinned: false, isActive: true },
+                          { name: "random", _id: "c4", isPinned: false, isActive: true },
+                        ];
+
+                    return activeChannels.map((chObj: any) => {
+                      const chName = typeof chObj === "string" ? chObj : chObj.name;
+                      const chId = typeof chObj === "string" ? chObj : chObj._id;
+                      const isPinned = typeof chObj === "string" ? false : Boolean(chObj.isPinned);
+                      const isSelected = selectedChannel === chName;
+                      const isManagerOrAdmin = user?.role === "Admin" || user?.role === "Manager";
+
+                      return (
+                        <div
+                          key={chId || chName}
+                          className={cn(
+                            "group flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer",
+                            isSelected
+                              ? "bg-primary text-primary-foreground font-bold shadow-xs"
+                              : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                          )}
+                          onClick={() => setSelectedChannel(chName)}
+                        >
+                          <span className="flex items-center gap-2 truncate">
+                            <i className={`fa-solid ${isPinned ? "fa-thumbtack text-amber-400 text-[10px]" : "fa-hashtag text-xs"}`} /> 
+                            {chName}
+                          </span>
+
+                          {isManagerOrAdmin && (
+                            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleTogglePinChannel(chId, isPinned);
+                                }}
+                                className="p-1 text-[10px] hover:text-amber-400 transition-colors"
+                                title={isPinned ? "Unpin Channel" : "Pin Channel"}
+                              >
+                                <i className="fa-solid fa-thumbtack" />
+                              </button>
+
+                              {chName !== "general" && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDeleteChannel(chId, chName);
+                                  }}
+                                  className="p-1 text-[10px] hover:text-rose-400 transition-colors"
+                                  title="Deactivate Channel"
+                                >
+                                  <i className="fa-solid fa-trash-can" />
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    });
+                  })()}
+                </div>
+
+                {/* Inactive Channels Section (Admin & Manager view) */}
+                {(user?.role === "Admin" || user?.role === "Manager") && (
+                  <div className="mt-3 pt-2 border-t border-border/60">
+                    <h4 className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70 mb-1.5 flex items-center gap-1">
+                      <i className="fa-solid fa-box-archive text-[9px] text-amber-500" /> Inactive Channels
+                    </h4>
+                    {channelsList.filter((ch: any) => ch.isActive === false).length === 0 ? (
+                      <p className="text-[10px] text-muted-foreground/50 italic px-1">No inactive channels</p>
+                    ) : (
+                      <div className="space-y-1 max-h-[90px] overflow-y-auto no-scrollbar">
+                        {channelsList
+                          .filter((ch: any) => ch.isActive === false)
+                          .map((inCh: any) => (
+                            <div
+                              key={inCh._id}
+                              className="group flex items-center justify-between px-2.5 py-1 rounded-lg text-xs font-medium text-muted-foreground/60 bg-muted/20 hover:bg-muted/40 transition-colors"
+                            >
+                              <span className="flex items-center gap-1.5 truncate line-through">
+                                <i className="fa-solid fa-hashtag text-[10px] opacity-40" />
+                                {inCh.name}
+                              </span>
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => handleReactivateChannel(inCh._id)}
+                                  className="text-[10px] text-emerald-500 hover:text-emerald-600 font-bold opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 cursor-pointer"
+                                  title="Reactivate Channel"
+                                >
+                                  <i className="fa-solid fa-rotate-left text-[9px]" /> Restore
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteChannel(inCh._id, inCh.name)}
+                                  className="text-[10px] text-rose-400 hover:text-rose-500 font-bold opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 cursor-pointer"
+                                  title="Permanently Delete Channel"
+                                >
+                                  <i className="fa-solid fa-trash-can text-[9px]" />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div>
@@ -614,22 +931,52 @@ export default function CommunicationHub() {
           </Card>
 
           {/* Chat Feed */}
-          <Card className="md:col-span-3 p-4 flex flex-col justify-between">
+          <Card className="md:col-span-3 p-4 flex flex-col justify-between overflow-hidden">
             <div className="flex items-center justify-between pb-3 border-b border-border font-semibold text-foreground text-sm">
               <div className="flex items-center gap-2">
                 <i className="fa-solid fa-hashtag text-primary" />
                 <span>{selectedChannel}</span>
-                <Badge variant="outline" className="text-[10px] uppercase font-mono">
-                  {selectedChannel.startsWith("dm_") ? "Direct Message" : "Public Channel"}
+                <Badge variant="outline" className="text-[10px] font-mono tracking-wider px-2 py-0.5 inline-flex items-center gap-1 border-primary/30 bg-primary/10 text-primary dark:text-blue-300 font-semibold rounded-md">
+                  {selectedChannel.startsWith("dm_") ? "DIRECT MESSAGE" : "PUBLIC CHANNEL"}
                 </Badge>
               </div>
-              <span className="text-xs text-muted-foreground flex items-center gap-1.5">
-                <i className="fa-solid fa-signal text-emerald-500 text-[10px]" /> Realtime Sync
-              </span>
+              <div className="flex items-center gap-3">
+                {/* Export Chat Controls */}
+                {messages && messages.length > 0 && (
+                  <div className="flex items-center gap-1.5 bg-muted/30 p-1 rounded-lg border border-border/60">
+                    <span className="text-[10px] font-semibold text-muted-foreground px-1.5 flex items-center gap-1">
+                      <i className="fa-solid fa-file-arrow-down text-primary" /> Export:
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleExportChat("txt")}
+                      className="px-2 py-0.5 text-[10px] font-bold rounded bg-background hover:bg-accent text-foreground border border-border/60 transition-colors flex items-center gap-1 cursor-pointer"
+                      title="Export as Text Transcript (.txt)"
+                    >
+                      <i className="fa-solid fa-file-lines text-slate-500" /> TXT
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleExportChat("json")}
+                      className="px-2 py-0.5 text-[10px] font-bold rounded bg-background hover:bg-accent text-foreground border border-border/60 transition-colors flex items-center gap-1 cursor-pointer"
+                      title="Export as Structured JSON (.json)"
+                    >
+                      <i className="fa-solid fa-code text-indigo-500" /> JSON
+                    </button>
+                  </div>
+                )}
+                <span className="text-xs text-muted-foreground flex items-center gap-1.5">
+                  <i className="fa-solid fa-signal text-emerald-500 text-[10px]" /> Realtime Sync
+                </span>
+              </div>
             </div>
 
             {/* Messages Scroll Area */}
-            <div className="flex-1 overflow-y-auto py-4 space-y-4 no-scrollbar">
+            <div 
+              ref={chatContainerRef}
+              onScroll={handleChatScroll}
+              className="flex-1 overflow-y-auto py-4 space-y-4 no-scrollbar"
+            >
               {loadingChat ? (
                 <div className="text-center text-xs text-muted-foreground py-12 space-y-2">
                   <i className="fa-solid fa-spinner fa-spin text-xl text-primary" />
@@ -642,8 +989,33 @@ export default function CommunicationHub() {
                   <p className="text-[11px]">Start the conversation below!</p>
                 </div>
               ) : (
-                messages.map((m) => {
+                messages.map((m, idx) => {
                   const isSelected = selectedMsgId === m._id;
+                  const messageDate = new Date(m.createdAt);
+                  const prevMessageDate = idx > 0 ? new Date(messages[idx - 1].createdAt) : null;
+                  
+                  const isDifferentDay = !prevMessageDate || 
+                    messageDate.toDateString() !== prevMessageDate.toDateString();
+
+                  const getDateSeparatorLabel = (date: Date) => {
+                    const today = new Date();
+                    const yesterday = new Date();
+                    yesterday.setDate(today.getDate() - 1);
+
+                    if (date.toDateString() === today.toDateString()) {
+                      return "Today";
+                    } else if (date.toDateString() === yesterday.toDateString()) {
+                      return "Yesterday";
+                    } else {
+                      return date.toLocaleDateString(undefined, { 
+                        weekday: "long", 
+                        month: "short", 
+                        day: "numeric", 
+                        year: date.getFullYear() !== today.getFullYear() ? "numeric" : undefined 
+                      });
+                    }
+                  };
+
                   const reactionColorMap: Record<string, string> = {
                     "fa-thumbs-up": "text-primary",
                     "fa-heart": "text-rose-500",
@@ -653,110 +1025,122 @@ export default function CommunicationHub() {
                     "fa-hands-clapping": "text-emerald-500",
                   };
                   return (
-                    <div key={m._id} className="group">
-                      {/* Chat Bubble Row: Avatar + Bubble */}
-                      <div className="flex items-start gap-3">
-                        {/* Avatar */}
-                        <div className="h-9 w-9 rounded-full bg-gradient-to-br from-primary/40 to-primary/10 flex items-center justify-center text-primary font-bold text-sm uppercase flex-shrink-0 mt-0.5 border border-primary/20">
-                          {m.senderName.charAt(0)}
+                    <React.Fragment key={m._id}>
+                      {/* Date Separator Divider */}
+                      {isDifferentDay && (
+                        <div className="relative flex items-center justify-center my-6">
+                          <div className="absolute inset-0 flex items-center">
+                            <div className="w-full border-t border-border/80 dark:border-slate-800" />
+                          </div>
+                          <div className="relative bg-card dark:bg-slate-900 px-3 py-1 rounded-full border border-border/80 dark:border-slate-800 shadow-xs text-[11px] font-semibold text-muted-foreground">
+                            {getDateSeparatorLabel(messageDate)}
+                          </div>
                         </div>
-
-                        {/* Bubble */}
-                        <div className="flex-1 min-w-0">
-                          <div
-                            className={cn(
-                              "rounded-2xl rounded-tl-sm px-4 py-3 border transition-colors duration-150 cursor-pointer",
-                              isSelected
-                                ? "bg-slate-100 border-primary/50 shadow-md dark:bg-[hsl(215,30%,22%)]"
-                                : "bg-slate-50 border-slate-200 hover:bg-slate-100 dark:bg-[hsl(215,30%,20%)] dark:border-[hsl(215,25%,25%)] dark:hover:bg-[hsl(215,30%,22%)]"
-                            )}
-                            onClick={() => setSelectedMsgId(isSelected ? null : m._id)}
-                          >
-                            {/* Name + Role + Reply */}
-                            <div className="flex items-center gap-2 mb-1">
-                              <span className="font-bold text-sm text-foreground">{m.senderName}</span>
-                              {m.senderRole && (
-                                <span className="text-[9px] font-bold uppercase tracking-wider bg-primary/20 text-primary px-1.5 py-0.5 rounded">
-                                  {m.senderRole}
-                                </span>
-                              )}
-                              <button
-                                onClick={(e) => { e.stopPropagation(); setReplyingToMsg(m); }}
-                                className="ml-auto text-[10px] text-muted-foreground hover:text-primary flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
-                              >
-                                <i className="fa-solid fa-reply text-[9px]" />
-                              </button>
-                            </div>
-
-                            {/* Thread Indicator */}
-                            {m.parentId && (
-                              <div className="text-[11px] text-muted-foreground bg-background/50 p-1.5 rounded border-l-2 border-l-primary flex items-center gap-1.5 mb-2">
-                                <i className="fa-solid fa-quote-left text-[9px] text-primary" /> Replying to thread
-                              </div>
-                            )}
-
-                            {/* Message Body */}
-                            <div className="flex items-end gap-2">
-                              <p className="text-sm text-foreground leading-relaxed flex-1 whitespace-pre-wrap">
-                                {renderFormattedContent(m.content, m.mentions)}
-                              </p>
-                              <span className="text-[10px] text-muted-foreground font-mono whitespace-nowrap flex-shrink-0 pb-0.5">
-                                {new Date(m.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                              </span>
-                            </div>
+                      )}
+                      <div className="group">
+                        {/* Chat Bubble Row: Avatar + Bubble */}
+                        <div className="flex items-start gap-3">
+                          {/* Avatar */}
+                          <div className="h-9 w-9 rounded-full bg-gradient-to-br from-primary/40 to-primary/10 flex items-center justify-center text-primary font-bold text-sm uppercase flex-shrink-0 mt-0.5 border border-primary/20">
+                            {m.senderName.charAt(0)}
                           </div>
 
-                          {/* Reaction Badges — below the bubble */}
-                          {m.reactions && m.reactions.length > 0 && (
-                            <div className="flex items-center flex-wrap gap-1.5 mt-2 pl-1">
-                              {m.reactions.map((r, rIdx) => {
-                                const iconColor = REACTION_COLOR_MAP[r.emoji] || "text-primary";
-                                return (
-                                  <button
-                                    key={rIdx}
-                                    type="button"
-                                    onClick={() => setActiveReactionModal({ messageId: m._id, emoji: r.emoji, users: r.users })}
-                                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-100 border border-slate-200 shadow-sm hover:bg-slate-200 dark:bg-[hsl(215,30%,20%)] dark:border-[hsl(215,25%,25%)] dark:hover:bg-[hsl(215,30%,24%)] cursor-pointer transition-colors"
-                                    title="Click to view members who reacted"
-                                  >
-                                    <i className={cn("fa-solid text-sm", r.emoji, iconColor)} />
-                                    <span className="text-xs font-bold text-foreground">{r.users.length}</span>
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          )}
+                          {/* Bubble */}
+                          <div className="flex-1 min-w-0">
+                            <div
+                              className={cn(
+                                "rounded-2xl rounded-tl-sm px-4 py-3 border transition-colors duration-150 cursor-pointer",
+                                isSelected
+                                  ? "bg-slate-100 border-primary/50 shadow-md dark:bg-[hsl(215,30%,22%)]"
+                                  : "bg-slate-50 border-slate-200 hover:bg-slate-100 dark:bg-[hsl(215,30%,20%)] dark:border-[hsl(215,25%,25%)] dark:hover:bg-[hsl(215,30%,22%)]"
+                              )}
+                              onClick={() => setSelectedMsgId(isSelected ? null : m._id)}
+                            >
+                              {/* Name + Role + Reply */}
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="font-bold text-sm text-foreground">{m.senderName}</span>
+                                {m.senderRole && (
+                                  <span className="text-[9px] font-bold uppercase tracking-wider bg-primary/20 text-primary px-1.5 py-0.5 rounded">
+                                    {m.senderRole}
+                                  </span>
+                                )}
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); setReplyingToMsg(m); }}
+                                  className="ml-auto text-[10px] text-muted-foreground hover:text-primary flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                                >
+                                  <i className="fa-solid fa-reply text-[9px]" />
+                                </button>
+                              </div>
 
-                          {/* Reaction Picker — appears on click */}
-                          {isSelected && (
-                            <div className="flex items-center gap-0.5 mt-2 pl-1">
-                              <div className="inline-flex items-center gap-0.5 bg-white border border-slate-200 rounded-full px-2.5 py-1.5 shadow-md dark:bg-[hsl(215,30%,20%)] dark:border-[hsl(215,25%,25%)]">
-                                {[
-                                  { icon: "fa-thumbs-up",     label: "Like",   color: "text-primary" },
-                                  { icon: "fa-heart",          label: "Love",   color: "text-rose-500" },
-                                  { icon: "fa-fire",           label: "Fire",   color: "text-amber-500" },
-                                  { icon: "fa-rocket",         label: "Rocket", color: "text-indigo-500" },
-                                  { icon: "fa-face-smile",     label: "Smile",  color: "text-yellow-500" },
-                                  { icon: "fa-hands-clapping", label: "Clap",   color: "text-emerald-500" },
-                                ].map((item) => (
-                                  <button
-                                    key={item.icon}
-                                    onClick={() => { handleToggleReaction(m._id, item.icon); setSelectedMsgId(null); }}
-                                    className="h-7 w-7 rounded-full hover:bg-background hover:scale-125 flex items-center justify-center transition-all duration-150 cursor-pointer"
-                                    title={item.label}
-                                  >
-                                    <i className={cn("fa-solid text-sm", item.icon, item.color)} />
-                                  </button>
-                                ))}
+                              {/* Thread Indicator */}
+                              {m.parentId && (
+                                <div className="text-[11px] text-muted-foreground bg-background/50 p-1.5 rounded border-l-2 border-l-primary flex items-center gap-1.5 mb-2">
+                                  <i className="fa-solid fa-quote-left text-[9px] text-primary" /> Replying to thread
+                                </div>
+                              )}
+
+                              {/* Message Body */}
+                              <div className="flex items-end gap-2">
+                                <p className="text-sm text-foreground leading-relaxed flex-1 whitespace-pre-wrap">
+                                  {renderFormattedContent(m.content, m.mentions)}
+                                </p>
+                                <span className="text-[10px] text-muted-foreground font-mono whitespace-nowrap flex-shrink-0 pb-0.5">
+                                  {new Date(m.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: true })}
+                                </span>
                               </div>
                             </div>
-                          )}
+
+                            {/* Reaction Badges */}
+                            {m.reactions && m.reactions.length > 0 && (
+                              <div className="flex items-center flex-wrap gap-1.5 mt-2 pl-1">
+                                {m.reactions.map((r, rIdx) => {
+                                  const iconColor = REACTION_COLOR_MAP[r.emoji] || "text-primary";
+                                  return (
+                                    <button
+                                      key={rIdx}
+                                      type="button"
+                                      onClick={() => setActiveReactionModal({ messageId: m._id, emoji: r.emoji, users: r.users })}
+                                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-100 border border-slate-200 shadow-sm hover:bg-slate-200 dark:bg-[hsl(215,30%,20%)] dark:border-[hsl(215,25%,25%)] dark:hover:bg-[hsl(215,30%,24%)] cursor-pointer transition-colors"
+                                      title="Click to view members who reacted"
+                                    >
+                                      <i className={cn("fa-solid text-sm", r.emoji, iconColor)} />
+                                      <span className="text-xs font-bold text-foreground">{r.users.length}</span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            )}
+
+                            {/* Reaction Picker */}
+                            {isSelected && (
+                              <div className="flex items-center gap-0.5 mt-2 pl-1">
+                                <div className="inline-flex items-center gap-0.5 bg-white border border-slate-200 rounded-full px-2.5 py-1.5 shadow-md dark:bg-[hsl(215,30%,20%)] dark:border-[hsl(215,25%,25%)]">
+                                  {[
+                                    { icon: "fa-thumbs-up",     label: "Like",   color: "text-primary" },
+                                    { icon: "fa-heart",          label: "Love",   color: "text-rose-500" },
+                                    { icon: "fa-fire",           label: "Fire",   color: "text-amber-500" },
+                                    { icon: "fa-rocket",         label: "Rocket", color: "text-indigo-500" },
+                                    { icon: "fa-face-smile",     label: "Smile",  color: "text-yellow-500" },
+                                    { icon: "fa-hands-clapping", label: "Clap",   color: "text-emerald-500" },
+                                  ].map((item) => (
+                                    <button
+                                      key={item.icon}
+                                      onClick={() => { handleToggleReaction(m._id, item.icon); setSelectedMsgId(null); }}
+                                      className="h-7 w-7 rounded-full hover:bg-background hover:scale-125 flex items-center justify-center transition-all duration-150 cursor-pointer"
+                                      title={item.label}
+                                    >
+                                      <i className={cn("fa-solid text-sm", item.icon, item.color)} />
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </div>
-                    </div>
+                    </React.Fragment>
                   );
                 })
-
               )}
               <div ref={messagesEndRef} />
             </div>
@@ -937,10 +1321,34 @@ export default function CommunicationHub() {
               )}
 
               <div className="flex justify-end gap-2 pt-4 border-t border-border">
-                <Button variant="outline" size="sm" className="gap-2 text-xs">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-2 text-xs cursor-pointer"
+                  onClick={() => {
+                    if (selectedMail) {
+                      setComposeTo(selectedMail.email);
+                      setComposeSubject(`Re: ${selectedMail.subject}`);
+                      setComposeBody(`\n\n--- Original Message ---\nFrom: ${selectedMail.sender} (${selectedMail.email})\n${selectedMail.body}`);
+                      setShowComposeMail(true);
+                    }
+                  }}
+                >
                   <i className="fa-solid fa-reply text-xs" /> Reply
                 </Button>
-                <Button variant="outline" size="sm" className="gap-2 text-xs">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-2 text-xs cursor-pointer"
+                  onClick={() => {
+                    if (selectedMail) {
+                      setComposeTo("");
+                      setComposeSubject(`Fwd: ${selectedMail.subject}`);
+                      setComposeBody(`\n\n--- Forwarded Message ---\nFrom: ${selectedMail.sender} (${selectedMail.email})\n${selectedMail.body}`);
+                      setShowComposeMail(true);
+                    }
+                  }}
+                >
                   <i className="fa-solid fa-share text-xs" /> Forward
                 </Button>
               </div>
@@ -1336,11 +1744,27 @@ export default function CommunicationHub() {
             <form onSubmit={handleSendMail} className="space-y-4 text-xs">
               <div className="space-y-1.5">
                 <label className="font-semibold text-foreground">To (Recipient Email)</label>
+                {teamMembers.length > 0 && (
+                  <select
+                    onChange={(e) => {
+                      if (e.target.value) setComposeTo(e.target.value);
+                    }}
+                    value={teamMembers.some((m: any) => m.email === composeTo) ? composeTo : ""}
+                    className="w-full h-9 mb-1.5 rounded-md border border-input bg-background px-3 py-1 text-xs text-foreground focus:outline-none"
+                  >
+                    <option value="">-- Select Teammate (or type below) --</option>
+                    {teamMembers.map((member: any) => (
+                      <option key={member._id || member.email} value={member.email}>
+                        {member.name} ({member.email}) - {member.role || "Member"}
+                      </option>
+                    ))}
+                  </select>
+                )}
                 <Input
                   type="email"
                   value={composeTo}
                   onChange={(e) => setComposeTo(e.target.value)}
-                  placeholder="client@company.com"
+                  placeholder="Select teammate above or type client email..."
                   required
                 />
               </div>
@@ -1376,6 +1800,112 @@ export default function CommunicationHub() {
                 </Button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Create Channel Modal Dialog */}
+      {showCreateChannelModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in">
+          <div className="w-full max-w-md rounded-xl border border-border bg-card p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-border pb-3">
+              <h3 className="text-base font-bold text-foreground flex items-center gap-2">
+                <i className="fa-solid fa-hashtag text-primary" /> Create New Channel
+              </h3>
+              <button
+                onClick={() => setShowCreateChannelModal(false)}
+                className="text-muted-foreground hover:text-foreground"
+              >
+                <i className="fa-solid fa-xmark text-sm" />
+              </button>
+            </div>
+
+            {channelError && (
+              <div className="p-3 text-xs bg-rose-500/10 text-rose-500 border border-rose-500/20 rounded-lg font-medium">
+                {channelError}
+              </div>
+            )}
+
+            <form onSubmit={handleCreateChannel} className="space-y-4">
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-muted-foreground">Channel Name</label>
+                <div className="relative">
+                  <span className="absolute left-3 top-2.5 text-muted-foreground text-xs font-mono">#</span>
+                  <Input
+                    value={newChannelName}
+                    onChange={(e) => setNewChannelName(e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, ""))}
+                    placeholder="e.g. design-sync"
+                    className="pl-7 text-xs font-mono"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-muted-foreground">Description (Optional)</label>
+                <Input
+                  value={newChannelDesc}
+                  onChange={(e) => setNewChannelDesc(e.target.value)}
+                  placeholder="What is this channel about?"
+                  className="text-xs"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-border">
+                <Button variant="outline" size="sm" type="button" onClick={() => setShowCreateChannelModal(false)}>
+                  Cancel
+                </Button>
+                <Button color="primary" size="sm" type="submit" disabled={isSubmittingChannel} className="font-semibold gap-2">
+                  <i className={`fa-solid ${isSubmittingChannel ? "fa-spinner fa-spin" : "fa-plus"} text-xs`} />
+                  {isSubmittingChannel ? "Creating..." : "Create Channel"}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Channel Confirmation Modal */}
+      {channelDeleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in">
+          <div className="w-full max-w-sm rounded-xl border border-border bg-card p-5 shadow-2xl space-y-4 text-center">
+            <div className="h-12 w-12 rounded-full bg-rose-500/10 text-rose-500 flex items-center justify-center mx-auto border border-rose-500/20">
+              <i className="fa-solid fa-triangle-exclamation text-xl" />
+            </div>
+
+            <div className="space-y-1">
+              <h3 className="text-base font-bold text-foreground">
+                {channelsList.find((c: any) => c._id === channelDeleteConfirm.channelId)?.isActive === false
+                  ? `Permanently Delete #${channelDeleteConfirm.channelName}?`
+                  : `Move #${channelDeleteConfirm.channelName} to Inactive?`}
+              </h3>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                {channelsList.find((c: any) => c._id === channelDeleteConfirm.channelId)?.isActive === false
+                  ? "This channel will be permanently removed from the database for all workspace members. This action cannot be undone."
+                  : "This channel will be moved to the Inactive list. Admins and Managers can restore it at any time."}
+              </p>
+            </div>
+
+            <div className="flex items-center justify-center gap-3 pt-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setChannelDeleteConfirm(null)}
+                className="w-full font-medium"
+              >
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                onClick={confirmExecuteDelete}
+                className="w-full bg-rose-600 hover:bg-rose-700 text-white font-semibold gap-1.5"
+              >
+                <i className="fa-solid fa-box-archive text-xs" />
+                {channelsList.find((c: any) => c._id === channelDeleteConfirm.channelId)?.isActive === false
+                  ? "Permanently Delete"
+                  : "Move to Inactive"}
+              </Button>
+            </div>
           </div>
         </div>
       )}

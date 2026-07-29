@@ -8,9 +8,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
+import { useTabPersistence } from "@/hooks/useTabPersistence";
+
 export default function ProjectsPage() {
   const { user: currentUser, loading: authLoading } = useAuth();
-  const [activeTab, setActiveTab] = useState<"kanban" | "gantt" | "wiki" | "drive" | "workload" | "history">("kanban");
+  const [activeTab, setActiveTab] = useTabPersistence<"kanban" | "gantt" | "wiki" | "drive" | "workload" | "history">(
+    "projects_active_tab",
+    "kanban",
+    ["kanban", "gantt", "wiki", "drive", "workload", "history"]
+  );
   const [loading, setLoading] = useState(true);
   const [mounted, setMounted] = useState(false);
 
@@ -420,7 +426,7 @@ export default function ProjectsPage() {
       {/* Tabs */}
       <div className="flex border-b border-border space-x-1 overflow-x-auto no-scrollbar">
         <button
-          onClick={() => startTransition(() => setActiveTab("kanban"))}
+          onClick={() => setActiveTab("kanban")}
           className={cn(
             "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer",
             activeTab === "kanban"
@@ -432,7 +438,7 @@ export default function ProjectsPage() {
         </button>
 
         <button
-          onClick={() => startTransition(() => setActiveTab("gantt"))}
+          onClick={() => setActiveTab("gantt")}
           className={cn(
             "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer",
             activeTab === "gantt"
@@ -444,7 +450,7 @@ export default function ProjectsPage() {
         </button>
 
         <button
-          onClick={() => startTransition(() => setActiveTab("wiki"))}
+          onClick={() => setActiveTab("wiki")}
           className={cn(
             "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer",
             activeTab === "wiki"
@@ -456,7 +462,7 @@ export default function ProjectsPage() {
         </button>
 
         <button
-          onClick={() => startTransition(() => setActiveTab("drive"))}
+          onClick={() => setActiveTab("drive")}
           className={cn(
             "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer",
             activeTab === "drive"
@@ -468,7 +474,7 @@ export default function ProjectsPage() {
         </button>
 
         <button
-          onClick={() => startTransition(() => setActiveTab("history"))}
+          onClick={() => setActiveTab("history")}
           className={cn(
             "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer",
             activeTab === "history"

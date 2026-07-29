@@ -23,9 +23,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
+import { useTabPersistence } from "@/hooks/useTabPersistence";
+
 export default function CalendarPage() {
   const { user: currentUser, loading: authLoading } = useAuth();
-  const [activeTab, setActiveTab] = useState<"calendar" | "sprints" | "timesheets" | "attendance">("calendar");
+  const [activeTab, setActiveTab] = useTabPersistence<"calendar" | "sprints" | "timesheets" | "attendance">(
+    "calendar_active_tab",
+    "calendar",
+    ["calendar", "sprints", "timesheets", "attendance"]
+  );
 
   const [loading, setLoading] = useState(true);
   const [mounted, setMounted] = useState(false);
@@ -572,7 +578,7 @@ export default function CalendarPage() {
       {/* Tabs */}
       <div className="flex border-b border-border space-x-1 overflow-x-auto no-scrollbar">
         <button
-          onClick={() => startTransition(() => setActiveTab("calendar"))}
+          onClick={() => setActiveTab("calendar")}
           className={cn(
             "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer",
             activeTab === "calendar"
@@ -584,7 +590,7 @@ export default function CalendarPage() {
         </button>
 
         <button
-          onClick={() => startTransition(() => setActiveTab("sprints"))}
+          onClick={() => setActiveTab("sprints")}
           className={cn(
             "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer",
             activeTab === "sprints"
@@ -596,7 +602,7 @@ export default function CalendarPage() {
         </button>
 
         <button
-          onClick={() => startTransition(() => setActiveTab("timesheets"))}
+          onClick={() => setActiveTab("timesheets")}
           className={cn(
             "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer",
             activeTab === "timesheets"
@@ -608,7 +614,7 @@ export default function CalendarPage() {
         </button>
 
         <button
-          onClick={() => startTransition(() => setActiveTab("attendance"))}
+          onClick={() => setActiveTab("attendance")}
           className={cn(
             "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer",
             activeTab === "attendance"

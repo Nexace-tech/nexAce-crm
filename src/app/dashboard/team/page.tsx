@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo, startTransition } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import { OrgChartNode, OrgNode } from "@/components/features/OrgChartNode";
 import { 
@@ -161,9 +162,34 @@ export default function TeamDashboardPage() {
     }, 3500);
   };
 
+  // URL & LocalStorage Active Tab Persistence
+  const searchParams = useSearchParams();
+  const router = useRouter();
+
   useEffect(() => {
     setMounted(true);
-  }, []);
+    const tabFromUrl = searchParams.get("tab") as any;
+    const tabFromStorage = typeof window !== "undefined" ? localStorage.getItem("team_active_tab") as any : null;
+    const validTabs = ["directory", "orgchart", "manager", "departments"];
+
+    if (tabFromUrl && validTabs.includes(tabFromUrl)) {
+      setActiveTab(tabFromUrl);
+    } else if (tabFromStorage && validTabs.includes(tabFromStorage)) {
+      setActiveTab(tabFromStorage);
+    }
+  }, [searchParams]);
+
+  const handleTabChange = (tab: "directory" | "orgchart" | "manager" | "departments") => {
+    startTransition(() => {
+      setActiveTab(tab);
+      if (typeof window !== "undefined") {
+        localStorage.setItem("team_active_tab", tab);
+      }
+      const params = new URLSearchParams(window.location.search);
+      params.set("tab", tab);
+      router.replace(`/dashboard/team?${params.toString()}`, { scroll: false });
+    });
+  };
 
   const fetchDepartments = async () => {
     setDeptLoading(true);
@@ -679,7 +705,7 @@ export default function TeamDashboardPage() {
       {/* Tabs Bar */}
       <div className="flex border-b border-border space-x-1 overflow-x-auto no-scrollbar">
         <button
-          onClick={() => startTransition(() => setActiveTab("directory"))}
+          onClick={() => handleTabChange("directory")}
           className={cn(
             "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer",
             activeTab === "directory"
@@ -691,7 +717,7 @@ export default function TeamDashboardPage() {
         </button>
 
         <button
-          onClick={() => startTransition(() => setActiveTab("orgchart"))}
+          onClick={() => handleTabChange("orgchart")}
           className={cn(
             "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer",
             activeTab === "orgchart"
@@ -704,7 +730,7 @@ export default function TeamDashboardPage() {
 
         {isManagerOrAdmin && (
           <button
-            onClick={() => startTransition(() => setActiveTab("manager"))}
+            onClick={() => handleTabChange("manager")}
             className={cn(
               "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer",
               activeTab === "manager"
@@ -717,7 +743,7 @@ export default function TeamDashboardPage() {
         )}
 
         <button
-          onClick={() => startTransition(() => setActiveTab("departments"))}
+          onClick={() => handleTabChange("departments")}
           className={cn(
             "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer",
             activeTab === "departments"

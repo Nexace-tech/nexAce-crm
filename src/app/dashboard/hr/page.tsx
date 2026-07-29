@@ -24,9 +24,15 @@ interface CaseData {
   status: string; priority: string; comments: any[]; createdAt: string;
 }
 
+import { useTabPersistence } from "@/hooks/useTabPersistence";
+
 export default function HRPage() {
   const { user, loading: authLoading } = useAuth();
-  const [activeTab, setActiveTab] = useState<"leaves" | "cases">("leaves");
+  const [activeTab, setActiveTab] = useTabPersistence<"leaves" | "cases">(
+    "hr_active_tab",
+    "leaves",
+    ["leaves", "cases"]
+  );
   const [leaves, setLeaves] = useState<LeaveData[]>([]);
   const [cases, setCases] = useState<CaseData[]>([]);
   const [loading, setLoading] = useState(true);
