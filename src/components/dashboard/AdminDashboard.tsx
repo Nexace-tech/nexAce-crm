@@ -56,7 +56,7 @@ export function AdminDashboard({ user }: { user: any }) {
             </span>
           </div>
           <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground">
-            Welcome back, <span className="text-primary">{user?.name || "Admin"}</span> 👋
+            Welcome back, <span className="text-primary">{user?.name || "Admin"}</span> <i className="fa-solid fa-hand-wave text-amber-400 ml-1.5 inline-block" />
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
             Here is your multi-tenant workspace status, real-time company metrics, and team shift overview.
