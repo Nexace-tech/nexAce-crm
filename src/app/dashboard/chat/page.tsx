@@ -223,7 +223,13 @@ export default function CommunicationHub() {
       const res = await fetch(`/api/chat/messages?channel=${channel}`);
       if (res.ok) {
         const data = await res.json();
-        setMessages(data.messages || []);
+        const newMsgs: ChatMsg[] = data.messages || [];
+        setMessages((prev) => {
+          if (JSON.stringify(prev) === JSON.stringify(newMsgs)) {
+            return prev;
+          }
+          return newMsgs;
+        });
       }
     } catch (err) {
       console.error("Fetch chat messages error:", err);
@@ -249,7 +255,13 @@ export default function CommunicationHub() {
       const res = await fetch("/api/chat/channels");
       if (res.ok) {
         const data = await res.json();
-        setChannelsList(data.channels || []);
+        const newChannels = data.channels || [];
+        setChannelsList((prev) => {
+          if (JSON.stringify(prev) === JSON.stringify(newChannels)) {
+            return prev;
+          }
+          return newChannels;
+        });
       }
     } catch (e) {
       console.error("Fetch channels error:", e);
