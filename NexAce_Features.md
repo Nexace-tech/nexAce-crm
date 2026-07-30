@@ -54,39 +54,37 @@ Recommendation: keep KPI tracking inside HR (individual, role-level, tied to app
  ⭕ KPI tracker — tiered daily/weekly/monthly targets, progress bars per tier, manager sign-off, dual-signature record saved to the document vault  [Source: Your existing KPI document template + Zoho People]
  ⭕ OKR module — define, align, and track Objectives and Key Results as measurable outcomes across teams and the whole company, distinct from individual KPIs  [Source: Zoho People (OKR service)]
  ⭕ Recognition/Kudos wall — peer shoutouts tagged by company value, public feed  [Source: Industry standard (culture/engagement tool pattern)]
- ⭕ Pulse surveys — quick 1-question weekly anonymous check-in with trend charts for leadership  [Source: Industry standard]
- ⭕ 1:1 meeting tracker — recurring manager-employee log with agenda, notes, and carried-over action items  [Source: Industry standard]
+ ✅ Pulse surveys — quick 1-question weekly anonymous check-in with trend charts for leadership  [Source: Industry standard]
+ ✅ 1:1 meeting tracker — recurring manager-employee log with agenda, notes, and carried-over action items  [Source: Industry standard]
 
 
 
 7. Analytics
- ⭕ Time analytics — hours logged per employee/project/week, over/under-target flags  [Source: Your existing folder structure]
- ⭕ Manager view — team-wide time summary, pending approval queue, exportable reports (CSV)  [Source: Your existing folder structure]
- ⭕ Performance insight dashboards drawing on KPI, KRA, and appraisal data  [Source: Zoho People]
- ⭕ Workspace-wide workflow execution logs with real-time status, for auditing automation  [Source: Zoho People]
+  ✅ Time analytics — hours logged per employee/project/week, over/under-target flags  [Source: Your existing folder structure]
+  ✅ Manager view — team-wide time summary, pending approval queue, exportable reports (CSV)  [Source: Your existing folder structure]
+  ✅ Performance insight dashboards drawing on KPI, KRA, and appraisal data  [Source: Zoho People]
+  ✅ Workspace-wide workflow execution logs with real-time status, for auditing automation  [Source: Zoho People]
 
 
 
 8. CRM
- ⭕ Client/retainer tracker — pipeline stage, retainer hours billed vs. used, renewal date  [Source: Recommended addition (fits your Ziqsy billing structure)]
- ⭕ Contact history log per client, including notes and past interactions  [Source: Industry standard (CRM pattern)]
-
+  ✅ Client/retainer tracker — pipeline stage, retainer hours billed vs. used, renewal date  [Source: Recommended addition (fits your Ziqsy billing structure)]
+  ✅ Contact history log per client, including notes and past interactions  [Source: Industry standard (CRM pattern)]
 
 9. Referrals
- ⭕ Referral pipeline — Submitted → Interviewing → Hired → Paid, with reward payout status  [Source: Your existing folder structure]
+  ✅ Referral pipeline — Submitted → Interviewing → Hired → Paid, with reward payout status  [Source: Your existing folder structure]
 
 
 10. Platform-Level (Admin/Settings) — required because you are selling this, not just using it
- ⭕ Role-based permission management (Employee / Manager / Admin), configurable per client company  [Source: Your existing folder structure + industry standard for multi-tenant SaaS]
- ⭕ Audit log / activity trail — who changed a KPI target, who approved leave, who edited a document; required for enterprise procurement checklists  [Source: Recommended addition — not present in your current folder list]
- ⭕ Billing/subscription admin layer — separate from the CRM (that CRM is for your customers' clients; this is for managing which client company is on which plan, seat counts, renewals)  [Source: Recommended addition — not present in your current folder list]
- ⭕ Multi-tenant data isolation — each client company's data (employees, KPIs, projects, chat) kept separate, with your own admin layer above all tenants  [Source: Recommended addition, based on your stated goal of selling to teams up to 500]
-
+  ✅ Role-based permission management (Employee / Manager / Admin), configurable per client company  [Source: Your existing folder structure + industry standard for multi-tenant SaaS]
+  ✅ Audit log / activity trail — who changed a KPI target, who approved leave, who edited a document; required for enterprise procurement checklists  [Source: Recommended addition — not present in your current folder list]
+  ✅ Billing/subscription admin layer — separate from the CRM (that CRM is for your customers' clients; this is for managing which client company is on which plan, seat counts, renewals)  [Source: Recommended addition — not present in your current folder list]
+  ✅ Multi-tenant data isolation — each client company's data (employees, KPIs, projects, chat) kept separate, with your own admin layer above all tenants  [Source: Recommended addition, based on your stated goal of selling to teams up to 500]
 
 
 Summary: Items Recommended for Addition to Your Current Folder List
- ⭕ Drive — dedicated file storage module, distinct from Wiki  [Source: Huly]
- ⭕ Goals — OKR-specific module, distinct from HR's individual KPI tracking (you already have a “goals” folder; confirmed this is the right place for OKRs specifically)  [Source: Zoho People]
- ⭕ Audit log / activity trail  [Source: Recommended — enterprise sales requirement]
- ⭕ Billing/subscription admin layer for your own SaaS tiering  [Source: Recommended — multi-tenant sales requirement]
- ⭕ Client/retainer tracker inside CRM  [Source: Recommended, based on your Ziqsy billing structure]
+  ✅ Drive — dedicated file storage module, distinct from Wiki  [Source: Huly]
+  ✅ Goals — OKR-specific module, distinct from HR's individual KPI tracking (you already have a “goals” folder; confirmed this is the right place for OKRs specifically)  [Source: Zoho People]
+  ✅ Audit log / activity trail  [Source: Recommended — enterprise sales requirement]
+  ✅ Billing/subscription admin layer for your own SaaS tiering  [Source: Recommended — multi-tenant sales requirement]
+  ✅ Client/retainer tracker inside CRM  [Source: Recommended, based on your Ziqsy billing structure]

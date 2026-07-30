@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState, startTransition } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 
 export function useTabPersistence<T extends string>(
   storageKey: string,
@@ -9,7 +9,6 @@ export function useTabPersistence<T extends string>(
   validTabs: T[]
 ) {
   const searchParams = useSearchParams();
-  const router = useRouter();
   const [activeTab, setActiveTab] = useState<T>(defaultTab);
 
   useEffect(() => {
@@ -27,17 +26,14 @@ export function useTabPersistence<T extends string>(
   }, [searchParams, storageKey, validTabs]);
 
   const handleTabChange = (tab: T) => {
-    startTransition(() => {
-      setActiveTab(tab);
-      if (typeof window !== "undefined") {
-        localStorage.setItem(storageKey, tab);
-      }
+    setActiveTab(tab);
+    if (typeof window !== "undefined") {
+      localStorage.setItem(storageKey, tab);
       const params = new URLSearchParams(window.location.search);
       params.set("tab", tab);
-      router.replace(`${window.location.pathname}?${params.toString()}`, {
-        scroll: false,
-      });
-    });
+      const newUrl = `${window.location.pathname}?${params.toString()}`;
+      window.history.replaceState(null, "", newUrl);
+    }
   };
 
   return [activeTab, handleTabChange] as const;

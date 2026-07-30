@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { UserCheck, UserX, Clock, CheckCircle2, AlertCircle, Sparkles } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -71,7 +70,7 @@ export function PendingApprovalsCard() {
   };
 
   if (loading || pendingUsers.length === 0) {
-    if (!actionSuccess) return null; // Don't take up space if no pending approvals
+    if (!actionSuccess) return null;
   }
 
   return (
@@ -81,7 +80,7 @@ export function PendingApprovalsCard() {
       <CardHeader className="flex flex-row items-center justify-between pb-3">
         <div>
           <CardTitle className="text-base font-bold flex items-center gap-2 text-amber-600 dark:text-amber-400">
-            <Clock className="w-5 h-5 text-amber-500 animate-pulse" /> Pending Employee Registration Approvals
+            <i className="fa-solid fa-clock text-amber-500 animate-pulse text-base" /> Pending Employee Registration Approvals
           </CardTitle>
           <CardDescription className="text-xs text-muted-foreground mt-0.5">
             New employee signups requiring administrator review and account activation
@@ -95,7 +94,7 @@ export function PendingApprovalsCard() {
       <CardContent className="space-y-3">
         {actionSuccess && (
           <div className="p-3 text-xs bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 rounded-md font-medium flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4 shrink-0" />
+            <i className="fa-solid fa-circle-check text-base shrink-0" />
             <span>{actionSuccess}</span>
           </div>
         )}
@@ -124,7 +123,7 @@ export function PendingApprovalsCard() {
                   disabled={processingId === user._id}
                   className="text-xs h-8 text-destructive hover:bg-destructive/10 cursor-pointer"
                 >
-                  <UserX className="w-3.5 h-3.5 mr-1" /> Decline
+                  <i className="fa-solid fa-user-xmark text-xs mr-1" /> Decline
                 </Button>
                 
                 <Button
@@ -134,7 +133,7 @@ export function PendingApprovalsCard() {
                   disabled={processingId === user._id}
                   className="text-xs h-8 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shadow-sm cursor-pointer"
                 >
-                  <UserCheck className="w-3.5 h-3.5 mr-1" /> Approve Account
+                  <i className="fa-solid fa-user-check text-xs mr-1" /> Approve Account
                 </Button>
               </div>
             </div>

@@ -2,18 +2,6 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
-import { 
-  Clock, 
-  ArrowUpRight,
-  Calendar,
-  CheckSquare,
-  Sparkles,
-  UserCheck,
-  Bell,
-  Sun,
-  Play,
-  Square
-} from "lucide-react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -22,18 +10,27 @@ export function EmployeeDashboard({ user }: { user: any }) {
   const [clockedIn, setClockedIn] = useState(false);
   const [clockTime, setClockTime] = useState<string | null>(null);
   const [tasks, setTasks] = useState<any[]>([]);
+  const [timesheets, setTimesheets] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function fetchEmployeeData() {
       try {
-        const res = await fetch("/api/tasks");
-        if (res.ok) {
-          const data = await res.json();
-          setTasks(data.tasks || []);
+        const [taskRes, tsRes] = await Promise.all([
+          fetch("/api/tasks"),
+          fetch("/api/timesheets")
+        ]);
+
+        if (taskRes.ok) {
+          const tData = await taskRes.json();
+          setTasks(tData.tasks || []);
+        }
+        if (tsRes.ok) {
+          const tsData = await tsRes.json();
+          setTimesheets(tsData.entries || []);
         }
       } catch (err) {
-        console.error("Failed to fetch employee tasks:", err);
+        console.error("Failed to fetch employee tasks/timesheets:", err);
       } finally {
         setLoading(false);
       }
@@ -51,13 +48,15 @@ export function EmployeeDashboard({ user }: { user: any }) {
     }
   };
 
+  const totalLoggedHours = timesheets.reduce((acc, t) => acc + (t.hours || 0), 0);
+
   return (
     <div className="space-y-8 animate-in fade-in">
       {/* Welcome Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gradient-to-r from-emerald-500/10 via-emerald-500/5 to-transparent p-6 rounded-2xl border border-emerald-500/20">
         <div>
           <div className="flex items-center gap-2 text-xs font-bold text-emerald-500 tracking-wider uppercase mb-1">
-            <UserCheck className="w-4 h-4 text-emerald-500" /> Employee Portal
+            <i className="fa-solid fa-user-check text-emerald-500 text-sm" /> Employee Portal
           </div>
           <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground flex items-center gap-2">
             Hello, <span className="text-emerald-500">{user?.name || "Employee"}</span> <i className="fa-solid fa-hand-sparkles text-amber-400 ml-1.5 inline-block" />
@@ -69,7 +68,7 @@ export function EmployeeDashboard({ user }: { user: any }) {
         <div className="flex items-center gap-3">
           <Button asChild color="primary" size="sm">
             <Link href="/dashboard/calendar">
-              <Calendar className="w-4 h-4 mr-2" /> My Shift Calendar
+              <i className="fa-solid fa-calendar-days text-xs mr-2" /> My Shift Calendar
             </Link>
           </Button>
           <Button asChild variant="outline" size="sm">
@@ -86,11 +85,11 @@ export function EmployeeDashboard({ user }: { user: any }) {
               <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">My Shift Schedule</p>
               <p className="text-lg font-bold text-foreground">{user?.shiftName || "Standard Day Shift"}</p>
               <p className="text-xs text-emerald-500 font-mono font-semibold flex items-center gap-1 mt-1">
-                <Sun className="w-3.5 h-3.5 text-amber-500" /> {user?.shiftTime || "09:00 AM - 05:00 PM"}
+                <i className="fa-solid fa-sun text-amber-500 text-xs" /> {user?.shiftTime || "09:00 AM - 05:00 PM"}
               </p>
             </div>
-            <div className="p-3 bg-emerald-500/10 text-emerald-500 rounded-xl">
-              <Clock className="w-6 h-6" />
+            <div className="p-3 bg-emerald-500/10 text-emerald-500 rounded-xl flex items-center justify-center w-12 h-12">
+              <i className="fa-solid fa-clock text-xl" />
             </div>
           </CardContent>
         </Card>
@@ -99,13 +98,13 @@ export function EmployeeDashboard({ user }: { user: any }) {
           <CardContent className="p-5 flex items-center justify-between">
             <div className="space-y-1">
               <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">My Timesheet Hours</p>
-              <p className="text-2xl font-bold text-foreground">37.5 Hrs</p>
+              <p className="text-2xl font-bold text-foreground">{loading ? "..." : `${totalLoggedHours} Hrs`}</p>
               <p className="text-xs text-primary font-medium flex items-center gap-1 mt-1">
                 Target: 40.0 Hrs this week
               </p>
             </div>
-            <div className="p-3 bg-primary/10 text-primary rounded-xl">
-              <Calendar className="w-6 h-6" />
+            <div className="p-3 bg-primary/10 text-primary rounded-xl flex items-center justify-center w-12 h-12">
+              <i className="fa-solid fa-calendar-days text-xl" />
             </div>
           </CardContent>
         </Card>
@@ -119,8 +118,8 @@ export function EmployeeDashboard({ user }: { user: any }) {
                 Tasks assigned to you
               </p>
             </div>
-            <div className="p-3 bg-amber-500/10 text-amber-500 rounded-xl">
-              <CheckSquare className="w-6 h-6" />
+            <div className="p-3 bg-amber-500/10 text-amber-500 rounded-xl flex items-center justify-center w-12 h-12">
+              <i className="fa-solid fa-list-check text-xl" />
             </div>
           </CardContent>
         </Card>
@@ -134,8 +133,8 @@ export function EmployeeDashboard({ user }: { user: any }) {
                 Paid Time Off & Casual
               </p>
             </div>
-            <div className="p-3 bg-sky-500/10 text-sky-500 rounded-xl">
-              <Sparkles className="w-6 h-6" />
+            <div className="p-3 bg-sky-500/10 text-sky-500 rounded-xl flex items-center justify-center w-12 h-12">
+              <i className="fa-solid fa-sparkles text-xl" />
             </div>
           </CardContent>
         </Card>
@@ -150,7 +149,7 @@ export function EmployeeDashboard({ user }: { user: any }) {
             <CardHeader className="flex flex-row items-center justify-between pb-4">
               <div>
                 <CardTitle className="text-lg font-bold flex items-center gap-2">
-                  <i className="fa-solid fa-clock-rotate-left text-primary" /> Today's Shift & Attendance
+                  <i className="fa-solid fa-clock-rotate-left text-primary text-lg" /> Today's Shift & Attendance
                 </CardTitle>
                 <CardDescription>Your assigned shift schedule & real-time punch status</CardDescription>
               </div>
@@ -163,11 +162,11 @@ export function EmployeeDashboard({ user }: { user: any }) {
               >
                 {clockedIn ? (
                   <>
-                    <Square className="w-4 h-4 fill-current" /> Clock Out
+                    <i className="fa-solid fa-square text-xs" /> Clock Out
                   </>
                 ) : (
                   <>
-                    <Play className="w-4 h-4 fill-current" /> Clock In Now
+                    <i className="fa-solid fa-play text-xs" /> Clock In Now
                   </>
                 )}
               </Button>
@@ -221,13 +220,13 @@ export function EmployeeDashboard({ user }: { user: any }) {
             <CardHeader className="flex flex-row items-center justify-between pb-4">
               <div>
                 <CardTitle className="text-lg font-semibold flex items-center gap-2">
-                  <CheckSquare className="w-5 h-5 text-emerald-500" /> My Assigned Tasks
+                  <i className="fa-solid fa-list-check text-emerald-500 text-lg" /> My Assigned Tasks
                 </CardTitle>
                 <CardDescription>Deliverables assigned to you</CardDescription>
               </div>
               <Button asChild variant="ghost" size="sm">
                 <Link href="/dashboard/tasks" className="gap-1 text-primary">
-                  View All Tasks <ArrowUpRight className="w-4 h-4" />
+                  View All Tasks <i className="fa-solid fa-arrow-up-right-from-square text-xs" />
                 </Link>
               </Button>
             </CardHeader>
@@ -260,7 +259,7 @@ export function EmployeeDashboard({ user }: { user: any }) {
           <Card>
             <CardHeader className="pb-4">
               <CardTitle className="text-lg font-semibold flex items-center gap-2">
-                <Bell className="w-5 h-5 text-amber-500" /> Workspace Announcements
+                <i className="fa-solid fa-bullhorn text-amber-500 text-lg" /> Workspace Announcements
               </CardTitle>
               <CardDescription>Company notices and team updates</CardDescription>
             </CardHeader>

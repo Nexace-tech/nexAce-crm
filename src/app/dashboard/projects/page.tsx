@@ -180,12 +180,19 @@ export default function ProjectsPage() {
     }
   };
 
+  const [allowedExtensions, setAllowedExtensions] = useState<string[]>([]);
+
   const fetchDriveFiles = async () => {
     try {
       const res = await fetch("/api/drive");
       if (res.ok) {
         const data = await res.json();
         setDriveFiles(data.files || []);
+      }
+      const settingsRes = await fetch("/api/settings/allowed-files");
+      if (settingsRes.ok) {
+        const sData = await settingsRes.json();
+        setAllowedExtensions(sData.allowedExtensions || []);
       }
     } catch (e) {
       console.error(e);
@@ -822,32 +829,56 @@ export default function ProjectsPage() {
               <CardDescription className="font-normal text-xs">Store assets, project specs, and documents securely in workspace drive storage.</CardDescription>
             </CardHeader>
             <CardContent className="px-0 pt-2">
-              <form onSubmit={handleFileUpload} className="flex flex-col sm:flex-row items-end gap-3">
-                <div className="space-y-1 flex-1 w-full">
-                  <label className="text-xs font-semibold text-foreground">Select File</label>
-                  <Input
-                    type="file"
-                    onChange={(e) => {
-                      if (e.target.files && e.target.files[0]) {
-                        setUploadFile(e.target.files[0]);
-                        if (!uploadName) setUploadName(e.target.files[0].name);
-                      }
-                    }}
-                    required
-                  />
+              <form onSubmit={handleFileUpload} className="space-y-4">
+                {allowedExtensions.length > 0 && (
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/40 p-2.5 rounded-lg border border-border/60">
+                    <i className="fa-solid fa-shield-halved text-primary text-xs" />
+                    <span>Allowed File Types (Admin Managed):</span>
+                    <div className="flex items-center gap-1 flex-wrap">
+                      {allowedExtensions.map((ext) => (
+                        <span key={ext} className="px-1.5 py-0.5 rounded bg-primary/10 text-primary font-mono text-[10px] uppercase font-bold border border-primary/20">
+                          .{ext}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <div className="flex flex-col sm:flex-row items-end gap-3">
+                  <div className="space-y-1 flex-1 w-full">
+                    <label className="text-xs font-semibold text-foreground">Select File</label>
+                    <Input
+                      type="file"
+                      accept={allowedExtensions.map((e) => `.${e}`).join(",")}
+                      onChange={(e) => {
+                        if (e.target.files && e.target.files[0]) {
+                          const selected = e.target.files[0];
+                          const ext = selected.name.includes(".") ? selected.name.split(".").pop()?.toLowerCase() || "" : "";
+                          if (allowedExtensions.length > 0 && ext && !allowedExtensions.includes(ext)) {
+                            showToast(`File type .${ext} is not allowed. Allowed: ${allowedExtensions.map(e => `.${e}`).join(", ")}`, "error");
+                            e.target.value = "";
+                            setUploadFile(null);
+                            return;
+                          }
+                          setUploadFile(selected);
+                          if (!uploadName) setUploadName(selected.name);
+                        }
+                      }}
+                      required
+                    />
+                  </div>
+                  <div className="space-y-1 flex-1 w-full">
+                    <label className="text-xs font-semibold text-foreground">Display Name (Optional)</label>
+                    <Input
+                      type="text"
+                      value={uploadName}
+                      onChange={(e) => setUploadName(e.target.value)}
+                      placeholder="e.g. Project_Brief_v2.pdf"
+                    />
+                  </div>
+                  <Button color="primary" size="sm" type="submit" disabled={!uploadFile} className="gap-2 shrink-0 h-9 font-semibold">
+                    <i className="fa-solid fa-upload text-xs" /> Upload
+                  </Button>
                 </div>
-                <div className="space-y-1 flex-1 w-full">
-                  <label className="text-xs font-semibold text-foreground">Display Name (Optional)</label>
-                  <Input
-                    type="text"
-                    value={uploadName}
-                    onChange={(e) => setUploadName(e.target.value)}
-                    placeholder="e.g. Project_Brief_v2.pdf"
-                  />
-                </div>
-                <Button color="primary" size="sm" type="submit" disabled={!uploadFile} className="gap-2 shrink-0 h-9 font-semibold">
-                  <i className="fa-solid fa-upload text-xs" /> Upload
-                </Button>
               </form>
             </CardContent>
           </Card>

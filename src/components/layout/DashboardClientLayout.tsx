@@ -1,33 +1,14 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { 
-  LayoutDashboard, 
-  Users, 
-  CalendarDays, 
-  FolderGit2, 
-  MessageSquare, 
-  Briefcase, 
-  Target, 
-  BarChart3, 
-  Handshake, 
-  Share2, 
-  Search, 
-  Menu, 
-  X, 
-  Sparkles,
-  Settings,
-  LogOut,
-  ChevronDown,
-  ChevronLeft
-} from "lucide-react";
 import { useAuthContext } from "@/context/AuthContext";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import { ZoomControl } from "@/components/layout/ZoomControl";
 import { NotificationBell } from "@/components/layout/NotificationBell";
 import { LogoutHeaderBtn } from "@/components/layout/LogoutHeaderBtn";
+import { CommandPalette } from "@/components/layout/CommandPalette";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
 
@@ -66,7 +47,19 @@ export function DashboardClientLayout({ session, menuItems, children }: Dashboar
   const { user } = useAuthContext();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const pathname = usePathname();
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "k") {
+        e.preventDefault();
+        setCommandPaletteOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   const userName = user?.name || session.userName;
   const role = user?.role || session.role;
@@ -93,32 +86,32 @@ export function DashboardClientLayout({ session, menuItems, children }: Dashboar
       {/* Dashcode Sidebar */}
       <aside
         className={cn(
-          "fixed top-0 bottom-0 left-0 z-50 flex flex-col w-72 border-r border-border bg-card/95 backdrop-blur-md transition-all duration-300 lg:static lg:h-screen lg:sticky lg:top-0",
-          mobileOpen ? "translate-x-0" : "-translate-x-full",
-          sidebarCollapsed 
-            ? "lg:-translate-x-full lg:w-0 lg:min-w-0 lg:border-r-0 lg:overflow-hidden lg:p-0" 
-            : "lg:translate-x-0 lg:w-72"
+          "fixed top-0 bottom-0 left-0 z-50 flex flex-col border-r border-border bg-card/95 backdrop-blur-md transition-all duration-300 lg:static lg:h-screen lg:sticky lg:top-0",
+          mobileOpen ? "translate-x-0 w-72" : "-translate-x-full lg:translate-x-0",
+          sidebarCollapsed ? "lg:w-20" : "lg:w-72"
         )}
       >
         {/* Brand Header */}
-        <div className="flex items-center justify-between h-16 px-6 border-b border-border">
-          <Link href="/dashboard" className="flex items-center gap-3 font-semibold text-lg tracking-tight">
-            <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-primary text-primary-foreground shadow-md shadow-primary/30">
-              <Sparkles className="w-5 h-5" />
+        <div className={cn("flex items-center justify-between h-16 border-b border-border transition-all", sidebarCollapsed ? "px-3 justify-center" : "px-6")}>
+          <Link href="/dashboard" className="flex items-center gap-3 font-semibold text-lg tracking-tight overflow-hidden">
+            <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-primary text-primary-foreground shadow-md shadow-primary/30 shrink-0">
+              <i className="fa-solid fa-sparkles text-base" />
             </div>
-            <span className="bg-gradient-to-r from-primary to-blue-500 bg-clip-text text-transparent font-bold">
-              NexAce CRM
-            </span>
+            {!sidebarCollapsed && (
+              <span className="bg-gradient-to-r from-primary to-blue-500 bg-clip-text text-transparent font-bold truncate">
+                NexAce CRM
+              </span>
+            )}
           </Link>
           <div className="flex items-center gap-1">
-            {/* Collapse sidebar button (desktop only) */}
+            {/* Collapse / Expand toggle button (desktop only) */}
             <button
-              className="hidden lg:flex text-muted-foreground hover:text-foreground p-1.5 rounded-lg hover:bg-accent transition-colors"
-              onClick={() => setSidebarCollapsed(true)}
-              aria-label="Collapse Sidebar"
-              title="Collapse Sidebar"
+              className="hidden lg:flex text-muted-foreground hover:text-foreground p-1.5 rounded-lg hover:bg-accent transition-colors cursor-pointer"
+              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+              aria-label={sidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+              title={sidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
             >
-              <ChevronLeft className="w-4 h-4" />
+              {sidebarCollapsed ? <i className="fa-solid fa-chevron-right text-xs" /> : <i className="fa-solid fa-chevron-left text-xs" />}
             </button>
             {/* Close sidebar button (mobile only) */}
             <button
@@ -126,67 +119,52 @@ export function DashboardClientLayout({ session, menuItems, children }: Dashboar
               onClick={() => setMobileOpen(false)}
               aria-label="Close Sidebar"
             >
-              <X className="w-5 h-5" />
+              <i className="fa-solid fa-xmark text-base" />
             </button>
           </div>
         </div>
 
-        {/* Tenant Switcher Label */}
-        <div className="px-6 py-3 border-b border-border/50 bg-muted/40 flex items-center justify-between">
-          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Workspace</span>
-          <span className="text-xs font-medium bg-primary/10 text-primary px-2 py-0.5 rounded-md truncate max-w-[140px]">
-            {tenantName}
-          </span>
-        </div>
-
-        {/* Navigation Menu */}
-        <nav className="flex-1 px-4 py-4 space-y-1.5 overflow-y-auto no-scrollbar">
+        {/* Menu Navigation Items */}
+        <div className="flex-1 px-3 py-4 space-y-1.5 overflow-y-auto">
           {menuItems.map((item) => {
-            const isActive = pathname === item.href;
-            const faClass = item.icon || fontAwesomeIconMap[item.name] || "fa-solid fa-chart-simple";
+            const isActive = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href));
+            const iconClass = fontAwesomeIconMap[item.name] || item.icon || "fa-solid fa-layer-group";
+
             return (
               <Link
-                key={item.name}
+                key={item.href}
                 href={item.href}
                 onClick={() => setMobileOpen(false)}
                 className={cn(
-                  "flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 group relative",
+                  "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 group relative",
                   isActive
-                    ? "bg-primary text-primary-foreground shadow-sm shadow-primary/20 font-semibold"
-                    : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                    ? "bg-primary text-primary-foreground shadow-md shadow-primary/25 font-semibold"
+                    : "text-muted-foreground hover:text-foreground hover:bg-accent/60",
+                  sidebarCollapsed && "justify-center px-0"
                 )}
+                title={sidebarCollapsed ? item.name : undefined}
               >
-                <span className={cn("w-5 text-center text-base transition-transform group-hover:scale-110 flex items-center justify-center", isActive ? "text-primary-foreground" : "text-muted-foreground group-hover:text-foreground")}>
-                  <i className={faClass} />
-                </span>
-                <span className="truncate">{item.name}</span>
-                {isActive && (
-                  <span className="ml-auto w-1.5 h-1.5 rounded-full bg-primary-foreground animate-pulse" />
-                )}
+                <i className={cn(iconClass, "text-base transition-transform group-hover:scale-110 shrink-0", isActive ? "text-primary-foreground" : "text-muted-foreground group-hover:text-foreground")} />
+                {!sidebarCollapsed && <span className="truncate">{item.name}</span>}
               </Link>
             );
           })}
-        </nav>
+        </div>
 
-        {/* Sidebar Footer User Profile */}
-        <div className="p-4 border-t border-border bg-card/50">
-          <div className="flex items-center gap-3 p-2 rounded-lg bg-accent/50 border border-border/50">
-            <Avatar size="sm">
-              <AvatarFallback className="bg-primary/20 text-primary font-bold text-xs">
-                {initials}
+        {/* User Footer Profile Card */}
+        <div className={cn("border-t border-border bg-card/50", sidebarCollapsed ? "p-2" : "p-4")}>
+          <div className={cn("flex items-center rounded-lg bg-accent/50 border border-border/50", sidebarCollapsed ? "justify-center p-2" : "gap-3 p-2")}>
+            <Avatar className="h-9 w-9 shrink-0 border border-primary/20">
+              <AvatarFallback className="bg-primary/10 text-primary font-bold text-xs">
+                {session.userName ? session.userName.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2) : "U"}
               </AvatarFallback>
             </Avatar>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate text-foreground leading-none">{userName}</p>
-              <p className="text-xs text-muted-foreground capitalize mt-1 truncate">{role}</p>
-            </div>
-            <Link
-              href="/dashboard/settings"
-              className="text-muted-foreground hover:text-foreground p-1.5 rounded-md hover:bg-background transition-colors"
-              title="Settings"
-            >
-              <Settings className="w-4 h-4" />
-            </Link>
+            {!sidebarCollapsed && (
+              <div className="flex flex-col min-w-0 flex-1">
+                <p className="text-xs font-bold text-foreground truncate">{session.userName}</p>
+                <span className="text-[10px] text-muted-foreground font-medium truncate">{session.role} • {tenantName}</span>
+              </div>
+            )}
           </div>
         </div>
       </aside>
@@ -211,17 +189,24 @@ export function DashboardClientLayout({ session, menuItems, children }: Dashboar
               aria-label={sidebarCollapsed ? "Expand Sidebar" : "Open Sidebar"}
               title={sidebarCollapsed ? "Expand Sidebar" : "Open Sidebar"}
             >
-              <Menu className="w-5 h-5" />
+              <i className="fa-solid fa-bars text-base" />
             </button>
 
-            {/* Global Search Bar */}
-            <div className="relative w-full">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            {/* Global Search Bar (Triggers Command Palette) */}
+            <div
+              className="relative w-full cursor-pointer"
+              onClick={() => setCommandPaletteOpen(true)}
+            >
+              <i className="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground" />
               <input
                 type="text"
-                placeholder="Search team, projects, tasks..."
-                className="w-full pl-9 pr-4 py-2 text-sm bg-muted/60 dark:bg-slate-800/80 hover:bg-muted/80 dark:hover:bg-slate-800 border border-border/80 dark:border-slate-700/80 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:bg-background dark:focus:bg-slate-900 transition-all placeholder:text-muted-foreground shadow-xs"
+                readOnly
+                placeholder="Search command palette... (e.g. OKRs, Referrals, Timesheets)"
+                className="w-full pl-9 pr-14 py-2 text-sm bg-muted/60 dark:bg-slate-800/80 hover:bg-muted/80 dark:hover:bg-slate-800 border border-border/80 dark:border-slate-700/80 rounded-lg focus:outline-none transition-all placeholder:text-muted-foreground shadow-xs cursor-pointer"
               />
+              <kbd className="absolute right-3 top-1/2 -translate-y-1/2 hidden sm:inline-block px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground bg-background border border-border rounded shadow-2xs">
+                Ctrl + K
+              </kbd>
             </div>
           </div>
 
@@ -236,6 +221,9 @@ export function DashboardClientLayout({ session, menuItems, children }: Dashboar
             <LogoutHeaderBtn />
           </div>
         </header>
+
+        {/* Command Palette Modal */}
+        <CommandPalette open={commandPaletteOpen} onClose={() => setCommandPaletteOpen(false)} />
 
         {/* Content Body */}
         <main className="flex-1 p-6 md:p-8 overflow-y-auto bg-background">

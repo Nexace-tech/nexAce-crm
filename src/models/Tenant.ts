@@ -3,12 +3,17 @@ import mongoose, { Schema, Document, Model } from "mongoose";
 export interface ITenant extends Document {
   name: string;
   slug: string;
+  allowedExtensions?: string[];
   createdAt: Date;
 }
 
 const TenantSchema: Schema = new Schema({
   name: { type: String, required: true },
   slug: { type: String, required: true, unique: true, lowercase: true, trim: true },
+  allowedExtensions: {
+    type: [String],
+    default: ["png", "jpg", "jpeg", "pdf", "docx", "xlsx", "zip", "csv", "txt", "svg", "webp"],
+  },
   createdAt: { type: Date, default: Date.now }
 });
 

@@ -3,6 +3,7 @@ import { getSession } from "@/lib/session";
 import { connectToDatabase } from "@/lib/db";
 import { DriveFile } from "@/models/DriveFile";
 import { ActivityLog } from "@/models/ActivityLog";
+import { Tenant } from "@/models/Tenant";
 import mongoose from "mongoose";
 import fs from "fs";
 import path from "path";
@@ -55,6 +56,20 @@ export async function POST(request: Request) {
     const fileName = (formData.get("fileName") as string) || (file as any).name || "uploaded_file";
     const mimeType = file.type || "application/octet-stream";
     const size = file.size;
+
+    // Fetch tenant allowed extensions setting
+    const tenantDoc = await Tenant.findById(session.tenantId);
+    const allowedExts: string[] = (tenantDoc?.allowedExtensions && tenantDoc.allowedExtensions.length > 0)
+      ? tenantDoc.allowedExtensions.map((e: string) => e.toLowerCase())
+      : ["png", "jpg", "jpeg", "pdf", "docx", "xlsx", "zip", "csv", "txt", "svg", "webp"];
+
+    // Check uploaded file extension
+    const fileExt = fileName.includes(".") ? fileName.split(".").pop()?.toLowerCase() || "" : "";
+    if (fileExt && !allowedExts.includes(fileExt)) {
+      return NextResponse.json({
+        error: `File type '.${fileExt}' is not allowed by your Admin workspace policy. Allowed formats: ${allowedExts.map(e => `.${e}`).join(", ")}`
+      }, { status: 400 });
+    }
 
     // Convert file Blob to Node Buffer
     const arrayBuffer = await file.arrayBuffer();

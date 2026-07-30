@@ -35,7 +35,7 @@ export async function GET() {
 }
 
 /**
- * POST: Create a new notification.
+ * POST: Create a new notification or broadcast to all tenant members.
  */
 export async function POST(request: Request) {
   try {
@@ -44,13 +44,32 @@ export async function POST(request: Request) {
 
     const { tenantObjectId, userObjectId } = authResult;
     const body = await request.json();
-    const { recipientId, title, message, type, linkUrl } = body;
+    const { recipientId, title, message, type, linkUrl, broadcast } = body;
 
     if (!title || !message) {
       return NextResponse.json({ error: "Title and Message are required" }, { status: 400 });
     }
 
     await connectToDatabase();
+
+    if (broadcast) {
+      // Import User model dynamically to get all tenant members
+      const { User } = await import("@/models/User");
+      const tenantUsers = await User.find({ tenantId: tenantObjectId }).select("_id");
+      
+      const docs = tenantUsers.map((u) => ({
+        recipientId: u._id,
+        title: title.trim(),
+        message: message.trim(),
+        type: type || "announcement",
+        linkUrl: linkUrl || "",
+        read: false,
+        tenantId: tenantObjectId,
+      }));
+
+      await Notification.insertMany(docs);
+      return NextResponse.json({ message: `Broadcast sent to ${docs.length} team members` }, { status: 201 });
+    }
 
     const newNotification = await Notification.create({
       recipientId: recipientId || userObjectId,
@@ -102,6 +121,38 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: "Invalid request payload" }, { status: 400 });
   } catch (error: any) {
     console.error("API PATCH Notification error:", error);
+    return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: 500 });
+  }
+}
+
+/**
+ * DELETE: Delete single notification or clear all notifications for the user.
+ */
+export async function DELETE(request: Request) {
+  try {
+    const authResult = await requireTenantSession();
+    if (isAuthError(authResult)) return authResult;
+
+    const { tenantObjectId, userObjectId } = authResult;
+    const { searchParams } = new URL(request.url);
+    const notificationId = searchParams.get("id");
+    const clearAll = searchParams.get("clearAll") === "true";
+
+    await connectToDatabase();
+
+    if (clearAll) {
+      await Notification.deleteMany({ tenantId: tenantObjectId, recipientId: userObjectId });
+      return NextResponse.json({ message: "Cleared all notifications" });
+    }
+
+    if (notificationId) {
+      await Notification.deleteOne({ _id: notificationId, tenantId: tenantObjectId, recipientId: userObjectId });
+      return NextResponse.json({ message: "Notification deleted" });
+    }
+
+    return NextResponse.json({ error: "Notification ID or clearAll required" }, { status: 400 });
+  } catch (error: any) {
+    console.error("API DELETE Notification error:", error);
     return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: 500 });
   }
 }

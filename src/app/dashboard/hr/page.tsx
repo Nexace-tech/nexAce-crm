@@ -2,12 +2,6 @@
 
 import React, { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
-import {
-  Calendar, ClipboardCheck, FileText, UserCheck, HelpCircle, Award,
-  Plus, X, CheckCircle, AlertCircle, MessageSquare, ChevronRight,
-  Users, ShieldCheck, Download, ExternalLink, Send, PlayCircle, Clock,
-  Filter, Search, UserCheck as UserIcon, FileCheck, Layers, Settings2
-} from "lucide-react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -54,13 +48,16 @@ export default function HRPage() {
   const [newChecklistUserId, setNewChecklistUserId] = useState("");
   const [newChecklistType, setNewChecklistType] = useState<"Onboarding" | "Offboarding">("Onboarding");
 
-  // Leaves State
-  const [leaves, setLeaves] = useState<LeaveData[]>([]);
+  // Leave Management State
+  const [leaves, setLeaves] = useState<any[]>([]);
   const [showLeaveForm, setShowLeaveForm] = useState(false);
   const [leaveType, setLeaveType] = useState("Casual");
   const [leaveStart, setLeaveStart] = useState("");
   const [leaveEnd, setLeaveEnd] = useState("");
   const [leaveReason, setLeaveReason] = useState("");
+  const [leaveSearchQuery, setLeaveSearchQuery] = useState("");
+  const [leaveStatusFilter, setLeaveStatusFilter] = useState("All");
+  const [leaveTypeFilter, setLeaveTypeFilter] = useState("All");
 
   // Vault State (Document Vault)
   const [documents, setDocuments] = useState<any[]>([]);
@@ -80,6 +77,9 @@ export default function HRPage() {
   const [casePriority, setCasePriority] = useState("Medium");
   const [selectedCase, setSelectedCase] = useState<CaseData | null>(null);
   const [commentText, setCommentText] = useState("");
+  const [caseSearchQuery, setCaseSearchQuery] = useState("");
+  const [caseCategoryFilter, setCaseCategoryFilter] = useState("All");
+  const [caseStatusFilter, setCaseStatusFilter] = useState("All");
 
   // Appraisals & KRAs State
   const [appraisals, setAppraisals] = useState<any[]>([]);
@@ -421,7 +421,7 @@ export default function HRPage() {
           "fixed top-4 right-4 z-50 px-4 py-3 rounded-lg shadow-lg border text-sm font-medium flex items-center gap-2 animate-in fade-in slide-in-from-top-2",
           toast.type === "success" ? "bg-emerald-500/90 text-white border-emerald-600" : "bg-destructive/90 text-white border-destructive"
         )}>
-          {toast.type === "success" ? <CheckCircle className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
+          {toast.type === "success" ? <i className="fa-solid fa-circle-check text-base" /> : <i className="fa-solid fa-circle-exclamation text-base" />}
           {toast.message}
         </div>
       )}
@@ -438,10 +438,10 @@ export default function HRPage() {
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <Button variant="outline" size="sm" onClick={() => { setActiveTab("leaves"); setShowLeaveForm(true); }} className="gap-2 cursor-pointer">
-            <Calendar className="w-4 h-4" /> Request Leave
+            <i className="fa-solid fa-calendar-days text-xs" /> Request Leave
           </Button>
           <Button color="primary" size="sm" onClick={() => { setActiveTab("cases"); setShowCaseForm(true); }} className="gap-2 cursor-pointer">
-            <Plus className="w-4 h-4" /> Submit Case
+            <i className="fa-solid fa-plus text-xs" /> Submit Case
           </Button>
         </div>
       </div>
@@ -454,7 +454,7 @@ export default function HRPage() {
               <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Total Workforce</p>
               <p className="text-2xl font-bold text-foreground">{directoryUsers.length} Employees</p>
             </div>
-            <div className="p-3 bg-primary/10 text-primary rounded-xl"><Users className="w-6 h-6" /></div>
+            <div className="p-3 bg-primary/10 text-primary rounded-xl"><i className="fa-solid fa-users text-xl" /></div>
           </CardContent>
         </Card>
         <Card className="border-l-4 border-l-emerald-500">
@@ -463,7 +463,7 @@ export default function HRPage() {
               <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Active Checklists</p>
               <p className="text-2xl font-bold text-foreground">{checklists.filter((c) => c.status === "In Progress").length} Ongoing</p>
             </div>
-            <div className="p-3 bg-emerald-500/10 text-emerald-500 rounded-xl"><FileCheck className="w-6 h-6" /></div>
+            <div className="p-3 bg-emerald-500/10 text-emerald-500 rounded-xl"><i className="fa-solid fa-clipboard-check text-xl" /></div>
           </CardContent>
         </Card>
         <Card className="border-l-4 border-l-amber-500">
@@ -472,7 +472,7 @@ export default function HRPage() {
               <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Pending Leaves</p>
               <p className="text-2xl font-bold text-foreground">{leaves.filter((l) => l.status === "Pending").length} Requests</p>
             </div>
-            <div className="p-3 bg-amber-500/10 text-amber-500 rounded-xl"><Calendar className="w-6 h-6" /></div>
+            <div className="p-3 bg-amber-500/10 text-amber-500 rounded-xl"><i className="fa-solid fa-calendar-days text-xl" /></div>
           </CardContent>
         </Card>
         <Card className="border-l-4 border-l-sky-500">
@@ -481,7 +481,7 @@ export default function HRPage() {
               <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Open HR Cases</p>
               <p className="text-2xl font-bold text-foreground">{cases.filter((c) => c.status === "Open" || c.status === "In Progress").length} Open</p>
             </div>
-            <div className="p-3 bg-sky-500/10 text-sky-500 rounded-xl"><HelpCircle className="w-6 h-6" /></div>
+            <div className="p-3 bg-sky-500/10 text-sky-500 rounded-xl"><i className="fa-solid fa-circle-question text-xl" /></div>
           </CardContent>
         </Card>
       </div>
@@ -504,38 +504,38 @@ export default function HRPage() {
           "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer shrink-0",
           activeTab === "leaves" ? "border-primary text-primary font-semibold" : "border-transparent text-muted-foreground hover:text-foreground"
         )}>
-          <Calendar className="w-4 h-4" /> Leave Management
+          <i className="fa-solid fa-calendar-days text-sm" /> Leave Management
         </button>
         <button onClick={() => setActiveTab("vault")} className={cn(
           "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer shrink-0",
           activeTab === "vault" ? "border-primary text-primary font-semibold" : "border-transparent text-muted-foreground hover:text-foreground"
         )}>
-          <ShieldCheck className="w-4 h-4 text-emerald-500" /> Document Vault
+          <i className="fa-solid fa-shield-halved text-sm text-emerald-500" /> Document Vault
         </button>
         <button onClick={() => setActiveTab("cases")} className={cn(
           "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer shrink-0",
           activeTab === "cases" ? "border-primary text-primary font-semibold" : "border-transparent text-muted-foreground hover:text-foreground"
         )}>
-          <HelpCircle className="w-4 h-4 text-amber-500" /> Help Desk
+          <i className="fa-solid fa-circle-question text-sm text-amber-500" /> Help Desk
         </button>
         <button onClick={() => setActiveTab("appraisals")} className={cn(
           "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer shrink-0",
           activeTab === "appraisals" ? "border-primary text-primary font-semibold" : "border-transparent text-muted-foreground hover:text-foreground"
         )}>
-          <Award className="w-4 h-4 text-indigo-500" /> Appraisals & KRAs
+          <i className="fa-solid fa-award text-sm text-indigo-500" /> Appraisals & KRAs
         </button>
         <button onClick={() => setActiveTab("probation")} className={cn(
           "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer shrink-0",
           activeTab === "probation" ? "border-primary text-primary font-semibold" : "border-transparent text-muted-foreground hover:text-foreground"
         )}>
-          <Clock className="w-4 h-4 text-sky-500" /> Review Cycle & Probation
+          <i className="fa-solid fa-clock text-sm text-sky-500" /> Review Cycle & Probation
         </button>
         {isManagerOrAdmin && (
           <button onClick={() => setActiveTab("sandbox")} className={cn(
             "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer shrink-0",
             activeTab === "sandbox" ? "border-primary text-primary font-semibold" : "border-transparent text-muted-foreground hover:text-foreground"
           )}>
-            <Settings2 className="w-4 h-4 text-purple-500" /> HR Sandbox
+            <i className="fa-solid fa-sliders text-sm text-purple-500" /> HR Sandbox
           </button>
         )}
       </div>
@@ -545,7 +545,7 @@ export default function HRPage() {
         <div className="space-y-4">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-muted/20 p-3 rounded-lg border border-border">
             <div className="flex items-center gap-2 w-full sm:w-auto">
-              <Search className="w-4 h-4 text-muted-foreground" />
+              <i className="fa-solid fa-magnifying-glass text-muted-foreground text-sm" />
               <Input
                 placeholder="Search by name or email..."
                 value={searchQuery}
@@ -636,7 +636,7 @@ export default function HRPage() {
             </div>
             {isManagerOrAdmin && (
               <Button color="primary" size="sm" onClick={() => setShowChecklistModal(true)} className="gap-1">
-                <Plus className="w-4 h-4" /> Start Checklist
+                <i className="fa-solid fa-plus text-xs" /> Start Checklist
               </Button>
             )}
           </div>
@@ -700,7 +700,48 @@ export default function HRPage() {
       {/* TAB 3: LEAVE MANAGEMENT */}
       {activeTab === "leaves" && (
         <div className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-muted/20 p-3 rounded-lg border border-border">
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <i className="fa-solid fa-magnifying-glass text-muted-foreground text-sm" />
+              <Input
+                placeholder="Search by employee name..."
+                value={leaveSearchQuery}
+                onChange={(e) => setLeaveSearchQuery(e.target.value)}
+                className="w-full sm:w-64 h-9"
+              />
+            </div>
+            <div className="flex items-center gap-3 w-full sm:w-auto flex-wrap">
+              <select
+                value={leaveStatusFilter}
+                onChange={(e) => setLeaveStatusFilter(e.target.value)}
+                className="h-9 px-3 text-xs bg-background border border-border rounded-md text-foreground"
+              >
+                <option value="All">All Statuses</option>
+                <option value="Approved">Approved</option>
+                <option value="Pending">Pending</option>
+                <option value="Rejected">Rejected</option>
+              </select>
+
+              <select
+                value={leaveTypeFilter}
+                onChange={(e) => setLeaveTypeFilter(e.target.value)}
+                className="h-9 px-3 text-xs bg-background border border-border rounded-md text-foreground"
+              >
+                <option value="All">All Types</option>
+                <option value="Casual">Casual Leave</option>
+                <option value="Sick">Sick Leave</option>
+                <option value="Earned">Earned Leave</option>
+                <option value="Unpaid">Unpaid Leave</option>
+              </select>
+
+              <Button color="primary" size="sm" onClick={() => setShowLeaveForm(true)} className="gap-1.5 cursor-pointer">
+                <i className="fa-solid fa-plus text-xs" /> Request Time-Off
+              </Button>
+            </div>
+          </div>
+
+          {/* Leave Balances Header Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <Card className="p-4 text-center">
               <p className="text-xs text-muted-foreground font-semibold uppercase">Casual Leave Balance</p>
               <p className="text-2xl font-bold text-primary mt-1">12 Days</p>
@@ -714,42 +755,71 @@ export default function HRPage() {
               <p className="text-2xl font-bold text-amber-500 mt-1">15 Days</p>
             </Card>
             <Card className="p-4 text-center">
-              <p className="text-xs text-muted-foreground font-semibold uppercase">Unpaid Leaves Used</p>
-              <p className="text-2xl font-bold text-slate-400 mt-1">0 Days</p>
+              <p className="text-xs text-muted-foreground font-semibold uppercase">Total Approved Leaves</p>
+              <p className="text-2xl font-bold text-indigo-400 mt-1">
+                {leaves.filter((l) => l.status === "Approved").length} Record(s)
+              </p>
             </Card>
           </div>
 
+          {/* Leave Records List */}
           <div className="space-y-3">
-            {leaves.map((l) => (
-              <Card key={l._id} className="hover:shadow-md transition-all">
-                <CardContent className="p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                  <div className="space-y-1 flex-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p className="font-semibold text-foreground">{l.userName}</p>
-                      <Badge color="primary" variant="soft">{l.type}</Badge>
-                      <Badge color={l.status === "Approved" ? "success" : l.status === "Rejected" ? "destructive" : "warning"}>
-                        {l.status}
-                      </Badge>
+            {leaves
+              .filter((l) => {
+                const matchesSearch = !leaveSearchQuery || (l.userName && l.userName.toLowerCase().includes(leaveSearchQuery.toLowerCase()));
+                const matchesStatus = leaveStatusFilter === "All" || l.status === leaveStatusFilter;
+                const matchesType = leaveTypeFilter === "All" || l.type === leaveTypeFilter;
+                return matchesSearch && matchesStatus && matchesType;
+              })
+              .map((l) => (
+                <Card key={l._id} className="hover:shadow-md transition-all">
+                  <CardContent className="p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                    <div className="flex items-center gap-4 flex-1">
+                      <div className="h-10 w-10 rounded-full bg-primary/20 text-primary font-bold flex items-center justify-center text-sm border border-primary/30 shrink-0">
+                        {l.userName?.charAt(0) || "?"}
+                      </div>
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="font-bold text-sm text-foreground">{l.userName}</p>
+                          <Badge color="primary" variant="soft">{l.type} Leave</Badge>
+                          <Badge color={l.status === "Approved" ? "success" : l.status === "Rejected" ? "destructive" : "warning"}>
+                            {l.status}
+                          </Badge>
+                        </div>
+                        <p className="text-xs text-muted-foreground font-medium flex items-center gap-2">
+                          <i className="fa-solid fa-calendar-days text-xs text-primary" />
+                          {new Date(l.startDate).toLocaleDateString()} — {new Date(l.endDate).toLocaleDateString()}
+                        </p>
+                        <p className="text-xs text-muted-foreground italic">"{l.reason}"</p>
+                      </div>
                     </div>
-                    <p className="text-xs text-muted-foreground">
-                      {new Date(l.startDate).toLocaleDateString()} — {new Date(l.endDate).toLocaleDateString()}
-                    </p>
-                    <p className="text-xs text-muted-foreground">{l.reason}</p>
-                  </div>
 
-                  {isManagerOrAdmin && l.status === "Pending" && (
-                    <div className="flex gap-2 shrink-0">
-                      <Button size="sm" color="primary" onClick={() => handleApproveRejectLeave(l._id, "Approved")} className="gap-1 cursor-pointer">
-                        <CheckCircle className="w-3.5 h-3.5" /> Approve
-                      </Button>
-                      <Button size="sm" variant="outline" onClick={() => handleApproveRejectLeave(l._id, "Rejected")} className="gap-1 text-destructive cursor-pointer">
-                        <X className="w-3.5 h-3.5" /> Reject
-                      </Button>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            ))}
+                    {isManagerOrAdmin && l.status === "Pending" && (
+                      <div className="flex gap-2 shrink-0">
+                        <Button size="sm" color="primary" onClick={() => handleApproveRejectLeave(l._id, "Approved")} className="gap-1 cursor-pointer">
+                          <i className="fa-solid fa-circle-check text-xs" /> Approve
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={() => handleApproveRejectLeave(l._id, "Rejected")} className="gap-1 text-destructive cursor-pointer">
+                          <i className="fa-solid fa-xmark text-xs" /> Reject
+                        </Button>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              ))}
+
+            {leaves.filter((l) => {
+              const matchesSearch = !leaveSearchQuery || (l.userName && l.userName.toLowerCase().includes(leaveSearchQuery.toLowerCase()));
+              const matchesStatus = leaveStatusFilter === "All" || l.status === leaveStatusFilter;
+              const matchesType = leaveTypeFilter === "All" || l.type === leaveTypeFilter;
+              return matchesSearch && matchesStatus && matchesType;
+            }).length === 0 && (
+              <div className="text-center py-10 text-muted-foreground border border-dashed rounded-xl">
+                <i className="fa-solid fa-calendar-xmark text-4xl mb-2 text-muted-foreground/40 block" />
+                <p className="text-sm font-semibold text-foreground">No leave records found</p>
+                <p className="text-xs text-muted-foreground mt-1">Try adjusting your filters or request a new leave.</p>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -761,7 +831,7 @@ export default function HRPage() {
             <p className="text-xs text-muted-foreground">Restricted vault containing NDAs, Offer Letters, KRA Sign-offs, and KPI Agreements.</p>
             {isManagerOrAdmin && (
               <Button color="primary" size="sm" onClick={() => setShowDocModal(true)} className="gap-1">
-                <Plus className="w-4 h-4" /> Upload Document
+                <i className="fa-solid fa-plus text-xs" /> Upload Document
               </Button>
             )}
           </div>
@@ -773,7 +843,7 @@ export default function HRPage() {
                   <div className="flex items-start justify-between">
                     <div className="flex items-center gap-3">
                       <div className="p-2.5 bg-primary/10 text-primary rounded-lg">
-                        <FileText className="w-5 h-5" />
+                        <i className="fa-solid fa-file-lines text-base" />
                       </div>
                       <div>
                         <h4 className="font-bold text-sm text-foreground line-clamp-1">{doc.title}</h4>
@@ -789,7 +859,7 @@ export default function HRPage() {
                     <p>Uploaded by: {doc.uploadedBy}</p>
                   </div>
                   <Button variant="outline" size="sm" className="w-full gap-2 text-xs cursor-pointer" onClick={() => window.open(doc.fileUrl, "_blank")}>
-                    <Download className="w-3.5 h-3.5" /> Download Document ({doc.fileSize || "1.2 MB"})
+                    <i className="fa-solid fa-download text-xs" /> Download Document ({doc.fileSize || "1.2 MB"})
                   </Button>
                 </CardContent>
               </Card>
@@ -801,36 +871,125 @@ export default function HRPage() {
       {/* TAB 5: HELP DESK / CASES */}
       {activeTab === "cases" && (
         <div className="space-y-4">
-          <div className="space-y-3">
-            {cases.map((c) => (
-              <Card
-                key={c._id}
-                className="hover:shadow-md transition-all cursor-pointer"
-                onClick={() => setSelectedCase(c)}
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-muted/20 p-3 rounded-lg border border-border">
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <i className="fa-solid fa-magnifying-glass text-muted-foreground text-sm" />
+              <Input
+                placeholder="Search cases by subject, user or ID..."
+                value={caseSearchQuery}
+                onChange={(e) => setCaseSearchQuery(e.target.value)}
+                className="w-full sm:w-64 h-9"
+              />
+            </div>
+
+            <div className="flex items-center gap-3 w-full sm:w-auto flex-wrap">
+              <select
+                value={caseCategoryFilter}
+                onChange={(e) => setCaseCategoryFilter(e.target.value)}
+                className="h-9 px-3 text-xs bg-background border border-border rounded-md text-foreground"
               >
-                <CardContent className="p-5">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="space-y-1 flex-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <p className="font-semibold text-foreground">{c.subject}</p>
-                        <Badge color={c.category === "Ask your Manager" ? "primary" : "default"}>{c.category}</Badge>
-                        <Badge color={c.status === "Open" ? "warning" : c.status === "In Progress" ? "info" : "success"}>
-                          {c.status}
-                        </Badge>
-                        <Badge variant="outline">{c.priority}</Badge>
+                <option value="All">All Categories</option>
+                <option value="Payroll">Payroll</option>
+                <option value="IT Access">IT Access</option>
+                <option value="Policy Query">Policy Query</option>
+                <option value="Benefits">Benefits</option>
+                <option value="Ask your Manager">Ask your Manager</option>
+                <option value="Other">Other</option>
+              </select>
+
+              <select
+                value={caseStatusFilter}
+                onChange={(e) => setCaseStatusFilter(e.target.value)}
+                className="h-9 px-3 text-xs bg-background border border-border rounded-md text-foreground"
+              >
+                <option value="All">All Statuses</option>
+                <option value="Open">Open</option>
+                <option value="In Progress">In Progress</option>
+                <option value="Resolved">Resolved</option>
+                <option value="Closed">Closed</option>
+              </select>
+
+              <Button color="primary" size="sm" onClick={() => setShowCaseForm(true)} className="gap-1.5 cursor-pointer font-semibold">
+                <i className="fa-solid fa-ticket text-xs" /> Raise HR Ticket
+              </Button>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            {cases
+              .filter((c) => {
+                const matchesSearch =
+                  !caseSearchQuery ||
+                  (c.subject && c.subject.toLowerCase().includes(caseSearchQuery.toLowerCase())) ||
+                  (c.userName && c.userName.toLowerCase().includes(caseSearchQuery.toLowerCase())) ||
+                  (c.description && c.description.toLowerCase().includes(caseSearchQuery.toLowerCase()));
+                const matchesCategory = caseCategoryFilter === "All" || c.category === caseCategoryFilter;
+                const matchesStatus = caseStatusFilter === "All" || c.status === caseStatusFilter;
+                return matchesSearch && matchesCategory && matchesStatus;
+              })
+              .map((c) => (
+                <Card
+                  key={c._id}
+                  className="hover:shadow-md transition-all cursor-pointer border-l-4 border-l-sky-500"
+                  onClick={() => setSelectedCase(c)}
+                >
+                  <CardContent className="p-5">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="space-y-1.5 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="font-bold text-sm text-foreground">{c.subject}</p>
+                          <Badge color={c.category === "Ask your Manager" ? "primary" : "default"} variant="soft">
+                            {c.category}
+                          </Badge>
+                          <Badge
+                            color={
+                              c.status === "Open"
+                                ? "warning"
+                                : c.status === "In Progress"
+                                ? "info"
+                                : c.status === "Resolved"
+                                ? "success"
+                                : "default"
+                            }
+                          >
+                            {c.status}
+                          </Badge>
+                          <Badge variant="outline" className="text-[10px]">
+                            {c.priority} Priority
+                          </Badge>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Submitted by <span className="font-semibold text-foreground">{c.userName}</span> • {new Date(c.createdAt).toLocaleDateString()}
+                        </p>
+                        <p className="text-xs text-foreground/80 line-clamp-2">{c.description}</p>
                       </div>
-                      <p className="text-xs text-muted-foreground">By {c.userName} • {new Date(c.createdAt).toLocaleDateString()}</p>
-                      <p className="text-xs text-muted-foreground line-clamp-2">{c.description}</p>
+
+                      <div className="flex items-center gap-2 shrink-0 text-muted-foreground bg-muted/30 px-3 py-1.5 rounded-lg border border-border/60">
+                        <i className="fa-solid fa-message text-primary text-xs" />
+                        <span className="text-xs font-bold text-foreground">{c.comments?.length || 0}</span>
+                        <i className="fa-solid fa-chevron-right text-xs" />
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2 shrink-0 text-muted-foreground">
-                      <MessageSquare className="w-4 h-4" />
-                      <span className="text-xs font-semibold">{c.comments?.length || 0}</span>
-                      <ChevronRight className="w-4 h-4" />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+                  </CardContent>
+                </Card>
+              ))}
+
+            {cases.filter((c) => {
+              const matchesSearch =
+                !caseSearchQuery ||
+                (c.subject && c.subject.toLowerCase().includes(caseSearchQuery.toLowerCase())) ||
+                (c.userName && c.userName.toLowerCase().includes(caseSearchQuery.toLowerCase())) ||
+                (c.description && c.description.toLowerCase().includes(caseSearchQuery.toLowerCase()));
+              const matchesCategory = caseCategoryFilter === "All" || c.category === caseCategoryFilter;
+              const matchesStatus = caseStatusFilter === "All" || c.status === caseStatusFilter;
+              return matchesSearch && matchesCategory && matchesStatus;
+            }).length === 0 && (
+              <div className="text-center py-10 text-muted-foreground border border-dashed rounded-xl">
+                <i className="fa-solid fa-circle-question text-4xl mb-2 text-sky-500/40 block" />
+                <p className="text-sm font-semibold text-foreground">No Help Desk cases found</p>
+                <p className="text-xs text-muted-foreground mt-1">Submit a new query or adjust your filters.</p>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -842,7 +1001,7 @@ export default function HRPage() {
             <p className="text-xs text-muted-foreground">Competency reviews, Key Result Areas (KRAs), and self/manager performance scoring.</p>
             {isManagerOrAdmin && (
               <Button color="primary" size="sm" onClick={() => setShowAppraisalModal(true)} className="gap-1">
-                <Plus className="w-4 h-4" /> Init Appraisal Cycle
+                <i className="fa-solid fa-plus text-xs" /> Init Appraisal Cycle
               </Button>
             )}
           </div>
@@ -884,7 +1043,7 @@ export default function HRPage() {
         <div className="space-y-4">
           <Card className="p-5 space-y-4">
             <h3 className="font-bold text-base text-foreground flex items-center gap-2">
-              <Clock className="w-5 h-5 text-sky-500" /> Automated Probation & Review Timeline
+              <i className="fa-solid fa-clock text-sky-500 text-base" /> Automated Probation & Review Timeline
             </h3>
             <p className="text-xs text-muted-foreground">
               Flags employees with upcoming 90-day probation end dates or annual review cycles based on their initial join date.
@@ -918,7 +1077,7 @@ export default function HRPage() {
           <div className="flex items-center justify-between">
             <p className="text-xs text-muted-foreground">Test & preview custom HR forms and leave policies in a sandbox prior to live release.</p>
             <Button color="primary" size="sm" onClick={() => setShowSandboxModal(true)} className="gap-1">
-              <Plus className="w-4 h-4" /> Create Test Workflow
+              <i className="fa-solid fa-plus text-xs" /> Create Test Workflow
             </Button>
           </div>
 
@@ -982,25 +1141,80 @@ export default function HRPage() {
         </div>
       )}
 
-      {/* Case Modal */}
+      {/* Raise Ticket / Case Modal */}
       {showCaseForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in" onClick={() => setShowCaseForm(false)}>
-          <div className="w-full max-w-md bg-card border border-border rounded-xl p-6 shadow-2xl space-y-4" onClick={(e) => e.stopPropagation()}>
-            <h3 className="font-bold text-lg text-foreground">Submit HR Help Desk Case</h3>
-            <form onSubmit={handleSubmitCase} className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <select value={caseCategory} onChange={(e) => setCaseCategory(e.target.value)} className="w-full h-9 px-3 text-sm bg-background border border-border rounded-md">
-                  {["Payroll", "IT Access", "Policy Query", "Benefits", "Ask your Manager", "Other"].map((c) => <option key={c} value={c}>{c}</option>)}
-                </select>
-                <select value={casePriority} onChange={(e) => setCasePriority(e.target.value)} className="w-full h-9 px-3 text-sm bg-background border border-border rounded-md">
-                  {["Low", "Medium", "High"].map((p) => <option key={p} value={p}>{p}</option>)}
-                </select>
+          <div className="w-full max-w-lg bg-card border border-border rounded-xl p-6 shadow-2xl space-y-4 animate-in zoom-in-95" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between border-b border-border pb-3">
+              <h3 className="font-bold text-lg text-foreground flex items-center gap-2">
+                <i className="fa-solid fa-ticket text-sky-500 text-base" /> Raise New Ticket / HR Query
+              </h3>
+              <button onClick={() => setShowCaseForm(false)} className="text-muted-foreground hover:text-foreground cursor-pointer">
+                <i className="fa-solid fa-xmark text-sm" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmitCase} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-foreground">Category / Target</label>
+                  <select
+                    value={caseCategory}
+                    onChange={(e) => setCaseCategory(e.target.value)}
+                    className="w-full h-9 px-3 text-xs bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                  >
+                    <option value="Payroll">Payroll & Compensation</option>
+                    <option value="IT Access">IT Hardware & Access</option>
+                    <option value="Policy Query">Company Policy Query</option>
+                    <option value="Benefits">Health & Benefits</option>
+                    <option value="Ask your Manager">Direct to My Manager</option>
+                    <option value="Other">General HR Inquiry</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-foreground">Priority</label>
+                  <select
+                    value={casePriority}
+                    onChange={(e) => setCasePriority(e.target.value)}
+                    className="w-full h-9 px-3 text-xs bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                  >
+                    <option value="Low">Low Priority</option>
+                    <option value="Medium">Medium Priority</option>
+                    <option value="High">High Priority (Urgent)</option>
+                  </select>
+                </div>
               </div>
-              <Input value={caseSubject} onChange={(e) => setCaseSubject(e.target.value)} required placeholder="Subject" />
-              <textarea value={caseDesc} onChange={(e) => setCaseDesc(e.target.value)} rows={3} required placeholder="Description..." className="w-full p-2 text-sm bg-background border border-border rounded-md" />
-              <div className="flex justify-end gap-2 pt-2 border-t border-border">
-                <Button variant="outline" size="sm" type="button" onClick={() => setShowCaseForm(false)}>Cancel</Button>
-                <Button color="primary" size="sm" type="submit">Create Case</Button>
+
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-foreground">Ticket Subject *</label>
+                <Input
+                  value={caseSubject}
+                  onChange={(e) => setCaseSubject(e.target.value)}
+                  required
+                  placeholder="e.g. Need VPN credentials reset or Payroll query for June"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-foreground">Detailed Description *</label>
+                <textarea
+                  value={caseDesc}
+                  onChange={(e) => setCaseDesc(e.target.value)}
+                  rows={4}
+                  required
+                  placeholder="Provide all relevant details, error codes, or context to help HR assist you..."
+                  className="w-full p-3 text-xs bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary leading-relaxed"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-border">
+                <Button variant="outline" size="sm" type="button" onClick={() => setShowCaseForm(false)}>
+                  Cancel
+                </Button>
+                <Button color="primary" size="sm" type="submit" className="gap-1.5 cursor-pointer font-semibold">
+                  <i className="fa-solid fa-paper-plane text-xs" /> Submit Ticket
+                </Button>
               </div>
             </form>
           </div>
@@ -1013,10 +1227,10 @@ export default function HRPage() {
           <div className="w-full max-w-md bg-card border border-border rounded-xl p-6 shadow-2xl space-y-4 animate-in zoom-in-95" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between border-b border-border pb-3">
               <h3 className="font-bold text-lg text-foreground flex items-center gap-2">
-                <FileCheck className="w-5 h-5 text-emerald-500" /> Start Onboarding / Offboarding
+                <i className="fa-solid fa-clipboard-check text-emerald-500 text-base" /> Start Onboarding / Offboarding
               </h3>
               <button onClick={() => setShowChecklistModal(false)} className="text-muted-foreground hover:text-foreground cursor-pointer">
-                <X className="w-5 h-5" />
+                <i className="fa-solid fa-xmark text-sm" />
               </button>
             </div>
             <form onSubmit={handleCreateChecklist} className="space-y-3">
@@ -1049,10 +1263,10 @@ export default function HRPage() {
           <div className="w-full max-w-md bg-card border border-border rounded-xl p-6 shadow-2xl space-y-4 animate-in zoom-in-95" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between border-b border-border pb-3">
               <h3 className="font-bold text-lg text-foreground flex items-center gap-2">
-                <ShieldCheck className="w-5 h-5 text-emerald-500" /> Upload to Document Vault
+                <i className="fa-solid fa-shield-halved text-emerald-500 text-base" /> Upload to Document Vault
               </h3>
               <button onClick={() => setShowDocModal(false)} className="text-muted-foreground hover:text-foreground cursor-pointer">
-                <X className="w-5 h-5" />
+                <i className="fa-solid fa-xmark text-sm" />
               </button>
             </div>
             <form onSubmit={handleCreateDocument} className="space-y-3">
@@ -1096,10 +1310,10 @@ export default function HRPage() {
           <div className="w-full max-w-md bg-card border border-border rounded-xl p-6 shadow-2xl space-y-4 animate-in zoom-in-95" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between border-b border-border pb-3">
               <h3 className="font-bold text-lg text-foreground flex items-center gap-2">
-                <Award className="w-5 h-5 text-indigo-500" /> Initialize Appraisal Cycle
+                <i className="fa-solid fa-award text-indigo-500 text-base" /> Initialize Appraisal Cycle
               </h3>
               <button onClick={() => setShowAppraisalModal(false)} className="text-muted-foreground hover:text-foreground cursor-pointer">
-                <X className="w-5 h-5" />
+                <i className="fa-solid fa-xmark text-sm" />
               </button>
             </div>
             <form onSubmit={handleCreateAppraisal} className="space-y-3">
@@ -1137,10 +1351,10 @@ export default function HRPage() {
           <div className="w-full max-w-md bg-card border border-border rounded-xl p-6 shadow-2xl space-y-4 animate-in zoom-in-95" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between border-b border-border pb-3">
               <h3 className="font-bold text-lg text-foreground flex items-center gap-2">
-                <Settings2 className="w-5 h-5 text-purple-500" /> Create Sandbox Workflow
+                <i className="fa-solid fa-sliders text-purple-500 text-base" /> Create Sandbox Workflow
               </h3>
               <button onClick={() => setShowSandboxModal(false)} className="text-muted-foreground hover:text-foreground cursor-pointer">
-                <X className="w-5 h-5" />
+                <i className="fa-solid fa-xmark text-sm" />
               </button>
             </div>
             <form onSubmit={handleCreateSandbox} className="space-y-3">
@@ -1214,7 +1428,7 @@ export default function HRPage() {
                 <h3 className="font-bold text-lg text-foreground">{selectedCase.subject}</h3>
                 <p className="text-xs text-muted-foreground">{selectedCase.category} • {selectedCase.userName}</p>
               </div>
-              <button onClick={() => setSelectedCase(null)} className="text-muted-foreground hover:text-foreground cursor-pointer"><X className="w-5 h-5" /></button>
+              <button onClick={() => setSelectedCase(null)} className="text-muted-foreground hover:text-foreground cursor-pointer"><i className="fa-solid fa-xmark text-sm" /></button>
             </div>
             <p className="text-sm text-foreground">{selectedCase.description}</p>
             {isManagerOrAdmin && selectedCase.status !== "Closed" && (
@@ -1256,7 +1470,7 @@ export default function HRPage() {
                 <h3 className="font-bold text-lg text-foreground">{selectedAppraisal.userName}</h3>
                 <p className="text-xs text-muted-foreground">{selectedAppraisal.cycle} • {selectedAppraisal.type}</p>
               </div>
-              <button onClick={() => setSelectedAppraisal(null)} className="text-muted-foreground hover:text-foreground cursor-pointer"><X className="w-5 h-5" /></button>
+              <button onClick={() => setSelectedAppraisal(null)} className="text-muted-foreground hover:text-foreground cursor-pointer"><i className="fa-solid fa-xmark text-sm" /></button>
             </div>
 
             <div className="space-y-3">

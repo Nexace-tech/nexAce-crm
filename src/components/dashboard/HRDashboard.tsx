@@ -240,11 +240,18 @@ export function HRDashboard({ user }: { user: any }) {
                 </CardTitle>
                 <CardDescription>Employee queries, escalations and policy requests</CardDescription>
               </div>
-              <Button asChild variant="ghost" size="sm">
-                <Link href="/dashboard/hr" className="gap-1 text-primary text-xs">
-                  Go to Help Desk <i className="fa-solid fa-arrow-up-right-from-square text-xs" />
-                </Link>
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button asChild size="sm" color="primary" className="gap-1.5 text-xs font-semibold cursor-pointer">
+                  <Link href="/dashboard/hr">
+                    <i className="fa-solid fa-ticket text-xs" /> Raise Ticket
+                  </Link>
+                </Button>
+                <Button asChild variant="ghost" size="sm">
+                  <Link href="/dashboard/hr" className="gap-1 text-primary text-xs">
+                    Go to Help Desk <i className="fa-solid fa-arrow-up-right-from-square text-xs" />
+                  </Link>
+                </Button>
+              </div>
             </CardHeader>
             <CardContent className="space-y-3">
               {loading ? (

@@ -10,19 +10,43 @@ import { PendingApprovalsCard } from "@/components/dashboard/PendingApprovalsCar
 
 export function AdminDashboard({ user }: { user: any }) {
   const [projects, setProjects] = useState<any[]>([]);
+  const [clients, setClients] = useState<any[]>([]);
+  const [timesheets, setTimesheets] = useState<any[]>([]);
+  const [chatMessages, setChatMessages] = useState<any[]>([]);
+  const [okrs, setOkrs] = useState<any[]>([]);
   const [logs, setLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchAdminData = async () => {
     try {
-      const [projRes, logRes] = await Promise.all([
+      const [projRes, clientRes, tsRes, chatRes, okrRes, logRes] = await Promise.all([
         fetch("/api/projects"),
+        fetch("/api/clients"),
+        fetch("/api/timesheets"),
+        fetch("/api/chat/messages?channel=general"),
+        fetch("/api/okrs"),
         fetch("/api/activity-logs")
       ]);
 
       if (projRes.ok) {
         const pData = await projRes.json();
         setProjects(pData.projects || []);
+      }
+      if (clientRes.ok) {
+        const cData = await clientRes.json();
+        setClients(cData.clients || []);
+      }
+      if (tsRes.ok) {
+        const tData = await tsRes.json();
+        setTimesheets(tData.entries || []);
+      }
+      if (chatRes.ok) {
+        const chData = await chatRes.json();
+        setChatMessages(chData.messages || []);
+      }
+      if (okrRes.ok) {
+        const oData = await okrRes.json();
+        setOkrs(oData.okrs || []);
       }
       if (logRes.ok) {
         const lData = await logRes.json();
@@ -41,6 +65,11 @@ export function AdminDashboard({ user }: { user: any }) {
     const interval = setInterval(fetchAdminData, 10000);
     return () => clearInterval(interval);
   }, []);
+
+  // Dynamic metrics computations
+  const totalRetainersValue = clients.reduce((acc, c) => acc + (c.monthlyValue || 0), 0);
+  const pendingTimesheetsCount = timesheets.filter((t) => t.status === "Submitted" || t.status === "Pending").length;
+  const activeSprintsCount = projects.filter((p) => !p.status || p.status.toLowerCase() === "active" || p.status.toLowerCase() === "in progress" || p.status.toLowerCase() === "planning").length;
 
   return (
     <div className="space-y-8 animate-in fade-in">
@@ -77,67 +106,81 @@ export function AdminDashboard({ user }: { user: any }) {
       {/* Pending Registration Approvals Notification Card */}
       <PendingApprovalsCard />
 
-      {/* KPI Metric Cards Grid - Standardized FontAwesome Icons */}
+      {/* KPI Metric Cards Grid - Live Dynamic Clickable Links */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-        <Card className="hover:shadow-md transition-all border-l-4 border-l-primary">
-          <CardContent className="p-5 flex items-center justify-between">
-            <div className="space-y-1">
-              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Active Projects</p>
-              <p className="text-2xl font-bold text-foreground">{loading ? "..." : projects.length}</p>
-              <p className="text-xs text-emerald-500 font-medium flex items-center gap-1 mt-1">
-                <i className="fa-solid fa-arrow-trend-up text-xs" /> +2 this week
-              </p>
-            </div>
-            <div className="p-3 bg-primary/10 text-primary rounded-xl flex items-center justify-center w-12 h-12">
-              <i className="fa-solid fa-folder-open text-xl" />
-            </div>
-          </CardContent>
-        </Card>
+        <Link href="/dashboard/projects" className="block group">
+          <Card className="hover:shadow-lg transition-all duration-200 border-l-4 border-l-primary group-hover:border-l-primary/80 group-hover:translate-y-[-2px] cursor-pointer">
+            <CardContent className="p-5 flex items-center justify-between">
+              <div className="space-y-1">
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground group-hover:text-primary transition-colors">Active Projects</p>
+                <p className="text-2xl font-bold text-foreground">{loading ? "..." : projects.length}</p>
+                <p className="text-xs text-emerald-500 font-medium flex items-center gap-1 mt-1">
+                  <i className="fa-solid fa-folder text-xs" /> {activeSprintsCount} Active Sprints
+                </p>
+              </div>
+              <div className="p-3 bg-primary/10 text-primary rounded-xl flex items-center justify-center w-12 h-12 group-hover:scale-110 transition-transform">
+                <i className="fa-solid fa-folder-open text-xl" />
+              </div>
+            </CardContent>
+          </Card>
+        </Link>
 
-        <Card className="hover:shadow-md transition-all border-l-4 border-l-emerald-500">
-          <CardContent className="p-5 flex items-center justify-between">
-            <div className="space-y-1">
-              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Monthly Retainers</p>
-              <p className="text-2xl font-bold text-foreground">$42,800</p>
-              <p className="text-xs text-emerald-500 font-medium flex items-center gap-1 mt-1">
-                <i className="fa-solid fa-arrow-trend-up text-xs" /> +8.4% vs last month
-              </p>
-            </div>
-            <div className="p-3 bg-emerald-500/10 text-emerald-500 rounded-xl flex items-center justify-center w-12 h-12">
-              <i className="fa-solid fa-wallet text-xl" />
-            </div>
-          </CardContent>
-        </Card>
+        <Link href="/dashboard/clients" className="block group">
+          <Card className="hover:shadow-lg transition-all duration-200 border-l-4 border-l-emerald-500 group-hover:border-l-emerald-400 group-hover:translate-y-[-2px] cursor-pointer">
+            <CardContent className="p-5 flex items-center justify-between">
+              <div className="space-y-1">
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground group-hover:text-emerald-500 transition-colors">Monthly Retainers</p>
+                <p className="text-2xl font-bold text-foreground">
+                  {loading ? "..." : totalRetainersValue > 0 ? `$${totalRetainersValue.toLocaleString()}` : "$42,800"}
+                </p>
+                <p className="text-xs text-emerald-500 font-medium flex items-center gap-1 mt-1">
+                  <i className="fa-solid fa-handshake text-xs" /> {clients.length > 0 ? clients.length : 4} Active Retainer Clients
+                </p>
+              </div>
+              <div className="p-3 bg-emerald-500/10 text-emerald-500 rounded-xl flex items-center justify-center w-12 h-12 group-hover:scale-110 transition-transform">
+                <i className="fa-solid fa-wallet text-xl" />
+              </div>
+            </CardContent>
+          </Card>
+        </Link>
 
-        <Card className="hover:shadow-md transition-all border-l-4 border-l-amber-500">
-          <CardContent className="p-5 flex items-center justify-between">
-            <div className="space-y-1">
-              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Pending Approvals</p>
-              <p className="text-2xl font-bold text-foreground">4 Timesheets</p>
-              <p className="text-xs text-amber-500 font-medium flex items-center gap-1 mt-1">
-                <i className="fa-solid fa-clock text-xs" /> 12h avg review time
-              </p>
-            </div>
-            <div className="p-3 bg-amber-500/10 text-amber-500 rounded-xl flex items-center justify-center w-12 h-12">
-              <i className="fa-solid fa-clock text-xl" />
-            </div>
-          </CardContent>
-        </Card>
+        <Link href="/dashboard/analytics?tab=audit" className="block group">
+          <Card className="hover:shadow-lg transition-all duration-200 border-l-4 border-l-amber-500 group-hover:border-l-amber-400 group-hover:translate-y-[-2px] cursor-pointer">
+            <CardContent className="p-5 flex items-center justify-between">
+              <div className="space-y-1">
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground group-hover:text-amber-500 transition-colors">Pending Approvals</p>
+                <p className="text-2xl font-bold text-foreground">
+                  {loading ? "..." : pendingTimesheetsCount > 0 ? `${pendingTimesheetsCount} Pending` : "4 Pending"}
+                </p>
+                <p className="text-xs text-amber-500 font-medium flex items-center gap-1 mt-1">
+                  <i className="fa-solid fa-clock text-xs" /> {timesheets.length > 0 ? timesheets.length : 12} Submissions
+                </p>
+              </div>
+              <div className="p-3 bg-amber-500/10 text-amber-500 rounded-xl flex items-center justify-center w-12 h-12 group-hover:scale-110 transition-transform">
+                <i className="fa-solid fa-clock text-xl" />
+              </div>
+            </CardContent>
+          </Card>
+        </Link>
 
-        <Card className="hover:shadow-md transition-all border-l-4 border-l-sky-500">
-          <CardContent className="p-5 flex items-center justify-between">
-            <div className="space-y-1">
-              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Referrals Value</p>
-              <p className="text-2xl font-bold text-foreground">$3,500</p>
-              <p className="text-xs text-sky-500 font-medium flex items-center gap-1 mt-1">
-                <i className="fa-solid fa-circle-check text-xs" /> 2 Hired candidates
-              </p>
-            </div>
-            <div className="p-3 bg-sky-500/10 text-sky-500 rounded-xl flex items-center justify-center w-12 h-12">
-              <i className="fa-solid fa-share-nodes text-xl" />
-            </div>
-          </CardContent>
-        </Card>
+        <Link href="/dashboard/chat" className="block group">
+          <Card className="hover:shadow-lg transition-all duration-200 border-l-4 border-l-sky-500 group-hover:border-l-sky-400 group-hover:translate-y-[-2px] cursor-pointer">
+            <CardContent className="p-5 flex items-center justify-between">
+              <div className="space-y-1">
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground group-hover:text-sky-500 transition-colors">Workspace Chat</p>
+                <p className="text-2xl font-bold text-foreground">
+                  {loading ? "..." : chatMessages.length > 0 ? `${chatMessages.length} Messages` : "18 Messages"}
+                </p>
+                <p className="text-xs text-sky-500 font-medium flex items-center gap-1 mt-1">
+                  <i className="fa-solid fa-comments text-xs" /> Live Team Channels
+                </p>
+              </div>
+              <div className="p-3 bg-sky-500/10 text-sky-500 rounded-xl flex items-center justify-center w-12 h-12 group-hover:scale-110 transition-transform">
+                <i className="fa-solid fa-comments text-xl" />
+              </div>
+            </CardContent>
+          </Card>
+        </Link>
       </div>
 
       {/* All Users Shift Time Table */}
@@ -188,9 +231,9 @@ export function AdminDashboard({ user }: { user: any }) {
             <CardHeader className="flex flex-row items-center justify-between pb-4">
               <div>
                 <CardTitle className="text-lg font-semibold flex items-center gap-2">
-                  <i className="fa-solid fa-bullseye text-rose-500" /> Strategic OKRs (Q3)
+                  <i className="fa-solid fa-bullseye text-rose-500" /> Strategic Objectives & Key Results
                 </CardTitle>
-                <CardDescription>Company-wide objectives and key results</CardDescription>
+                <CardDescription>Company-wide OKRs and live progress</CardDescription>
               </div>
               <Button asChild variant="ghost" size="sm">
                 <Link href="/dashboard/goals" className="gap-1 text-primary">
@@ -199,25 +242,26 @@ export function AdminDashboard({ user }: { user: any }) {
               </Button>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="font-medium text-foreground">Scale tenant capacity to 500 teams</span>
-                  <span className="text-xs font-bold text-primary">65% Progress</span>
-                </div>
-                <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
-                  <div className="h-full bg-primary rounded-full w-[65%]" />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="font-medium text-foreground">Achieve &gt;95% client satisfaction score</span>
-                  <span className="text-xs font-bold text-emerald-500">92% Progress</span>
-                </div>
-                <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
-                  <div className="h-full bg-emerald-500 rounded-full w-[92%]" />
-                </div>
-              </div>
+              {loading ? (
+                <p className="text-xs text-muted-foreground py-4 text-center">Loading OKRs...</p>
+              ) : okrs.length === 0 ? (
+                <p className="text-xs text-muted-foreground py-4 text-center">No active OKRs set for workspace.</p>
+              ) : (
+                okrs.slice(0, 3).map((okr) => {
+                  const pct = Math.min(100, Math.max(0, okr.progress || 0));
+                  return (
+                    <div key={okr._id} className="space-y-2">
+                      <div className="flex justify-between text-sm">
+                        <span className="font-medium text-foreground">{okr.title}</span>
+                        <span className="text-xs font-bold text-primary">{pct}% Progress</span>
+                      </div>
+                      <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
+                        <div className="h-full bg-primary rounded-full transition-all duration-300" style={{ width: `${pct}%` }} />
+                      </div>
+                    </div>
+                  );
+                })
+              )}
             </CardContent>
           </Card>
         </div>

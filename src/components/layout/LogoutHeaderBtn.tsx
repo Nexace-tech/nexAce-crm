@@ -3,7 +3,6 @@
 import React, { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { logoutAction } from "@/app/actions/auth";
-import { LogOut, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export function LogoutHeaderBtn() {
@@ -35,7 +34,7 @@ export function LogoutHeaderBtn() {
         className="text-muted-foreground hover:text-destructive hover:bg-destructive/10 gap-2 transition-colors"
         title="Log Out"
       >
-        <LogOut className="w-4 h-4" />
+        <i className="fa-solid fa-right-from-bracket text-sm" />
         <span className="hidden sm:inline font-medium">Log Out</span>
       </Button>
 
@@ -50,7 +49,7 @@ export function LogoutHeaderBtn() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center gap-3 text-destructive">
-              <AlertCircle className="w-6 h-6 shrink-0" />
+              <i className="fa-solid fa-circle-exclamation text-xl shrink-0" />
               <h3 className="text-lg font-bold text-foreground">Confirm Log Out</h3>
             </div>
             <p className="text-sm text-muted-foreground leading-relaxed">

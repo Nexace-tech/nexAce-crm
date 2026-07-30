@@ -2,9 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
-import { Clock, Search, ArrowUpRight, CheckCircle2, ShieldCheck, Users } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 
@@ -59,7 +57,7 @@ export function TeamShiftOverviewCard() {
         <div className="flex items-center gap-2">
           <Button asChild variant="ghost" size="sm" className="text-xs gap-1 text-primary">
             <Link href="/dashboard/calendar">
-              Shift Attendance Logs <ArrowUpRight className="w-3.5 h-3.5" />
+              Shift Attendance Logs <i className="fa-solid fa-arrow-up-right-from-square text-xs" />
             </Link>
           </Button>
         </div>
@@ -69,7 +67,7 @@ export function TeamShiftOverviewCard() {
         {/* Search & Filter Toolbar */}
         <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-muted/30 p-3 rounded-lg border border-border/50">
           <div className="relative w-full sm:w-64">
-            <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <i className="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground" />
             <Input
               type="text"
               placeholder="Search user, username, dept..."

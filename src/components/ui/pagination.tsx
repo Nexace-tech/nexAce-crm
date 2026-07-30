@@ -1,7 +1,6 @@
 "use client";
 
 import React from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 interface PaginationProps {
@@ -49,7 +48,7 @@ export function Pagination({
           disabled={currentPage <= 1}
           className="h-8 px-2 text-xs gap-1"
         >
-          <ChevronLeft className="w-4 h-4" /> Previous
+          <i className="fa-solid fa-chevron-left text-xs" /> Previous
         </Button>
 
         <div className="flex items-center gap-1 px-2">
@@ -75,7 +74,7 @@ export function Pagination({
           disabled={currentPage >= totalPages}
           className="h-8 px-2 text-xs gap-1"
         >
-          Next <ChevronRight className="w-4 h-4" />
+          Next <i className="fa-solid fa-chevron-right text-xs" />
         </Button>
       </div>
     </div>

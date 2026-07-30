@@ -62,6 +62,32 @@ export async function POST(request: Request) {
       tenantId: tenantObjectId,
     });
 
+    // Real-time Notification triggers for DM and Mentions
+    const { Notification } = await import("@/models/Notification");
+
+    if (isDM && recipientId) {
+      await Notification.create({
+        tenantId: tenantObjectId,
+        recipientId,
+        title: "New Direct Message",
+        message: `${session.userName}: "${content.slice(0, 60)}${content.length > 60 ? "..." : ""}"`,
+        type: "chat",
+        linkUrl: "/dashboard/chat",
+        read: false,
+      });
+    } else if (Array.isArray(mentions) && mentions.length > 0) {
+      const mentionDocs = mentions.map((mId: string) => ({
+        tenantId: tenantObjectId,
+        recipientId: mId,
+        title: "You were mentioned in Chat",
+        message: `${session.userName} mentioned you in #${channel || "general"}`,
+        type: "chat",
+        linkUrl: "/dashboard/chat",
+        read: false,
+      }));
+      await Notification.insertMany(mentionDocs);
+    }
+
     return NextResponse.json({ message: newMessage }, { status: 201 });
   } catch (error: any) {
     console.error("API POST ChatMessage error:", error);

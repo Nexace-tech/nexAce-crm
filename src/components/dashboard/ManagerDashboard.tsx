@@ -2,18 +2,6 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
-import { 
-  Users, 
-  FolderOpen, 
-  Clock, 
-  TrendingUp, 
-  Wrench, 
-  Target, 
-  ArrowUpRight,
-  UserCheck,
-  CheckSquare,
-  ShieldAlert
-} from "lucide-react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -22,14 +10,16 @@ import { TeamShiftOverviewCard } from "@/components/dashboard/TeamShiftOverviewC
 export function ManagerDashboard({ user }: { user: any }) {
   const [projects, setProjects] = useState<any[]>([]);
   const [tasks, setTasks] = useState<any[]>([]);
+  const [timesheets, setTimesheets] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function fetchManagerData() {
       try {
-        const [projRes, taskRes] = await Promise.all([
+        const [projRes, taskRes, tsRes] = await Promise.all([
           fetch("/api/projects"),
-          fetch("/api/tasks")
+          fetch("/api/tasks"),
+          fetch("/api/timesheets"),
         ]);
 
         if (projRes.ok) {
@@ -39,6 +29,10 @@ export function ManagerDashboard({ user }: { user: any }) {
         if (taskRes.ok) {
           const tData = await taskRes.json();
           setTasks(tData.tasks || []);
+        }
+        if (tsRes.ok) {
+          const tsData = await tsRes.json();
+          setTimesheets(tsData.entries || []);
         }
       } catch (err) {
         console.error("Error fetching manager dashboard data:", err);
@@ -50,6 +44,7 @@ export function ManagerDashboard({ user }: { user: any }) {
   }, []);
 
   const pendingTasks = tasks.filter((t) => t.status !== "Done");
+  const pendingApprovalsCount = timesheets.filter((t) => t.status === "Submitted" || t.status === "Pending").length;
 
   return (
     <div className="space-y-8 animate-in fade-in">
@@ -57,7 +52,7 @@ export function ManagerDashboard({ user }: { user: any }) {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gradient-to-r from-blue-500/10 via-blue-500/5 to-transparent p-6 rounded-2xl border border-blue-500/20">
         <div>
           <div className="flex items-center gap-2 text-xs font-bold text-blue-500 tracking-wider uppercase mb-1">
-            <Users className="w-4 h-4 text-blue-500" /> Department Manager Portal
+            <i className="fa-solid fa-users text-blue-500 text-sm" /> Department Manager Portal
           </div>
           <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground">
             Hello, <span className="text-blue-500">{user?.name || "Manager"}</span> <i className="fa-solid fa-hand-sparkles text-amber-400 ml-1.5 inline-block" />
@@ -69,7 +64,7 @@ export function ManagerDashboard({ user }: { user: any }) {
         <div className="flex items-center gap-3">
           <Button asChild color="primary" size="sm">
             <Link href="/dashboard/projects">
-              <FolderOpen className="w-4 h-4 mr-2" /> Team Projects
+              <i className="fa-solid fa-folder-open text-xs mr-2" /> Team Projects
             </Link>
           </Button>
           <Button asChild variant="outline" size="sm">
@@ -86,11 +81,11 @@ export function ManagerDashboard({ user }: { user: any }) {
               <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Department Projects</p>
               <p className="text-2xl font-bold text-foreground">{loading ? "..." : projects.length}</p>
               <p className="text-xs text-blue-500 font-medium flex items-center gap-1 mt-1">
-                <TrendingUp className="w-3.5 h-3.5" /> In progress
+                <i className="fa-solid fa-arrow-trend-up text-xs" /> In progress
               </p>
             </div>
-            <div className="p-3 bg-blue-500/10 text-blue-500 rounded-xl">
-              <FolderOpen className="w-6 h-6" />
+            <div className="p-3 bg-blue-500/10 text-blue-500 rounded-xl flex items-center justify-center w-12 h-12">
+              <i className="fa-solid fa-folder-open text-xl" />
             </div>
           </CardContent>
         </Card>
@@ -101,11 +96,11 @@ export function ManagerDashboard({ user }: { user: any }) {
               <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Team Tasks Pending</p>
               <p className="text-2xl font-bold text-foreground">{loading ? "..." : pendingTasks.length}</p>
               <p className="text-xs text-amber-500 font-medium flex items-center gap-1 mt-1">
-                <CheckSquare className="w-3.5 h-3.5" /> Across team
+                <i className="fa-solid fa-list-check text-xs" /> Across team
               </p>
             </div>
-            <div className="p-3 bg-amber-500/10 text-amber-500 rounded-xl">
-              <CheckSquare className="w-6 h-6" />
+            <div className="p-3 bg-amber-500/10 text-amber-500 rounded-xl flex items-center justify-center w-12 h-12">
+              <i className="fa-solid fa-square-check text-xl" />
             </div>
           </CardContent>
         </Card>
@@ -116,11 +111,11 @@ export function ManagerDashboard({ user }: { user: any }) {
               <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">My Department</p>
               <p className="text-lg font-bold text-foreground">{user?.department || "Engineering"}</p>
               <p className="text-xs text-emerald-500 font-medium flex items-center gap-1 mt-1">
-                <UserCheck className="w-3.5 h-3.5" /> Active Team
+                <i className="fa-solid fa-user-check text-xs" /> Active Team
               </p>
             </div>
-            <div className="p-3 bg-emerald-500/10 text-emerald-500 rounded-xl">
-              <Users className="w-6 h-6" />
+            <div className="p-3 bg-emerald-500/10 text-emerald-500 rounded-xl flex items-center justify-center w-12 h-12">
+              <i className="fa-solid fa-users text-xl" />
             </div>
           </CardContent>
         </Card>
@@ -129,13 +124,13 @@ export function ManagerDashboard({ user }: { user: any }) {
           <CardContent className="p-5 flex items-center justify-between">
             <div className="space-y-1">
               <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Pending Approvals</p>
-              <p className="text-2xl font-bold text-foreground">2 Requests</p>
+              <p className="text-2xl font-bold text-foreground">{loading ? "..." : `${pendingApprovalsCount} Requests`}</p>
               <p className="text-xs text-rose-500 font-medium flex items-center gap-1 mt-1">
-                <Clock className="w-3.5 h-3.5" /> Leaves & Timesheets
+                <i className="fa-solid fa-clock text-xs" /> Timesheets
               </p>
             </div>
-            <div className="p-3 bg-rose-500/10 text-rose-500 rounded-xl">
-              <Clock className="w-6 h-6" />
+            <div className="p-3 bg-rose-500/10 text-rose-500 rounded-xl flex items-center justify-center w-12 h-12">
+              <i className="fa-solid fa-clock text-xl" />
             </div>
           </CardContent>
         </Card>
@@ -152,13 +147,13 @@ export function ManagerDashboard({ user }: { user: any }) {
             <CardHeader className="flex flex-row items-center justify-between pb-4">
               <div>
                 <CardTitle className="text-lg font-semibold flex items-center gap-2">
-                  <Wrench className="w-5 h-5 text-blue-500" /> Team Projects & Sprints
+                  <i className="fa-solid fa-wrench text-blue-500 text-lg" /> Team Projects & Sprints
                 </CardTitle>
                 <CardDescription>Track status of active deliverables</CardDescription>
               </div>
               <Button asChild variant="ghost" size="sm">
                 <Link href="/dashboard/projects" className="gap-1 text-primary">
-                  Manage Projects <ArrowUpRight className="w-4 h-4" />
+                  Manage Projects <i className="fa-solid fa-arrow-up-right-from-square text-xs" />
                 </Link>
               </Button>
             </CardHeader>
@@ -184,35 +179,31 @@ export function ManagerDashboard({ user }: { user: any }) {
           </Card>
         </div>
 
-        {/* Right Column (1 span): OKRs / Department Goals */}
+        {/* Right Column (1 span): Recent Tasks */}
         <div className="space-y-6">
           <Card>
             <CardHeader className="pb-4">
               <CardTitle className="text-lg font-semibold flex items-center gap-2">
-                <Target className="w-5 h-5 text-rose-500" /> Department Goals
+                <i className="fa-solid fa-list-check text-amber-500 text-lg" /> Department Tasks
               </CardTitle>
-              <CardDescription>Quarterly key results</CardDescription>
+              <CardDescription>Assigned sprint tasks</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="font-medium text-foreground">Complete Q3 Deliverables</span>
-                  <span className="text-xs font-bold text-blue-500">75%</span>
-                </div>
-                <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
-                  <div className="h-full bg-blue-500 rounded-full w-[75%]" />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="font-medium text-foreground">Team Skill Certifications</span>
-                  <span className="text-xs font-bold text-emerald-500">80%</span>
-                </div>
-                <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
-                  <div className="h-full bg-emerald-500 rounded-full w-[80%]" />
-                </div>
-              </div>
+            <CardContent className="space-y-3">
+              {loading ? (
+                <p className="text-xs text-muted-foreground py-4 text-center">Loading tasks...</p>
+              ) : pendingTasks.length === 0 ? (
+                <p className="text-xs text-muted-foreground py-4 text-center">No pending tasks.</p>
+              ) : (
+                pendingTasks.slice(0, 5).map((t) => (
+                  <div key={t._id} className="p-3 rounded-lg border border-border bg-card flex flex-col gap-1 text-xs">
+                    <div className="flex items-center justify-between font-semibold text-foreground">
+                      <span>{t.title}</span>
+                      <Badge variant="outline" className="text-[10px]">{t.status}</Badge>
+                    </div>
+                    <span className="text-muted-foreground">Assignee: {t.assignee || "Unassigned"}</span>
+                  </div>
+                ))
+              )}
             </CardContent>
           </Card>
         </div>

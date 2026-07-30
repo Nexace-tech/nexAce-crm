@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Clock, ShieldAlert, RefreshCw, CheckCircle2, Radio } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -50,7 +49,7 @@ export function PendingApprovalDashboard({ user }: { user: any }) {
         
         <CardHeader className="pt-8 pb-4 space-y-3">
           <div className="w-16 h-16 rounded-2xl bg-amber-500/10 text-amber-600 mx-auto flex items-center justify-center border border-amber-500/20 shadow-inner">
-            <Clock className="w-8 h-8 animate-pulse" />
+            <i className="fa-solid fa-clock text-amber-500 text-2xl animate-pulse" />
           </div>
 
           <div>
@@ -75,14 +74,14 @@ export function PendingApprovalDashboard({ user }: { user: any }) {
         <CardContent className="space-y-6 pb-8">
           {/* Real-time status indicator badge */}
           <div className="flex items-center justify-center gap-2 text-[11px] text-emerald-500 bg-emerald-500/10 py-1.5 px-3 rounded-full border border-emerald-500/20 max-w-xs mx-auto">
-            <Radio className="w-3.5 h-3.5 animate-pulse" />
+            <i className="fa-solid fa-tower-broadcast text-xs animate-pulse" />
             <span>Live Auto-Sync Active (Checking every 30s)</span>
           </div>
 
           {/* Detailed Info Card */}
           <div className="p-4 rounded-xl bg-card border border-border/80 text-xs text-muted-foreground leading-relaxed text-left space-y-3 shadow-xs">
             <div className="flex items-center gap-2 text-amber-600 font-bold text-sm">
-              <ShieldAlert className="w-4 h-4 shrink-0" /> Administrator Verification Required
+              <i className="fa-solid fa-shield-cat text-amber-600 text-sm shrink-0" /> Administrator Verification Required
             </div>
             <p>
               Your account is currently under review by your organization&apos;s administrator. Once approved, this page will automatically unlock your full dashboard without reloading!
@@ -102,7 +101,7 @@ export function PendingApprovalDashboard({ user }: { user: any }) {
 
           {statusMsg && (
             <div className="p-2.5 text-xs bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 rounded-lg font-medium flex items-center justify-center gap-2">
-              <CheckCircle2 className="w-4 h-4" />
+              <i className="fa-solid fa-circle-check text-sm" />
               <span>{statusMsg}</span>
             </div>
           )}
@@ -116,7 +115,7 @@ export function PendingApprovalDashboard({ user }: { user: any }) {
               disabled={checking}
               className="w-full sm:w-auto font-semibold gap-2 cursor-pointer shadow-md"
             >
-              <RefreshCw className={`w-4 h-4 ${checking ? "animate-spin" : ""}`} /> 
+              <i className={`fa-solid fa-rotate text-xs ${checking ? "animate-spin" : ""}`} /> 
               {checking ? "Checking..." : "Check Now"}
             </Button>
 

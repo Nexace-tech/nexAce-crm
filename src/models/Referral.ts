@@ -7,6 +7,7 @@ export interface IReferral extends Document {
   position: string;
   referrerName: string;
   referrerId?: mongoose.Types.ObjectId;
+  referralCode?: string;
   status: "Submitted" | "Interviewing" | "Hired" | "Paid" | "Rejected";
   rewardAmount: number;
   payoutStatus: "Pending" | "Approved" | "Paid";
@@ -24,6 +25,7 @@ const ReferralSchema = new Schema<IReferral>(
     position: { type: String, required: true, trim: true },
     referrerName: { type: String, required: true, trim: true },
     referrerId: { type: Schema.Types.ObjectId, ref: "User" },
+    referralCode: { type: String, trim: true },
     status: {
       type: String,
       enum: ["Submitted", "Interviewing", "Hired", "Paid", "Rejected"],

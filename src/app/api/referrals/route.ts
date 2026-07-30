@@ -44,6 +44,14 @@ export async function POST(request: Request) {
 
     await connectToDatabase();
 
+    // Generate referral code using name and random number (e.g. JOHN-8492)
+    const nameSlug = (candidateName || session.userName || "REF")
+      .replace(/[^a-zA-Z]/g, "")
+      .toUpperCase()
+      .slice(0, 6) || "REF";
+    const randomNum = Math.floor(1000 + Math.random() * 9000);
+    const generatedReferralCode = `${nameSlug}-${randomNum}`;
+
     const newReferral = await Referral.create({
       candidateName,
       candidateEmail,
@@ -51,6 +59,7 @@ export async function POST(request: Request) {
       position,
       referrerName: session.userName || "Team Member",
       referrerId: userObjectId,
+      referralCode: generatedReferralCode,
       status: "Submitted",
       rewardAmount: Number(rewardAmount) || 500,
       payoutStatus: "Pending",

@@ -99,6 +99,20 @@ export async function POST(request: Request) {
       details: `Created new task '${title}' in status '${status || "To Do"}'`,
     });
 
+    // Real-time Notification for Assignee
+    if (assignee) {
+      const { Notification } = await import("@/models/Notification");
+      await Notification.create({
+        tenantId: new mongoose.Types.ObjectId(session.tenantId),
+        recipientId: new mongoose.Types.ObjectId(assignee),
+        title: "New Task Assigned",
+        message: `${session.userName} assigned you task: '${title}'`,
+        type: "task",
+        linkUrl: "/dashboard/tasks",
+        read: false,
+      });
+    }
+
     return NextResponse.json({ success: true, task: newTask }, { status: 201 });
   } catch (error: any) {
     console.error("API POST Tasks error:", error);

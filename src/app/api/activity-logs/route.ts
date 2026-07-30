@@ -27,9 +27,12 @@ export async function GET(request: Request) {
       query.projectId = new mongoose.Types.ObjectId(projectId);
     }
 
+    const limitParam = searchParams.get("limit");
+    const limit = limitParam === "all" ? 1000 : (limitParam ? Number(limitParam) : 500);
+
     const logs = await ActivityLog.find(query)
       .sort({ createdAt: -1 })
-      .limit(100);
+      .limit(limit);
 
     return NextResponse.json({ logs });
   } catch (error: any) {

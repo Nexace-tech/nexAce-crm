@@ -55,21 +55,24 @@ export async function GET(request: Request) {
       return NextResponse.json({ entries: pendingEntries });
     }
 
-    // Normal view: Fetch logged-in user's timesheet entries in date range
-    if (!startStr || !endStr) {
-      return NextResponse.json({ error: "Start and end dates are required parameters" }, { status: 400 });
+    // If start and end are provided, filter by range; otherwise fetch all
+    const query: any = {
+      tenantId: new mongoose.Types.ObjectId(session.tenantId),
+    };
+
+    if (session.role !== "Admin" && session.role !== "Manager") {
+      query.userId = new mongoose.Types.ObjectId(session.userId);
     }
 
-    const startDate = new Date(startStr);
-    const endDate = new Date(endStr);
+    if (startStr && endStr) {
+      query.date = { $gte: new Date(startStr), $lte: new Date(endStr) };
+    }
 
-    const userEntries = await TimeEntry.find({
-      tenantId: new mongoose.Types.ObjectId(session.tenantId),
-      userId: new mongoose.Types.ObjectId(session.userId),
-      date: { $gte: startDate, $lte: endDate },
-    }).sort({ date: 1 });
+    const entries = await TimeEntry.find(query)
+      .populate("userId", "name role department photoUrl")
+      .sort({ date: -1 });
 
-    return NextResponse.json({ entries: userEntries });
+    return NextResponse.json({ entries });
   } catch (error: any) {
     console.error("API GET Timesheets error:", error);
     return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: 500 });

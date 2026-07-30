@@ -2,21 +2,6 @@
 
 import React, { useState, useEffect, startTransition } from "react";
 import { useAuth } from "@/hooks/useAuth";
-import { 
-  Calendar as CalendarIcon, 
-  ChevronLeft, 
-  ChevronRight, 
-  Plus, 
-  Rocket, 
-  Clock, 
-  Fingerprint, 
-  CheckCircle, 
-  AlertCircle,
-  FileSpreadsheet,
-  CheckCheck,
-  Building,
-  UserCheck
-} from "lucide-react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -542,7 +527,7 @@ export default function CalendarPage() {
               : "bg-destructive/90 text-white border-destructive"
           )}
         >
-          {toast.type === "success" ? <CheckCircle className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
+          {toast.type === "success" ? <i className="fa-solid fa-circle-check text-base" /> : <i className="fa-solid fa-circle-exclamation text-base" />}
           {toast.message}
         </div>
       )}
@@ -628,13 +613,13 @@ export default function CalendarPage() {
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pb-4 border-b border-border">
             <div className="flex items-center gap-3">
               <Button variant="outline" size="icon" onClick={handlePrevMonth} className="h-8 w-8">
-                <ChevronLeft className="w-4 h-4" />
+                <i className="fa-solid fa-chevron-left text-xs" />
               </Button>
               <h2 className="text-lg font-bold text-foreground">
                 {monthsNames[currentDate.getMonth()]} {currentDate.getFullYear()}
               </h2>
               <Button variant="outline" size="icon" onClick={handleNextMonth} className="h-8 w-8">
-                <ChevronRight className="w-4 h-4" />
+                <i className="fa-solid fa-chevron-right text-xs" />
               </Button>
             </div>
 
@@ -932,7 +917,7 @@ export default function CalendarPage() {
           <Card className="lg:col-span-2">
             <CardHeader>
               <CardTitle className="text-lg font-bold flex items-center gap-2">
-                <Rocket className="w-5 h-5 text-primary" /> Active Sprint & Burndown
+                <i className="fa-solid fa-rocket text-primary text-base" /> Active Sprint & Burndown
               </CardTitle>
               <CardDescription>Current sprint objective and task velocity</CardDescription>
             </CardHeader>
@@ -998,7 +983,7 @@ export default function CalendarPage() {
               <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-3">
                 <div>
                   <CardTitle className="text-lg font-bold flex items-center gap-2">
-                    <FileSpreadsheet className="w-5 h-5 text-primary" /> Log Weekly Hours
+                    <i className="fa-solid fa-file-csv text-primary text-base" /> Log Weekly Hours
                   </CardTitle>
                   <CardDescription>Record your daily work hours on projects</CardDescription>
                 </div>
@@ -1012,7 +997,7 @@ export default function CalendarPage() {
                       setTimesheetWeekStart(prev);
                     }}
                   >
-                    <ChevronLeft className="w-4 h-4" />
+                    <i className="fa-solid fa-chevron-left text-xs" />
                   </Button>
                   <span className="text-xs font-semibold">
                     Week of {timesheetWeekStart.toLocaleDateString(undefined, { month: "short", day: "numeric" })}
@@ -1026,7 +1011,7 @@ export default function CalendarPage() {
                       setTimesheetWeekStart(next);
                     }}
                   >
-                    <ChevronRight className="w-4 h-4" />
+                    <i className="fa-solid fa-chevron-right text-xs" />
                   </Button>
                 </div>
               </CardHeader>
@@ -1099,7 +1084,7 @@ export default function CalendarPage() {
 
                 <div className="flex flex-col sm:flex-row justify-between gap-4 pt-4 border-t border-border/65">
                   <Button variant="outline" size="sm" onClick={handleAddTimesheetRow} className="gap-1.5 self-start">
-                    <Plus className="w-4 h-4" /> Add Row
+                    <i className="fa-solid fa-plus text-xs" /> Add Row
                   </Button>
                   <div className="flex gap-2 self-end">
                     <Button variant="outline" size="sm" onClick={() => handleSaveTimesheet("Draft")}>
@@ -1147,7 +1132,7 @@ export default function CalendarPage() {
                 <Card>
                   <CardHeader>
                     <CardTitle className="text-base font-bold flex items-center gap-2">
-                      <UserCheck className="w-4 h-4 text-primary" /> Pending Approvals
+                      <i className="fa-solid fa-user-check text-primary text-sm" /> Pending Approvals
                     </CardTitle>
                     <CardDescription>Approve or reject weekly timesheet logs</CardDescription>
                   </CardHeader>

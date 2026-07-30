@@ -1,74 +1,131 @@
 import { NextResponse } from "next/server";
+import { getSession } from "@/lib/session";
 import { connectToDatabase } from "@/lib/db";
 import { Client } from "@/models/Client";
-import { requireTenantSession, isAuthError } from "@/lib/auth-guard";
+import mongoose from "mongoose";
 
 /**
- * PATCH: Update client details or log retainer hours.
+ * GET single client
+ */
+export async function GET(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const session = await getSession();
+    if (!session) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { id } = await params;
+    await connectToDatabase();
+
+    const client = await Client.findOne({
+      _id: id,
+      tenantId: new mongoose.Types.ObjectId(session.tenantId),
+    });
+
+    if (!client) {
+      return NextResponse.json({ error: "Client not found" }, { status: 404 });
+    }
+
+    return NextResponse.json({ client });
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message || "Server Error" }, { status: 500 });
+  }
+}
+
+/**
+ * PATCH: Update client retainer details OR add a contact log entry
  */
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const authResult = await requireTenantSession(["Admin", "Manager"]);
-    if (isAuthError(authResult)) return authResult;
+    const session = await getSession();
+    if (!session) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
     const { id } = await params;
-    const { tenantObjectId } = authResult;
     const body = await request.json();
 
     await connectToDatabase();
 
-    const client = await Client.findOne({ _id: id, tenantId: tenantObjectId });
+    const client = await Client.findOne({
+      _id: id,
+      tenantId: new mongoose.Types.ObjectId(session.tenantId),
+    });
+
     if (!client) {
       return NextResponse.json({ error: "Client not found" }, { status: 404 });
     }
 
-    if (body.name !== undefined) client.name = body.name;
-    if (body.company !== undefined) client.company = body.company;
-    if (body.email !== undefined) client.email = body.email;
+    // Mode A: Log retainer hours used
+    if (typeof body.logHours === "number") {
+      client.usedHours = (client.usedHours || 0) + body.logHours;
+    }
+
+    // Mode B: Add contact history interaction log
+    if (body.contactLog) {
+      const { type, summary } = body.contactLog;
+      client.contactHistory.push({
+        date: new Date(),
+        type: type || "Note",
+        summary: summary || "Client interaction logged.",
+        authorName: session.userName,
+      });
+    }
+
+    // Mode C: Update fields directly
+    if (body.name) client.name = body.name;
+    if (body.company) client.company = body.company;
+    if (body.email) client.email = body.email;
     if (body.phone !== undefined) client.phone = body.phone;
-    if (body.status !== undefined) client.status = body.status;
-    if (body.retainerHours !== undefined) client.retainerHours = Number(body.retainerHours);
-    if (body.usedHours !== undefined) client.usedHours = Number(body.usedHours);
-    if (body.logHours !== undefined) client.usedHours = Math.max(0, client.usedHours + Number(body.logHours));
-    if (body.monthlyValue !== undefined) client.monthlyValue = Number(body.monthlyValue);
+    if (body.status) client.status = body.status;
+    if (body.pipelineStage) client.pipelineStage = body.pipelineStage;
+    if (body.retainerHours !== undefined) client.retainerHours = body.retainerHours;
+    if (body.usedHours !== undefined && typeof body.logHours !== "number") client.usedHours = body.usedHours;
+    if (body.monthlyValue !== undefined) client.monthlyValue = body.monthlyValue;
+    if (body.renewalDate !== undefined) client.renewalDate = body.renewalDate ? new Date(body.renewalDate) : undefined;
     if (body.notes !== undefined) client.notes = body.notes;
 
     await client.save();
 
-    return NextResponse.json({ client, message: "Client updated successfully" });
+    return NextResponse.json({ success: true, client });
   } catch (error: any) {
-    console.error("API PATCH Client error:", error);
-    return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: 500 });
+    return NextResponse.json({ error: error.message || "Server Error" }, { status: 500 });
   }
 }
 
 /**
- * DELETE: Remove a client retainer record (Admin only).
+ * DELETE client
  */
 export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const authResult = await requireTenantSession(["Admin"]);
-    if (isAuthError(authResult)) return authResult;
+    const session = await getSession();
+    if (!session) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
     const { id } = await params;
-    const { tenantObjectId } = authResult;
-
     await connectToDatabase();
 
-    const deletedClient = await Client.findOneAndDelete({ _id: id, tenantId: tenantObjectId });
-    if (!deletedClient) {
+    const client = await Client.findOneAndDelete({
+      _id: id,
+      tenantId: new mongoose.Types.ObjectId(session.tenantId),
+    });
+
+    if (!client) {
       return NextResponse.json({ error: "Client not found" }, { status: 404 });
     }
 
-    return NextResponse.json({ message: "Client record deleted successfully" });
+    return NextResponse.json({ success: true, message: "Client deleted successfully" });
   } catch (error: any) {
-    console.error("API DELETE Client error:", error);
-    return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: 500 });
+    return NextResponse.json({ error: error.message || "Server Error" }, { status: 500 });
   }
 }

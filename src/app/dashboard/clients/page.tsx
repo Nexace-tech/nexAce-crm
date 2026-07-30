@@ -1,27 +1,20 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from "react";
-import { 
-  Handshake, 
-  UserPlus, 
-  Search, 
-  Mail, 
-  Phone, 
-  Clock, 
-  DollarSign, 
-  Edit3, 
-  Trash2, 
-  Timer,
-  CheckCircle,
-  AlertCircle,
-  Plus
-} from "lucide-react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Pagination } from "@/components/ui/pagination";
 import { cn } from "@/lib/utils";
+
+interface ContactLog {
+  _id?: string;
+  date: string;
+  type: "Email" | "Call" | "Meeting" | "Note";
+  summary: string;
+  authorName: string;
+}
 
 interface ClientData {
   _id: string;
@@ -30,10 +23,13 @@ interface ClientData {
   email: string;
   phone?: string;
   status: "Active" | "Lead" | "On Hold" | "Archived";
+  pipelineStage: "Lead" | "Negotiation" | "Active Retainer" | "On Hold" | "Closed";
   retainerHours: number;
   usedHours: number;
   monthlyValue: number;
+  renewalDate?: string;
   notes?: string;
+  contactHistory: ContactLog[];
   createdAt: string;
 }
 
@@ -54,14 +50,18 @@ export default function ClientsPage() {
     email: "",
     phone: "",
     status: "Active" as ClientData["status"],
+    pipelineStage: "Active Retainer" as ClientData["pipelineStage"],
     retainerHours: 20,
     usedHours: 0,
     monthlyValue: 1500,
+    renewalDate: "",
     notes: "",
   });
 
-  const [logHoursClient, setLogHoursClient] = useState<ClientData | null>(null);
-  const [hoursToLog, setHoursToLog] = useState<number>(1);
+  // Contact history modal
+  const [activeHistoryClient, setActiveHistoryClient] = useState<ClientData | null>(null);
+  const [newLogType, setNewLogType] = useState<"Email" | "Call" | "Meeting" | "Note">("Meeting");
+  const [newLogSummary, setNewLogSummary] = useState("");
 
   const fetchClients = async () => {
     try {
@@ -91,9 +91,11 @@ export default function ClientsPage() {
         email: client.email,
         phone: client.phone || "",
         status: client.status,
+        pipelineStage: client.pipelineStage || "Active Retainer",
         retainerHours: client.retainerHours,
         usedHours: client.usedHours,
         monthlyValue: client.monthlyValue,
+        renewalDate: client.renewalDate ? client.renewalDate.split("T")[0] : "",
         notes: client.notes || "",
       });
     } else {
@@ -104,9 +106,11 @@ export default function ClientsPage() {
         email: "",
         phone: "",
         status: "Active",
+        pipelineStage: "Active Retainer",
         retainerHours: 20,
         usedHours: 0,
         monthlyValue: 1500,
+        renewalDate: "",
         notes: "",
       });
     }
@@ -137,27 +141,30 @@ export default function ClientsPage() {
     }
   };
 
-  const handleLogHoursSubmit = async (e: React.FormEvent) => {
+  const handleAddContactLog = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!logHoursClient) return;
+    if (!activeHistoryClient || !newLogSummary.trim()) return;
 
     try {
-      const res = await fetch(`/api/clients/${logHoursClient._id}`, {
+      const res = await fetch(`/api/clients/${activeHistoryClient._id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ logHours: hoursToLog }),
+        body: JSON.stringify({
+          contactLog: {
+            type: newLogType,
+            summary: newLogSummary,
+          },
+        }),
       });
 
       if (res.ok) {
-        setLogHoursClient(null);
-        setHoursToLog(1);
+        setNewLogSummary("");
+        const updated = await res.json();
+        setActiveHistoryClient(updated.client);
         fetchClients();
-      } else {
-        const err = await res.json();
-        alert(err.error || "Failed to log hours");
       }
     } catch (err) {
-      console.error("Log hours error:", err);
+      console.error("Add contact log error:", err);
     }
   };
 
@@ -209,14 +216,16 @@ export default function ClientsPage() {
       {/* Title */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">CRM & Client Retainers</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
+            <i className="fa-solid fa-handshake text-primary text-xl" /> CRM & Client Retainers
+          </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Retainer hours pipeline, monthly client value, and usage tracking.
+            Retainer hours pipeline, contact interaction history logs, and renewal tracking.
           </p>
         </div>
 
         <Button color="primary" size="sm" onClick={() => handleOpenModal()} className="gap-2">
-          <UserPlus className="w-4 h-4" /> Add Client Retainer
+          <i className="fa-solid fa-user-plus text-xs" /> Add Client Retainer
         </Button>
       </div>
 
@@ -229,7 +238,7 @@ export default function ClientsPage() {
               <p className="text-2xl font-bold text-foreground">{metrics.totalRetainers}</p>
             </div>
             <div className="p-3 bg-primary/10 text-primary rounded-xl">
-              <Handshake className="w-6 h-6" />
+              <i className="fa-solid fa-handshake text-xl" />
             </div>
           </CardContent>
         </Card>
@@ -241,7 +250,7 @@ export default function ClientsPage() {
               <p className="text-2xl font-bold text-foreground">{metrics.activeRetainers}</p>
             </div>
             <div className="p-3 bg-emerald-500/10 text-emerald-500 rounded-xl">
-              <CheckCircle className="w-6 h-6" />
+              <i className="fa-solid fa-circle-check text-xl" />
             </div>
           </CardContent>
         </Card>
@@ -253,7 +262,7 @@ export default function ClientsPage() {
               <p className="text-2xl font-bold text-foreground">${metrics.totalMonthlyValue.toLocaleString()}</p>
             </div>
             <div className="p-3 bg-sky-500/10 text-sky-500 rounded-xl">
-              <DollarSign className="w-6 h-6" />
+              <i className="fa-solid fa-dollar-sign text-xl" />
             </div>
           </CardContent>
         </Card>
@@ -265,7 +274,7 @@ export default function ClientsPage() {
               <p className="text-2xl font-bold text-foreground">{metrics.overallUtilization}%</p>
             </div>
             <div className="p-3 bg-amber-500/10 text-amber-500 rounded-xl">
-              <Clock className="w-6 h-6" />
+              <i className="fa-solid fa-clock text-xl" />
             </div>
           </CardContent>
         </Card>
@@ -274,7 +283,7 @@ export default function ClientsPage() {
       {/* Filter Bar */}
       <Card className="p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
         <div className="relative w-full sm:max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <i className="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground" />
           <Input
             type="text"
             placeholder="Search by name, company, email..."
@@ -306,21 +315,31 @@ export default function ClientsPage() {
               : 0;
 
           return (
-            <Card key={client._id} className="hover:shadow-md transition-all flex flex-col justify-between">
+            <Card key={client._id} className="hover:shadow-md transition-all flex flex-col justify-between border-l-4 border-l-primary">
               <CardHeader className="flex flex-row items-start justify-between pb-3">
                 <div>
                   <CardTitle className="text-base font-bold text-foreground">{client.company}</CardTitle>
                   <p className="text-xs text-primary font-semibold mt-0.5">{client.name}</p>
                 </div>
-                <Badge color={client.status === "Active" ? "success" : client.status === "Lead" ? "info" : "warning"} variant="soft">
-                  {client.status}
-                </Badge>
+                <div className="flex flex-col items-end gap-1">
+                  <Badge color={client.status === "Active" ? "success" : client.status === "Lead" ? "info" : "warning"} variant="soft">
+                    {client.status}
+                  </Badge>
+                  <Badge variant="outline" className="text-[10px]">
+                    {client.pipelineStage || "Active Retainer"}
+                  </Badge>
+                </div>
               </CardHeader>
 
               <CardContent className="space-y-4">
                 <div className="text-xs text-muted-foreground space-y-1">
-                  <p className="flex items-center gap-2"><Mail className="w-3.5 h-3.5" /> {client.email}</p>
-                  {client.phone && <p className="flex items-center gap-2"><Phone className="w-3.5 h-3.5" /> {client.phone}</p>}
+                  <p className="flex items-center gap-2"><i className="fa-solid fa-envelope text-xs" /> {client.email}</p>
+                  {client.phone && <p className="flex items-center gap-2"><i className="fa-solid fa-phone text-xs" /> {client.phone}</p>}
+                  {client.renewalDate && (
+                    <p className="flex items-center gap-2 text-amber-500 font-semibold">
+                      <i className="fa-solid fa-calendar-days text-xs" /> Renewal: {new Date(client.renewalDate).toLocaleDateString()}
+                    </p>
+                  )}
                 </div>
 
                 <div className="space-y-1.5">
@@ -340,14 +359,19 @@ export default function ClientsPage() {
                   </div>
 
                   <div className="flex items-center gap-1">
-                    <Button variant="outline" size="sm" onClick={() => { setLogHoursClient(client); setHoursToLog(1); }}>
-                      Log Hours
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setActiveHistoryClient(client)}
+                      className="gap-1 text-xs"
+                    >
+                      <i className="fa-solid fa-clock-rotate-left text-xs" /> Logs ({client.contactHistory?.length || 0})
                     </Button>
                     <Button variant="ghost" size="icon" onClick={() => handleOpenModal(client)} className="h-8 w-8">
-                      <Edit3 className="w-4 h-4" />
+                      <i className="fa-solid fa-pen-to-square text-xs" />
                     </Button>
                     <Button variant="ghost" size="icon" onClick={() => handleDeleteClient(client._id)} className="h-8 w-8 text-destructive">
-                      <Trash2 className="w-4 h-4" />
+                      <i className="fa-solid fa-trash text-xs" />
                     </Button>
                   </div>
                 </div>
@@ -364,6 +388,151 @@ export default function ClientsPage() {
         totalItems={filteredClients.length}
         itemsPerPage={itemsPerPage}
       />
+
+      {/* Add / Edit Client Modal */}
+      {showModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in" onClick={() => setShowModal(false)}>
+          <div className="w-full max-w-lg bg-card border border-border rounded-xl p-6 shadow-2xl space-y-4 animate-in zoom-in-95" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between border-b border-border pb-3">
+              <h3 className="font-bold text-lg text-foreground flex items-center gap-2">
+                <i className="fa-solid fa-handshake text-primary text-base" /> {editingClient ? "Edit Client Retainer" : "Add Client Retainer"}
+              </h3>
+              <button onClick={() => setShowModal(false)} className="text-muted-foreground hover:text-foreground cursor-pointer"><i className="fa-solid fa-xmark text-sm" /></button>
+            </div>
+            <form onSubmit={handleSaveClient} className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-foreground">Contact Name *</label>
+                  <Input value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} placeholder="John Doe" required />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-foreground">Company Name *</label>
+                  <Input value={formData.company} onChange={(e) => setFormData({ ...formData, company: e.target.value })} placeholder="Acme Corp" required />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-foreground">Email Address *</label>
+                  <Input type="email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} required />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-foreground">Phone Number</label>
+                  <Input value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-foreground">Status</label>
+                  <select value={formData.status} onChange={(e) => setFormData({ ...formData, status: e.target.value as any })} className="w-full h-9 px-3 text-sm bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary">
+                    <option value="Active">Active</option>
+                    <option value="Lead">Lead</option>
+                    <option value="On Hold">On Hold</option>
+                    <option value="Archived">Archived</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-foreground">Pipeline Stage</label>
+                  <select value={formData.pipelineStage} onChange={(e) => setFormData({ ...formData, pipelineStage: e.target.value as any })} className="w-full h-9 px-3 text-sm bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary">
+                    <option value="Lead">Lead</option>
+                    <option value="Negotiation">Negotiation</option>
+                    <option value="Active Retainer">Active Retainer</option>
+                    <option value="On Hold">On Hold</option>
+                    <option value="Closed">Closed</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-foreground">Renewal Date</label>
+                  <Input type="date" value={formData.renewalDate} onChange={(e) => setFormData({ ...formData, renewalDate: e.target.value })} />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-foreground">Monthly Retainer Hours</label>
+                  <Input type="number" value={formData.retainerHours} onChange={(e) => setFormData({ ...formData, retainerHours: Number(e.target.value) })} required />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-foreground">Monthly Value ($)</label>
+                  <Input type="number" value={formData.monthlyValue} onChange={(e) => setFormData({ ...formData, monthlyValue: Number(e.target.value) })} required />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-border">
+                <Button variant="outline" size="sm" type="button" onClick={() => setShowModal(false)}>Cancel</Button>
+                <Button color="primary" size="sm" type="submit">Save Client</Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Contact History Log Modal */}
+      {activeHistoryClient && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in" onClick={() => setActiveHistoryClient(null)}>
+          <div className="w-full max-w-xl bg-card border border-border rounded-xl p-6 shadow-2xl space-y-4 animate-in zoom-in-95 max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between border-b border-border pb-3">
+              <div>
+                <h3 className="font-bold text-lg text-foreground flex items-center gap-2">
+                  <i className="fa-solid fa-clock-rotate-left text-sky-500 text-base" /> Contact History Timeline
+                </h3>
+                <p className="text-xs text-muted-foreground">{activeHistoryClient.company} ({activeHistoryClient.name})</p>
+              </div>
+              <button onClick={() => setActiveHistoryClient(null)} className="text-muted-foreground hover:text-foreground cursor-pointer"><i className="fa-solid fa-xmark text-sm" /></button>
+            </div>
+
+            {/* Form to log interaction */}
+            <form onSubmit={handleAddContactLog} className="p-3 bg-muted/40 rounded-lg border border-border space-y-3">
+              <p className="text-xs font-semibold text-foreground">Log New Interaction</p>
+              <div className="flex gap-2">
+                <select
+                  value={newLogType}
+                  onChange={(e) => setNewLogType(e.target.value as any)}
+                  className="h-8 px-2 text-xs bg-background border border-border rounded-md text-foreground focus:outline-none"
+                >
+                  <option value="Meeting">Meeting</option>
+                  <option value="Call">Call</option>
+                  <option value="Email">Email</option>
+                  <option value="Note">Note</option>
+                </select>
+                <Input
+                  placeholder="Summary of conversation, email sent, or meeting outcome..."
+                  value={newLogSummary}
+                  onChange={(e) => setNewLogSummary(e.target.value)}
+                  className="text-xs flex-1 h-8"
+                  required
+                />
+                <Button color="primary" size="sm" type="submit" className="h-8 text-xs gap-1">
+                  <i className="fa-solid fa-paper-plane text-xs" /> Log
+                </Button>
+              </div>
+            </form>
+
+            {/* Interaction history list */}
+            <div className="space-y-3 pt-2">
+              {activeHistoryClient.contactHistory?.length === 0 ? (
+                <p className="text-xs text-muted-foreground text-center py-4">No contact history logged yet for this client.</p>
+              ) : (
+                activeHistoryClient.contactHistory?.map((item, idx) => (
+                  <div key={idx} className="p-3 rounded-lg border border-border bg-accent/20 space-y-1 text-xs">
+                    <div className="flex items-center justify-between font-semibold">
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className="text-[10px]">{item.type}</Badge>
+                        <span className="text-foreground">{item.authorName}</span>
+                      </div>
+                      <span className="text-[10px] text-muted-foreground">{new Date(item.date).toLocaleString()}</span>
+                    </div>
+                    <p className="text-muted-foreground whitespace-pre-line">{item.summary}</p>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
