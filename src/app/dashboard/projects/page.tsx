@@ -121,26 +121,37 @@ export default function ProjectsPage() {
       const res = await fetch("/api/projects");
       if (res.ok) {
         const data = await res.json();
-        setProjects(data.projects || []);
-        if (data.projects && data.projects.length > 0 && !selectedProjectId) {
-          setSelectedProjectId(data.projects[0]._id);
+        const list = data.projects || [];
+        setProjects(list);
+        if (list.length > 0) {
+          const targetId = list.some((p: any) => p._id === selectedProjectId) ? selectedProjectId : list[0]._id;
+          setSelectedProjectId(targetId);
+          await fetchTasks(targetId);
+          await fetchActivityLogs();
+        } else {
+          setSelectedProjectId("");
+          setTasks([]);
+          setActivityLogs([]);
         }
+        return list;
       }
     } catch (e) {
-      console.error(e);
+      console.error("fetchProjects error:", e);
     }
+    return [];
   };
 
-  const fetchTasks = async () => {
-    if (!selectedProjectId) return;
+  const fetchTasks = async (overrideProjectId?: string) => {
+    const pId = overrideProjectId || selectedProjectId;
+    if (!pId) return;
     try {
-      const res = await fetch(`/api/tasks?projectId=${selectedProjectId}`);
+      const res = await fetch(`/api/tasks?projectId=${pId}`);
       if (res.ok) {
         const data = await res.json();
         setTasks(data.tasks || []);
       }
     } catch (e) {
-      console.error(e);
+      console.error("fetchTasks error:", e);
     }
   };
 
@@ -265,8 +276,11 @@ export default function ProjectsPage() {
     if (mounted && selectedProjectId) {
       fetchTasks();
       fetchActivityLogs();
+    } else if (mounted && !selectedProjectId) {
+      setTasks([]);
+      setActivityLogs([]);
     }
-  }, [selectedProjectId, mounted]);
+  }, [selectedProjectId, activeTab, mounted]);
 
   const handleCreateProject = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -491,18 +505,26 @@ export default function ProjectsPage() {
             onChange={(e) => setSelectedProjectId(e.target.value)}
             className="h-9 px-3 text-sm bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary flex-1 sm:w-64"
           >
-            {projects.map((p) => (
-              <option key={p._id} value={p._id}>
-                {p.name}
-              </option>
-            ))}
+            {projects.length === 0 ? (
+              <option value="">No projects available</option>
+            ) : (
+              projects.map((p) => (
+                <option key={p._id} value={p._id}>
+                  {p.name}
+                </option>
+              ))
+            )}
           </select>
         </div>
 
-        {selectedProjectId && (
+        {selectedProjectId ? (
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <span>Total Tasks: <strong className="text-foreground">{tasks.length}</strong></span>
           </div>
+        ) : (
+          <Button size="sm" onClick={() => setShowProjectForm(true)} className="gap-2 text-xs font-semibold">
+            <i className="fa-solid fa-plus text-xs" /> Create First Project
+          </Button>
         )}
       </Card>
 
