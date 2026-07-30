@@ -70,6 +70,16 @@ export default async function DashboardLayout({ children }: DashboardLayoutProps
       { name: "Referral Pipeline", href: "/dashboard/referrals", icon: "fa-solid fa-link" },
       { name: "Settings & Security", href: "/dashboard/settings", icon: "fa-solid fa-gear" },
     ];
+  } else if (role === "HR") {
+    menuItems = [
+      { name: "HR Overview", href: "/dashboard", icon: "fa-solid fa-users-gear" },
+      { name: "HR Management Portal", href: "/dashboard/hr", icon: "fa-solid fa-briefcase" },
+      { name: "My Team", href: "/dashboard/team", icon: "fa-solid fa-users" },
+      { name: "Calendar & Timesheets", href: "/dashboard/calendar", icon: "fa-solid fa-calendar-days" },
+      { name: "Chat & Mail", href: "/dashboard/chat", icon: "fa-solid fa-comments" },
+      { name: "Goals & OKRs", href: "/dashboard/goals", icon: "fa-solid fa-bullseye" },
+      { name: "Settings & Security", href: "/dashboard/settings", icon: "fa-solid fa-gear" },
+    ];
   } else {
     // Employee
     menuItems = [

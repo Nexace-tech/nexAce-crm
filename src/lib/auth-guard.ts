@@ -13,7 +13,7 @@ export interface AuthenticatedContext {
  * Returns either the authenticated context or an immediate NextResponse error.
  */
 export async function requireTenantSession(
-  allowedRoles?: Array<"Admin" | "Manager" | "Employee">
+  allowedRoles?: Array<"Admin" | "Manager" | "HR" | "Employee">
 ): Promise<AuthenticatedContext | NextResponse> {
   const session = await getSession();
 

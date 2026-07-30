@@ -8,7 +8,7 @@ interface UserProfile {
   _id: string;
   name: string;
   email: string;
-  role: "Admin" | "Manager" | "Employee";
+  role: "Admin" | "Manager" | "HR" | "Employee";
   tenantId: {
     _id: string;
     name: string;

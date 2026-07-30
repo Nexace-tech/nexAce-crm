@@ -128,7 +128,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
 
     // Admin-specific updates
     if (isAdmin) {
-      if (body.role && ["Admin", "Manager", "Employee"].includes(body.role)) {
+      if (body.role && ["Admin", "Manager", "HR", "Employee"].includes(body.role)) {
         user.role = body.role;
       }
       if (body.departments && Array.isArray(body.departments)) {

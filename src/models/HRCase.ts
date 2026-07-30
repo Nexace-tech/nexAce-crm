@@ -29,7 +29,7 @@ const HRCaseSchema = new Schema<IHRCase>(
     userName: { type: String, required: true, trim: true },
     category: {
       type: String,
-      enum: ["Payroll", "IT Access", "Policy Query", "Benefits", "Other"],
+      enum: ["Payroll", "IT Access", "Policy Query", "Benefits", "Ask your Manager", "Other"],
       default: "Other",
     },
     subject: { type: String, required: true, trim: true },

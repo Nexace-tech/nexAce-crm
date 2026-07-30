@@ -5,33 +5,6 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import { Preloader } from "@/components/ui/Preloader";
 import { OrgChartNode, OrgNode } from "@/components/features/OrgChartNode";
-import { 
-  Users, 
-  Network, 
-  Crown, 
-  Layers, 
-  Plus, 
-  UserPlus, 
-  UsersRound, 
-  Building, 
-  Search, 
-  Grid, 
-  List as ListIcon, 
-  Trash2, 
-  Mail, 
-  Phone, 
-  CheckCircle, 
-  AlertCircle,
-  X,
-  Upload,
-  Edit3,
-  Filter,
-  Check,
-  ChevronRight,
-  Sparkles,
-  ShieldCheck,
-  Award
-} from "lucide-react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -428,7 +401,7 @@ export default function TeamDashboardPage() {
       const data = await response.json();
 
       if (response.ok) {
-        setSelectedMember(data.user);
+        setSelectedMember(null);
         setIsEditingBio(false);
         await fetchTeam();
         showToast("Profile updated successfully!", "success");
@@ -590,10 +563,21 @@ export default function TeamDashboardPage() {
   };
 
   const orgTreeRoots = useMemo(() => {
+    const filteredUsers = departmentFilter && departmentFilter !== "All"
+      ? users.filter((u) => u.department === departmentFilter || (u.departments && u.departments.includes(departmentFilter)))
+      : users;
+
     const userMap: { [key: string]: OrgNode } = {};
     const rootNodes: OrgNode[] = [];
 
-    users.forEach((u) => {
+    const roleWeight = (role: string) => {
+      if (role === "Admin") return 0;
+      if (role === "Manager") return 1;
+      if (role === "HR") return 2;
+      return 3;
+    };
+
+    filteredUsers.forEach((u) => {
       userMap[u._id] = {
         _id: u._id,
         name: u.name,
@@ -603,22 +587,50 @@ export default function TeamDashboardPage() {
         photoUrl: u.photoUrl,
         status: u.status || "Active",
         managerId: u.managerId?._id || u.managerId,
+        managerName: u.managerId?.name || undefined,
         reports: [],
       };
     });
 
-    users.forEach((u) => {
+    const globalFirstAdmin = filteredUsers.find((u) => u.role === "Admin")?._id || users.find((u) => u.role === "Admin")?._id || null;
+    const globalFirstManager = filteredUsers.find((u) => u.role === "Manager")?._id || users.find((u) => u.role === "Manager")?._id || null;
+
+    filteredUsers.forEach((u) => {
       const node = userMap[u._id];
       const managerId = u.managerId?._id || u.managerId;
-      if (managerId && userMap[managerId] && managerId !== u._id) {
+      const managerNode = managerId ? userMap[managerId] : null;
+      const managerRole = managerNode?.role || null;
+
+      const isEmployeeOrHR = u.role === "HR" || u.role === "Employee";
+      const isManagerRole = u.role === "Manager";
+
+      const deptManager = filteredUsers.find(
+        (m) => m.role === "Manager" && m._id !== u._id && (m.department === u.department || (m.departments && u.departments && m.departments.some((d: string) => u.departments.includes(d))))
+      )?._id;
+
+      const fallbackManagerId = deptManager || globalFirstManager;
+
+      if (managerId && managerNode && managerId !== u._id && managerRole !== "Admin") {
         userMap[managerId].reports.push(node);
+      } else if (isManagerRole && globalFirstAdmin && globalFirstAdmin !== u._id && userMap[globalFirstAdmin]) {
+        node.managerName = userMap[globalFirstAdmin].name;
+        userMap[globalFirstAdmin].reports.push(node);
+      } else if (isEmployeeOrHR && fallbackManagerId && fallbackManagerId !== u._id && userMap[fallbackManagerId]) {
+        node.managerName = userMap[fallbackManagerId].name;
+        userMap[fallbackManagerId].reports.push(node);
       } else {
         rootNodes.push(node);
       }
     });
 
+    Object.values(userMap).forEach((node) => {
+      node.reports.sort((a, b) => roleWeight(a.role) - roleWeight(b.role) || a.name.localeCompare(b.name));
+    });
+
+    rootNodes.sort((a, b) => roleWeight(a.role) - roleWeight(b.role) || a.name.localeCompare(b.name));
+
     return rootNodes;
-  }, [users]);
+  }, [users, departmentFilter]);
 
   const userRole = useMemo(() => (currentUser?.role || "").trim().toLowerCase(), [currentUser?.role]);
   const isAdmin = userRole === "admin";
@@ -647,7 +659,7 @@ export default function TeamDashboardPage() {
               : "bg-destructive/90 text-white border-destructive"
           )}
         >
-          {toast.type === "success" ? <CheckCircle className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
+          {toast.type === "success" ? <i className="fa-solid fa-circle-check" /> : <i className="fa-solid fa-circle-exclamation" />}
           {toast.message}
         </div>
       )}
@@ -669,7 +681,7 @@ export default function TeamDashboardPage() {
               onClick={() => setShowBulkAddModal(true)}
               className="gap-2"
             >
-              <UsersRound className="w-4 h-4" /> Bulk Add
+              <i className="fa-solid fa-people-group" /> Bulk Add
             </Button>
             <Button
               variant="outline"
@@ -684,7 +696,7 @@ export default function TeamDashboardPage() {
               }}
               className="gap-2"
             >
-              <Building className="w-4 h-4" /> Add Department
+              <i className="fa-solid fa-building" /> Add Department
             </Button>
             <Button
               color="primary"
@@ -692,7 +704,7 @@ export default function TeamDashboardPage() {
               onClick={() => setShowAddForm(true)}
               className="gap-2"
             >
-              <UserPlus className="w-4 h-4" /> Add Employee
+              <i className="fa-solid fa-user-plus" /> Add Employee
             </Button>
           </div>
         )}
@@ -709,7 +721,7 @@ export default function TeamDashboardPage() {
               : "border-transparent text-muted-foreground hover:text-foreground"
           )}
         >
-          <Users className="w-4 h-4" /> Directory ({users.length})
+          <i className="fa-solid fa-users" /> Directory ({users.length})
         </button>
 
         <button
@@ -721,7 +733,7 @@ export default function TeamDashboardPage() {
               : "border-transparent text-muted-foreground hover:text-foreground"
           )}
         >
-          <Network className="w-4 h-4" /> Org Chart (Hierarchy)
+          <i className="fa-solid fa-sitemap" /> Org Chart (Hierarchy)
         </button>
 
         {isManagerOrAdmin && (
@@ -734,7 +746,7 @@ export default function TeamDashboardPage() {
                 : "border-transparent text-muted-foreground hover:text-foreground"
             )}
           >
-            <Crown className="w-4 h-4 text-amber-500" /> Manager Panel
+            <i className="fa-solid fa-crown text-amber-500" /> Manager Panel
           </button>
         )}
 
@@ -747,7 +759,7 @@ export default function TeamDashboardPage() {
               : "border-transparent text-muted-foreground hover:text-foreground"
           )}
         >
-          <Layers className="w-4 h-4" /> Departments ({departmentsList.length})
+          <i className="fa-solid fa-layer-group" /> Departments ({departmentsList.length})
         </button>
       </div>
 
@@ -758,7 +770,7 @@ export default function TeamDashboardPage() {
           <Card>
             <CardContent className="p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
               <div className="relative w-full sm:max-w-md">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <i className="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm" />
                 <Input
                   type="text"
                   placeholder="Search name, email, skills, department..."
@@ -788,14 +800,14 @@ export default function TeamDashboardPage() {
                     className={cn("p-2 transition-colors cursor-pointer", viewMode === "grid" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground")}
                     title="Grid View"
                   >
-                    <Grid className="w-4 h-4" />
+                    <i className="fa-solid fa-grip" />
                   </button>
                   <button
                     onClick={() => setViewMode("list")}
                     className={cn("p-2 transition-colors cursor-pointer", viewMode === "list" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground")}
                     title="List View"
                   >
-                    <ListIcon className="w-4 h-4" />
+                    <i className="fa-solid fa-list" />
                   </button>
                 </div>
               </div>
@@ -871,7 +883,7 @@ export default function TeamDashboardPage() {
                             className="text-muted-foreground hover:text-destructive p-1 rounded-md transition-colors"
                             title="Remove Member"
                           >
-                            <Trash2 className="w-4 h-4" />
+                            <i className="fa-solid fa-trash" />
                           </button>
                         )}
                       </div>
@@ -886,11 +898,11 @@ export default function TeamDashboardPage() {
 
                       <div className="space-y-1 text-xs text-muted-foreground pt-1 border-t border-border/40">
                         <p className="flex items-center gap-2 truncate">
-                          <Mail className="w-3.5 h-3.5 shrink-0" /> {member.email}
+                          <i className="fa-solid fa-envelope shrink-0 text-xs" /> {member.email}
                         </p>
                         {member.phone && (
                           <p className="flex items-center gap-2 truncate">
-                            <Phone className="w-3.5 h-3.5 shrink-0" /> {member.phone}
+                            <i className="fa-solid fa-phone shrink-0 text-xs" /> {member.phone}
                           </p>
                         )}
                       </div>
@@ -1026,7 +1038,7 @@ export default function TeamDashboardPage() {
       {selectedUserIds.length > 0 && isManagerOrAdmin && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-card border border-border shadow-2xl rounded-full px-6 py-3 flex items-center gap-4 z-50 animate-in slide-in-from-bottom-5">
           <span className="text-sm font-semibold text-foreground flex items-center gap-2">
-            <CheckCircle className="w-4 h-4 text-primary" /> {selectedUserIds.length} Selected
+            <i className="fa-solid fa-circle-check text-primary" /> {selectedUserIds.length} Selected
           </span>
           <Button
             color="primary"
@@ -1086,7 +1098,7 @@ export default function TeamDashboardPage() {
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-lg font-bold text-foreground flex items-center gap-2">
-                <Crown className="w-5 h-5 text-amber-500" /> Manager Leadership Panel
+                <i className="fa-solid fa-crown text-amber-500 text-lg" /> Manager Leadership Panel
               </h2>
               <p className="text-xs text-muted-foreground">
                 Overview of your direct reports, team allocation, and reporting hierarchy management.
@@ -1102,14 +1114,14 @@ export default function TeamDashboardPage() {
             <Card className="lg:col-span-2">
               <CardHeader>
                 <CardTitle className="text-base font-bold flex items-center gap-2">
-                  <Users className="w-4 h-4 text-primary" /> Direct Reports
+                  <i className="fa-solid fa-users text-primary" /> Direct Reports
                 </CardTitle>
                 <CardDescription>Members reporting directly to you ({currentUser?.name})</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
                 {directReports.length === 0 ? (
                   <div className="py-8 text-center text-muted-foreground text-sm space-y-1">
-                    <UsersRound className="w-8 h-8 mx-auto stroke-1 opacity-50" />
+                    <i className="fa-solid fa-people-group text-4xl mx-auto opacity-50" />
                     <p>You currently have no direct reports assigned.</p>
                   </div>
                 ) : (
@@ -1154,7 +1166,7 @@ export default function TeamDashboardPage() {
             <Card>
               <CardHeader>
                 <CardTitle className="text-base font-bold flex items-center gap-2">
-                  <Network className="w-4 h-4 text-primary" /> Team Structure Actions
+                  <i className="fa-solid fa-sitemap text-primary" /> Team Structure Actions
                 </CardTitle>
                 <CardDescription>Manage reporting lines for organization members</CardDescription>
               </CardHeader>
@@ -1179,7 +1191,7 @@ export default function TeamDashboardPage() {
 
                 <div className="p-3.5 rounded-lg border border-border bg-muted/40 space-y-2 text-xs text-muted-foreground">
                   <p className="font-semibold text-foreground flex items-center gap-1.5">
-                    <Sparkles className="w-3.5 h-3.5 text-amber-500" /> Manager Drag & Drop
+                    <i className="fa-solid fa-wand-magic-sparkles text-amber-500 text-xs" /> Manager Drag & Drop
                   </p>
                   <p>
                     You can also switch to the <strong>Org Chart</strong> tab to visually drag and drop team members onto new managers.
@@ -1194,13 +1206,13 @@ export default function TeamDashboardPage() {
             <Card>
               <CardHeader>
                 <CardTitle className="text-base font-bold flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 text-amber-500" /> Pending Approvals
+                  <i className="fa-solid fa-circle-exclamation text-amber-500" /> Pending Approvals
                 </CardTitle>
                 <CardDescription>Leave requests and timesheets awaiting your action</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
                 {directReports.length === 0 ? (
-                  <p className="text-sm text-muted-foreground py-4 text-center">No direct reports — no pending approvals.</p>
+                  <p className="text-sm text-muted-foreground py-4 text-center">No direct reports â€” no pending approvals.</p>
                 ) : (
                   <>
                     <div className="flex items-center justify-between p-3 rounded-lg border border-amber-500/20 bg-amber-500/5">
@@ -1218,7 +1230,7 @@ export default function TeamDashboardPage() {
                       <Badge color="primary" variant="soft">0 pending</Badge>
                     </div>
                     <Button variant="outline" size="sm" className="w-full mt-1" asChild>
-                      <a href="/dashboard/hr">Go to HR Portal →</a>
+                      <a href="/dashboard/hr">Go to HR Portal â†’</a>
                     </Button>
                   </>
                 )}
@@ -1229,7 +1241,7 @@ export default function TeamDashboardPage() {
             <Card>
               <CardHeader>
                 <CardTitle className="text-base font-bold flex items-center gap-2">
-                  <Award className="w-4 h-4 text-emerald-500" /> Team KPI Status
+                  <i className="fa-solid fa-trophy text-emerald-500" /> Team KPI Status
                 </CardTitle>
                 <CardDescription>At-a-glance performance status for your direct reports</CardDescription>
               </CardHeader>
@@ -1293,7 +1305,7 @@ export default function TeamDashboardPage() {
                 }}
                 className="gap-2"
               >
-                <Plus className="w-4 h-4" /> Create Department
+                <i className="fa-solid fa-plus" /> Create Department
               </Button>
             )}
           </div>
@@ -1334,7 +1346,7 @@ export default function TeamDashboardPage() {
                           }}
                           className="h-8 w-8"
                         >
-                          <Edit3 className="w-4 h-4 text-muted-foreground" />
+                          <i className="fa-solid fa-pen text-muted-foreground" />
                         </Button>
                         {isAdmin && (
                           <Button
@@ -1343,7 +1355,7 @@ export default function TeamDashboardPage() {
                             onClick={() => setDeptToDelete(dept)}
                             className="h-8 w-8 text-destructive"
                           >
-                            <Trash2 className="w-4 h-4" />
+                            <i className="fa-solid fa-trash" />
                           </Button>
                         )}
                       </div>
@@ -1355,10 +1367,10 @@ export default function TeamDashboardPage() {
                       className="w-full flex items-center justify-between p-3 rounded-lg bg-accent/40 hover:bg-accent border border-border text-xs font-semibold text-foreground transition-colors cursor-pointer"
                     >
                       <span className="flex items-center gap-2">
-                        <Users className="w-4 h-4 text-primary" /> Assigned Employees
+                        <i className="fa-solid fa-users text-primary" /> Assigned Employees
                       </span>
                       <span className="text-primary flex items-center gap-1">
-                        {count} Members <ChevronRight className="w-4 h-4" />
+                        {count} Members <i className="fa-solid fa-chevron-right" />
                       </span>
                     </button>
                   </CardContent>
@@ -1388,7 +1400,7 @@ export default function TeamDashboardPage() {
                 </div>
               </div>
               <button onClick={() => setSelectedMember(null)} className="text-muted-foreground hover:text-foreground cursor-pointer">
-                <X className="w-5 h-5" />
+                <i className="fa-solid fa-xmark" />
               </button>
             </div>
 
@@ -1409,14 +1421,14 @@ export default function TeamDashboardPage() {
                 <p className="font-semibold text-foreground">
                   {selectedMember.createdAt
                     ? new Date(selectedMember.createdAt).toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" })
-                    : "—"}
+                    : "â€”"}
                 </p>
               </div>
               <div className="space-y-0.5">
                 <p className="text-muted-foreground font-medium">Reports To</p>
                 <p className="font-semibold text-foreground">
                   {selectedMember.managerId
-                    ? users.find((u: any) => u._id === selectedMember.managerId)?.name || "—"
+                    ? users.find((u: any) => u._id === selectedMember.managerId)?.name || "â€”"
                     : "CEO / Top-level"}
                 </p>
               </div>
@@ -1446,6 +1458,7 @@ export default function TeamDashboardPage() {
                     >
                       <option value="Employee">Employee</option>
                       <option value="Manager">Manager</option>
+                      <option value="HR">HR</option>
                       <option value="Admin">Admin</option>
                     </select>
                   </div>
@@ -1487,10 +1500,10 @@ export default function TeamDashboardPage() {
           <div className="w-full max-w-lg bg-card border border-border rounded-xl p-6 shadow-2xl space-y-4 animate-in zoom-in-95" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between border-b border-border pb-3">
               <h3 className="font-bold text-lg text-foreground flex items-center gap-2">
-                <UserPlus className="w-5 h-5 text-primary" /> Add New Employee
+                <i className="fa-solid fa-user-plus text-primary text-lg" /> Add New Employee
               </h3>
               <button onClick={() => setShowAddForm(false)} className="text-muted-foreground hover:text-foreground cursor-pointer">
-                <X className="w-5 h-5" />
+                <i className="fa-solid fa-xmark" />
               </button>
             </div>
 
@@ -1519,6 +1532,7 @@ export default function TeamDashboardPage() {
                   >
                     <option value="Employee">Employee</option>
                     <option value="Manager">Manager</option>
+                    <option value="HR">HR</option>
                     <option value="Admin">Admin</option>
                   </select>
                 </div>
@@ -1531,9 +1545,9 @@ export default function TeamDashboardPage() {
                     className="w-full h-9 px-3 text-sm bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
                   >
                     <option value="">None (Reports to CEO)</option>
-                    {users.map((u) => (
+                    {users.filter((u) => u.role === "Manager").map((u) => (
                       <option key={u._id} value={u._id}>
-                        {u.name} ({u.role})
+                        {u.name} (Manager)
                       </option>
                     ))}
                   </select>
@@ -1564,10 +1578,10 @@ export default function TeamDashboardPage() {
           <div className="w-full max-w-3xl bg-card border border-border rounded-xl p-6 shadow-2xl space-y-4 animate-in zoom-in-95 max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between border-b border-border pb-3">
               <h3 className="font-bold text-lg text-foreground flex items-center gap-2">
-                <UsersRound className="w-5 h-5 text-primary" /> Bulk Add Employees
+                <i className="fa-solid fa-people-group text-primary text-lg" /> Bulk Add Employees
               </h3>
               <button onClick={() => setShowBulkAddModal(false)} className="text-muted-foreground hover:text-foreground cursor-pointer">
-                <X className="w-5 h-5" />
+                <i className="fa-solid fa-xmark" />
               </button>
             </div>
 
@@ -1604,6 +1618,7 @@ export default function TeamDashboardPage() {
                     >
                       <option value="Employee">Employee</option>
                       <option value="Manager">Manager</option>
+                      <option value="HR">HR</option>
                       <option value="Admin">Admin</option>
                     </select>
 
@@ -1617,7 +1632,7 @@ export default function TeamDashboardPage() {
                         className="h-9 px-2 text-xs bg-background border border-border rounded-md text-foreground flex-1"
                       >
                         <option value="">No Manager</option>
-                        {users.map((u) => (
+                        {users.filter((u) => u.role === "Manager").map((u) => (
                           <option key={u._id} value={u._id}>
                             {u.name}
                           </option>
@@ -1630,7 +1645,7 @@ export default function TeamDashboardPage() {
                           onClick={() => setBulkRows((prev) => prev.filter((r) => r.id !== row.id))}
                           className="text-destructive hover:bg-destructive/10 p-1.5 rounded-md"
                         >
-                          <Trash2 className="w-4 h-4" />
+                          <i className="fa-solid fa-trash" />
                         </button>
                       )}
                     </div>
@@ -1651,7 +1666,7 @@ export default function TeamDashboardPage() {
                   }
                   className="gap-1"
                 >
-                  <Plus className="w-4 h-4" /> Add Row
+                  <i className="fa-solid fa-plus" /> Add Row
                 </Button>
 
                 <div className="flex items-center gap-2">
@@ -1685,10 +1700,10 @@ export default function TeamDashboardPage() {
           <div className="w-full max-w-md bg-card border border-border rounded-xl p-6 shadow-2xl space-y-4 animate-in zoom-in-95" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between border-b border-border pb-3">
               <h3 className="font-bold text-lg text-foreground flex items-center gap-2">
-                <Building className="w-5 h-5 text-primary" /> {editingDept ? "Edit Department" : "Create Department"}
+                <i className="fa-solid fa-building text-primary text-lg" /> {editingDept ? "Edit Department" : "Create Department"}
               </h3>
               <button onClick={() => setShowAddDeptModal(false)} className="text-muted-foreground hover:text-foreground cursor-pointer">
-                <X className="w-5 h-5" />
+                <i className="fa-solid fa-xmark" />
               </button>
             </div>
 
@@ -1736,7 +1751,7 @@ export default function TeamDashboardPage() {
             <div className="flex items-center justify-between border-b border-border pb-3">
               <h3 className="font-bold text-lg text-foreground">Assign Departments</h3>
               <button onClick={() => setShowBulkAssignModal(false)} className="text-muted-foreground hover:text-foreground cursor-pointer">
-                <X className="w-5 h-5" />
+                <i className="fa-solid fa-xmark" />
               </button>
             </div>
 
@@ -1784,7 +1799,7 @@ export default function TeamDashboardPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in" onClick={() => setMemberToDelete(null)}>
           <div className="w-full max-w-md bg-card border border-border rounded-xl p-6 shadow-2xl space-y-4 animate-in zoom-in-95" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center gap-3 text-destructive">
-              <AlertCircle className="w-6 h-6 shrink-0" />
+              <i className="fa-solid fa-circle-exclamation text-xl shrink-0" />
               <h3 className="text-lg font-bold text-foreground">Remove Employee</h3>
             </div>
             <p className="text-sm text-muted-foreground">
@@ -1807,7 +1822,7 @@ export default function TeamDashboardPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in" onClick={() => setShowBulkDeleteConfirm(false)}>
           <div className="w-full max-w-md bg-card border border-border rounded-xl p-6 shadow-2xl space-y-4 animate-in zoom-in-95" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center gap-3 text-destructive">
-              <AlertCircle className="w-6 h-6 shrink-0" />
+              <i className="fa-solid fa-circle-exclamation text-xl shrink-0" />
               <h3 className="text-lg font-bold text-foreground">Confirm Bulk Removal</h3>
             </div>
             <p className="text-sm text-muted-foreground">
@@ -1830,7 +1845,7 @@ export default function TeamDashboardPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in" onClick={() => setDeptToDelete(null)}>
           <div className="w-full max-w-md bg-card border border-border rounded-xl p-6 shadow-2xl space-y-4 animate-in zoom-in-95" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center gap-3 text-destructive">
-              <AlertCircle className="w-6 h-6 shrink-0" />
+              <i className="fa-solid fa-circle-exclamation text-xl shrink-0" />
               <h3 className="text-lg font-bold text-foreground">Delete Department</h3>
             </div>
             <p className="text-sm text-muted-foreground">
@@ -1854,10 +1869,10 @@ export default function TeamDashboardPage() {
           <div className="w-full max-w-lg bg-card border border-border rounded-xl p-6 shadow-2xl space-y-4 animate-in zoom-in-95 max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between border-b border-border pb-3">
               <h3 className="font-bold text-lg text-foreground flex items-center gap-2">
-                <Users className="w-5 h-5 text-primary" /> {viewingDeptMembers.name} Members
+                <i className="fa-solid fa-users text-primary text-lg" /> {viewingDeptMembers.name} Members
               </h3>
               <button onClick={() => setViewingDeptMembers(null)} className="text-muted-foreground hover:text-foreground cursor-pointer">
-                <X className="w-5 h-5" />
+                <i className="fa-solid fa-xmark" />
               </button>
             </div>
 
@@ -1885,3 +1900,4 @@ export default function TeamDashboardPage() {
     </div>
   );
 }
+

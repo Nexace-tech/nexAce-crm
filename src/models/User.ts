@@ -6,7 +6,7 @@ export interface IUser extends Document {
   username?: string;
   email: string;
   passwordHash: string;
-  role: "Admin" | "Manager" | "Employee";
+  role: "Admin" | "Manager" | "HR" | "Employee";
   tenantId: mongoose.Types.ObjectId;
   department?: string;
   departments?: string[];
@@ -27,7 +27,7 @@ const UserSchema: Schema = new Schema({
   username: { type: String, unique: true, sparse: true, lowercase: true, trim: true },
   email: { type: String, required: true, unique: true, lowercase: true, trim: true },
   passwordHash: { type: String, required: true },
-  role: { type: String, enum: ["Admin", "Manager", "Employee"], default: "Employee" },
+  role: { type: String, enum: ["Admin", "Manager", "HR", "Employee"], default: "Employee" },
   tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true, index: true },
   department: { type: String },
   departments: [{ type: String }],
@@ -45,5 +45,12 @@ const UserSchema: Schema = new Schema({
 
 // Compound index for tenant user listing & role filtering
 UserSchema.index({ tenantId: 1, role: 1 });
+
+// In Next.js dev mode, hot-reload re-imports this module but mongoose.models.User
+// still holds the OLD compiled schema. Delete the cached model so the updated
+// UserSchema (with "HR" in the enum) is always registered fresh.
+if (process.env.NODE_ENV !== "production" && mongoose.models.User) {
+  delete mongoose.models.User;
+}
 
 export const User: Model<IUser> = mongoose.models.User || mongoose.model<IUser>("User", UserSchema);

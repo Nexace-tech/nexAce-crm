@@ -13,6 +13,7 @@ export interface OrgNode {
   photoUrl?: string;
   status: string;
   managerId?: string;
+  managerName?: string;
   reports: OrgNode[];
 }
 
@@ -64,6 +65,22 @@ export function OrgChartNode({ node, onReassign, isAdmin, onSelectMember }: OrgC
         .toUpperCase()
     : "?";
 
+  const roleAccent = node.role === "Admin"
+    ? "border-t-rose-500/60"
+    : node.role === "Manager"
+    ? "border-t-amber-500/60"
+    : node.role === "HR"
+    ? "border-t-purple-500/60"
+    : "border-t-primary/50";
+
+  const roleBadgeClass = node.role === "Admin"
+    ? "text-rose-500"
+    : node.role === "Manager"
+    ? "text-amber-500"
+    : node.role === "HR"
+    ? "text-purple-500"
+    : "text-blue-400";
+
   return (
     <div className={styles.treeContainer}>
       {/* Node Card - Clean & Pleasing in both Light and Dark modes */}
@@ -82,8 +99,8 @@ export function OrgChartNode({ node, onReassign, isAdmin, onSelectMember }: OrgC
           zIndex: 2,
         }}
       >
-        {/* Subtle accent border on top */}
-        <div className="absolute top-0 left-3 right-3 h-0.5 rounded-full bg-gradient-to-r from-primary/50 via-blue-500/50 to-primary/10 opacity-70 group-hover:opacity-100 transition-opacity" />
+        {/* Subtle role-coloured accent border on top */}
+        <div className={`absolute top-0 left-3 right-3 h-0.5 rounded-full bg-gradient-to-r ${roleAccent} via-current to-transparent opacity-70 group-hover:opacity-100 transition-opacity`} />
 
         <div className="flex items-center gap-3">
           {node.photoUrl ? (
@@ -101,7 +118,7 @@ export function OrgChartNode({ node, onReassign, isAdmin, onSelectMember }: OrgC
             <span className="text-sm font-bold text-slate-900 dark:text-slate-100 truncate group-hover:text-primary transition-colors">
               {node.name}
             </span>
-            <span className="text-xs text-slate-500 dark:text-slate-400 font-medium truncate">
+            <span className={`text-xs font-semibold truncate ${roleBadgeClass}`}>
               {node.role}
             </span>
           </div>
@@ -126,6 +143,13 @@ export function OrgChartNode({ node, onReassign, isAdmin, onSelectMember }: OrgC
             </span>
           </div>
         </div>
+
+        {node.managerName && (
+          <div className="flex items-center gap-1.5 pt-1 border-t border-slate-100 dark:border-slate-800/60 text-[10px] text-slate-500 dark:text-slate-500">
+            <i className="fa-solid fa-turn-up rotate-90 text-[9px] opacity-60" />
+            <span>Reports to: <span className="font-semibold text-slate-700 dark:text-slate-300">{node.managerName}</span></span>
+          </div>
+        )}
       </div>
 
       {/* Render children nodes recursively with seamless single-element curved connectors */}

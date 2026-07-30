@@ -4,6 +4,7 @@ import React from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { AdminDashboard } from "@/components/dashboard/AdminDashboard";
 import { ManagerDashboard } from "@/components/dashboard/ManagerDashboard";
+import { HRDashboard } from "@/components/dashboard/HRDashboard";
 import { EmployeeDashboard } from "@/components/dashboard/EmployeeDashboard";
 import { PendingApprovalDashboard } from "@/components/dashboard/PendingApprovalDashboard";
 import { Preloader } from "@/components/ui/Preloader";
@@ -29,13 +30,17 @@ export default function DashboardHome() {
     return <PendingApprovalDashboard user={user} />;
   }
 
-  // 2. Separate views based on role (Admin, Manager, Employee)
+  // 2. Separate views based on role (Admin, Manager, HR, Employee)
   if (role === "admin") {
     return <AdminDashboard user={user} />;
   }
 
   if (role === "manager") {
     return <ManagerDashboard user={user} />;
+  }
+
+  if (role === "hr") {
+    return <HRDashboard user={user} />;
   }
 
   // Default to Employee view
