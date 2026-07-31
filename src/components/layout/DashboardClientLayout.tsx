@@ -9,6 +9,7 @@ import { ZoomControl } from "@/components/layout/ZoomControl";
 import { NotificationBell } from "@/components/layout/NotificationBell";
 import { LogoutHeaderBtn } from "@/components/layout/LogoutHeaderBtn";
 import { CommandPalette } from "@/components/layout/CommandPalette";
+import { GuidedTour } from "@/components/guided-tour/GuidedTour";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
 
@@ -48,6 +49,7 @@ export function DashboardClientLayout({ session, menuItems, children }: Dashboar
   const [mobileOpen, setMobileOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [tourOpen, setTourOpen] = useState(false);
   const pathname = usePathname();
 
   useEffect(() => {
@@ -212,6 +214,16 @@ export function DashboardClientLayout({ session, menuItems, children }: Dashboar
 
           {/* Right Header Actions */}
           <div className="flex items-center gap-1.5 md:gap-2">
+            <button
+              type="button"
+              onClick={() => setTourOpen(true)}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary transition-colors text-xs font-semibold cursor-pointer border border-primary/20"
+              title="Start Guided Product Tour"
+            >
+              <i className="fa-solid fa-compass text-sm animate-spin-slow text-primary" />
+              <span className="hidden sm:inline">Tour</span>
+            </button>
+
             <ZoomControl />
             <div className="flex items-center gap-1 bg-muted/60 dark:bg-slate-800/80 border border-border/80 dark:border-slate-700/80 rounded-lg p-0.5 shadow-xs">
               <ThemeToggle />
@@ -221,6 +233,9 @@ export function DashboardClientLayout({ session, menuItems, children }: Dashboar
             <LogoutHeaderBtn />
           </div>
         </header>
+
+        {/* Guided Product Tour Modal */}
+        <GuidedTour isOpen={tourOpen} onClose={() => setTourOpen(false)} role={role} />
 
         {/* Command Palette Modal */}
         <CommandPalette open={commandPaletteOpen} onClose={() => setCommandPaletteOpen(false)} />
