@@ -17,6 +17,12 @@ interface ChatMsg {
   parentId?: string;
   mentions?: string[];
   reactions?: Array<{ emoji: string; users: string[] }>;
+  read?: boolean;
+  readBy?: string[];
+  readAt?: string;
+  deletedForEveryone?: boolean;
+  deletedForUsers?: string[];
+  attachments?: Array<{ name: string; url: string; mimeType: string; size: number }>;
   createdAt: string;
 }
 
@@ -194,6 +200,113 @@ export default function CommunicationHub() {
     category: "Company News" as AnnouncementData["category"],
     pinned: false,
   });
+  // Read Info & Forward & Delete Modals State
+  const [readInfoMsg, setReadInfoMsg] = useState<ChatMsg | null>(null);
+  const [forwardMsg, setForwardMsg] = useState<ChatMsg | null>(null);
+  const [forwardTargetChannel, setForwardTargetChannel] = useState("general");
+  const [deleteConfirm, setDeleteConfirm] = useState<{ msgId: string; deleteMode: "me" | "everyone"; content: string } | null>(null);
+
+  // File Attachments State
+  const [pendingAttachments, setPendingAttachments] = useState<Array<{ name: string; url: string; mimeType: string; size: number }>>([]);
+  const [uploadingFile, setUploadingFile] = useState(false);
+  const [previewImageModal, setPreviewImageModal] = useState<{ url: string; name: string; size: number } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const handleFileAttachmentSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // 1. Validate Image Only
+    if (!file.type.startsWith("image/")) {
+      alert("Only image files (PNG, JPG, JPEG, WEBP, GIF, SVG) are allowed.");
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
+
+    // 2. Validate Max Size 10MB
+    const MAX_SIZE_MB = 10;
+    const MAX_SIZE_BYTES = MAX_SIZE_MB * 1024 * 1024;
+    if (file.size > MAX_SIZE_BYTES) {
+      alert(`File size exceeds the ${MAX_SIZE_MB}MB limit. Please select an image smaller than 10MB.`);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
+
+    setUploadingFile(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("fileName", file.name);
+      formData.append("folder", "Chat");
+
+      const res = await fetch("/api/drive", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        const driveFile = data.file;
+        setPendingAttachments((prev) => [
+          ...prev,
+          {
+            name: driveFile.name,
+            url: `/api/drive/download?fileId=${driveFile._id}`,
+            mimeType: driveFile.mimeType,
+            size: driveFile.size,
+          },
+        ]);
+      } else {
+        const err = await res.json();
+        alert(err.error || "Failed to upload image attachment");
+      }
+    } catch (err) {
+      console.error("Upload attachment error:", err);
+    } finally {
+      setUploadingFile(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const confirmExecuteMessageDelete = async () => {
+    if (!deleteConfirm) return;
+    try {
+      const res = await fetch("/api/chat/messages", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messageId: deleteConfirm.msgId, deleteMode: deleteConfirm.deleteMode }),
+      });
+      if (res.ok) {
+        fetchMessages(selectedChannel, true);
+        setSelectedMsgId(null);
+        setDeleteConfirm(null);
+      }
+    } catch (err) {
+      console.error("Delete message error:", err);
+    }
+  };
+
+  const handleForwardMessage = async (targetChannel: string) => {
+    if (!forwardMsg) return;
+    try {
+      const res = await fetch("/api/chat/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          channel: targetChannel,
+          content: `↳ Forwarded message from @${forwardMsg.senderName}:\n${forwardMsg.content}`,
+          isDM: targetChannel.startsWith("dm_"),
+        }),
+      });
+      if (res.ok) {
+        setForwardMsg(null);
+        setSelectedMsgId(null);
+        fetchMessages(selectedChannel, true);
+      }
+    } catch (err) {
+      console.error("Forward message error:", err);
+    }
+  };
 
   // Notification Preferences State
   const [teamMembers, setTeamMembers] = useState<any[]>([]);
@@ -572,7 +685,7 @@ export default function CommunicationHub() {
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newMessageText.trim()) return;
+    if (!newMessageText.trim() && pendingAttachments.length === 0) return;
 
     const mentions: string[] = [];
     const allTargets = Array.from(
@@ -595,11 +708,13 @@ export default function CommunicationHub() {
           content: newMessageText,
           parentId: replyingToMsg?._id,
           mentions,
+          attachments: pendingAttachments,
         }),
       });
 
       if (res.ok) {
         setNewMessageText("");
+        setPendingAttachments([]);
         setReplyingToMsg(null);
         setShowMentionPopup(false);
         isUserNearBottomRef.current = true;
@@ -987,7 +1102,8 @@ export default function CommunicationHub() {
             <div 
               ref={chatContainerRef}
               onScroll={handleChatScroll}
-              className="flex-1 overflow-y-auto py-4 space-y-4 no-scrollbar"
+              onClick={() => setSelectedMsgId(null)}
+              className="flex-1 overflow-y-auto py-4 space-y-4 no-scrollbar cursor-default"
             >
               {loadingChat ? (
                 <div className="text-center text-xs text-muted-foreground py-12 space-y-2">
@@ -1002,6 +1118,13 @@ export default function CommunicationHub() {
                 </div>
               ) : (
                 messages.map((m, idx) => {
+                  if (
+                    (user?.name && m.deletedForUsers?.includes(user.name)) ||
+                    (user?._id && m.deletedForUsers?.includes(user._id))
+                  ) {
+                    return null;
+                  }
+
                   const isSelected = selectedMsgId === m._id;
                   const messageDate = new Date(m.createdAt);
                   const prevMessageDate = idx > 0 ? new Date(messages[idx - 1].createdAt) : null;
@@ -1049,7 +1172,7 @@ export default function CommunicationHub() {
                           </div>
                         </div>
                       )}
-                      <div className="group">
+                      <div className="group" onClick={(e) => e.stopPropagation()}>
                         {/* Chat Bubble Row: Avatar + Bubble */}
                         <div className="flex items-start gap-3">
                           {/* Avatar */}
@@ -1061,28 +1184,41 @@ export default function CommunicationHub() {
                           <div className="flex-1 min-w-0">
                             <div
                               className={cn(
-                                "rounded-2xl rounded-tl-sm px-4 py-3 border transition-colors duration-150 cursor-pointer",
+                                "rounded-2xl rounded-tl-sm px-4 py-2.5 border transition-colors duration-150 cursor-pointer relative",
                                 isSelected
                                   ? "bg-slate-100 border-primary/50 shadow-md dark:bg-[hsl(215,30%,22%)]"
                                   : "bg-slate-50 border-slate-200 hover:bg-slate-100 dark:bg-[hsl(215,30%,20%)] dark:border-[hsl(215,25%,25%)] dark:hover:bg-[hsl(215,30%,22%)]"
                               )}
                               onClick={() => setSelectedMsgId(isSelected ? null : m._id)}
                             >
-                              {/* Name + Role + Reply */}
-                              <div className="flex items-center gap-2 mb-1">
-                                <span className="font-bold text-sm text-foreground">{m.senderName}</span>
-                                {m.senderRole && (
-                                  <span className="text-[9px] font-bold uppercase tracking-wider bg-primary/20 text-primary px-1.5 py-0.5 rounded">
-                                    {m.senderRole}
-                                  </span>
-                                )}
+                              {/* Name + Role + Reply for Public Channels */}
+                              {!selectedChannel.startsWith("dm_") && (
+                                <div className="flex items-center gap-2 mb-1">
+                                  <span className="font-bold text-sm text-foreground">{m.senderName}</span>
+                                  {m.senderRole && (
+                                    <span className="text-[9px] font-bold uppercase tracking-wider bg-primary/20 text-primary px-1.5 py-0.5 rounded">
+                                      {m.senderRole}
+                                    </span>
+                                  )}
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); setReplyingToMsg(m); }}
+                                    className="ml-auto text-[10px] text-muted-foreground hover:text-primary flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                                  >
+                                    <i className="fa-solid fa-reply text-[9px]" />
+                                  </button>
+                                </div>
+                              )}
+
+                              {/* Reply button for DMs (absolute positioned on hover, 0 flow height) */}
+                              {selectedChannel.startsWith("dm_") && (
                                 <button
                                   onClick={(e) => { e.stopPropagation(); setReplyingToMsg(m); }}
-                                  className="ml-auto text-[10px] text-muted-foreground hover:text-primary flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                                  className="absolute top-1.5 right-2 text-[10px] text-muted-foreground hover:text-primary opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer p-1"
+                                  title="Reply"
                                 >
                                   <i className="fa-solid fa-reply text-[9px]" />
                                 </button>
-                              </div>
+                              )}
 
                               {/* Thread Indicator */}
                               {m.parentId && (
@@ -1093,11 +1229,106 @@ export default function CommunicationHub() {
 
                               {/* Message Body */}
                               <div className="flex items-end gap-2">
-                                <p className="text-sm text-foreground leading-relaxed flex-1 whitespace-pre-wrap">
-                                  {renderFormattedContent(m.content, m.mentions)}
-                                </p>
-                                <span className="text-[10px] text-muted-foreground font-mono whitespace-nowrap flex-shrink-0 pb-0.5">
+                                {m.deletedForEveryone ? (
+                                  <p className="text-xs text-muted-foreground/80 italic flex-1 flex items-center gap-1.5">
+                                    <i className="fa-solid fa-ban text-xs text-muted-foreground/60" /> This message was deleted
+                                  </p>
+                                ) : (
+                                  <div className="flex-1 space-y-2">
+                                    {m.content && !m.content.startsWith("[Attachment]") && (
+                                      <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">
+                                        {renderFormattedContent(m.content, m.mentions)}
+                                      </p>
+                                    )}
+
+                                    {/* Message Attachments List */}
+                                    {m.attachments && m.attachments.length > 0 && (
+                                      <div className="mt-2 space-y-2">
+                                        {m.attachments.map((att, attIdx) => {
+                                          const isImg = att.mimeType?.startsWith("image/") || /\.(png|jpe?g|gif|webp|svg)$/i.test(att.name);
+                                          const attUrl = att.url.includes("fileId") || att.url.includes("id=") ? att.url : `/api/drive/download?fileId=${(att as any)._id || att.url.split("=").pop()}`;
+                                          return (
+                                            <div
+                                              key={attIdx}
+                                              className="rounded-xl border border-border/80 bg-card/80 p-2.5 max-w-sm space-y-2 shadow-xs"
+                                              onClick={(e) => e.stopPropagation()}
+                                            >
+                                              {/* Image Thumbnail */}
+                                              {isImg && (
+                                                <div
+                                                  className="overflow-hidden rounded-lg border border-border/60 bg-black/20 cursor-pointer group/img relative"
+                                                  onClick={() => setPreviewImageModal({ url: attUrl, name: att.name, size: att.size })}
+                                                >
+                                                  <img
+                                                    src={attUrl}
+                                                    alt={att.name}
+                                                    className="w-full max-h-52 object-cover group-hover/img:scale-105 transition-transform duration-200"
+                                                    onError={(e) => {
+                                                      // Hide broken img tag if URL fails
+                                                      (e.target as HTMLElement).style.display = "none";
+                                                    }}
+                                                  />
+                                                  <div className="absolute inset-0 bg-black/30 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center text-white font-semibold text-xs gap-1.5">
+                                                    <i className="fa-solid fa-magnifying-glass-plus text-sm" /> Preview
+                                                  </div>
+                                                </div>
+                                              )}
+
+                                              {/* File Meta Info */}
+                                              <div className="flex items-center justify-between gap-2 text-xs">
+                                                <div className="flex items-center gap-2 min-w-0">
+                                                  <div className="h-8 w-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center font-bold flex-shrink-0">
+                                                    <i className={cn("fa-solid text-sm", isImg ? "fa-file-image text-emerald-500" : "fa-file text-indigo-500")} />
+                                                  </div>
+                                                  <div className="min-w-0">
+                                                    <p className="font-bold text-foreground truncate">{att.name}</p>
+                                                    <p className="text-[10px] text-muted-foreground font-mono">{Math.round(att.size / 1024)} KB</p>
+                                                  </div>
+                                                </div>
+                                              </div>
+
+                                              {/* Action Buttons: Preview & Download */}
+                                              <div className="flex items-center gap-2 pt-1 border-t border-border/50">
+                                                {isImg && (
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => setPreviewImageModal({ url: attUrl, name: att.name, size: att.size })}
+                                                    className="flex-1 px-2.5 py-1.5 rounded-lg bg-muted/60 hover:bg-primary/10 text-muted-foreground hover:text-primary transition-colors text-[11px] font-semibold flex items-center justify-center gap-1.5 cursor-pointer"
+                                                  >
+                                                    <i className="fa-solid fa-eye text-xs text-primary" /> Preview
+                                                  </button>
+                                                )}
+
+                                                <a
+                                                  href={attUrl}
+                                                  download={att.name}
+                                                  target="_blank"
+                                                  rel="noopener noreferrer"
+                                                  className="flex-1 px-2.5 py-1.5 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary transition-colors text-[11px] font-semibold flex items-center justify-center gap-1.5 cursor-pointer"
+                                                >
+                                                  <i className="fa-solid fa-download text-xs" /> Download
+                                                </a>
+                                              </div>
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                                <span className="text-[10px] text-muted-foreground font-mono whitespace-nowrap flex-shrink-0 pb-0.5 flex items-center gap-1">
                                   {new Date(m.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: true })}
+                                  {(m.senderName === user?.name || (user?._id && (m as any).senderId === user?._id)) && (
+                                    (
+                                      m.read || 
+                                      (m.readBy && m.readBy.length > 0) || 
+                                      messages.slice(idx + 1).some((futureMsg) => futureMsg.senderName !== m.senderName)
+                                    ) ? (
+                                      <i className="fa-solid fa-check-double text-xs text-sky-400 font-bold" title="Read by recipient" />
+                                    ) : (
+                                      <i className="fa-solid fa-check text-xs text-muted-foreground/70 font-semibold" title="Sent (Unread)" />
+                                    )
+                                  )}
                                 </span>
                               </div>
                             </div>
@@ -1123,10 +1354,10 @@ export default function CommunicationHub() {
                               </div>
                             )}
 
-                            {/* Reaction Picker */}
+                            {/* Selection Toolbar: Reactions + Read Info + Forward + Delete Options */}
                             {isSelected && (
-                              <div className="flex items-center gap-0.5 mt-2 pl-1">
-                                <div className="inline-flex items-center gap-0.5 bg-white border border-slate-200 rounded-full px-2.5 py-1.5 shadow-md dark:bg-[hsl(215,30%,20%)] dark:border-[hsl(215,25%,25%)]">
+                              <div className="flex items-center flex-wrap gap-2 mt-2 pl-1 animate-in fade-in">
+                                <div className="inline-flex items-center gap-0.5 bg-white border border-slate-200 rounded-full px-2.5 py-1 shadow-md dark:bg-[hsl(215,30%,20%)] dark:border-[hsl(215,25%,25%)]">
                                   {[
                                     { icon: "fa-thumbs-up",     label: "Like",   color: "text-primary" },
                                     { icon: "fa-heart",          label: "Love",   color: "text-rose-500" },
@@ -1138,12 +1369,59 @@ export default function CommunicationHub() {
                                     <button
                                       key={item.icon}
                                       onClick={() => { handleToggleReaction(m._id, item.icon); setSelectedMsgId(null); }}
-                                      className="h-7 w-7 rounded-full hover:bg-background hover:scale-125 flex items-center justify-center transition-all duration-150 cursor-pointer"
+                                      className="h-6 w-6 rounded-full hover:bg-background hover:scale-125 flex items-center justify-center transition-all duration-150 cursor-pointer"
                                       title={item.label}
                                     >
-                                      <i className={cn("fa-solid text-sm", item.icon, item.color)} />
+                                      <i className={cn("fa-solid text-xs", item.icon, item.color)} />
                                     </button>
                                   ))}
+                                </div>
+
+                                <div className="inline-flex items-center gap-1.5 bg-card border border-border rounded-full px-3 py-1 shadow-md text-xs font-medium">
+                                  <button
+                                    type="button"
+                                    onClick={(e) => { e.stopPropagation(); setReadInfoMsg(m); }}
+                                    className="hover:text-primary transition-colors flex items-center gap-1 cursor-pointer"
+                                    title="Read details"
+                                  >
+                                    <i className="fa-solid fa-circle-info text-primary text-xs" /> Read Info
+                                  </button>
+
+                                  <span className="text-border">|</span>
+
+                                  <button
+                                    type="button"
+                                    onClick={(e) => { e.stopPropagation(); setForwardMsg(m); setForwardTargetChannel(selectedChannel); }}
+                                    className="hover:text-primary transition-colors flex items-center gap-1 cursor-pointer"
+                                    title="Forward message"
+                                  >
+                                    <i className="fa-solid fa-share text-indigo-500 text-xs" /> Forward
+                                  </button>
+
+                                  <span className="text-border">|</span>
+
+                                  <button
+                                    type="button"
+                                    onClick={(e) => { e.stopPropagation(); setDeleteConfirm({ msgId: m._id, deleteMode: "me", content: m.content }); }}
+                                    className="hover:text-amber-500 transition-colors flex items-center gap-1 cursor-pointer"
+                                    title="Delete for Me"
+                                  >
+                                    <i className="fa-solid fa-trash-can text-amber-500 text-xs" /> Delete for Me
+                                  </button>
+
+                                  {(m.senderName === user?.name || (user?._id && (m as any).senderId === user?._id) || user?.role === "Admin" || user?.role === "Manager") && !m.deletedForEveryone && (
+                                    <>
+                                      <span className="text-border">|</span>
+                                      <button
+                                        type="button"
+                                        onClick={(e) => { e.stopPropagation(); setDeleteConfirm({ msgId: m._id, deleteMode: "everyone", content: m.content }); }}
+                                        className="text-rose-500 hover:text-rose-600 font-semibold transition-colors flex items-center gap-1 cursor-pointer"
+                                        title="Delete for Everyone"
+                                      >
+                                        <i className="fa-solid fa-ban text-xs text-rose-500" /> Delete for Everyone
+                                      </button>
+                                    </>
+                                  )}
                                 </div>
                               </div>
                             )}
@@ -1218,7 +1496,65 @@ export default function CommunicationHub() {
                 </div>
               )}
 
-              <form onSubmit={handleSendMessage} className="flex gap-2">
+              {/* Pending Attachments Chip Bar with Image Thumbnail Previews */}
+              {(pendingAttachments.length > 0 || uploadingFile) && (
+                <div className="flex flex-wrap items-center gap-2 mb-2 p-2 bg-muted/30 border border-border/60 rounded-lg">
+                  {pendingAttachments.map((att, idx) => {
+                    const isImg = att.mimeType?.startsWith("image/") || /\.(png|jpe?g|gif|webp|svg)$/i.test(att.name);
+                    return (
+                      <div key={idx} className="relative group/chip inline-flex items-center gap-2 p-1.5 pr-3 rounded-lg bg-card border border-border shadow-xs text-xs font-semibold text-foreground">
+                        {isImg ? (
+                          <img src={att.url} alt={att.name} className="h-10 w-10 rounded-md object-cover border border-border/60" />
+                        ) : (
+                          <div className="h-10 w-10 rounded-md bg-primary/10 text-primary flex items-center justify-center font-bold">
+                            <i className="fa-solid fa-file-image text-base" />
+                          </div>
+                        )}
+                        <div className="min-w-0">
+                          <p className="truncate max-w-[130px] font-bold text-foreground">{att.name}</p>
+                          <p className="text-[10px] text-muted-foreground font-mono">{Math.round(att.size / 1024)} KB</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setPendingAttachments((prev) => prev.filter((_, i) => i !== idx))}
+                          className="h-5 w-5 rounded-full bg-rose-500/10 hover:bg-rose-500 text-rose-500 hover:text-white transition-colors flex items-center justify-center ml-1 cursor-pointer"
+                          title="Remove image"
+                        >
+                          <i className="fa-solid fa-xmark text-[10px]" />
+                        </button>
+                      </div>
+                    );
+                  })}
+                  {uploadingFile && (
+                    <div className="inline-flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground animate-pulse font-medium">
+                      <i className="fa-solid fa-spinner fa-spin text-primary text-sm" /> Uploading image preview...
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <form onSubmit={handleSendMessage} className="flex items-center gap-2">
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  accept="image/*"
+                  onChange={handleFileAttachmentSelect}
+                  className="hidden"
+                />
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploadingFile}
+                  className="h-9 w-9 rounded-md border border-input bg-background hover:bg-accent text-muted-foreground hover:text-primary transition-colors flex items-center justify-center cursor-pointer flex-shrink-0"
+                  title="Attach Image (Max 10MB)"
+                >
+                  {uploadingFile ? (
+                    <i className="fa-solid fa-spinner fa-spin text-xs text-primary" />
+                  ) : (
+                    <i className="fa-solid fa-paperclip text-xs" />
+                  )}
+                </button>
+
                 <div className="relative flex-1">
                   <Input
                     ref={chatInputRef}
@@ -1237,7 +1573,7 @@ export default function CommunicationHub() {
                     <i className="fa-solid fa-at" />
                   </button>
                 </div>
-                <Button color="primary" type="submit" className="gap-2 font-semibold">
+                <Button color="primary" type="submit" disabled={uploadingFile} className="gap-2 font-semibold">
                   <i className="fa-solid fa-paper-plane text-xs" /> Send
                 </Button>
               </form>
@@ -1436,7 +1772,16 @@ export default function CommunicationHub() {
                       )}
                     >
                       <p>{msg.text}</p>
-                      <span className="text-[9px] opacity-75 block text-right font-mono">{msg.time}</span>
+                      <span className="text-[9px] opacity-75 block text-right font-mono flex items-center justify-end gap-1">
+                        {msg.time}
+                        {msg.sender === "agent" && (
+                          (msg as any).read ? (
+                            <i className="fa-solid fa-check-double text-[11px] text-sky-300 font-bold" title="Read by user" />
+                          ) : (
+                            <i className="fa-solid fa-check text-[11px] opacity-80" title="Sent (Unread)" />
+                          )
+                        )}
+                      </span>
                     </div>
                   ))}
                 </div>
@@ -1982,6 +2327,228 @@ export default function CommunicationHub() {
               </Button>
             </div>
           </Card>
+        </div>
+      )}
+
+      {/* Read Info Modal Dialog */}
+      {readInfoMsg && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in" onClick={() => setReadInfoMsg(null)}>
+          <div className="w-full max-w-sm rounded-xl border border-border bg-card p-5 shadow-2xl space-y-4" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between border-b border-border pb-3">
+              <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
+                <i className="fa-solid fa-circle-info text-primary" /> Message Info
+              </h3>
+              <button onClick={() => setReadInfoMsg(null)} className="text-muted-foreground hover:text-foreground">
+                <i className="fa-solid fa-xmark text-sm" />
+              </button>
+            </div>
+
+            <div className="p-3 bg-muted/30 border border-border/60 rounded-lg text-xs space-y-1">
+              <p className="font-semibold text-foreground">@ {readInfoMsg.senderName}</p>
+              <p className="text-muted-foreground">{readInfoMsg.content}</p>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div className="flex items-center justify-between p-2.5 bg-emerald-500/10 border border-emerald-500/20 rounded-lg">
+                <span className="font-semibold text-foreground flex items-center gap-1.5">
+                  <i className="fa-solid fa-check-double text-sky-400 font-bold text-sm" /> Read Status
+                </span>
+                <span className="font-bold text-emerald-500 flex items-center gap-1">
+                  {readInfoMsg.read || (readInfoMsg.readBy && readInfoMsg.readBy.length > 0) ? (
+                    <>
+                      <i className="fa-solid fa-check-double text-sky-400 text-xs" /> Read
+                    </>
+                  ) : (
+                    "Sent (Unread)"
+                  )}
+                </span>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                  <i className="fa-solid fa-clock text-xs" /> Sent Timestamp
+                </label>
+                <p className="font-mono text-foreground font-semibold">
+                  {new Date(readInfoMsg.createdAt).toLocaleString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                    year: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    hour12: true,
+                  })}
+                </p>
+              </div>
+
+              {readInfoMsg.readBy && readInfoMsg.readBy.length > 0 && (
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                    <i className="fa-solid fa-users text-xs" /> Read By Teammates
+                  </label>
+                  <div className="flex flex-wrap gap-1">
+                    {readInfoMsg.readBy.map((usr, uIdx) => (
+                      <span key={uIdx} className="bg-primary/10 text-primary text-[11px] font-semibold px-2 py-0.5 rounded-md">
+                        {usr}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <Button variant="outline" size="sm" onClick={() => setReadInfoMsg(null)} className="w-full font-semibold">
+              Close
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Forward Message Modal Dialog */}
+      {forwardMsg && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in" onClick={() => setForwardMsg(null)}>
+          <div className="w-full max-w-sm rounded-xl border border-border bg-card p-5 shadow-2xl space-y-4" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between border-b border-border pb-3">
+              <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
+                <i className="fa-solid fa-share text-indigo-500" /> Forward Message
+              </h3>
+              <button onClick={() => setForwardMsg(null)} className="text-muted-foreground hover:text-foreground">
+                <i className="fa-solid fa-xmark text-sm" />
+              </button>
+            </div>
+
+            <div className="p-3 bg-muted/30 border border-border/60 rounded-lg text-xs space-y-1">
+              <p className="font-semibold text-foreground">@ {forwardMsg.senderName}</p>
+              <p className="text-muted-foreground line-clamp-3">{forwardMsg.content}</p>
+            </div>
+
+            <div className="space-y-1.5 text-xs">
+              <label className="font-semibold text-foreground">Select Destination Channel / DM</label>
+              <select
+                value={forwardTargetChannel}
+                onChange={(e) => setForwardTargetChannel(e.target.value)}
+                className="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-xs text-foreground focus:outline-none"
+              >
+                <option value="general"># general</option>
+                <option value="projects"># projects</option>
+                <option value="engineering"># engineering</option>
+                <option value="random"># random</option>
+                {teamMembers.map((m: any) => {
+                  const dmChan = `dm_${m.name.toLowerCase().replace(/[^a-z0-9]/g, "_")}`;
+                  return (
+                    <option key={m._id || m.email} value={dmChan}>
+                      DM: {m.name}
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="outline" size="sm" onClick={() => setForwardMsg(null)}>
+                Cancel
+              </Button>
+              <Button color="primary" size="sm" onClick={() => handleForwardMessage(forwardTargetChannel)} className="font-semibold gap-1.5">
+                <i className="fa-solid fa-share text-xs" /> Forward Message
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Message Confirmation Modal Dialog */}
+      {deleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in" onClick={() => setDeleteConfirm(null)}>
+          <div className="w-full max-w-sm rounded-xl border border-border bg-card p-5 shadow-2xl space-y-4 text-center" onClick={(e) => e.stopPropagation()}>
+            <div className="h-12 w-12 rounded-full bg-rose-500/10 text-rose-500 flex items-center justify-center mx-auto border border-rose-500/20">
+              <i className="fa-solid fa-trash-can text-xl" />
+            </div>
+
+            <div className="space-y-1.5">
+              <h3 className="text-base font-bold text-foreground">
+                {deleteConfirm.deleteMode === "everyone" ? "Delete for Everyone?" : "Delete for You?"}
+              </h3>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                {deleteConfirm.deleteMode === "everyone"
+                  ? "This message will be deleted for all members in this channel. This action cannot be undone."
+                  : "This message will be removed from your chat view."}
+              </p>
+            </div>
+
+            <div className="p-3 bg-muted/30 border border-border/60 rounded-lg text-xs italic text-muted-foreground truncate">
+              "{deleteConfirm.content}"
+            </div>
+
+            <div className="flex items-center justify-center gap-3 pt-1">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setDeleteConfirm(null)}
+                className="w-full font-medium"
+              >
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                onClick={confirmExecuteMessageDelete}
+                className="w-full bg-rose-600 hover:bg-rose-700 text-white font-semibold gap-1.5"
+              >
+                <i className="fa-solid fa-trash-can text-xs" /> Delete
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Image / Attachment Lightbox Modal */}
+      {previewImageModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in"
+          onClick={() => setPreviewImageModal(null)}
+        >
+          <div
+            className="w-full max-w-3xl rounded-2xl border border-border bg-card p-4 shadow-2xl space-y-3 relative overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-border pb-3">
+              <div className="min-w-0 pr-4">
+                <h3 className="text-sm font-bold text-foreground truncate flex items-center gap-2">
+                  <i className="fa-solid fa-image text-primary" /> {previewImageModal.name}
+                </h3>
+                <p className="text-[10px] text-muted-foreground font-mono">
+                  Size: {Math.round(previewImageModal.size / 1024)} KB
+                </p>
+              </div>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <Button
+                  asChild
+                  size="sm"
+                  color="primary"
+                  className="font-semibold text-xs gap-1.5"
+                >
+                  <a href={previewImageModal.url} download={previewImageModal.name} target="_blank" rel="noopener noreferrer">
+                    <i className="fa-solid fa-download text-xs" /> Download
+                  </a>
+                </Button>
+                <button
+                  type="button"
+                  onClick={() => setPreviewImageModal(null)}
+                  className="text-muted-foreground hover:text-foreground p-1.5 rounded-lg transition-colors cursor-pointer"
+                >
+                  <i className="fa-solid fa-xmark text-base" />
+                </button>
+              </div>
+            </div>
+
+            {/* Main Preview Image Container */}
+            <div className="flex items-center justify-center max-h-[70vh] overflow-hidden rounded-xl bg-black/40 border border-border/40 p-2">
+              <img
+                src={previewImageModal.url}
+                alt={previewImageModal.name}
+                className="max-h-[65vh] w-auto max-w-full object-contain rounded-lg shadow-lg"
+              />
+            </div>
+          </div>
         </div>
       )}
     </div>

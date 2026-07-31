@@ -48,6 +48,29 @@ export async function POST(request: Request) {
       tenantId: tenantObjectId,
     });
 
+    // Send Notification to Workspace Admins / Managers
+    try {
+      const { Notification } = await import("@/models/Notification");
+      const { User } = await import("@/models/User");
+      const adminsAndManagers = await User.find({
+        tenantId: tenantObjectId,
+        role: { $in: ["Admin", "Manager"] },
+      }).select("_id");
+
+      for (const mgr of adminsAndManagers) {
+        await Notification.create({
+          tenantId: tenantObjectId,
+          recipientId: mgr._id,
+          title: "New Leave Request",
+          message: `${session.userName} submitted a ${type || "Casual"} Leave request (${new Date(startDate).toLocaleDateString()} - ${new Date(endDate).toLocaleDateString()}).`,
+          type: "system",
+          linkUrl: "/dashboard/hr",
+        });
+      }
+    } catch (notifErr) {
+      console.error("Notification creation error on leave submit:", notifErr);
+    }
+
     return NextResponse.json({ leave, message: "Leave request submitted" }, { status: 201 });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -75,6 +98,21 @@ export async function PUT(request: Request) {
     );
 
     if (!leave) return NextResponse.json({ error: "Leave request not found" }, { status: 404 });
+
+    // Send Notification to the Employee whose leave status was updated
+    try {
+      const { Notification } = await import("@/models/Notification");
+      await Notification.create({
+        tenantId: tenantObjectId,
+        recipientId: leave.userId,
+        title: `Leave Request ${status}`,
+        message: `Your ${leave.type} Leave request has been ${status.toLowerCase()} by ${session.userName}.`,
+        type: "system",
+        linkUrl: "/dashboard/hr",
+      });
+    } catch (notifErr) {
+      console.error("Notification creation error on leave update:", notifErr);
+    }
 
     return NextResponse.json({ leave, message: `Leave ${status.toLowerCase()}` });
   } catch (error: any) {

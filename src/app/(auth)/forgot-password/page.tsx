@@ -18,6 +18,15 @@ function ForgotPasswordForm() {
   const [resetState, resetAction, isResetPending] = useActionState(resetPasswordAction, undefined);
   const [showPassword, setShowPassword] = useState(false);
   const [newPasswordVal, setNewPasswordVal] = useState("");
+  const [codeVal, setCodeVal] = useState(urlCode || resetState?.enteredCode || "");
+
+  React.useEffect(() => {
+    if (resetState?.enteredCode) {
+      setCodeVal(resetState.enteredCode);
+    } else if (urlCode) {
+      setCodeVal(urlCode);
+    }
+  }, [resetState?.enteredCode, urlCode]);
 
   const isResetStep = Boolean(urlCode && urlEmail) || requestState?.step === "reset" || resetState?.step === "reset";
   const isCompletedStep = resetState?.step === "completed";
@@ -110,7 +119,8 @@ function ForgotPasswordForm() {
                   name="code"
                   type="text"
                   maxLength={6}
-                  defaultValue={urlCode}
+                  value={codeVal}
+                  onChange={(e) => setCodeVal(e.target.value)}
                   placeholder="e.g. 123456"
                   className="font-mono text-center tracking-widest text-base font-bold"
                   required

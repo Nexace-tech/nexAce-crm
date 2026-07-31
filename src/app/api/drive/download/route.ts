@@ -17,7 +17,7 @@ export async function GET(request: Request) {
     }
 
     const { searchParams } = new URL(request.url);
-    const fileId = searchParams.get("fileId");
+    const fileId = searchParams.get("fileId") || searchParams.get("id");
 
     if (!fileId) {
       return new Response("File ID is required", { status: 400 });
@@ -38,12 +38,14 @@ export async function GET(request: Request) {
     }
 
     const fileBuffer = fs.readFileSync(filePathOnDisk);
+    const isImage = (file.mimeType || "").startsWith("image/") || /\.(png|jpe?g|gif|webp|svg)$/i.test(file.name);
+    const disposition = isImage ? `inline; filename="${encodeURIComponent(file.name)}"` : `attachment; filename="${encodeURIComponent(file.name)}"`;
 
     // Return binary file response
     return new Response(fileBuffer, {
       headers: {
         "Content-Type": file.mimeType || "application/octet-stream",
-        "Content-Disposition": `attachment; filename="${encodeURIComponent(file.name)}"`,
+        "Content-Disposition": disposition,
         "Content-Length": fileBuffer.length.toString(),
       },
     });

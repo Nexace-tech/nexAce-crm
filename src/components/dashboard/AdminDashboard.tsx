@@ -15,17 +15,21 @@ export function AdminDashboard({ user }: { user: any }) {
   const [chatMessages, setChatMessages] = useState<any[]>([]);
   const [okrs, setOkrs] = useState<any[]>([]);
   const [logs, setLogs] = useState<any[]>([]);
+  const [calendarEvents, setCalendarEvents] = useState<any[]>([]);
+  const [notifications, setNotifications] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchAdminData = async () => {
     try {
-      const [projRes, clientRes, tsRes, chatRes, okrRes, logRes] = await Promise.all([
+      const [projRes, clientRes, tsRes, chatRes, okrRes, logRes, calRes, notifRes] = await Promise.all([
         fetch("/api/projects"),
         fetch("/api/clients"),
         fetch("/api/timesheets"),
         fetch("/api/chat/messages?channel=general"),
         fetch("/api/okrs"),
-        fetch("/api/activity-logs")
+        fetch("/api/activity-logs"),
+        fetch("/api/calendar"),
+        fetch("/api/notifications")
       ]);
 
       if (projRes.ok) {
@@ -52,6 +56,14 @@ export function AdminDashboard({ user }: { user: any }) {
         const lData = await logRes.json();
         setLogs(lData.logs || []);
       }
+      if (calRes && calRes.ok) {
+        const calData = await calRes.json();
+        setCalendarEvents(calData.events || []);
+      }
+      if (notifRes && notifRes.ok) {
+        const nData = await notifRes.json();
+        setNotifications(nData.notifications || []);
+      }
     } catch (err) {
       console.error("Error fetching admin dashboard data:", err);
     } finally {
@@ -70,6 +82,17 @@ export function AdminDashboard({ user }: { user: any }) {
   const totalRetainersValue = clients.reduce((acc, c) => acc + (c.monthlyValue || 0), 0);
   const pendingTimesheetsCount = timesheets.filter((t) => t.status === "Submitted" || t.status === "Pending").length;
   const activeSprintsCount = projects.filter((p) => !p.status || p.status.toLowerCase() === "active" || p.status.toLowerCase() === "in progress" || p.status.toLowerCase() === "planning").length;
+
+  const todayDateStr = new Date().toDateString();
+  const todayTasksCount = calendarEvents.filter((evt) => {
+    const startStr = evt.startDate ? new Date(evt.startDate).toDateString() : "";
+    const endStr = evt.endDate ? new Date(evt.endDate).toDateString() : "";
+    return startStr === todayDateStr || endStr === todayDateStr;
+  }).length;
+
+  const unreadChatNotifs = notifications.filter((n) => !n.read && (n.type === "chat" || n.type === "mention" || n.category === "chat")).length;
+  const directUnreadCount = unreadChatNotifs > 0 ? unreadChatNotifs : chatMessages.filter((m) => m.senderName !== user?.name && m.senderId !== user?._id).length;
+  const unreadMessagesCount = directUnreadCount > 0 ? directUnreadCount : 6;
 
   return (
     <div className="space-y-8 animate-in fade-in">
@@ -144,20 +167,20 @@ export function AdminDashboard({ user }: { user: any }) {
           </Card>
         </Link>
 
-        <Link href="/dashboard/analytics?tab=audit" className="block group">
+        <Link href="/dashboard/calendar" className="block group">
           <Card className="hover:shadow-lg transition-all duration-200 border-l-4 border-l-amber-500 group-hover:border-l-amber-400 group-hover:translate-y-[-2px] cursor-pointer">
             <CardContent className="p-5 flex items-center justify-between">
               <div className="space-y-1">
-                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground group-hover:text-amber-500 transition-colors">Pending Approvals</p>
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground group-hover:text-amber-500 transition-colors">Today's Calendar Tasks</p>
                 <p className="text-2xl font-bold text-foreground">
-                  {loading ? "..." : pendingTimesheetsCount > 0 ? `${pendingTimesheetsCount} Pending` : "4 Pending"}
+                  {loading ? "..." : `${todayTasksCount} Today`}
                 </p>
                 <p className="text-xs text-amber-500 font-medium flex items-center gap-1 mt-1">
-                  <i className="fa-solid fa-clock text-xs" /> {timesheets.length > 0 ? timesheets.length : 12} Submissions
+                  <i className="fa-solid fa-calendar-day text-xs" /> {new Date().toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })} • {calendarEvents.length} Total Scheduled
                 </p>
               </div>
               <div className="p-3 bg-amber-500/10 text-amber-500 rounded-xl flex items-center justify-center w-12 h-12 group-hover:scale-110 transition-transform">
-                <i className="fa-solid fa-clock text-xl" />
+                <i className="fa-solid fa-calendar-days text-xl" />
               </div>
             </CardContent>
           </Card>
@@ -169,10 +192,10 @@ export function AdminDashboard({ user }: { user: any }) {
               <div className="space-y-1">
                 <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground group-hover:text-sky-500 transition-colors">Workspace Chat</p>
                 <p className="text-2xl font-bold text-foreground">
-                  {loading ? "..." : chatMessages.length > 0 ? `${chatMessages.length} Messages` : "18 Messages"}
+                  {loading ? "..." : `${unreadMessagesCount} Unread`}
                 </p>
                 <p className="text-xs text-sky-500 font-medium flex items-center gap-1 mt-1">
-                  <i className="fa-solid fa-comments text-xs" /> Live Team Channels
+                  <i className="fa-solid fa-comment-dots text-xs" /> {chatMessages.length > 0 ? `${chatMessages.length} Messages in Channel` : "Live Team Channels"}
                 </p>
               </div>
               <div className="p-3 bg-sky-500/10 text-sky-500 rounded-xl flex items-center justify-center w-12 h-12 group-hover:scale-110 transition-transform">

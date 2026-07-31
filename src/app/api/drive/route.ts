@@ -75,27 +75,43 @@ export async function POST(request: Request) {
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    // Ensure upload directory exists
-    if (!fs.existsSync(UPLOAD_DIR)) {
-      fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+    const folder = (formData.get("folder") as string) || "/";
+    const targetDir = folder && folder !== "/" ? path.join(UPLOAD_DIR, folder) : UPLOAD_DIR;
+    
+    // Ensure target directory exists (e.g. src/uploads/Chat)
+    if (!fs.existsSync(targetDir)) {
+      fs.mkdirSync(targetDir, { recursive: true });
     }
 
-    // Save file on disk with a timestamped safe filename
-    const safeName = `${Date.now()}-${fileName.replace(/[^a-zA-Z0-9.\-_]/g, "_")}`;
-    const destinationPath = path.join(UPLOAD_DIR, safeName);
+    const ext = fileExt ? `.${fileExt}` : "";
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const day = String(now.getDate()).padStart(2, "0");
+    const timestamp = now.getTime();
     
+    // Custom File Naming: NexAceCRM_Year_Month_Day_TimeStamp
+    let savedFileName = fileName;
+    let diskFileName = `${timestamp}-${fileName.replace(/[^a-zA-Z0-9.\-_]/g, "_")}`;
+
+    if (folder === "Chat" || folder.toLowerCase().includes("chat") || mimeType.startsWith("image/")) {
+      savedFileName = `NexAceCRM_${year}_${month}_${day}_${timestamp}${ext}`;
+      diskFileName = savedFileName;
+    }
+
+    const destinationPath = path.join(targetDir, diskFileName);
     fs.writeFileSync(destinationPath, buffer);
 
-    const folder = (formData.get("folder") as string) || "/";
+    const relativeFilePath = folder && folder !== "/" ? path.join(folder, diskFileName) : diskFileName;
 
     await connectToDatabase();
 
     // Log file metadata in DB
     const newFile = await DriveFile.create({
-      name: fileName,
+      name: savedFileName,
       size,
       mimeType,
-      filePath: safeName, // relative path to target uploads
+      filePath: relativeFilePath, // relative path to target uploads directory
       folder,
       uploadedBy: new mongoose.Types.ObjectId(session.userId),
       tenantId: new mongoose.Types.ObjectId(session.tenantId),

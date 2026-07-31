@@ -51,6 +51,7 @@ export default function HRPage() {
   // Leave Management State
   const [leaves, setLeaves] = useState<any[]>([]);
   const [showLeaveForm, setShowLeaveForm] = useState(false);
+  const [selectedLeaveDetails, setSelectedLeaveDetails] = useState<any | null>(null);
   const [leaveType, setLeaveType] = useState("Casual");
   const [leaveStart, setLeaveStart] = useState("");
   const [leaveEnd, setLeaveEnd] = useState("");
@@ -58,6 +59,89 @@ export default function HRPage() {
   const [leaveSearchQuery, setLeaveSearchQuery] = useState("");
   const [leaveStatusFilter, setLeaveStatusFilter] = useState("All");
   const [leaveTypeFilter, setLeaveTypeFilter] = useState("All");
+  const [leavePage, setLeavePage] = useState(1);
+  const [leaveItemsPerPage, setLeaveItemsPerPage] = useState(5);
+
+  const handleExportLeaveDetails = (leave: any, format: "csv" | "json" | "txt" = "csv") => {
+    if (!leave) return;
+    const safeUser = leave.userName.replace(/\s+/g, "_");
+
+    if (format === "csv") {
+      const csvHeader = "Record ID,Employee Name,Leave Type,Status,Start Date,End Date,Reason,Approver,Timestamp\n";
+      const csvRow = `"${leave._id}","${leave.userName}","${leave.type} Leave","${leave.status}","${new Date(leave.startDate).toLocaleDateString()}","${new Date(leave.endDate).toLocaleDateString()}","${(leave.reason || "").replace(/"/g, '""')}","${leave.approverName || "Admin"}","${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() : "N/A"}"`;
+      const blob = new Blob([csvHeader + csvRow], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `Leave_Record_${safeUser}_${leave._id}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      showToast("Exported leave details as CSV!");
+      return;
+    }
+
+    if (format === "json") {
+      const blob = new Blob([JSON.stringify(leave, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `Leave_Record_${safeUser}_${leave._id}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      showToast("Exported leave details as JSON!");
+      return;
+    }
+
+    const content = `================================================
+NEXACE CRM - LEAVE APPLICATION RECORD
+================================================
+Record ID     : ${leave._id}
+Employee Name : ${leave.userName}
+Leave Type    : ${leave.type} Leave
+Status        : ${leave.status}
+Start Date    : ${new Date(leave.startDate).toLocaleDateString()}
+End Date      : ${new Date(leave.endDate).toLocaleDateString()}
+Reason        : ${leave.reason}
+Approver      : ${leave.approverName || "Admin/Manager"}
+Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() : "N/A"}
+================================================`;
+
+    const blob = new Blob([content], { type: "text/plain;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `Leave_Record_${safeUser}_${leave._id}.txt`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showToast("Exported leave details report!");
+  };
+
+  const handleExportAllLeaves = (records: any[]) => {
+    if (!records || records.length === 0) {
+      showToast("No leave records to export", "error");
+      return;
+    }
+
+    const csvHeader = "Record ID,Employee Name,Leave Type,Status,Start Date,End Date,Reason,Approver,Timestamp\n";
+    const csvRows = records
+      .map((l) => {
+        return `"${l._id}","${l.userName}","${l.type} Leave","${l.status}","${new Date(l.startDate).toLocaleDateString()}","${new Date(l.endDate).toLocaleDateString()}","${(l.reason || "").replace(/"/g, '""')}","${l.approverName || "N/A"}","${l.updatedAt ? new Date(l.updatedAt).toLocaleString() : "N/A"}"`;
+      })
+      .join("\n");
+
+    const blob = new Blob([csvHeader + csvRows], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `Leave_Records_Export_${new Date().toISOString().split("T")[0]}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showToast(`Exported ${records.length} leave record(s) to CSV!`);
+  };
 
   // Vault State (Document Vault)
   const [documents, setDocuments] = useState<any[]>([]);
@@ -184,6 +268,14 @@ export default function HRPage() {
       setLoading(false);
     };
     init();
+
+    // Real-time background sync every 5s (updates status without page reload)
+    const interval = setInterval(() => {
+      fetchLeaves();
+      fetchCases();
+    }, 5000);
+
+    return () => clearInterval(interval);
   }, []);
 
   // Handlers
@@ -242,14 +334,24 @@ export default function HRPage() {
   };
 
   const handleApproveRejectLeave = async (leaveId: string, status: string) => {
+    // Instant optimistic UI update without waiting
+    setLeaves((prev) => prev.map((l) => l._id === leaveId ? { ...l, status } : l));
     try {
       const res = await fetch("/api/hr/leaves", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ leaveId, status }),
       });
-      if (res.ok) { showToast(`Leave ${status.toLowerCase()}`); await fetchLeaves(); }
-    } catch { showToast("Action failed", "error"); }
+      if (res.ok) {
+        showToast(`Leave ${status.toLowerCase()}`);
+        await fetchLeaves();
+      } else {
+        await fetchLeaves();
+      }
+    } catch {
+      showToast("Action failed", "error");
+      await fetchLeaves();
+    }
   };
 
   const handleCreateDocument = async (e: React.FormEvent) => {
@@ -446,9 +548,15 @@ export default function HRPage() {
         </div>
       </div>
 
-      {/* Stats Row */}
+      {/* Stats Row - Interactive Clickable Tab Shortcuts */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-        <Card className="border-l-4 border-l-primary">
+        <Card 
+          onClick={() => setActiveTab("directory")} 
+          className={cn(
+            "border-l-4 border-l-primary hover:shadow-md hover:translate-y-[-2px] transition-all cursor-pointer",
+            activeTab === "directory" ? "bg-primary/5 ring-1 ring-primary/30" : ""
+          )}
+        >
           <CardContent className="p-5 flex items-center justify-between">
             <div className="space-y-1">
               <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Total Workforce</p>
@@ -457,7 +565,14 @@ export default function HRPage() {
             <div className="p-3 bg-primary/10 text-primary rounded-xl"><i className="fa-solid fa-users text-xl" /></div>
           </CardContent>
         </Card>
-        <Card className="border-l-4 border-l-emerald-500">
+
+        <Card 
+          onClick={() => setActiveTab("checklists")} 
+          className={cn(
+            "border-l-4 border-l-emerald-500 hover:shadow-md hover:translate-y-[-2px] transition-all cursor-pointer",
+            activeTab === "checklists" ? "bg-emerald-500/5 ring-1 ring-emerald-500/30" : ""
+          )}
+        >
           <CardContent className="p-5 flex items-center justify-between">
             <div className="space-y-1">
               <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Active Checklists</p>
@@ -466,7 +581,14 @@ export default function HRPage() {
             <div className="p-3 bg-emerald-500/10 text-emerald-500 rounded-xl"><i className="fa-solid fa-clipboard-check text-xl" /></div>
           </CardContent>
         </Card>
-        <Card className="border-l-4 border-l-amber-500">
+
+        <Card 
+          onClick={() => setActiveTab("leaves")} 
+          className={cn(
+            "border-l-4 border-l-amber-500 hover:shadow-md hover:translate-y-[-2px] transition-all cursor-pointer",
+            activeTab === "leaves" ? "bg-amber-500/5 ring-1 ring-amber-500/30" : ""
+          )}
+        >
           <CardContent className="p-5 flex items-center justify-between">
             <div className="space-y-1">
               <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Pending Leaves</p>
@@ -475,7 +597,14 @@ export default function HRPage() {
             <div className="p-3 bg-amber-500/10 text-amber-500 rounded-xl"><i className="fa-solid fa-calendar-days text-xl" /></div>
           </CardContent>
         </Card>
-        <Card className="border-l-4 border-l-sky-500">
+
+        <Card 
+          onClick={() => setActiveTab("cases")} 
+          className={cn(
+            "border-l-4 border-l-sky-500 hover:shadow-md hover:translate-y-[-2px] transition-all cursor-pointer",
+            activeTab === "cases" ? "bg-sky-500/5 ring-1 ring-sky-500/30" : ""
+          )}
+        >
           <CardContent className="p-5 flex items-center justify-between">
             <div className="space-y-1">
               <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Open HR Cases</p>
@@ -486,58 +615,84 @@ export default function HRPage() {
         </Card>
       </div>
 
-      {/* Tabs */}
-      <div className="flex border-b border-border space-x-1 overflow-x-auto no-scrollbar">
-        <button onClick={() => setActiveTab("directory")} className={cn(
-          "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer shrink-0",
-          activeTab === "directory" ? "border-primary text-primary font-semibold" : "border-transparent text-muted-foreground hover:text-foreground"
-        )}>
-          <i className="fa-solid fa-address-book text-sm" /> Employee Directory
+      {/* Interactive Tab Navigation Bar with Smooth Scroll Controls */}
+      <div className="relative flex items-center bg-card border border-border/80 rounded-xl p-1 shadow-2xs">
+        <button
+          type="button"
+          onClick={() => {
+            const container = document.getElementById("hr-tab-bar");
+            if (container) container.scrollBy({ left: -220, behavior: "smooth" });
+          }}
+          className="h-9 w-8 rounded-lg hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors cursor-pointer shrink-0"
+          title="Scroll Left"
+        >
+          <i className="fa-solid fa-chevron-left text-xs" />
         </button>
-        <button onClick={() => setActiveTab("checklists")} className={cn(
-          "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer shrink-0",
-          activeTab === "checklists" ? "border-primary text-primary font-semibold" : "border-transparent text-muted-foreground hover:text-foreground"
-        )}>
-          <i className="fa-solid fa-list-check text-sm" /> Onboarding / Offboarding
-        </button>
-        <button onClick={() => setActiveTab("leaves")} className={cn(
-          "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer shrink-0",
-          activeTab === "leaves" ? "border-primary text-primary font-semibold" : "border-transparent text-muted-foreground hover:text-foreground"
-        )}>
-          <i className="fa-solid fa-calendar-days text-sm" /> Leave Management
-        </button>
-        <button onClick={() => setActiveTab("vault")} className={cn(
-          "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer shrink-0",
-          activeTab === "vault" ? "border-primary text-primary font-semibold" : "border-transparent text-muted-foreground hover:text-foreground"
-        )}>
-          <i className="fa-solid fa-shield-halved text-sm text-emerald-500" /> Document Vault
-        </button>
-        <button onClick={() => setActiveTab("cases")} className={cn(
-          "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer shrink-0",
-          activeTab === "cases" ? "border-primary text-primary font-semibold" : "border-transparent text-muted-foreground hover:text-foreground"
-        )}>
-          <i className="fa-solid fa-circle-question text-sm text-amber-500" /> Help Desk
-        </button>
-        <button onClick={() => setActiveTab("appraisals")} className={cn(
-          "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer shrink-0",
-          activeTab === "appraisals" ? "border-primary text-primary font-semibold" : "border-transparent text-muted-foreground hover:text-foreground"
-        )}>
-          <i className="fa-solid fa-award text-sm text-indigo-500" /> Appraisals & KRAs
-        </button>
-        <button onClick={() => setActiveTab("probation")} className={cn(
-          "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer shrink-0",
-          activeTab === "probation" ? "border-primary text-primary font-semibold" : "border-transparent text-muted-foreground hover:text-foreground"
-        )}>
-          <i className="fa-solid fa-clock text-sm text-sky-500" /> Review Cycle & Probation
-        </button>
-        {isManagerOrAdmin && (
-          <button onClick={() => setActiveTab("sandbox")} className={cn(
-            "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer shrink-0",
-            activeTab === "sandbox" ? "border-primary text-primary font-semibold" : "border-transparent text-muted-foreground hover:text-foreground"
+
+        <div id="hr-tab-bar" className="flex-1 flex space-x-1 overflow-x-auto no-scrollbar scroll-smooth py-0.5 px-1">
+          <button onClick={() => setActiveTab("directory")} className={cn(
+            "px-4 py-2 text-xs font-semibold rounded-lg transition-all flex items-center gap-2 cursor-pointer shrink-0",
+            activeTab === "directory" ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
           )}>
-            <i className="fa-solid fa-sliders text-sm text-purple-500" /> HR Sandbox
+            <i className="fa-solid fa-address-book text-xs" /> Employee Directory
           </button>
-        )}
+          <button onClick={() => setActiveTab("checklists")} className={cn(
+            "px-4 py-2 text-xs font-semibold rounded-lg transition-all flex items-center gap-2 cursor-pointer shrink-0",
+            activeTab === "checklists" ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+          )}>
+            <i className="fa-solid fa-list-check text-xs" /> Onboarding / Offboarding
+          </button>
+          <button onClick={() => setActiveTab("leaves")} className={cn(
+            "px-4 py-2 text-xs font-semibold rounded-lg transition-all flex items-center gap-2 cursor-pointer shrink-0",
+            activeTab === "leaves" ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+          )}>
+            <i className="fa-solid fa-calendar-days text-xs" /> Leave Management
+          </button>
+          <button onClick={() => setActiveTab("vault")} className={cn(
+            "px-4 py-2 text-xs font-semibold rounded-lg transition-all flex items-center gap-2 cursor-pointer shrink-0",
+            activeTab === "vault" ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+          )}>
+            <i className="fa-solid fa-shield-halved text-xs text-emerald-500" /> Document Vault
+          </button>
+          <button onClick={() => setActiveTab("cases")} className={cn(
+            "px-4 py-2 text-xs font-semibold rounded-lg transition-all flex items-center gap-2 cursor-pointer shrink-0",
+            activeTab === "cases" ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+          )}>
+            <i className="fa-solid fa-circle-question text-xs text-amber-500" /> Help Desk
+          </button>
+          <button onClick={() => setActiveTab("appraisals")} className={cn(
+            "px-4 py-2 text-xs font-semibold rounded-lg transition-all flex items-center gap-2 cursor-pointer shrink-0",
+            activeTab === "appraisals" ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+          )}>
+            <i className="fa-solid fa-award text-xs text-indigo-500" /> Appraisals & KRAs
+          </button>
+          <button onClick={() => setActiveTab("probation")} className={cn(
+            "px-4 py-2 text-xs font-semibold rounded-lg transition-all flex items-center gap-2 cursor-pointer shrink-0",
+            activeTab === "probation" ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+          )}>
+            <i className="fa-solid fa-clock text-xs text-sky-500" /> Review Cycle & Probation
+          </button>
+          {isManagerOrAdmin && (
+            <button onClick={() => setActiveTab("sandbox")} className={cn(
+              "px-4 py-2 text-xs font-semibold rounded-lg transition-all flex items-center gap-2 cursor-pointer shrink-0",
+              activeTab === "sandbox" ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+            )}>
+              <i className="fa-solid fa-sliders text-xs text-purple-500" /> HR Sandbox
+            </button>
+          )}
+        </div>
+
+        <button
+          type="button"
+          onClick={() => {
+            const container = document.getElementById("hr-tab-bar");
+            if (container) container.scrollBy({ left: 220, behavior: "smooth" });
+          }}
+          className="h-9 w-8 rounded-lg hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors cursor-pointer shrink-0"
+          title="Scroll Right"
+        >
+          <i className="fa-solid fa-chevron-right text-xs" />
+        </button>
       </div>
 
       {/* TAB 1: EMPLOYEE DIRECTORY */}
@@ -706,15 +861,21 @@ export default function HRPage() {
               <Input
                 placeholder="Search by employee name..."
                 value={leaveSearchQuery}
-                onChange={(e) => setLeaveSearchQuery(e.target.value)}
+                onChange={(e) => {
+                  setLeaveSearchQuery(e.target.value);
+                  setLeavePage(1);
+                }}
                 className="w-full sm:w-64 h-9"
               />
             </div>
             <div className="flex items-center gap-3 w-full sm:w-auto flex-wrap">
               <select
                 value={leaveStatusFilter}
-                onChange={(e) => setLeaveStatusFilter(e.target.value)}
-                className="h-9 px-3 text-xs bg-background border border-border rounded-md text-foreground"
+                onChange={(e) => {
+                  setLeaveStatusFilter(e.target.value);
+                  setLeavePage(1);
+                }}
+                className="h-9 px-3 text-xs bg-background border border-border rounded-md text-foreground cursor-pointer"
               >
                 <option value="All">All Statuses</option>
                 <option value="Approved">Approved</option>
@@ -724,8 +885,11 @@ export default function HRPage() {
 
               <select
                 value={leaveTypeFilter}
-                onChange={(e) => setLeaveTypeFilter(e.target.value)}
-                className="h-9 px-3 text-xs bg-background border border-border rounded-md text-foreground"
+                onChange={(e) => {
+                  setLeaveTypeFilter(e.target.value);
+                  setLeavePage(1);
+                }}
+                className="h-9 px-3 text-xs bg-background border border-border rounded-md text-foreground cursor-pointer"
               >
                 <option value="All">All Types</option>
                 <option value="Casual">Casual Leave</option>
@@ -733,6 +897,23 @@ export default function HRPage() {
                 <option value="Earned">Earned Leave</option>
                 <option value="Unpaid">Unpaid Leave</option>
               </select>
+
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const filtered = leaves.filter((l) => {
+                    const matchesSearch = !leaveSearchQuery || (l.userName && l.userName.toLowerCase().includes(leaveSearchQuery.toLowerCase()));
+                    const matchesStatus = leaveStatusFilter === "All" || l.status === leaveStatusFilter;
+                    const matchesType = leaveTypeFilter === "All" || l.type === leaveTypeFilter;
+                    return matchesSearch && matchesStatus && matchesType;
+                  });
+                  handleExportAllLeaves(filtered);
+                }}
+                className="gap-1.5 cursor-pointer font-semibold text-xs text-emerald-500 border-emerald-500/40 hover:bg-emerald-500/10"
+              >
+                <i className="fa-solid fa-file-excel text-xs" /> Export Data
+              </Button>
 
               <Button color="primary" size="sm" onClick={() => setShowLeaveForm(true)} className="gap-1.5 cursor-pointer">
                 <i className="fa-solid fa-plus text-xs" /> Request Time-Off
@@ -763,64 +944,152 @@ export default function HRPage() {
           </div>
 
           {/* Leave Records List */}
-          <div className="space-y-3">
-            {leaves
-              .filter((l) => {
-                const matchesSearch = !leaveSearchQuery || (l.userName && l.userName.toLowerCase().includes(leaveSearchQuery.toLowerCase()));
-                const matchesStatus = leaveStatusFilter === "All" || l.status === leaveStatusFilter;
-                const matchesType = leaveTypeFilter === "All" || l.type === leaveTypeFilter;
-                return matchesSearch && matchesStatus && matchesType;
-              })
-              .map((l) => (
-                <Card key={l._id} className="hover:shadow-md transition-all">
-                  <CardContent className="p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                    <div className="flex items-center gap-4 flex-1">
-                      <div className="h-10 w-10 rounded-full bg-primary/20 text-primary font-bold flex items-center justify-center text-sm border border-primary/30 shrink-0">
-                        {l.userName?.charAt(0) || "?"}
-                      </div>
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <p className="font-bold text-sm text-foreground">{l.userName}</p>
-                          <Badge color="primary" variant="soft">{l.type} Leave</Badge>
-                          <Badge color={l.status === "Approved" ? "success" : l.status === "Rejected" ? "destructive" : "warning"}>
-                            {l.status}
-                          </Badge>
-                        </div>
-                        <p className="text-xs text-muted-foreground font-medium flex items-center gap-2">
-                          <i className="fa-solid fa-calendar-days text-xs text-primary" />
-                          {new Date(l.startDate).toLocaleDateString()} — {new Date(l.endDate).toLocaleDateString()}
-                        </p>
-                        <p className="text-xs text-muted-foreground italic">"{l.reason}"</p>
-                      </div>
-                    </div>
-
-                    {isManagerOrAdmin && l.status === "Pending" && (
-                      <div className="flex gap-2 shrink-0">
-                        <Button size="sm" color="primary" onClick={() => handleApproveRejectLeave(l._id, "Approved")} className="gap-1 cursor-pointer">
-                          <i className="fa-solid fa-circle-check text-xs" /> Approve
-                        </Button>
-                        <Button size="sm" variant="outline" onClick={() => handleApproveRejectLeave(l._id, "Rejected")} className="gap-1 text-destructive cursor-pointer">
-                          <i className="fa-solid fa-xmark text-xs" /> Reject
-                        </Button>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              ))}
-
-            {leaves.filter((l) => {
+          {(() => {
+            const filteredLeaves = leaves.filter((l) => {
               const matchesSearch = !leaveSearchQuery || (l.userName && l.userName.toLowerCase().includes(leaveSearchQuery.toLowerCase()));
               const matchesStatus = leaveStatusFilter === "All" || l.status === leaveStatusFilter;
               const matchesType = leaveTypeFilter === "All" || l.type === leaveTypeFilter;
               return matchesSearch && matchesStatus && matchesType;
-            }).length === 0 && (
-              <div className="text-center py-10 text-muted-foreground border border-dashed rounded-xl">
-                <i className="fa-solid fa-calendar-xmark text-4xl mb-2 text-muted-foreground/40 block" />
-                <p className="text-sm font-semibold text-foreground">No leave records found</p>
-                <p className="text-xs text-muted-foreground mt-1">Try adjusting your filters or request a new leave.</p>
+            });
+
+            const totalLeavePages = Math.ceil(filteredLeaves.length / leaveItemsPerPage) || 1;
+            const currentPage = Math.min(leavePage, totalLeavePages);
+            const paginatedLeaves = filteredLeaves.slice((currentPage - 1) * leaveItemsPerPage, currentPage * leaveItemsPerPage);
+
+            return (
+              <div className="space-y-3">
+                {paginatedLeaves.map((l) => (
+                  <Card key={l._id} className="hover:shadow-md transition-all">
+                    <CardContent className="p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                      <div className="flex items-center gap-4 flex-1">
+                        <div className="h-10 w-10 rounded-full bg-primary/20 text-primary font-bold flex items-center justify-center text-sm border border-primary/30 shrink-0">
+                          {l.userName?.charAt(0) || "?"}
+                        </div>
+                        <div className="space-y-1 flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-2 flex-wrap w-full">
+                            <p className="font-bold text-sm text-foreground">{l.userName}</p>
+                            <div className="flex items-center gap-1.5 ml-auto">
+                              <Badge color="primary" variant="soft">{l.type} Leave</Badge>
+                              <Badge color={l.status === "Approved" ? "success" : l.status === "Rejected" ? "destructive" : "warning"}>
+                                {l.status}
+                              </Badge>
+                            </div>
+                          </div>
+                          <div className="flex items-center justify-between gap-2 flex-wrap">
+                            <p className="text-xs text-muted-foreground font-medium flex items-center gap-2">
+                              <i className="fa-solid fa-calendar-days text-xs text-primary" />
+                              {new Date(l.startDate).toLocaleDateString()} — {new Date(l.endDate).toLocaleDateString()}
+                            </p>
+                            {l.status === "Approved" && (
+                              <p className="text-[11px] font-semibold text-emerald-500 flex items-center gap-1 ml-auto">
+                                <i className="fa-solid fa-circle-check text-xs" />
+                                Approved {l.approverName ? `by ${l.approverName}` : "by Admin"}
+                                {l.updatedAt ? ` on ${new Date(l.updatedAt).toLocaleDateString()} at ${new Date(l.updatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: true })}` : ""}
+                              </p>
+                            )}
+                            {l.status === "Rejected" && (
+                              <p className="text-[11px] font-semibold text-rose-500 flex items-center gap-1 ml-auto">
+                                <i className="fa-solid fa-circle-xmark text-xs" />
+                                Declined {l.approverName ? `by ${l.approverName}` : "by Admin"}
+                                {l.updatedAt ? ` on ${new Date(l.updatedAt).toLocaleDateString()} at ${new Date(l.updatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: true })}` : ""}
+                              </p>
+                            )}
+                          </div>
+                          <p className="text-xs text-muted-foreground italic">"{l.reason}"</p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setSelectedLeaveDetails(l)}
+                          className="gap-1.5 text-xs font-semibold cursor-pointer"
+                        >
+                          <i className="fa-solid fa-file-lines text-xs text-primary" /> Show Details
+                        </Button>
+
+                        {isManagerOrAdmin && l.status === "Pending" && (
+                          <>
+                            <Button size="sm" color="primary" onClick={() => handleApproveRejectLeave(l._id, "Approved")} className="gap-1 cursor-pointer">
+                              <i className="fa-solid fa-circle-check text-xs" /> Approve
+                            </Button>
+                            <Button size="sm" variant="outline" onClick={() => handleApproveRejectLeave(l._id, "Rejected")} className="gap-1 text-destructive cursor-pointer">
+                              <i className="fa-solid fa-xmark text-xs" /> Reject
+                            </Button>
+                          </>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+
+                {filteredLeaves.length === 0 && (
+                  <div className="text-center py-10 text-muted-foreground border border-dashed rounded-xl">
+                    <i className="fa-solid fa-calendar-xmark text-4xl mb-2 text-muted-foreground/40 block" />
+                    <p className="text-sm font-semibold text-foreground">No leave records found</p>
+                  </div>
+                )}
+
+                {/* Pagination Controls Bar */}
+                {filteredLeaves.length > 0 && (
+                  <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-3.5 bg-card border border-border/80 rounded-xl shadow-2xs">
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <span>Showing</span>
+                      <span className="font-bold text-foreground">
+                        {Math.min((currentPage - 1) * leaveItemsPerPage + 1, filteredLeaves.length)} - {Math.min(currentPage * leaveItemsPerPage, filteredLeaves.length)}
+                      </span>
+                      <span>of</span>
+                      <span className="font-bold text-foreground">{filteredLeaves.length} Records</span>
+
+                      <div className="flex items-center gap-1.5 ml-4">
+                        <span>Rows:</span>
+                        <select
+                          value={leaveItemsPerPage}
+                          onChange={(e) => {
+                            setLeaveItemsPerPage(Number(e.target.value));
+                            setLeavePage(1);
+                          }}
+                          className="h-7 px-2 text-xs bg-background border border-border rounded text-foreground cursor-pointer font-semibold"
+                        >
+                          <option value={5}>5 per page</option>
+                          <option value={10}>10 per page</option>
+                          <option value={20}>20 per page</option>
+                          <option value={50}>50 per page</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={currentPage === 1}
+                        onClick={() => setLeavePage((prev) => Math.max(prev - 1, 1))}
+                        className="h-8 text-xs gap-1 font-semibold cursor-pointer"
+                      >
+                        <i className="fa-solid fa-chevron-left text-[10px]" /> Previous
+                      </Button>
+
+                      <span className="text-xs font-semibold px-2 text-foreground font-mono">
+                        Page {currentPage} of {totalLeavePages}
+                      </span>
+
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={currentPage >= totalLeavePages}
+                        onClick={() => setLeavePage((prev) => Math.min(prev + 1, totalLeavePages))}
+                        className="h-8 text-xs gap-1 font-semibold cursor-pointer"
+                      >
+                        Next <i className="fa-solid fa-chevron-right text-[10px]" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
+            );
+          })()}
         </div>
       )}
 
@@ -1527,6 +1796,165 @@ export default function HRPage() {
                   Finalize Manager Review
                 </Button>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Leave Request Record Details Popup Modal */}
+      {selectedLeaveDetails && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in"
+          onClick={() => setSelectedLeaveDetails(null)}
+        >
+          <div
+            className={cn(
+              "w-full max-w-lg bg-card border border-border/80 rounded-2xl p-6 shadow-2xl space-y-5 relative overflow-hidden transition-all",
+              selectedLeaveDetails.status === "Approved" ? "border-t-4 border-t-emerald-500" : selectedLeaveDetails.status === "Rejected" ? "border-t-4 border-t-rose-500" : "border-t-4 border-t-amber-500"
+            )}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-border pb-3.5">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-full bg-primary/20 text-primary font-bold flex items-center justify-center text-sm border border-primary/30 shrink-0">
+                  {selectedLeaveDetails.userName?.charAt(0) || "?"}
+                </div>
+                <div>
+                  <h3 className="font-bold text-base text-foreground flex items-center gap-2">
+                    {selectedLeaveDetails.userName}
+                  </h3>
+                  <p className="text-xs text-muted-foreground">Leave Application Record Details</p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Badge color={selectedLeaveDetails.status === "Approved" ? "success" : selectedLeaveDetails.status === "Rejected" ? "destructive" : "warning"}>
+                  {selectedLeaveDetails.status}
+                </Badge>
+                <button
+                  type="button"
+                  onClick={() => setSelectedLeaveDetails(null)}
+                  className="text-muted-foreground hover:text-foreground p-1 rounded-lg transition-colors cursor-pointer"
+                >
+                  <i className="fa-solid fa-xmark text-base" />
+                </button>
+              </div>
+            </div>
+
+            {/* Details Content Grid */}
+            <div className="space-y-3 text-xs">
+              <div className="grid grid-cols-2 gap-3 p-3 bg-muted/30 border border-border/60 rounded-xl">
+                <div>
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Leave Type</label>
+                  <p className="font-semibold text-foreground text-sm mt-0.5">{selectedLeaveDetails.type} Leave</p>
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Status</label>
+                  <p className="font-semibold text-foreground text-sm mt-0.5">{selectedLeaveDetails.status}</p>
+                </div>
+              </div>
+
+              <div className="p-3 bg-muted/30 border border-border/60 rounded-xl space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                    <i className="fa-solid fa-calendar-days text-primary text-xs" /> Duration & Dates
+                  </label>
+                  <span className="text-[10px] font-bold px-2 py-0.5 bg-primary/10 text-primary rounded-full">
+                    {Math.max(1, Math.ceil((new Date(selectedLeaveDetails.endDate).getTime() - new Date(selectedLeaveDetails.startDate).getTime()) / (1000 * 60 * 60 * 24)) + 1)} Days Total
+                  </span>
+                </div>
+                <p className="font-semibold text-foreground font-mono text-sm">
+                  {new Date(selectedLeaveDetails.startDate).toLocaleDateString()} — {new Date(selectedLeaveDetails.endDate).toLocaleDateString()}
+                </p>
+              </div>
+
+              <div className="p-3 bg-muted/30 border border-border/60 rounded-xl space-y-1">
+                <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Reason / Purpose</label>
+                <p className="text-foreground leading-relaxed italic text-xs font-medium">"{selectedLeaveDetails.reason}"</p>
+              </div>
+
+              {(selectedLeaveDetails.status === "Approved" || selectedLeaveDetails.status === "Rejected") && (
+                <div className={cn(
+                  "p-3 rounded-xl border space-y-1",
+                  selectedLeaveDetails.status === "Approved" ? "bg-emerald-500/10 border-emerald-500/20" : "bg-rose-500/10 border-rose-500/20"
+                )}>
+                  <label className={cn(
+                    "text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5",
+                    selectedLeaveDetails.status === "Approved" ? "text-emerald-500" : "text-rose-500"
+                  )}>
+                    <i className={cn("fa-solid text-xs", selectedLeaveDetails.status === "Approved" ? "fa-circle-check" : "fa-circle-xmark")} />
+                    Approval Audit Log
+                  </label>
+                  <p className="text-foreground font-medium text-xs">
+                    {selectedLeaveDetails.status} by <span className="font-bold">{selectedLeaveDetails.approverName || "Admin"}</span>
+                  </p>
+                  {selectedLeaveDetails.updatedAt && (
+                    <p className="text-[11px] font-mono text-muted-foreground">
+                      Timestamp: {new Date(selectedLeaveDetails.updatedAt).toLocaleDateString()} at {new Date(selectedLeaveDetails.updatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: true })}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Record ID Copy Row */}
+              <div className="flex items-center justify-between p-2 bg-muted/20 border border-border/40 rounded-lg text-[11px] text-muted-foreground font-mono">
+                <span className="truncate max-w-[280px]">ID: {selectedLeaveDetails._id}</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(selectedLeaveDetails._id);
+                    showToast("Copied Record ID to clipboard!");
+                  }}
+                  className="hover:text-primary transition-colors flex items-center gap-1 cursor-pointer"
+                >
+                  <i className="fa-solid fa-copy text-xs" /> Copy
+                </button>
+              </div>
+            </div>
+
+            {/* Footer Actions: Multi-Format Export Options */}
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-2.5 border-t border-border pt-4">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setSelectedLeaveDetails(null)}
+                className="w-full sm:w-auto font-medium"
+              >
+                Close
+              </Button>
+
+              <div className="flex items-center gap-2 w-full sm:w-auto justify-end flex-wrap">
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => handleExportLeaveDetails(selectedLeaveDetails, "csv")}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs gap-1.5 cursor-pointer shadow-sm"
+                >
+                  <i className="fa-solid fa-file-csv text-xs" /> Export CSV
+                </Button>
+
+                <Button
+                  type="button"
+                  color="primary"
+                  size="sm"
+                  onClick={() => handleExportLeaveDetails(selectedLeaveDetails, "txt")}
+                  className="font-semibold text-xs gap-1.5 cursor-pointer shadow-sm"
+                >
+                  <i className="fa-solid fa-file-lines text-xs" /> Export TXT
+                </Button>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleExportLeaveDetails(selectedLeaveDetails, "json")}
+                  className="font-semibold text-xs gap-1.5 cursor-pointer"
+                >
+                  <i className="fa-solid fa-code text-xs text-amber-500" /> JSON
+                </Button>
+              </div>
             </div>
           </div>
         </div>

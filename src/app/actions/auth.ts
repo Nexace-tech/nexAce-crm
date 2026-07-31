@@ -28,6 +28,7 @@ export interface FormState {
   success?: boolean;
   step?: "request" | "reset" | "completed";
   resetEmail?: string;
+  enteredCode?: string;
   devCode?: string;
   previewUrl?: string;
 }
@@ -410,7 +411,7 @@ export async function resetPasswordAction(state: FormState | undefined, formData
   }
 
   if (Object.keys(errors).length > 0) {
-    return { errors, step: "reset", resetEmail: email };
+    return { errors, step: "reset", resetEmail: email, enteredCode: code };
   }
 
   try {
@@ -422,6 +423,7 @@ export async function resetPasswordAction(state: FormState | undefined, formData
       return {
         step: "reset",
         resetEmail: email,
+        enteredCode: code,
         message: "Incorrect or expired verification code. Please check your email or request a new code.",
       };
     }
@@ -430,6 +432,9 @@ export async function resetPasswordAction(state: FormState | undefined, formData
     const user = await User.findOne({ email });
     if (!user) {
       return {
+        step: "reset",
+        resetEmail: email,
+        enteredCode: code,
         message: "User account not found.",
       };
     }
@@ -452,6 +457,7 @@ export async function resetPasswordAction(state: FormState | undefined, formData
     return {
       step: "reset",
       resetEmail: email,
+      enteredCode: code,
       message: getDescriptiveErrorMessage(error, "An error occurred while resetting password. Please try again.")
     };
   }

@@ -11,11 +11,26 @@ export async function GET(request: Request) {
     const authResult = await requireTenantSession();
     if (isAuthError(authResult)) return authResult;
 
-    const { tenantObjectId } = authResult;
+    const { session, tenantObjectId, userObjectId } = authResult;
     const { searchParams } = new URL(request.url);
     const channel = searchParams.get("channel") || "general";
 
     await connectToDatabase();
+
+    // Automatically mark unread messages in this channel sent by others as read by current user
+    const userIdentifier = session?.userName || userObjectId.toString();
+    await ChatMessage.updateMany(
+      {
+        tenantId: tenantObjectId,
+        channel,
+        senderId: { $ne: userObjectId },
+        read: false,
+      },
+      {
+        $set: { read: true, readAt: new Date() },
+        $addToSet: { readBy: userIdentifier },
+      }
+    );
 
     const messages = await ChatMessage.find({
       tenantId: tenantObjectId,
@@ -41,10 +56,11 @@ export async function POST(request: Request) {
 
     const { session, tenantObjectId, userObjectId } = authResult;
     const body = await request.json();
-    const { channel, content, isDM, recipientId, parentId, mentions } = body;
+    const { channel, content, isDM, recipientId, parentId, mentions, attachments } = body;
 
-    if (!content || !content.trim()) {
-      return NextResponse.json({ error: "Message content cannot be empty" }, { status: 400 });
+    const trimmedContent = (content || "").trim();
+    if (!trimmedContent && (!attachments || attachments.length === 0)) {
+      return NextResponse.json({ error: "Message must contain text or an attachment" }, { status: 400 });
     }
 
     await connectToDatabase();
@@ -54,11 +70,12 @@ export async function POST(request: Request) {
       senderId: userObjectId,
       senderName: session.userName || "Team Member",
       senderRole: session.role,
-      content: content.trim(),
+      content: trimmedContent || (attachments && attachments[0] ? `[Attachment] ${attachments[0].name}` : "Attachment"),
       isDM: Boolean(isDM),
       recipientId: recipientId || undefined,
       parentId: parentId || undefined,
       mentions: mentions || [],
+      attachments: attachments || [],
       tenantId: tenantObjectId,
     });
 
@@ -162,6 +179,70 @@ export async function PUT(request: Request) {
     return NextResponse.json({ success: true, message });
   } catch (error: any) {
     console.error("API PUT ChatMessage reaction error:", error);
+    return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: 500 });
+  }
+}
+
+/**
+ * DELETE: Delete message for me or delete for everyone.
+ * Body: { messageId: string, deleteMode: "me" | "everyone" }
+ */
+export async function DELETE(request: Request) {
+  try {
+    const authResult = await requireTenantSession();
+    if (isAuthError(authResult)) return authResult;
+
+    const { session, tenantObjectId, userObjectId } = authResult;
+    const body = await request.json();
+    const { messageId, deleteMode } = body;
+
+    if (!messageId || !deleteMode) {
+      return NextResponse.json({ error: "messageId and deleteMode ('me' | 'everyone') are required" }, { status: 400 });
+    }
+
+    await connectToDatabase();
+
+    const message = await ChatMessage.findOne({
+      _id: messageId,
+      tenantId: tenantObjectId,
+    });
+
+    if (!message) {
+      return NextResponse.json({ error: "Message not found" }, { status: 404 });
+    }
+
+    const userName = session.userName || "Team Member";
+    const userIdStr = userObjectId.toString();
+
+    if (deleteMode === "everyone") {
+      const isSender = message.senderId?.toString() === userIdStr || message.senderName === userName;
+      const isAdminOrManager = session.role === "Admin" || session.role === "Manager";
+
+      if (!isSender && !isAdminOrManager) {
+        return NextResponse.json({ error: "Only the message sender or an admin can delete a message for everyone" }, { status: 403 });
+      }
+
+      message.deletedForEveryone = true;
+      message.content = "This message was deleted";
+      await message.save();
+    } else {
+      // Delete for me
+      if (!message.deletedForUsers) {
+        message.deletedForUsers = [];
+      }
+      if (!message.deletedForUsers.includes(userName)) {
+        message.deletedForUsers.push(userName);
+      }
+      if (!message.deletedForUsers.includes(userIdStr)) {
+        message.deletedForUsers.push(userIdStr);
+      }
+      message.markModified("deletedForUsers");
+      await message.save();
+    }
+
+    return NextResponse.json({ success: true, message });
+  } catch (error: any) {
+    console.error("API DELETE ChatMessage error:", error);
     return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: 500 });
   }
 }
