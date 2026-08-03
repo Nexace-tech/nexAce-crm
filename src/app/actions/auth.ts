@@ -28,6 +28,8 @@ export interface FormState {
   success?: boolean;
   step?: "request" | "reset" | "completed";
   resetEmail?: string;
+  enteredEmail?: string;
+  enteredPassword?: string;
   enteredCode?: string;
   devCode?: string;
   previewUrl?: string;
@@ -143,40 +145,41 @@ export async function registerAction(state: FormState | undefined, formData: For
     // 5. Hash Password & Create User with status: "Pending"
     const passwordHash = await bcrypt.hash(adminPassword, 10);
     const user = await User.create({
-      name: adminName,
+      name: adminName.trim(),
       username: usernameRaw,
       email: adminEmail.toLowerCase(),
       passwordHash,
-      role: "Employee",
+      role: "Admin",
       status: "Pending",
-      tenantId: tenant._id
+      tenantId: tenant._id,
     });
 
-    // Notify all Admins in the workspace about the pending approval
-    const adminUsers = await User.find({ tenantId: tenant._id, role: "Admin" });
-    
-    for (const admin of adminUsers) {
-      await Notification.create({
+    // Notify existing tenant admins about new registration
+    const tenantAdmins = await User.find({ tenantId: tenant._id, role: "Admin", status: "Active" });
+    if (tenantAdmins.length > 0) {
+      const notifDocs = tenantAdmins.map((a) => ({
         tenantId: tenant._id,
-        recipientId: admin._id,
-        title: "New Employee Registration Approval",
-        message: `${adminName} (@${usernameRaw}) has registered as an Employee and is waiting for your approval.`,
+        recipientId: a._id,
+        title: "New Employee Account Pending Approval",
+        message: `${adminName} (@${usernameRaw}) registered an account and is awaiting approval.`,
         type: "system",
-        linkUrl: "/dashboard/team"
-      });
+        linkUrl: "/dashboard/team",
+        read: false,
+      }));
+      await Notification.insertMany(notifDocs);
 
-      if (admin.email) {
-        const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000";
+      for (const adminUser of tenantAdmins) {
         try {
           await sendEmail({
-            to: admin.email,
-            subject: `✦ Action Required: New Employee Signup Approval (${adminName})`,
-            text: `New employee signup: ${adminName} (@${usernameRaw}, ${adminEmail}). Please review and approve in your admin workspace.`,
+            to: adminUser.email,
+            subject: `[NexAce CRM] New Employee Approval Request: ${adminName}`,
+            text: `New account awaiting approval: ${adminName} (@${usernameRaw}, ${adminEmail}). Please review and approve in your dashboard.`,
             html: `
-              <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff;">
-                <h2 style="color: #0f172a; margin-top: 0;">Employee Registration Approval Needed</h2>
-                <p style="color: #475569; font-size: 14px; line-height: 1.5;">
-                  A new employee has completed email verification and registered on <strong>${tenant.name}</strong>:
+              <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px; padding: 24px;">
+                <h2 style="color: #1e293b; margin-top: 0;">New Account Awaiting Approval</h2>
+                <p style="color: #475569; font-size: 14px;">
+                  A new employee has registered for your workspace <strong>${tenant.name}</strong> and is currently pending approval:
                 </p>
                 <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 16px; border-radius: 8px; margin: 16px 0;">
                   <p style="margin: 4px 0; font-size: 14px; color: #1e293b;"><strong>Name:</strong> ${adminName}</p>
@@ -225,7 +228,7 @@ export async function loginAction(state: FormState | undefined, formData: FormDa
   }
 
   if (Object.keys(errors).length > 0) {
-    return { errors };
+    return { errors, enteredEmail: email, enteredPassword: password };
   }
 
   try {
@@ -235,7 +238,9 @@ export async function loginAction(state: FormState | undefined, formData: FormDa
     const user = await User.findOne({ email: email.toLowerCase() }).populate("tenantId");
     if (!user) {
       return {
-        message: "Invalid email or password."
+        message: "Invalid email or password.",
+        enteredEmail: email,
+        enteredPassword: password
       };
     }
 
@@ -243,19 +248,25 @@ export async function loginAction(state: FormState | undefined, formData: FormDa
     const passwordMatch = await bcrypt.compare(password, user.passwordHash);
     if (!passwordMatch) {
       return {
-        message: "Invalid email or password."
+        message: "Invalid email or password.",
+        enteredEmail: email,
+        enteredPassword: password
       };
     }
 
     // Check account approval status
     if (user.status === "Pending") {
       return {
-        message: "Your employee account registration is currently pending administrator approval. Please wait for an admin to approve your account."
+        message: "Your employee account registration is currently pending administrator approval. Please wait for an admin to approve your account.",
+        enteredEmail: email,
+        enteredPassword: password
       };
     }
     if (user.status === "Suspended") {
       return {
-        message: "Your employee account has been suspended. Please contact your workspace administrator."
+        message: "Your employee account has been suspended. Please contact your workspace administrator.",
+        enteredEmail: email,
+        enteredPassword: password
       };
     }
 
@@ -263,7 +274,9 @@ export async function loginAction(state: FormState | undefined, formData: FormDa
     const tenant = user.tenantId as any; // Cast populated tenantId
     if (!tenant) {
       return {
-        message: "Company tenant associated with this account was not found."
+        message: "Company tenant associated with this account was not found.",
+        enteredEmail: email,
+        enteredPassword: password
       };
     }
 
@@ -278,7 +291,9 @@ export async function loginAction(state: FormState | undefined, formData: FormDa
   } catch (error: any) {
     console.error("Login error:", error);
     return {
-      message: getDescriptiveErrorMessage(error, "An error occurred during login. Please try again.")
+      message: getDescriptiveErrorMessage(error, "An error occurred during login. Please check your network connection and database settings."),
+      enteredEmail: email,
+      enteredPassword: password
     };
   }
 

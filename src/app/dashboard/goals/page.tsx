@@ -490,7 +490,7 @@ export default function GoalsPage() {
             activeTab === "kudos" ? "border-primary text-primary font-semibold" : "border-transparent text-muted-foreground hover:text-foreground"
           )}
         >
-          <i className="fa-solid fa-sparkles text-xs text-amber-500" /> Kudos Wall ({kudosList.length})
+          <i className="fa-solid fa-wand-magic-sparkles text-xs text-amber-500" /> Kudos Wall ({kudosList.length})
         </button>
       </div>
 
@@ -816,7 +816,7 @@ export default function GoalsPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {kudosList.length === 0 ? (
             <Card className="col-span-full p-8 text-center text-muted-foreground">
-              <i className="fa-solid fa-sparkles text-3xl mx-auto mb-3 opacity-50 text-amber-500 block" />
+              <i className="fa-solid fa-wand-magic-sparkles text-3xl mx-auto mb-3 opacity-50 text-amber-500 block" />
               <p className="font-medium">No Kudos shared yet!</p>
               <p className="text-xs mt-1">Be the first to appreciate a team member by clicking "Give Kudos".</p>
             </Card>

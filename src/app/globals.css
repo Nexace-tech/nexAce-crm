@@ -230,3 +230,37 @@
     @apply bg-background text-foreground font-sans antialiased min-h-screen;
   }
 }
+
+/* Fix native browser datepicker calendar popup in dark mode */
+::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+}
+
+.dark ::-webkit-calendar-picker-indicator {
+  filter: invert(0.8) hue-rotate(180deg);
+}
+
+/* Chrome/Brave/Edge internal date picker popup text alignment & line-height fix */
+::-webkit-datetime-edit {
+  padding: 0.1em;
+}
+
+::-webkit-datetime-edit-fields-wrapper {
+  padding: 0;
+}
+
+::-webkit-datetime-edit-text {
+  color: inherit;
+  padding: 0 0.2em;
+}
+
+::-webkit-datetime-edit-month-field,
+::-webkit-datetime-edit-day-field,
+::-webkit-datetime-edit-year-field {
+  color: inherit;
+}
+
+/* Prevent datepicker calendar grid overlapping numbers */
+input[type="date"] {
+  color-scheme: light dark;
+}

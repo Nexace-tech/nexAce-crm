@@ -42,7 +42,7 @@ function ForgotPasswordForm() {
       <Card className="w-full max-w-md border border-border shadow-2xl relative z-10 animate-in fade-in zoom-in-95">
         <CardHeader className="text-center space-y-2 pb-2">
           <div className="flex items-center justify-center gap-2 text-primary font-bold text-xl tracking-tight">
-            <i className="fa-solid fa-sparkles text-primary" />
+            <i className="fa-solid fa-wand-magic-sparkles text-primary" />
             <span>NexAce CRM</span>
           </div>
           <CardTitle className="text-2xl font-bold tracking-tight text-foreground">

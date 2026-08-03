@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, startTransition } from "react";
 import { useAuth } from "@/hooks/useAuth";
+import { usePermissions } from "@/hooks/usePermissions";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -13,6 +14,7 @@ import { useTabPersistence } from "@/hooks/useTabPersistence";
 
 export default function ProjectsPage() {
   const { user: currentUser, loading: authLoading } = useAuth();
+  const { can, isAdmin, isOPS } = usePermissions();
   const [activeTab, setActiveTab] = useTabPersistence<"kanban" | "gantt" | "wiki" | "drive" | "workload" | "history">(
     "projects_active_tab",
     "kanban",
@@ -43,7 +45,7 @@ export default function ProjectsPage() {
   };
 
   const [projects, setProjects] = useState<any[]>([]);
-  const [selectedProjectId, setSelectedProjectId] = useState<string>("");
+  const [selectedProjectId, setSelectedProjectId] = useState<string>("all");
   const [tasks, setTasks] = useState<any[]>([]);
   const [teamMembers, setTeamMembers] = useState<any[]>([]);
   const [sprints, setSprints] = useState<any[]>([]);
@@ -55,6 +57,17 @@ export default function ProjectsPage() {
 
   const [newProjName, setNewProjName] = useState("");
   const [newProjDesc, setNewProjDesc] = useState("");
+  const [newProjAssignType, setNewProjAssignType] = useState<"Member" | "Department">("Member");
+  const [newProjAssignDept, setNewProjAssignDept] = useState("");
+  const [newProjMembers, setNewProjMembers] = useState<string[]>([]);
+  const [newProjStartDate, setNewProjStartDate] = useState("");
+  const [newProjDueDate, setNewProjDueDate] = useState("");
+  const [newProjCost, setNewProjCost] = useState("");
+  const [newProjIsInternal, setNewProjIsInternal] = useState(true);
+  const [newProjRequirements, setNewProjRequirements] = useState("");
+  const [newProjRequirementFile, setNewProjRequirementFile] = useState<File | null>(null);
+  const [newProjStatus, setNewProjStatus] = useState("Planning");
+  const [departments, setDepartments] = useState<any[]>([]);
 
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [newTaskDesc, setNewTaskDesc] = useState("");
@@ -101,6 +114,12 @@ export default function ProjectsPage() {
   const [driveFolder, setDriveFolder] = useState<string>("/");
   const [deleteConfirmFile, setDeleteConfirmFile] = useState<any | null>(null);
 
+  // Multi-select & Batch operations & Preview Lightbox state
+  const [selectedDriveFileIds, setSelectedDriveFileIds] = useState<string[]>([]);
+  const [previewFile, setPreviewFile] = useState<any | null>(null);
+  const [showBatchDeleteModal, setShowBatchDeleteModal] = useState<boolean>(false);
+  const [isDeletingBatch, setIsDeletingBatch] = useState<boolean>(false);
+
   // Project Activity History Pagination state
   const [historyPage, setHistoryPage] = useState<number>(1);
   const [historyRowsPerPage, setHistoryRowsPerPage] = useState<number>(5);
@@ -123,16 +142,8 @@ export default function ProjectsPage() {
         const data = await res.json();
         const list = data.projects || [];
         setProjects(list);
-        if (list.length > 0) {
-          const targetId = list.some((p: any) => p._id === selectedProjectId) ? selectedProjectId : list[0]._id;
-          setSelectedProjectId(targetId);
-          await fetchTasks(targetId);
-          await fetchActivityLogs();
-        } else {
-          setSelectedProjectId("");
-          setTasks([]);
-          setActivityLogs([]);
-        }
+        await fetchTasks(selectedProjectId || "all");
+        await fetchActivityLogs(selectedProjectId || "all");
         return list;
       }
     } catch (e) {
@@ -142,10 +153,10 @@ export default function ProjectsPage() {
   };
 
   const fetchTasks = async (overrideProjectId?: string) => {
-    const pId = overrideProjectId || selectedProjectId;
-    if (!pId) return;
+    const pId = overrideProjectId !== undefined ? overrideProjectId : selectedProjectId;
     try {
-      const res = await fetch(`/api/tasks?projectId=${pId}`);
+      const url = pId && pId !== "all" ? `/api/tasks?projectId=${pId}` : "/api/tasks";
+      const res = await fetch(url);
       if (res.ok) {
         const data = await res.json();
         setTasks(data.tasks || []);
@@ -155,10 +166,11 @@ export default function ProjectsPage() {
     }
   };
 
-  const fetchActivityLogs = async () => {
-    if (!selectedProjectId) return;
+  const fetchActivityLogs = async (overrideProjectId?: string) => {
+    const pId = overrideProjectId !== undefined ? overrideProjectId : selectedProjectId;
     try {
-      const res = await fetch(`/api/activity-logs?projectId=${selectedProjectId}`);
+      const url = pId && pId !== "all" ? `/api/activity-logs?projectId=${pId}` : "/api/activity-logs";
+      const res = await fetch(url);
       if (res.ok) {
         const data = await res.json();
         setActivityLogs(data.logs || []);
@@ -174,6 +186,11 @@ export default function ProjectsPage() {
       if (res.ok) {
         const data = await res.json();
         setTeamMembers(data.users || []);
+      }
+      const deptRes = await fetch("/api/departments");
+      if (deptRes.ok) {
+        const dData = await deptRes.json();
+        setDepartments(dData.departments || []);
       }
     } catch (e) {
       console.error(e);
@@ -255,6 +272,7 @@ export default function ProjectsPage() {
       if (res.ok) {
         showToast("File deleted successfully!", "success");
         setDeleteConfirmFile(null);
+        setSelectedDriveFileIds((prev) => prev.filter((id) => id !== fileId));
         await fetchDriveFiles();
         fetchActivityLogs();
       } else {
@@ -264,6 +282,60 @@ export default function ProjectsPage() {
     } catch (e) {
       showToast("Error deleting file", "error");
     }
+  };
+
+  const toggleSelectDriveFile = (fileId: string) => {
+    setSelectedDriveFileIds((prev) =>
+      prev.includes(fileId) ? prev.filter((id) => id !== fileId) : [...prev, fileId]
+    );
+  };
+
+  const handleSelectAllDriveFiles = () => {
+    if (selectedDriveFileIds.length === driveFiles.length) {
+      setSelectedDriveFileIds([]);
+    } else {
+      setSelectedDriveFileIds(driveFiles.map((f) => f._id));
+    }
+  };
+
+  const handleBatchDownloadDriveFiles = () => {
+    const selectedFiles = driveFiles.filter((f) => selectedDriveFileIds.includes(f._id));
+    if (selectedFiles.length === 0) return;
+
+    selectedFiles.forEach((file, index) => {
+      setTimeout(() => {
+        const a = document.createElement("a");
+        a.href = `/api/drive/download?fileId=${file._id}`;
+        a.download = file.name;
+        a.target = "_blank";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      }, index * 350);
+    });
+    showToast(`Downloading ${selectedFiles.length} file(s)...`, "success");
+  };
+
+  const handleBatchDeleteDriveFiles = async () => {
+    if (selectedDriveFileIds.length === 0) return;
+    setIsDeletingBatch(true);
+
+    let successCount = 0;
+    for (const fileId of selectedDriveFileIds) {
+      try {
+        const res = await fetch(`/api/drive?fileId=${fileId}`, { method: "DELETE" });
+        if (res.ok) successCount++;
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    setIsDeletingBatch(false);
+    setShowBatchDeleteModal(false);
+    setSelectedDriveFileIds([]);
+    showToast(`Successfully deleted ${successCount} file(s)`, "success");
+    await fetchDriveFiles();
+    fetchActivityLogs();
   };
 
   useEffect(() => {
@@ -294,10 +366,35 @@ export default function ProjectsPage() {
     if (!newProjName) return;
 
     try {
+      let requirementDocUrl = "";
+      if (newProjRequirementFile) {
+        const formData = new FormData();
+        formData.append("file", newProjRequirementFile);
+        formData.append("fileName", `Requirement_${newProjName}_${newProjRequirementFile.name}`);
+        formData.append("folder", "/Requirements");
+        const driveRes = await fetch("/api/drive", { method: "POST", body: formData });
+        if (driveRes.ok) {
+          const driveData = await driveRes.json();
+          requirementDocUrl = driveData.file?.url || "";
+        }
+      }
+
       const res = await fetch("/api/projects", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: newProjName, description: newProjDesc }),
+        body: JSON.stringify({
+          name: newProjName,
+          description: newProjDesc,
+          status: newProjStatus,
+          startDate: newProjStartDate || undefined,
+          dueDate: newProjDueDate || undefined,
+          cost: newProjCost ? Number(newProjCost) : 0,
+          isInternal: newProjIsInternal,
+          requirements: newProjRequirements ? (requirementDocUrl ? `${newProjRequirements}\n\nAttachment: ${newProjRequirementFile?.name}` : newProjRequirements) : (newProjRequirementFile ? `Attachment: ${newProjRequirementFile.name}` : ""),
+          assignType: newProjAssignType,
+          assignedDepartment: newProjAssignType === "Department" ? newProjAssignDept : undefined,
+          members: newProjAssignType === "Member" ? newProjMembers : undefined,
+        }),
       });
       if (res.ok) {
         const data = await res.json();
@@ -306,6 +403,15 @@ export default function ProjectsPage() {
         setShowProjectForm(false);
         setNewProjName("");
         setNewProjDesc("");
+        setNewProjStartDate("");
+        setNewProjDueDate("");
+        setNewProjCost("");
+        setNewProjIsInternal(true);
+        setNewProjRequirements("");
+        setNewProjRequirementFile(null);
+        setNewProjMembers([]);
+        setNewProjAssignDept("");
+        setNewProjStatus("Planning");
         showToast("Project created successfully!", "success");
 
         // Log history
@@ -431,9 +537,11 @@ export default function ProjectsPage() {
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          <Button variant="outline" size="sm" onClick={() => setShowProjectForm(true)} className="gap-2 font-semibold">
-            <i className="fa-solid fa-folder-plus text-xs" /> New Project
-          </Button>
+          {can("createProjects") && (
+            <Button variant="outline" size="sm" onClick={() => setShowProjectForm(true)} className="gap-2 font-semibold">
+              <i className="fa-solid fa-folder-plus text-xs" /> New Project
+            </Button>
+          )}
           <Button color="primary" size="sm" onClick={() => setShowTaskForm(true)} className="gap-2 font-semibold">
             <i className="fa-solid fa-plus text-xs" /> Create Task
           </Button>
@@ -505,34 +613,46 @@ export default function ProjectsPage() {
 
       {/* Project Selector Bar */}
       <Card className="p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
-        <div className="flex items-center gap-3 w-full sm:w-auto">
-          <span className="text-sm font-semibold text-foreground shrink-0">Active Project:</span>
-          <select
-            value={selectedProjectId}
-            onChange={(e) => setSelectedProjectId(e.target.value)}
-            className="h-9 px-3 text-sm bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary flex-1 sm:w-64"
-          >
-            {projects.length === 0 ? (
-              <option value="">No projects available</option>
-            ) : (
-              projects.map((p) => (
+        <div className="flex items-center gap-3 w-full sm:w-auto flex-wrap">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-semibold text-foreground shrink-0">Active Project:</span>
+            <select
+              value={selectedProjectId}
+              onChange={(e) => {
+                const val = e.target.value;
+                setSelectedProjectId(val);
+                fetchTasks(val);
+              }}
+              className="h-9 px-3 text-sm bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary w-64 cursor-pointer"
+            >
+              <option value="all">⚡ All Projects (Combined Workspace View)</option>
+              {projects.map((p) => (
                 <option key={p._id} value={p._id}>
-                  {p.name}
+                  📁 {p.name}
                 </option>
-              ))
-            )}
-          </select>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex items-center gap-2 text-xs">
+            <Badge variant="outline" className="gap-1.5 px-2.5 py-1 text-xs bg-muted/30">
+              <i className="fa-solid fa-folder-closed text-primary text-[11px]" />
+              Total Projects: <strong className="text-foreground">{projects.length}</strong>
+            </Badge>
+
+            <Badge variant="outline" className="gap-1.5 px-2.5 py-1 text-xs bg-emerald-500/10 text-emerald-500 border-emerald-500/30">
+              <i className="fa-solid fa-circle-play text-emerald-500 text-[11px]" />
+              Active Projects: <strong className="text-emerald-500">{projects.filter((p) => p.status === "In Progress" || p.status === "Planning" || !p.status).length}</strong>
+            </Badge>
+          </div>
         </div>
 
-        {selectedProjectId ? (
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <span>Total Tasks: <strong className="text-foreground">{tasks.length}</strong></span>
-          </div>
-        ) : (
-          <Button size="sm" onClick={() => setShowProjectForm(true)} className="gap-2 text-xs font-semibold">
-            <i className="fa-solid fa-plus text-xs" /> Create First Project
-          </Button>
-        )}
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <Badge color="primary" variant="soft" className="gap-1.5 px-2.5 py-1 text-xs font-semibold">
+            <i className="fa-solid fa-list-check text-[11px]" />
+            Total Tasks: <strong className="text-primary-foreground">{tasks.length}</strong>
+          </Badge>
+        </div>
       </Card>
 
       {/* Kanban Board View */}
@@ -637,6 +757,11 @@ export default function ProjectsPage() {
                             {t.priority}
                           </Badge>
                         </div>
+                        {selectedProjectId === "all" && t.projectId?.name && (
+                          <div className="flex items-center gap-1 text-[10px] text-primary font-semibold">
+                            <i className="fa-solid fa-folder text-[9px]" /> {t.projectId.name}
+                          </div>
+                        )}
                         {t.description && <p className="text-[11px] text-foreground/80 leading-relaxed line-clamp-2">{t.description}</p>}
                         <div className="flex items-center justify-between text-[10px] text-foreground/70 font-medium pt-1.5 border-t border-border/40">
                           <span className="flex items-center gap-1">
@@ -884,13 +1009,56 @@ export default function ProjectsPage() {
           </Card>
 
           <Card className="p-5">
-            <CardHeader className="px-0 pt-0 flex flex-row items-center justify-between">
+            <CardHeader className="px-0 pt-0 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
                 <CardTitle className="text-base font-bold flex items-center gap-2">
                   <i className="fa-solid fa-hard-drive text-primary text-sm" /> Drive Files & Assets ({driveFiles.length})
                 </CardTitle>
                 <CardDescription>File repository accessible across your workspace</CardDescription>
               </div>
+
+              {driveFiles.length > 0 && (
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleSelectAllDriveFiles}
+                    className="h-8 gap-1.5 text-xs font-semibold"
+                  >
+                    <i className={cn("fa-solid text-xs", selectedDriveFileIds.length === driveFiles.length ? "fa-square-check text-primary" : "fa-square")} />
+                    {selectedDriveFileIds.length === driveFiles.length ? "Deselect All" : "Select All"}
+                  </Button>
+
+                  {selectedDriveFileIds.length > 0 && (
+                    <>
+                      <Badge variant="soft" color="primary" className="h-8 px-2.5 text-xs font-semibold">
+                        {selectedDriveFileIds.length} Selected
+                      </Badge>
+
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleBatchDownloadDriveFiles}
+                        className="h-8 gap-1.5 text-xs font-semibold text-primary border-primary/30 hover:bg-primary/10"
+                        title="Download selected files"
+                      >
+                        <i className="fa-solid fa-download text-xs" /> Download Selected ({selectedDriveFileIds.length})
+                      </Button>
+
+                      <Button
+                        variant="soft"
+                        color="destructive"
+                        size="sm"
+                        onClick={() => setShowBatchDeleteModal(true)}
+                        className="h-8 gap-1.5 text-xs font-semibold"
+                        title="Delete selected files"
+                      >
+                        <i className="fa-solid fa-trash-can text-xs" /> Delete Selected ({selectedDriveFileIds.length})
+                      </Button>
+                    </>
+                  )}
+                </div>
+              )}
             </CardHeader>
 
             <CardContent className="px-0 pt-2">
@@ -902,42 +1070,117 @@ export default function ProjectsPage() {
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {driveFiles.map((file) => (
-                    <div key={file._id} className="p-4 rounded-xl border border-border bg-card hover:shadow-md transition-all flex flex-col justify-between space-y-3">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex items-center gap-3 min-w-0">
-                          <div className="p-2.5 bg-primary/10 text-primary rounded-lg shrink-0 flex items-center justify-center w-10 h-10">
-                            <i className="fa-solid fa-file-lines text-lg" />
+                  {driveFiles.map((file) => {
+                    const isSelected = selectedDriveFileIds.includes(file._id);
+                    const isImg = (file.mimeType || "").startsWith("image/") || /\.(png|jpe?g|gif|webp|svg)$/i.test(file.name);
+                    const fileDownloadUrl = `/api/drive/download?fileId=${file._id}`;
+
+                    return (
+                      <div
+                        key={file._id}
+                        className={cn(
+                          "p-4 rounded-xl border transition-all flex flex-col justify-between space-y-3 relative group",
+                          isSelected ? "border-primary bg-primary/5 shadow-xs" : "border-border bg-card hover:shadow-md"
+                        )}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-start gap-3 min-w-0 flex-1">
+                            {/* Multi-select checkbox */}
+                            <button
+                              type="button"
+                              onClick={() => toggleSelectDriveFile(file._id)}
+                              className="mt-1 text-muted-foreground hover:text-primary transition-colors focus:outline-none"
+                              title={isSelected ? "Deselect file" : "Select file"}
+                            >
+                              <i className={cn("fa-lg", isSelected ? "fa-solid fa-square-check text-primary" : "fa-regular fa-square")} />
+                            </button>
+
+                            {/* Thumbnail or File Icon */}
+                            {isImg ? (
+                              <div
+                                onClick={() => setPreviewFile(file)}
+                                className="relative w-12 h-12 rounded-lg border border-border/80 bg-muted/30 overflow-hidden cursor-pointer shrink-0 group/img flex items-center justify-center"
+                                title="Click to view image preview"
+                              >
+                                <img
+                                  src={fileDownloadUrl}
+                                  alt={file.name}
+                                  className="w-full h-full object-cover group-hover/img:scale-105 transition-transform"
+                                />
+                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center text-white">
+                                  <i className="fa-solid fa-eye text-xs" />
+                                </div>
+                              </div>
+                            ) : (
+                              <div
+                                onClick={() => setPreviewFile(file)}
+                                className="p-2.5 bg-primary/10 text-primary rounded-lg shrink-0 flex items-center justify-center w-10 h-10 cursor-pointer hover:bg-primary/20 transition-colors"
+                                title="Click to view file details"
+                              >
+                                <i className={cn("fa-solid text-lg", isImg ? "fa-image" : file.name.endsWith(".pdf") ? "fa-file-pdf text-rose-500" : "fa-file-lines")} />
+                              </div>
+                            )}
+
+                            <div className="min-w-0 flex-1">
+                              <p
+                                onClick={() => setPreviewFile(file)}
+                                className="font-semibold text-xs text-foreground truncate cursor-pointer hover:text-primary transition-colors"
+                                title={file.name}
+                              >
+                                {file.name}
+                              </p>
+                              <p className="text-[10px] text-muted-foreground">
+                                {Math.round((file.size || 0) / 1024)} KB • {new Date(file.createdAt).toLocaleDateString()}
+                              </p>
+                            </div>
                           </div>
-                          <div className="min-w-0">
-                            <p className="font-semibold text-xs text-foreground truncate" title={file.name}>
-                              {file.name}
-                            </p>
-                            <p className="text-[10px] text-muted-foreground">
-                              {Math.round((file.size || 0) / 1024)} KB • {new Date(file.createdAt).toLocaleDateString()}
-                            </p>
+
+                          <div className="flex items-center gap-1 shrink-0">
+                            {/* Preview button */}
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => setPreviewFile(file)}
+                              className="h-7 w-7 text-muted-foreground hover:text-primary hover:bg-primary/10"
+                              title="View file details / Preview"
+                            >
+                              <i className="fa-solid fa-eye text-xs" />
+                            </Button>
+
+                            {/* Download button */}
+                            <a
+                              href={fileDownloadUrl}
+                              download={file.name}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center justify-center h-7 w-7 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
+                              title="Download File"
+                            >
+                              <i className="fa-solid fa-download text-xs" />
+                            </a>
+
+                            {/* Delete button */}
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => setDeleteConfirmFile(file)}
+                              className="h-7 w-7 text-destructive hover:bg-destructive/10"
+                              title="Delete File"
+                            >
+                              <i className="fa-solid fa-trash-can text-xs" />
+                            </Button>
                           </div>
                         </div>
 
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => setDeleteConfirmFile(file)}
-                          className="h-7 w-7 text-destructive hover:bg-destructive/10 shrink-0"
-                          title="Delete File"
-                        >
-                          <i className="fa-solid fa-trash-can text-xs" />
-                        </Button>
+                        <div className="flex items-center justify-between text-[10px] text-muted-foreground border-t border-border/60 pt-2">
+                          <span>By {file.uploadedBy?.name || "Member"}</span>
+                          <Badge variant="outline" className="text-[9px] px-1.5 py-0">
+                            {file.mimeType?.split("/")[1] || "file"}
+                          </Badge>
+                        </div>
                       </div>
-
-                      <div className="flex items-center justify-between text-[10px] text-muted-foreground border-t border-border pt-2">
-                        <span>By {file.uploadedBy?.name || "Member"}</span>
-                        <Badge variant="outline" className="text-[9px] px-1.5 py-0">
-                          {file.mimeType?.split("/")[1] || "file"}
-                        </Badge>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </CardContent>
@@ -1195,10 +1438,10 @@ export default function ProjectsPage() {
       {/* Create New Project Modal */}
       {showProjectForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in" onClick={() => setShowProjectForm(false)}>
-          <div className="w-full max-w-md bg-card border border-border rounded-xl p-6 shadow-2xl space-y-4 animate-in zoom-in-95" onClick={(e) => e.stopPropagation()}>
+          <div className="w-full max-w-xl bg-card border border-border rounded-xl p-6 shadow-2xl space-y-4 animate-in zoom-in-95 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="flex justify-between items-center border-b border-border/60 pb-3">
               <h3 className="text-base font-bold text-foreground flex items-center gap-2">
-                <i className="fa-solid fa-folder-plus text-primary" /> Create Workspace Project
+                <i className="fa-solid fa-folder-plus text-primary" /> Create New Workspace Project
               </h3>
               <Button variant="ghost" size="sm" onClick={() => setShowProjectForm(false)}>
                 <i className="fa-solid fa-xmark text-sm" />
@@ -1206,33 +1449,211 @@ export default function ProjectsPage() {
             </div>
 
             <form onSubmit={handleCreateProject} className="space-y-4 text-xs">
-              <div className="space-y-1.5">
-                <label className="font-semibold text-foreground">Project Name</label>
-                <Input
-                  value={newProjName}
-                  onChange={(e) => setNewProjName(e.target.value)}
-                  placeholder="e.g. Q3 Mobile App Redesign"
-                  required
-                />
+              {/* Project Name & Internal Tag */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="sm:col-span-2 space-y-1.5">
+                  <label className="font-semibold text-foreground flex items-center gap-1">
+                    Project Name <span className="text-rose-500">*</span>
+                  </label>
+                  <Input
+                    value={newProjName}
+                    onChange={(e) => setNewProjName(e.target.value)}
+                    placeholder="e.g. Q3 Enterprise CRM Redesign"
+                    required
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="font-semibold text-foreground">Project Status</label>
+                  <select
+                    value={newProjStatus}
+                    onChange={(e) => setNewProjStatus(e.target.value)}
+                    className="w-full h-9 rounded-md border border-input bg-background px-3 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring cursor-pointer"
+                  >
+                    <option value="Planning">Planning</option>
+                    <option value="In Progress">In Progress</option>
+                    <option value="In Review">In Review</option>
+                    <option value="On Hold">On Hold</option>
+                    <option value="Completed">Completed</option>
+                  </select>
+                </div>
               </div>
 
+              {/* Description */}
               <div className="space-y-1.5">
-                <label className="font-semibold text-foreground">Description & Objectives</label>
+                <label className="font-semibold text-foreground">Description & Scope</label>
                 <textarea
                   value={newProjDesc}
                   onChange={(e) => setNewProjDesc(e.target.value)}
-                  rows={4}
+                  rows={3}
                   className="w-full rounded-md border border-input bg-background p-3 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-                  placeholder="Outline key deliverables, scope, and target outcomes..."
+                  placeholder="Describe key deliverables, scope, and objectives..."
                 />
+              </div>
+
+              {/* Assign Project ---> Team Member or Department */}
+              <div className="p-3.5 rounded-lg border border-border/80 bg-muted/20 space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="font-bold text-foreground flex items-center gap-1.5">
+                    <i className="fa-solid fa-users-gear text-primary" /> Assign Project
+                  </label>
+                  <div className="flex items-center gap-3">
+                    <label className="flex items-center gap-1.5 cursor-pointer font-medium text-foreground">
+                      <input
+                        type="radio"
+                        name="assignType"
+                        checked={newProjAssignType === "Member"}
+                        onChange={() => setNewProjAssignType("Member")}
+                        className="text-primary focus:ring-primary"
+                      />
+                      Team Members
+                    </label>
+                    <label className="flex items-center gap-1.5 cursor-pointer font-medium text-foreground">
+                      <input
+                        type="radio"
+                        name="assignType"
+                        checked={newProjAssignType === "Department"}
+                        onChange={() => setNewProjAssignType("Department")}
+                        className="text-primary focus:ring-primary"
+                      />
+                      Department
+                    </label>
+                  </div>
+                </div>
+
+                {newProjAssignType === "Member" ? (
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] text-muted-foreground">Select Team Members</label>
+                    <div className="max-h-28 overflow-y-auto p-2 rounded-md border border-input bg-background space-y-1">
+                      {teamMembers.map((m) => (
+                        <label key={m._id} className="flex items-center gap-2 p-1 hover:bg-accent/40 rounded cursor-pointer text-xs">
+                          <input
+                            type="checkbox"
+                            checked={newProjMembers.includes(m._id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setNewProjMembers([...newProjMembers, m._id]);
+                              } else {
+                                setNewProjMembers(newProjMembers.filter((id) => id !== m._id));
+                              }
+                            }}
+                            className="rounded text-primary focus:ring-primary"
+                          />
+                          <span className="font-medium text-foreground">{m.name || m.email}</span>
+                          <span className="text-[10px] text-muted-foreground">({m.role || "Member"})</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] text-muted-foreground">Select Department</label>
+                    <select
+                      value={newProjAssignDept}
+                      onChange={(e) => setNewProjAssignDept(e.target.value)}
+                      className="w-full h-9 rounded-md border border-input bg-background px-3 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring cursor-pointer"
+                    >
+                      <option value="">Select Target Department...</option>
+                      {departments.length === 0 ? (
+                        <>
+                          <option value="Engineering">Engineering</option>
+                          <option value="Marketing">Marketing</option>
+                          <option value="Sales">Sales</option>
+                          <option value="Product">Product</option>
+                          <option value="Design">Design</option>
+                          <option value="Support">Support</option>
+                        </>
+                      ) : (
+                        departments.map((d) => (
+                          <option key={d._id} value={d.name}>{d.name}</option>
+                        ))
+                      )}
+                    </select>
+                  </div>
+                )}
+              </div>
+
+              {/* Start Date, End Date & Cost */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="space-y-1.5">
+                  <label className="font-semibold text-foreground">Start Date</label>
+                  <Input
+                    type="date"
+                    min={new Date().toISOString().split("T")[0]}
+                    value={newProjStartDate}
+                    onChange={(e) => setNewProjStartDate(e.target.value)}
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="font-semibold text-foreground">End Date</label>
+                  <Input
+                    type="date"
+                    min={newProjStartDate || new Date().toISOString().split("T")[0]}
+                    value={newProjDueDate}
+                    onChange={(e) => setNewProjDueDate(e.target.value)}
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="font-semibold text-foreground">Budget / Cost ($)</label>
+                  <Input
+                    type="number"
+                    min="0"
+                    placeholder="e.g. 15000"
+                    value={newProjCost}
+                    onChange={(e) => setNewProjCost(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              {/* Tag Internal Checkbox */}
+              <div className="flex items-center gap-2 p-3 rounded-lg border border-border/60 bg-muted/10">
+                <input
+                  type="checkbox"
+                  id="internalTag"
+                  checked={newProjIsInternal}
+                  onChange={(e) => setNewProjIsInternal(e.target.checked)}
+                  className="w-4 h-4 rounded text-primary focus:ring-primary cursor-pointer"
+                />
+                <label htmlFor="internalTag" className="font-semibold text-foreground cursor-pointer flex items-center gap-1.5">
+                  <i className="fa-solid fa-tag text-indigo-500 text-xs" /> Tag as Internal Project
+                </label>
+                <span className="text-[11px] text-muted-foreground ml-auto">(Non-billable / Internal tool)</span>
+              </div>
+
+              {/* Requirements & Attachments */}
+              <div className="space-y-2 p-3.5 rounded-lg border border-border/80 bg-muted/20">
+                <label className="font-bold text-foreground flex items-center gap-1.5">
+                  <i className="fa-solid fa-paperclip text-primary" /> Project Requirements & Attachments
+                </label>
+                <textarea
+                  value={newProjRequirements}
+                  onChange={(e) => setNewProjRequirements(e.target.value)}
+                  rows={2}
+                  className="w-full rounded-md border border-input bg-background p-2.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                  placeholder="Key functional requirements, specs, or guidelines..."
+                />
+                <div className="flex items-center gap-3">
+                  <Input
+                    type="file"
+                    onChange={(e) => setNewProjRequirementFile(e.target.files?.[0] || null)}
+                    className="text-xs file:mr-2 file:py-1 file:px-2 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20 cursor-pointer"
+                  />
+                  {newProjRequirementFile && (
+                    <span className="text-[11px] text-emerald-500 font-medium truncate">
+                      <i className="fa-solid fa-check text-[10px]" /> {newProjRequirementFile.name}
+                    </span>
+                  )}
+                </div>
               </div>
 
               <div className="flex justify-end gap-2 pt-3 border-t border-border">
                 <Button variant="outline" size="sm" type="button" onClick={() => setShowProjectForm(false)}>
                   Cancel
                 </Button>
-                <Button color="primary" size="sm" type="submit" className="font-semibold">
-                  Launch Project
+                <Button color="primary" size="sm" type="submit" className="font-semibold gap-1.5">
+                  <i className="fa-solid fa-rocket text-xs" /> Launch Project
                 </Button>
               </div>
             </form>
@@ -1357,6 +1778,122 @@ export default function ProjectsPage() {
                 className="gap-2 font-semibold"
               >
                 <i className="fa-solid fa-trash-can text-xs" /> Delete File
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Batch Delete Selected Confirmation Modal */}
+      {showBatchDeleteModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in" onClick={() => setShowBatchDeleteModal(false)}>
+          <div className="w-full max-w-md bg-card border border-border rounded-xl p-6 shadow-2xl space-y-4 animate-in zoom-in-95" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-3 border-b border-border/60 pb-3">
+              <div className="p-2.5 bg-rose-500/10 text-rose-500 rounded-lg shrink-0 flex items-center justify-center">
+                <i className="fa-solid fa-triangle-exclamation text-lg" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-foreground">Confirm Batch Deletion</h3>
+                <p className="text-xs text-muted-foreground font-semibold text-rose-500">
+                  {selectedDriveFileIds.length} file(s) selected
+                </p>
+              </div>
+            </div>
+
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              Are you sure you want to permanently delete these <strong className="text-foreground">{selectedDriveFileIds.length}</strong> selected files from Drive Space? This operation cannot be undone.
+            </p>
+
+            <div className="flex justify-end gap-2 pt-3 border-t border-border">
+              <Button variant="outline" size="sm" type="button" disabled={isDeletingBatch} onClick={() => setShowBatchDeleteModal(false)}>
+                Cancel
+              </Button>
+              <Button
+                color="destructive"
+                size="sm"
+                disabled={isDeletingBatch}
+                onClick={handleBatchDeleteDriveFiles}
+                className="gap-2 font-semibold"
+              >
+                <i className="fa-solid fa-trash-can text-xs" />
+                {isDeletingBatch ? "Deleting..." : `Delete ${selectedDriveFileIds.length} Files`}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* File Preview & Lightbox Modal */}
+      {previewFile && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in" onClick={() => setPreviewFile(null)}>
+          <div className="w-full max-w-3xl bg-card border border-border rounded-xl p-6 shadow-2xl space-y-4 animate-in zoom-in-95 max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-center border-b border-border/60 pb-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="p-2 bg-primary/10 text-primary rounded-lg shrink-0">
+                  <i className={cn("fa-solid text-base", (previewFile.mimeType || "").startsWith("image/") || /\.(png|jpe?g|gif|webp|svg)$/i.test(previewFile.name) ? "fa-image" : "fa-file-lines")} />
+                </div>
+                <div className="min-w-0">
+                  <h3 className="text-sm font-bold text-foreground truncate" title={previewFile.name}>{previewFile.name}</h3>
+                  <p className="text-[10px] text-muted-foreground">
+                    {Math.round((previewFile.size || 0) / 1024)} KB • Uploaded by {previewFile.uploadedBy?.name || "Member"} on {new Date(previewFile.createdAt).toLocaleDateString()}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <a
+                  href={`/api/drive/download?fileId=${previewFile._id}`}
+                  download={previewFile.name}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="h-8 px-3 inline-flex items-center gap-1.5 rounded-md text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+                >
+                  <i className="fa-solid fa-download text-xs" /> Download
+                </a>
+                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setPreviewFile(null)}>
+                  <i className="fa-solid fa-xmark text-base" />
+                </Button>
+              </div>
+            </div>
+
+            {/* Preview content body */}
+            <div className="flex-1 overflow-auto flex items-center justify-center p-4 bg-muted/20 rounded-lg border border-border/60 min-h-[250px]">
+              {(previewFile.mimeType || "").startsWith("image/") || /\.(png|jpe?g|gif|webp|svg)$/i.test(previewFile.name) ? (
+                <img
+                  src={`/api/drive/download?fileId=${previewFile._id}`}
+                  alt={previewFile.name}
+                  className="max-h-[60vh] max-w-full object-contain rounded-md shadow-md"
+                />
+              ) : previewFile.mimeType === "application/pdf" || previewFile.name.endsWith(".pdf") ? (
+                <iframe
+                  src={`/api/drive/download?fileId=${previewFile._id}`}
+                  title={previewFile.name}
+                  className="w-full h-[60vh] rounded-md border border-border"
+                />
+              ) : (
+                <div className="text-center py-8 space-y-3">
+                  <div className="p-4 bg-primary/10 text-primary rounded-full inline-block">
+                    <i className="fa-solid fa-file-arrow-down text-3xl" />
+                  </div>
+                  <div>
+                    <p className="font-semibold text-sm text-foreground">Preview not available for this format</p>
+                    <p className="text-xs text-muted-foreground">Click below to download and view on your device.</p>
+                  </div>
+                  <a
+                    href={`/api/drive/download?fileId=${previewFile._id}`}
+                    download={previewFile.name}
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-colors"
+                  >
+                    <i className="fa-solid fa-download text-xs" /> Download File
+                  </a>
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-between items-center border-t border-border pt-3 text-xs text-muted-foreground">
+              <span>File Format: <strong className="text-foreground">{previewFile.mimeType || "Binary/Document"}</strong></span>
+              <Button variant="outline" size="sm" onClick={() => setPreviewFile(null)}>
+                Close Preview
               </Button>
             </div>
           </div>

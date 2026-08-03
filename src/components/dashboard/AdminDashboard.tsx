@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { TeamShiftOverviewCard } from "@/components/dashboard/TeamShiftOverviewCard";
 import { PendingApprovalsCard } from "@/components/dashboard/PendingApprovalsCard";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export function AdminDashboard({ user }: { user: any }) {
   const [projects, setProjects] = useState<any[]>([]);
@@ -21,51 +22,20 @@ export function AdminDashboard({ user }: { user: any }) {
 
   const fetchAdminData = async () => {
     try {
-      const [projRes, clientRes, tsRes, chatRes, okrRes, logRes, calRes, notifRes] = await Promise.all([
-        fetch("/api/projects"),
-        fetch("/api/clients"),
-        fetch("/api/timesheets"),
-        fetch("/api/chat/messages?channel=general"),
-        fetch("/api/okrs"),
-        fetch("/api/activity-logs"),
-        fetch("/api/calendar"),
-        fetch("/api/notifications")
-      ]);
-
-      if (projRes.ok) {
-        const pData = await projRes.json();
-        setProjects(pData.projects || []);
-      }
-      if (clientRes.ok) {
-        const cData = await clientRes.json();
-        setClients(cData.clients || []);
-      }
-      if (tsRes.ok) {
-        const tData = await tsRes.json();
-        setTimesheets(tData.entries || []);
-      }
-      if (chatRes.ok) {
-        const chData = await chatRes.json();
-        setChatMessages(chData.messages || []);
-      }
-      if (okrRes.ok) {
-        const oData = await okrRes.json();
-        setOkrs(oData.okrs || []);
-      }
-      if (logRes.ok) {
-        const lData = await logRes.json();
-        setLogs(lData.logs || []);
-      }
-      if (calRes && calRes.ok) {
-        const calData = await calRes.json();
-        setCalendarEvents(calData.events || []);
-      }
-      if (notifRes && notifRes.ok) {
-        const nData = await notifRes.json();
-        setNotifications(nData.notifications || []);
+      const res = await fetch("/api/dashboard/summary");
+      if (res.ok) {
+        const data = await res.json();
+        setProjects(data.projects || []);
+        setClients(data.clients || []);
+        setTimesheets(data.timesheets || []);
+        setChatMessages(data.chatMessages || []);
+        setOkrs(data.okrs || []);
+        setLogs(data.logs || []);
+        setCalendarEvents(data.calendarEvents || []);
+        setNotifications(data.notifications || []);
       }
     } catch (err) {
-      console.error("Error fetching admin dashboard data:", err);
+      console.error("Failed to fetch dashboard summary:", err);
     } finally {
       setLoading(false);
     }
@@ -230,7 +200,17 @@ export function AdminDashboard({ user }: { user: any }) {
             </CardHeader>
             <CardContent className="space-y-3">
               {loading ? (
-                <p className="text-xs text-muted-foreground py-4 text-center">Loading projects...</p>
+                <div className="space-y-3 py-2">
+                  {Array.from({ length: 3 }).map((_, i) => (
+                    <div key={i} className="flex items-center justify-between p-3.5 rounded-lg border border-border/40 bg-card">
+                      <div className="space-y-2 flex-1 mr-4">
+                        <Skeleton className="h-4 w-1/3" />
+                        <Skeleton className="h-3 w-2/3" />
+                      </div>
+                      <Skeleton className="h-5 w-16 rounded-full" />
+                    </div>
+                  ))}
+                </div>
               ) : projects.length === 0 ? (
                 <p className="text-xs text-muted-foreground py-4 text-center">No projects found.</p>
               ) : (
@@ -266,7 +246,17 @@ export function AdminDashboard({ user }: { user: any }) {
             </CardHeader>
             <CardContent className="space-y-4">
               {loading ? (
-                <p className="text-xs text-muted-foreground py-4 text-center">Loading OKRs...</p>
+                <div className="space-y-4 py-2">
+                  {Array.from({ length: 3 }).map((_, i) => (
+                    <div key={i} className="space-y-2">
+                      <div className="flex justify-between">
+                        <Skeleton className="h-4 w-1/2" />
+                        <Skeleton className="h-4 w-16" />
+                      </div>
+                      <Skeleton className="h-2.5 w-full rounded-full" />
+                    </div>
+                  ))}
+                </div>
               ) : okrs.length === 0 ? (
                 <p className="text-xs text-muted-foreground py-4 text-center">No active OKRs set for workspace.</p>
               ) : (
@@ -292,6 +282,52 @@ export function AdminDashboard({ user }: { user: any }) {
         {/* Right Column (1 span) */}
         <div className="space-y-6">
           <Card>
+            <CardHeader className="pb-4 flex flex-row items-center justify-between">
+              <div>
+                <CardTitle className="text-lg font-semibold flex items-center gap-2">
+                  <i className="fa-solid fa-bell text-amber-500" /> Live Notifications
+                </CardTitle>
+                <CardDescription>Real-time database alerts</CardDescription>
+              </div>
+              <Button asChild variant="ghost" size="sm">
+                <Link href="/dashboard/notifications" className="gap-1 text-primary text-xs">
+                  View All <i className="fa-solid fa-arrow-right text-[10px]" />
+                </Link>
+              </Button>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {loading ? (
+                <div className="space-y-3 py-1">
+                  {Array.from({ length: 3 }).map((_, i) => (
+                    <div key={i} className="flex items-start gap-2.5 p-2.5 rounded-lg border border-border/40">
+                      <Skeleton className="w-5 h-5 rounded-full shrink-0 mt-0.5" />
+                      <div className="space-y-1.5 flex-1">
+                        <Skeleton className="h-3.5 w-3/4" />
+                        <Skeleton className="h-2.5 w-full" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : notifications.length === 0 ? (
+                <p className="text-xs text-muted-foreground py-4 text-center">No recent notifications.</p>
+              ) : (
+                notifications.slice(0, 4).map((n) => (
+                  <div key={n._id} className="flex items-start gap-2.5 p-2.5 rounded-lg border border-border bg-card/60 hover:bg-accent/40 transition-colors text-xs">
+                    <i className={`fa-solid ${n.type === "chat" ? "fa-message text-sky-500" : n.type === "task" ? "fa-list-check text-emerald-500" : n.type === "announcement" ? "fa-bullhorn text-amber-500" : "fa-bell text-primary"} text-sm mt-0.5`} />
+                    <div className="min-w-0 flex-1 space-y-0.5">
+                      <div className="flex items-center justify-between gap-1">
+                        <span className="font-semibold text-foreground truncate">{n.title}</span>
+                        {!n.read && <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />}
+                      </div>
+                      <p className="text-muted-foreground line-clamp-1">{n.message}</p>
+                    </div>
+                  </div>
+                ))
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
             <CardHeader className="pb-4">
               <CardTitle className="text-lg font-semibold flex items-center gap-2">
                 <i className="fa-solid fa-clock-rotate-left text-sky-500" /> Audit Trail Log
@@ -300,7 +336,17 @@ export function AdminDashboard({ user }: { user: any }) {
             </CardHeader>
             <CardContent className="space-y-4">
               {loading ? (
-                <p className="text-xs text-muted-foreground py-4 text-center">Loading activity logs...</p>
+                <div className="space-y-3 py-1">
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <div key={i} className="flex items-center gap-3">
+                      <Skeleton className="w-2.5 h-2.5 rounded-full shrink-0" />
+                      <div className="space-y-1 flex-1">
+                        <Skeleton className="h-3 w-4/5" />
+                        <Skeleton className="h-2.5 w-1/4" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
               ) : logs.length === 0 ? (
                 <p className="text-xs text-muted-foreground py-4 text-center">No recent activity logs.</p>
               ) : (

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
 import { connectToDatabase } from "@/lib/db";
 import { User } from "@/models/User";
+import { getUserDataScope } from "@/lib/dataScope";
 import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
 
@@ -20,22 +21,49 @@ export async function GET(request: Request) {
     const department = searchParams.get("department");
     const search = searchParams.get("search");
 
-    await connectToDatabase();
+    const dataScope = await getUserDataScope(session);
 
-    // Base query: only users belonging to the logged-in user's tenant
+    // Base query: tenant ID constraint
     const query: any = {
       tenantId: new mongoose.Types.ObjectId(session.tenantId)
     };
 
-    // Filter by department if supplied (matches primary department or departments array)
-    if (department && department !== "All") {
-      query.$or = [
-        { department: department },
-        { departments: department }
-      ];
+    // Role-based data scoping:
+    if (dataScope.scope === "department") {
+      // Logged-in user's own profile to get department & ID
+      const loggedUser = await User.findById(session.userId).lean();
+      const userDept = loggedUser?.department;
+      const userObjId = new mongoose.Types.ObjectId(session.userId);
+
+      query.$and = query.$and || [];
+      query.$and.push({
+        $or: [
+          { _id: userObjId },
+          { managerId: userObjId },
+          { department: userDept },
+          { departments: userDept },
+        ]
+      });
+    } else if (dataScope.scope === "own") {
+      query._id = new mongoose.Types.ObjectId(session.userId);
     }
 
-    // Filter by search query if supplied (matches name, email, skills, department)
+    // Filter by department if supplied
+    if (department && department !== "All") {
+      const deptCondition = {
+        $or: [
+          { department: department },
+          { departments: department }
+        ]
+      };
+      if (query.$and) {
+        query.$and.push(deptCondition);
+      } else {
+        query.$or = deptCondition.$or;
+      }
+    }
+
+    // Filter by search query if supplied
     if (search) {
       const searchRegex = new RegExp(search, "i");
       const searchConditions = [
@@ -46,24 +74,22 @@ export async function GET(request: Request) {
         { departments: searchRegex }
       ];
 
-      if (query.$or) {
-        query.$and = [
-          { $or: query.$or },
-          { $or: searchConditions }
-        ];
-        delete query.$or;
-      } else {
-        query.$or = searchConditions;
-      }
+      query.$and = query.$and || [];
+      query.$and.push({ $or: searchConditions });
     }
 
-    // Find users and populate their manager's details
+    // Find users and populate their manager's details using lean() for ultra-fast query execution
     const users = await User.find(query)
       .select("-passwordHash")
       .populate("managerId", "name email role photoUrl")
-      .sort({ name: 1 });
+      .sort({ name: 1 })
+      .lean();
 
-    return NextResponse.json({ users });
+    return NextResponse.json({ users }, {
+      headers: {
+        "Cache-Control": "private, max-age=15, stale-while-revalidate=60"
+      }
+    });
   } catch (error: any) {
     console.error("API GET Team error:", error);
     return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: 500 });

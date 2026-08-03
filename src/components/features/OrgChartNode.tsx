@@ -14,6 +14,14 @@ export interface OrgNode {
   status: string;
   managerId?: string;
   managerName?: string;
+  socialLinks?: {
+    linkedin?: string;
+    twitter?: string;
+    github?: string;
+    website?: string;
+    instagram?: string;
+    facebook?: string;
+  };
   reports: OrgNode[];
 }
 
@@ -148,6 +156,77 @@ export function OrgChartNode({ node, onReassign, isAdmin, onSelectMember }: OrgC
           <div className="flex items-center gap-1.5 pt-1 border-t border-slate-100 dark:border-slate-800/60 text-[10px] text-slate-500 dark:text-slate-500">
             <i className="fa-solid fa-turn-up rotate-90 text-[9px] opacity-60" />
             <span>Reports to: <span className="font-semibold text-slate-700 dark:text-slate-300">{node.managerName}</span></span>
+          </div>
+        )}
+
+        {node.socialLinks && (node.socialLinks.linkedin || node.socialLinks.twitter || node.socialLinks.github || node.socialLinks.website || node.socialLinks.instagram || node.socialLinks.facebook) && (
+          <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-slate-100 dark:border-slate-800/60" onClick={(e) => e.stopPropagation()}>
+            {node.socialLinks.linkedin && (
+              <a
+                href={node.socialLinks.linkedin}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-6 h-6 rounded-md bg-sky-500/10 hover:bg-sky-500 text-sky-600 hover:text-white border border-sky-500/20 flex items-center justify-center transition-all duration-200 hover:scale-110 hover:shadow-xs group/icon"
+                title="LinkedIn Profile"
+              >
+                <i className="fa-brands fa-linkedin text-[11px] transition-transform duration-200 group-hover/icon:scale-110" />
+              </a>
+            )}
+            {node.socialLinks.twitter && (
+              <a
+                href={node.socialLinks.twitter}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-6 h-6 rounded-md bg-slate-500/10 hover:bg-slate-900 dark:hover:bg-slate-100 text-slate-800 dark:text-slate-200 hover:text-white dark:hover:text-slate-950 border border-slate-500/20 flex items-center justify-center transition-all duration-200 hover:scale-110 hover:shadow-xs group/icon"
+                title="Twitter / X Profile"
+              >
+                <i className="fa-brands fa-x-twitter text-[11px] transition-transform duration-200 group-hover/icon:scale-110" />
+              </a>
+            )}
+            {node.socialLinks.instagram && (
+              <a
+                href={node.socialLinks.instagram}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-6 h-6 rounded-md bg-pink-500/10 hover:bg-gradient-to-tr hover:from-amber-500 hover:via-rose-500 hover:to-purple-600 text-pink-600 hover:text-white border border-pink-500/20 flex items-center justify-center transition-all duration-200 hover:scale-110 hover:shadow-xs group/icon"
+                title="Instagram Profile"
+              >
+                <i className="fa-brands fa-instagram text-[11px] transition-transform duration-200 group-hover/icon:scale-110" />
+              </a>
+            )}
+            {node.socialLinks.facebook && (
+              <a
+                href={node.socialLinks.facebook}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-6 h-6 rounded-md bg-blue-600/10 hover:bg-blue-600 text-blue-600 hover:text-white border border-blue-600/20 flex items-center justify-center transition-all duration-200 hover:scale-110 hover:shadow-xs group/icon"
+                title="Facebook Profile"
+              >
+                <i className="fa-brands fa-facebook text-[11px] transition-transform duration-200 group-hover/icon:scale-110" />
+              </a>
+            )}
+            {node.socialLinks.github && (
+              <a
+                href={node.socialLinks.github}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-6 h-6 rounded-md bg-slate-500/10 hover:bg-slate-900 dark:hover:bg-slate-100 text-slate-800 dark:text-slate-200 hover:text-white dark:hover:text-slate-950 border border-slate-500/20 flex items-center justify-center transition-all duration-200 hover:scale-110 hover:shadow-xs group/icon"
+                title="GitHub Profile"
+              >
+                <i className="fa-brands fa-github text-[11px] transition-transform duration-200 group-hover/icon:scale-110" />
+              </a>
+            )}
+            {node.socialLinks.website && (
+              <a
+                href={node.socialLinks.website}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-6 h-6 rounded-md bg-emerald-500/10 hover:bg-emerald-500 text-emerald-600 hover:text-white border border-emerald-500/20 flex items-center justify-center transition-all duration-200 hover:scale-110 hover:shadow-xs group/icon"
+                title="Personal Website"
+              >
+                <i className="fa-solid fa-globe text-[11px] transition-transform duration-200 group-hover/icon:scale-110" />
+              </a>
+            )}
           </div>
         )}
       </div>

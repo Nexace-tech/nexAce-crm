@@ -7,6 +7,11 @@ export interface IProject extends Document {
   priority?: "Low" | "Medium" | "High" | "Urgent";
   startDate?: Date;
   dueDate?: Date;
+  cost?: number;
+  isInternal?: boolean;
+  requirements?: string;
+  assignType?: "Member" | "Department";
+  assignedDepartment?: string;
   members: mongoose.Types.ObjectId[];
   tenantId: mongoose.Types.ObjectId;
   createdAt: Date;
@@ -29,6 +34,11 @@ const ProjectSchema = new Schema<IProject>(
     },
     startDate: { type: Date },
     dueDate: { type: Date },
+    cost: { type: Number, default: 0 },
+    isInternal: { type: Boolean, default: false },
+    requirements: { type: String, trim: true },
+    assignType: { type: String, enum: ["Member", "Department"], default: "Member" },
+    assignedDepartment: { type: String, trim: true },
     members: [{ type: Schema.Types.ObjectId, ref: "User" }],
     tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true, index: true },
   },

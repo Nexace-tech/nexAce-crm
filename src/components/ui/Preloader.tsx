@@ -32,7 +32,7 @@ export function Preloader({
         
         {/* Center Sparkles Icon */}
         <div className="relative flex items-center justify-center w-12 h-12 rounded-xl bg-card border border-border shadow-lg shadow-primary/20 text-primary">
-          <i className="fa-solid fa-sparkles text-xl animate-bounce" />
+          <i className="fa-solid fa-wand-magic-sparkles text-lg animate-pulse" />
         </div>
       </div>
 

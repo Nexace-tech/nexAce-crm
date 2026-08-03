@@ -91,6 +91,12 @@ export default function TeamDashboardPage() {
   const [editPhone, setEditPhone] = useState("");
   const [editDepts, setEditDepts] = useState<string[]>(["Engineering"]);
   const [editRole, setEditRole] = useState("Employee");
+  const [editSocialLinkedin, setEditSocialLinkedin] = useState("");
+  const [editSocialTwitter, setEditSocialTwitter] = useState("");
+  const [editSocialGithub, setEditSocialGithub] = useState("");
+  const [editSocialWebsite, setEditSocialWebsite] = useState("");
+  const [editSocialInstagram, setEditSocialInstagram] = useState("");
+  const [editSocialFacebook, setEditSocialFacebook] = useState("");
   const [isUpdating, setIsUpdating] = useState(false);
 
   // Pagination state for Team Directory
@@ -384,6 +390,14 @@ export default function TeamDashboardPage() {
         bio: editBioText,
         skills: parsedSkills,
         photoUrl: editPhotoUrl,
+        socialLinks: {
+          linkedin: editSocialLinkedin,
+          twitter: editSocialTwitter,
+          github: editSocialGithub,
+          website: editSocialWebsite,
+          instagram: editSocialInstagram,
+          facebook: editSocialFacebook,
+        },
       };
 
       if (isAdmin) {
@@ -558,6 +572,12 @@ export default function TeamDashboardPage() {
         : [member.department || "Engineering"];
       setEditDepts(userDepts);
       setEditRole(member.role || "Employee");
+      setEditSocialLinkedin(member.socialLinks?.linkedin || "");
+      setEditSocialTwitter(member.socialLinks?.twitter || "");
+      setEditSocialGithub(member.socialLinks?.github || "");
+      setEditSocialWebsite(member.socialLinks?.website || "");
+      setEditSocialInstagram(member.socialLinks?.instagram || "");
+      setEditSocialFacebook(member.socialLinks?.facebook || "");
       setIsEditingBio(false);
     }
   };
@@ -907,6 +927,78 @@ export default function TeamDashboardPage() {
                         )}
                       </div>
 
+                      {/* Social media icons on card (Rendered at last of section) */}
+                      {member.socialLinks && (member.socialLinks.linkedin || member.socialLinks.twitter || member.socialLinks.github || member.socialLinks.website || member.socialLinks.instagram || member.socialLinks.facebook) && (
+                        <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-border/40" onClick={(e) => e.stopPropagation()}>
+                          {member.socialLinks.linkedin && (
+                            <a
+                              href={member.socialLinks.linkedin}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="w-7 h-7 rounded-lg bg-sky-500/10 hover:bg-sky-500 text-sky-500 hover:text-white border border-sky-500/20 flex items-center justify-center transition-all duration-200 hover:scale-110 hover:shadow-md hover:shadow-sky-500/20 group/icon"
+                              title="LinkedIn Profile"
+                            >
+                              <i className="fa-brands fa-linkedin text-xs transition-transform duration-200 group-hover/icon:scale-110" />
+                            </a>
+                          )}
+                          {member.socialLinks.twitter && (
+                            <a
+                              href={member.socialLinks.twitter}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="w-7 h-7 rounded-lg bg-foreground/10 hover:bg-foreground text-foreground hover:text-background border border-foreground/20 flex items-center justify-center transition-all duration-200 hover:scale-110 hover:shadow-md group/icon"
+                              title="Twitter / X Profile"
+                            >
+                              <i className="fa-brands fa-x-twitter text-xs transition-transform duration-200 group-hover/icon:scale-110" />
+                            </a>
+                          )}
+                          {member.socialLinks.instagram && (
+                            <a
+                              href={member.socialLinks.instagram}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="w-7 h-7 rounded-lg bg-pink-500/10 hover:bg-gradient-to-tr hover:from-amber-500 hover:via-rose-500 hover:to-purple-600 text-pink-500 hover:text-white border border-pink-500/20 flex items-center justify-center transition-all duration-200 hover:scale-110 hover:shadow-md hover:shadow-pink-500/20 group/icon"
+                              title="Instagram Profile"
+                            >
+                              <i className="fa-brands fa-instagram text-xs transition-transform duration-200 group-hover/icon:scale-110" />
+                            </a>
+                          )}
+                          {member.socialLinks.facebook && (
+                            <a
+                              href={member.socialLinks.facebook}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="w-7 h-7 rounded-lg bg-blue-600/10 hover:bg-blue-600 text-blue-600 hover:text-white border border-blue-600/20 flex items-center justify-center transition-all duration-200 hover:scale-110 hover:shadow-md hover:shadow-blue-600/20 group/icon"
+                              title="Facebook Profile"
+                            >
+                              <i className="fa-brands fa-facebook text-xs transition-transform duration-200 group-hover/icon:scale-110" />
+                            </a>
+                          )}
+                          {member.socialLinks.github && (
+                            <a
+                              href={member.socialLinks.github}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="w-7 h-7 rounded-lg bg-slate-500/10 hover:bg-slate-900 dark:hover:bg-slate-100 text-slate-700 dark:text-slate-200 hover:text-white dark:hover:text-slate-950 border border-slate-500/20 flex items-center justify-center transition-all duration-200 hover:scale-110 hover:shadow-md group/icon"
+                              title="GitHub Profile"
+                            >
+                              <i className="fa-brands fa-github text-xs transition-transform duration-200 group-hover/icon:scale-110" />
+                            </a>
+                          )}
+                          {member.socialLinks.website && (
+                            <a
+                              href={member.socialLinks.website}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="w-7 h-7 rounded-lg bg-emerald-500/10 hover:bg-emerald-500 text-emerald-500 hover:text-white border border-emerald-500/20 flex items-center justify-center transition-all duration-200 hover:scale-110 hover:shadow-md hover:shadow-emerald-500/20 group/icon"
+                              title="Personal Website"
+                            >
+                              <i className="fa-solid fa-globe text-xs transition-transform duration-200 group-hover/icon:scale-110" />
+                            </a>
+                          )}
+                        </div>
+                      )}
+
                       <div className="flex items-center justify-between pt-2 border-t border-border/40 text-xs">
                         <span className="text-muted-foreground">Reports to: <strong className="text-foreground">{member.managerId?.name || "CEO"}</strong></span>
                         <Badge
@@ -941,6 +1033,7 @@ export default function TeamDashboardPage() {
                       <th className="p-4 font-semibold">Employee</th>
                       <th className="p-4 font-semibold">Departments</th>
                       <th className="p-4 font-semibold">Role</th>
+                      <th className="p-4 font-semibold">Social Profiles</th>
                       <th className="p-4 font-semibold">Reporting Line</th>
                       <th className="p-4 font-semibold">Status</th>
                       {isAdmin && <th className="p-4 font-semibold text-right">Action</th>}
@@ -1000,6 +1093,44 @@ export default function TeamDashboardPage() {
                             </div>
                           </td>
                           <td className="p-4 text-muted-foreground">{member.role}</td>
+                          <td className="p-4" onClick={(e) => e.stopPropagation()}>
+                            {member.socialLinks && (member.socialLinks.linkedin || member.socialLinks.twitter || member.socialLinks.github || member.socialLinks.website || member.socialLinks.instagram || member.socialLinks.facebook) ? (
+                              <div className="flex items-center gap-1.5">
+                                {member.socialLinks.linkedin && (
+                                  <a href={member.socialLinks.linkedin} target="_blank" rel="noopener noreferrer" className="w-6 h-6 rounded-md bg-sky-500/10 hover:bg-sky-500 text-sky-600 hover:text-white border border-sky-500/20 flex items-center justify-center transition-all duration-200 hover:scale-110" title="LinkedIn">
+                                    <i className="fa-brands fa-linkedin text-[11px]" />
+                                  </a>
+                                )}
+                                {member.socialLinks.twitter && (
+                                  <a href={member.socialLinks.twitter} target="_blank" rel="noopener noreferrer" className="w-6 h-6 rounded-md bg-foreground/10 hover:bg-foreground text-foreground hover:text-background border border-foreground/20 flex items-center justify-center transition-all duration-200 hover:scale-110" title="Twitter / X">
+                                    <i className="fa-brands fa-x-twitter text-[11px]" />
+                                  </a>
+                                )}
+                                {member.socialLinks.github && (
+                                  <a href={member.socialLinks.github} target="_blank" rel="noopener noreferrer" className="w-6 h-6 rounded-md bg-slate-500/10 hover:bg-slate-900 dark:hover:bg-slate-100 text-slate-700 dark:text-slate-200 hover:text-white dark:hover:text-slate-950 border border-slate-500/20 flex items-center justify-center transition-all duration-200 hover:scale-110" title="GitHub">
+                                    <i className="fa-brands fa-github text-[11px]" />
+                                  </a>
+                                )}
+                                {member.socialLinks.website && (
+                                  <a href={member.socialLinks.website} target="_blank" rel="noopener noreferrer" className="w-6 h-6 rounded-md bg-emerald-500/10 hover:bg-emerald-500 text-emerald-600 hover:text-white border border-emerald-500/20 flex items-center justify-center transition-all duration-200 hover:scale-110" title="Website">
+                                    <i className="fa-solid fa-globe text-[11px]" />
+                                  </a>
+                                )}
+                                {member.socialLinks.instagram && (
+                                  <a href={member.socialLinks.instagram} target="_blank" rel="noopener noreferrer" className="w-6 h-6 rounded-md bg-pink-500/10 hover:bg-gradient-to-tr hover:from-amber-500 hover:via-rose-500 hover:to-purple-600 text-pink-600 hover:text-white border border-pink-500/20 flex items-center justify-center transition-all duration-200 hover:scale-110" title="Instagram">
+                                    <i className="fa-brands fa-instagram text-[11px]" />
+                                  </a>
+                                )}
+                                {member.socialLinks.facebook && (
+                                  <a href={member.socialLinks.facebook} target="_blank" rel="noopener noreferrer" className="w-6 h-6 rounded-md bg-blue-600/10 hover:bg-blue-600 text-blue-600 hover:text-white border border-blue-600/20 flex items-center justify-center transition-all duration-200 hover:scale-110" title="Facebook">
+                                    <i className="fa-brands fa-facebook text-[11px]" />
+                                  </a>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-xs text-muted-foreground italic">&mdash;</span>
+                            )}
+                          </td>
                           <td className="p-4 text-muted-foreground">{member.managerId?.name || "CEO"}</td>
                           <td className="p-4">
                             <Badge
@@ -1479,6 +1610,51 @@ export default function TeamDashboardPage() {
                   className="w-full px-3 py-2 text-sm bg-background border border-border rounded-md text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary resize-y"
                   placeholder="Tell us about this team member..."
                 />
+              </div>
+
+              {/* Social Media Profiles in Edit Modal */}
+              <div className="pt-2 border-t border-border space-y-2">
+                <label className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                  <i className="fa-solid fa-share-nodes text-primary text-xs" /> Social Media Profiles
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-medium text-muted-foreground flex items-center gap-1">
+                      <i className="fa-brands fa-linkedin text-sky-600" /> LinkedIn
+                    </label>
+                    <Input value={editSocialLinkedin} onChange={(e) => setEditSocialLinkedin(e.target.value)} placeholder="https://linkedin.com/in/..." className="h-8 text-xs" />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-medium text-muted-foreground flex items-center gap-1">
+                      <i className="fa-brands fa-x-twitter text-foreground" /> Twitter / X
+                    </label>
+                    <Input value={editSocialTwitter} onChange={(e) => setEditSocialTwitter(e.target.value)} placeholder="https://x.com/..." className="h-8 text-xs" />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-medium text-muted-foreground flex items-center gap-1">
+                      <i className="fa-brands fa-github text-foreground" /> GitHub
+                    </label>
+                    <Input value={editSocialGithub} onChange={(e) => setEditSocialGithub(e.target.value)} placeholder="https://github.com/..." className="h-8 text-xs" />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-medium text-muted-foreground flex items-center gap-1">
+                      <i className="fa-solid fa-globe text-emerald-500" /> Website
+                    </label>
+                    <Input value={editSocialWebsite} onChange={(e) => setEditSocialWebsite(e.target.value)} placeholder="https://..." className="h-8 text-xs" />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-medium text-muted-foreground flex items-center gap-1">
+                      <i className="fa-brands fa-instagram text-pink-500" /> Instagram
+                    </label>
+                    <Input value={editSocialInstagram} onChange={(e) => setEditSocialInstagram(e.target.value)} placeholder="https://instagram.com/..." className="h-8 text-xs" />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-medium text-muted-foreground flex items-center gap-1">
+                      <i className="fa-brands fa-facebook text-blue-600" /> Facebook
+                    </label>
+                    <Input value={editSocialFacebook} onChange={(e) => setEditSocialFacebook(e.target.value)} placeholder="https://facebook.com/..." className="h-8 text-xs" />
+                  </div>
+                </div>
               </div>
 
               <div className="flex justify-end gap-2 pt-2 border-t border-border">

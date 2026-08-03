@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, startTransition } from "react";
 import { useAuth } from "@/hooks/useAuth";
+import { usePermissions } from "@/hooks/usePermissions";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -13,6 +14,7 @@ import { useTabPersistence } from "@/hooks/useTabPersistence";
 
 export default function CalendarPage() {
   const { user: currentUser, loading: authLoading } = useAuth();
+  const { can, isAdmin, isOPS } = usePermissions();
   const [activeTab, setActiveTab] = useTabPersistence<"calendar" | "sprints" | "timesheets" | "attendance">(
     "calendar_active_tab",
     "calendar",
@@ -123,7 +125,6 @@ export default function CalendarPage() {
 
   const [projectsList, setProjectsList] = useState<string[]>(["General Administration"]);
 
-  const isAdmin = currentUser?.role === "Admin";
   const isManagerOrAdmin = currentUser?.role === "Admin" || currentUser?.role === "Manager";
 
   const fetchEvents = async () => {
@@ -210,7 +211,7 @@ export default function CalendarPage() {
         }
       }
 
-      if (isManagerOrAdmin) {
+      if (can("approveTimesheets") || isOPS || isAdmin) {
         const pendingRes = await fetch("/api/timesheets?pending=true");
         if (pendingRes.ok) {
           const pendingData = await pendingRes.json();
@@ -670,86 +671,92 @@ export default function CalendarPage() {
             };
 
             return (
-              <div className="grid grid-cols-7 gap-2 bg-transparent">
-                {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
-                  <div key={day} className="bg-muted/80 dark:bg-slate-800/90 p-2.5 text-center text-xs font-bold text-foreground uppercase rounded-xl border border-border/80 dark:border-slate-700/80 shadow-xs">
-                    {day}
+              <div className="overflow-x-auto">
+                <div className="min-w-[700px] space-y-2">
+                  <div className="grid grid-cols-7 gap-2">
+                    {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
+                      <div key={day} className="bg-muted/80 dark:bg-slate-800/90 py-2 px-1 text-center text-xs font-bold text-foreground uppercase rounded-lg border border-border/80 dark:border-slate-700/80 shadow-xs">
+                        {day}
+                      </div>
+                    ))}
                   </div>
-                ))}
 
-                {daysArray.map((day, idx) => {
-                  if (!day) return <div key={`empty-${idx}`} className="bg-muted/10 dark:bg-slate-900/20 border border-border/40 dark:border-slate-800/40 rounded-xl min-h-[110px] p-2 opacity-25" />;
-                  
-                  const dayStr = day.getDate();
-                  const isToday = new Date().toDateString() === day.toDateString();
-                  
-                  const dayEvents = events.filter((evt) => {
-                    const start = new Date(evt.startDate);
-                    start.setHours(0,0,0,0);
-                    const end = new Date(evt.endDate);
-                    end.setHours(23,59,59,999);
+                  <div className="grid grid-cols-7 gap-2">
+                    {daysArray.map((day, idx) => {
+                      if (!day) return <div key={`empty-${idx}`} className="bg-muted/10 dark:bg-slate-900/20 border border-border/30 dark:border-slate-800/40 rounded-xl min-h-[115px] p-2 opacity-30" />;
+                      
+                      const dayStr = day.getDate();
+                      const isToday = new Date().toDateString() === day.toDateString();
+                      
+                      const dayEvents = events.filter((evt) => {
+                        const start = new Date(evt.startDate);
+                        start.setHours(0,0,0,0);
+                        const end = new Date(evt.endDate);
+                        end.setHours(23,59,59,999);
 
-                    const matchesDate = day >= start && day <= end;
-                    const matchesType = filterType === "All" || evt.type === filterType;
-                    const matchesDept = filterDept === "All" || evt.department === filterDept || evt.department === "All";
+                        const matchesDate = day >= start && day <= end;
+                        const matchesType = filterType === "All" || evt.type === filterType;
+                        const matchesDept = filterDept === "All" || evt.department === filterDept || evt.department === "All";
 
-                    return matchesDate && matchesType && matchesDept;
-                  });
+                        return matchesDate && matchesType && matchesDept;
+                      });
 
-                  const hasEvents = dayEvents.length > 0;
+                      const hasEvents = dayEvents.length > 0;
 
-                  return (
-                    <div
-                      key={idx}
-                      className={cn(
-                        "relative p-2.5 min-h-[110px] rounded-xl border flex flex-col justify-start gap-1.5 transition-all duration-200 group shadow-2xs",
-                        isToday
-                          ? "bg-primary/15 border-2 border-primary ring-2 ring-primary/40 shadow-md shadow-primary/20"
-                          : hasEvents
-                          ? "bg-card dark:bg-slate-900/95 border-primary/40 dark:border-primary/30 shadow-xs hover:border-primary/70 hover:shadow-md hover:bg-accent/50"
-                          : "bg-card/90 dark:bg-slate-900/60 border-border dark:border-slate-800/90 hover:border-primary/50 hover:bg-accent/40"
-                      )}
-                    >
-                      <div className="flex items-center justify-between">
-                        <span
+                      return (
+                        <div
+                          key={idx}
                           className={cn(
-                            "text-xs font-bold w-6 h-6 flex items-center justify-center rounded-full transition-transform group-hover:scale-105",
+                            "relative p-2.5 min-h-[120px] max-h-[140px] rounded-xl border flex flex-col justify-start gap-1.5 transition-all duration-200 group shadow-xs overflow-hidden",
                             isToday
-                              ? "bg-primary text-primary-foreground font-extrabold shadow-xs"
+                              ? "bg-primary/10 border-2 border-primary ring-2 ring-primary/30 shadow-md shadow-primary/10"
                               : hasEvents
-                              ? "bg-primary/15 text-primary font-bold"
-                              : "text-muted-foreground group-hover:text-foreground font-semibold"
+                              ? "bg-card dark:bg-slate-900/95 border-primary/40 dark:border-primary/30 shadow-xs hover:border-primary/70 hover:shadow-md hover:bg-accent/40"
+                              : "bg-card/90 dark:bg-slate-900/60 border-border dark:border-slate-800/90 hover:border-primary/50 hover:bg-accent/30"
                           )}
                         >
-                          {dayStr}
-                        </span>
-                        {hasEvents && (
-                          <span className="flex h-2 w-2 relative" title={`${dayEvents.length} Event(s)`}>
-                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
-                            <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
-                          </span>
-                        )}
-                      </div>
-
-                      <div className="space-y-1 overflow-y-auto max-h-[75px] no-scrollbar">
-                        {dayEvents.map((evt) => (
-                          <div
-                            key={evt._id}
-                            onClick={() => setSelectedEvent(evt)}
-                            className={cn(
-                              "text-[11px] font-semibold px-2 py-1 rounded-md truncate cursor-pointer transition-all duration-150 flex items-center gap-1.5 border shadow-2xs",
-                              getEventTypeStyle(evt.type)
+                          <div className="flex items-center justify-between shrink-0">
+                            <span
+                              className={cn(
+                                "text-xs font-bold w-6 h-6 flex items-center justify-center rounded-full transition-transform group-hover:scale-105",
+                                isToday
+                                  ? "bg-primary text-primary-foreground font-extrabold shadow-xs"
+                                  : hasEvents
+                                  ? "bg-primary/15 text-primary font-bold"
+                                  : "text-muted-foreground group-hover:text-foreground font-semibold"
+                              )}
+                            >
+                              {dayStr}
+                            </span>
+                            {hasEvents && (
+                              <span className="flex h-2 w-2 relative shrink-0" title={`${dayEvents.length} Event(s)`}>
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
+                              </span>
                             )}
-                            title={evt.title}
-                          >
-                            <span className="w-1.5 h-1.5 rounded-full shrink-0 bg-current" />
-                            <span className="truncate">{evt.title}</span>
                           </div>
-                        ))}
-                      </div>
-                    </div>
-                  );
-                })}
+
+                          <div className="space-y-1 overflow-y-auto max-h-[80px] pr-0.5 no-scrollbar flex-1">
+                            {dayEvents.map((evt) => (
+                              <div
+                                key={evt._id}
+                                onClick={() => setSelectedEvent(evt)}
+                                className={cn(
+                                  "text-[10px] font-semibold px-2 py-1 rounded-md truncate cursor-pointer transition-all duration-150 flex items-center gap-1.5 border shadow-2xs leading-tight",
+                                  getEventTypeStyle(evt.type)
+                                )}
+                                title={evt.title}
+                              >
+                                <span className="w-1.5 h-1.5 rounded-full shrink-0 bg-current" />
+                                <span className="truncate">{evt.title}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
             );
           })()}

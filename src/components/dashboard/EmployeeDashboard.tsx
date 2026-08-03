@@ -72,7 +72,7 @@ export function EmployeeDashboard({ user }: { user: any }) {
             </Link>
           </Button>
           <Button asChild variant="outline" size="sm">
-            <Link href="/dashboard/tasks">My Tasks</Link>
+            <Link href="/dashboard/projects">My Tasks</Link>
           </Button>
         </div>
       </div>
@@ -134,7 +134,7 @@ export function EmployeeDashboard({ user }: { user: any }) {
               </p>
             </div>
             <div className="p-3 bg-sky-500/10 text-sky-500 rounded-xl flex items-center justify-center w-12 h-12">
-              <i className="fa-solid fa-sparkles text-xl" />
+              <i className="fa-solid fa-wand-magic-sparkles text-xl" />
             </div>
           </CardContent>
         </Card>

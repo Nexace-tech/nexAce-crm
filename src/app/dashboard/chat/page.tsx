@@ -111,9 +111,11 @@ const REACTION_COLOR_MAP: Record<string, string> = {
 
 import { useTabPersistence } from "@/hooks/useTabPersistence";
 import { useAuthContext } from "@/context/AuthContext";
+import { usePermissions } from "@/hooks/usePermissions";
 
 export default function CommunicationHub() {
   const { user } = useAuthContext();
+  const { can, canAccessModule, isAdmin, isOPS } = usePermissions();
   const [activeTab, setActiveTab] = useTabPersistence<"chat" | "mail" | "whatsapp" | "video" | "announcements" | "settings">(
     "chat_active_tab",
     "chat",
@@ -795,53 +797,61 @@ export default function CommunicationHub() {
           <i className="fa-solid fa-comments text-sm" /> Workspace Chat
         </button>
 
-        <button
-          onClick={() => setActiveTab("mail")}
-          className={cn(
-            "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer",
-            activeTab === "mail"
-              ? "border-primary text-primary font-semibold"
-              : "border-transparent text-muted-foreground hover:text-foreground"
-          )}
-        >
-          <i className="fa-solid fa-envelope text-sm" /> Mail Center
-        </button>
+        {(can("viewMailCenter") || can("sendEmails") || isAdmin || isOPS) && (
+          <button
+            onClick={() => setActiveTab("mail")}
+            className={cn(
+              "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer",
+              activeTab === "mail"
+                ? "border-primary text-primary font-semibold"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <i className="fa-solid fa-envelope text-sm" /> Mail Center
+          </button>
+        )}
 
-        <button
-          onClick={() => setActiveTab("whatsapp")}
-          className={cn(
-            "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer",
-            activeTab === "whatsapp"
-              ? "border-primary text-primary font-semibold"
-              : "border-transparent text-muted-foreground hover:text-foreground"
-          )}
-        >
-          <i className="fa-brands fa-whatsapp text-sm text-emerald-500" /> WhatsApp Panel
-        </button>
+        {(can("viewWhatsAppPanel") || can("sendWhatsAppMessages") || isAdmin || isOPS) && (
+          <button
+            onClick={() => setActiveTab("whatsapp")}
+            className={cn(
+              "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer",
+              activeTab === "whatsapp"
+                ? "border-primary text-primary font-semibold"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <i className="fa-brands fa-whatsapp text-sm text-emerald-500" /> WhatsApp Panel
+          </button>
+        )}
 
-        <button
-          onClick={() => setActiveTab("video")}
-          className={cn(
-            "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer",
-            activeTab === "video"
-              ? "border-primary text-primary font-semibold"
-              : "border-transparent text-muted-foreground hover:text-foreground"
-          )}
-        >
-          <i className="fa-solid fa-video text-sm text-indigo-500" /> Virtual Huddle / Video
-        </button>
+        {(can("startVirtualHuddles") || can("joinVirtualHuddles") || isAdmin || isOPS) && (
+          <button
+            onClick={() => setActiveTab("video")}
+            className={cn(
+              "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer",
+              activeTab === "video"
+                ? "border-primary text-primary font-semibold"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <i className="fa-solid fa-video text-sm text-indigo-500" /> Virtual Huddle / Video
+          </button>
+        )}
 
-        <button
-          onClick={() => setActiveTab("announcements")}
-          className={cn(
-            "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer",
-            activeTab === "announcements"
-              ? "border-primary text-primary font-semibold"
-              : "border-transparent text-muted-foreground hover:text-foreground"
-          )}
-        >
-          <i className="fa-solid fa-bullhorn text-sm text-amber-500" /> Announcements
-        </button>
+        {(can("viewAnnouncements") || isAdmin || isOPS) && (
+          <button
+            onClick={() => setActiveTab("announcements")}
+            className={cn(
+              "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer",
+              activeTab === "announcements"
+                ? "border-primary text-primary font-semibold"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <i className="fa-solid fa-bullhorn text-sm text-amber-500" /> Announcements
+          </button>
+        )}
 
         <button
           onClick={() => setActiveTab("settings")}
@@ -869,7 +879,7 @@ export default function CommunicationHub() {
                   <h3 className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
                     <i className="fa-solid fa-hashtag text-xs text-primary" /> Channels
                   </h3>
-                  {(user?.role === "Admin" || user?.role === "Manager") && (
+                  {(can("createChatChannels") || isAdmin || isOPS) && (
                     <button
                       onClick={() => setShowCreateChannelModal(true)}
                       className="text-[10px] text-primary hover:underline font-semibold flex items-center gap-1 cursor-pointer"
@@ -1927,9 +1937,11 @@ export default function CommunicationHub() {
               </h2>
               <p className="text-xs text-muted-foreground">Official team updates and pinned policy notices, distinct from general chat noise.</p>
             </div>
-            <Button color="primary" size="sm" onClick={() => setShowAnnModal(true)} className="gap-2 font-semibold bg-amber-600 hover:bg-amber-700 border-none">
-              <i className="fa-solid fa-plus text-xs" /> Post Announcement
-            </Button>
+            {(can("createAnnouncements") || isAdmin || isOPS) && (
+              <Button color="primary" size="sm" onClick={() => setShowAnnModal(true)} className="gap-2 font-semibold bg-amber-600 hover:bg-amber-700 border-none">
+                <i className="fa-solid fa-plus text-xs" /> Post Announcement
+              </Button>
+            )}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1982,25 +1994,32 @@ export default function CommunicationHub() {
 
           <div className="space-y-4 text-xs">
             {[
-              { key: "chatPings", label: "Workspace Chat @Mentions & Direct Messages", desc: "Receive immediate popups and sound chimes for direct pings" },
-              { key: "mailAlerts", label: "Mail Center Inbound Emails", desc: "Alert when new client emails arrive in the CRM inbox" },
-              { key: "hrApprovals", label: "HR Leave & Expense Approvals", desc: "Separate quiet alerts for manager approval requests" },
-              { key: "announcementPins", label: "Pinned Company Announcements", desc: "Always notify on high-priority company updates" },
+              { key: "chatPings", label: "Workspace Chat @Mentions & Direct Messages", desc: "Receive immediate popups and sound chimes for direct pings", module: "chat" },
+              { key: "mailAlerts", label: "Mail Center Inbound Emails", desc: "Alert when new client emails arrive in the CRM inbox", module: "clients" },
+              { key: "hrApprovals", label: "HR Leave & Expense Approvals", desc: "Separate quiet alerts for manager approval requests", module: "hr", feature: "approveLeave" },
+              { key: "announcementPins", label: "Pinned Company Announcements", desc: "Always notify on high-priority company updates", module: "chat" },
               { key: "soundEnabled", label: "Audible Notification Chimes", desc: "Play sound chime on high-priority incoming alerts" },
-            ].map((pref) => (
-              <div key={pref.key} className="flex items-center justify-between p-3 rounded-lg border border-border/80 bg-muted/20">
-                <div>
-                  <p className="font-bold text-foreground">{pref.label}</p>
-                  <p className="text-[11px] text-muted-foreground">{pref.desc}</p>
+            ]
+              .filter((pref) => {
+                if (isAdmin || isOPS) return true;
+                if (pref.module && !canAccessModule(pref.module)) return false;
+                if (pref.feature && !can(pref.feature)) return false;
+                return true;
+              })
+              .map((pref) => (
+                <div key={pref.key} className="flex items-center justify-between p-3 rounded-lg border border-border/80 bg-muted/20">
+                  <div>
+                    <p className="font-bold text-foreground">{pref.label}</p>
+                    <p className="text-[11px] text-muted-foreground">{pref.desc}</p>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={(notifyPrefs as any)[pref.key]}
+                    onChange={(e) => setNotifyPrefs({ ...notifyPrefs, [pref.key]: e.target.checked })}
+                    className="w-4 h-4 rounded text-primary border-input focus:ring-primary cursor-pointer"
+                  />
                 </div>
-                <input
-                  type="checkbox"
-                  checked={(notifyPrefs as any)[pref.key]}
-                  onChange={(e) => setNotifyPrefs({ ...notifyPrefs, [pref.key]: e.target.checked })}
-                  className="w-4 h-4 rounded text-primary border-input focus:ring-primary cursor-pointer"
-                />
-              </div>
-            ))}
+              ))}
           </div>
         </Card>
       )}

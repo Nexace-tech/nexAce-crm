@@ -6,7 +6,7 @@ export interface IUser extends Document {
   username?: string;
   email: string;
   passwordHash: string;
-  role: "Admin" | "Manager" | "HR" | "Employee";
+  role: string;
   tenantId: mongoose.Types.ObjectId;
   department?: string;
   departments?: string[];
@@ -19,6 +19,15 @@ export interface IUser extends Document {
   photoUrl?: string;
   shiftTime?: string;
   shiftName?: string;
+  employmentType?: string;
+  socialLinks?: {
+    linkedin?: string;
+    twitter?: string;
+    github?: string;
+    website?: string;
+    instagram?: string;
+    facebook?: string;
+  };
   createdAt: Date;
 }
 
@@ -27,7 +36,7 @@ const UserSchema: Schema = new Schema({
   username: { type: String, unique: true, sparse: true, lowercase: true, trim: true },
   email: { type: String, required: true, unique: true, lowercase: true, trim: true },
   passwordHash: { type: String, required: true },
-  role: { type: String, enum: ["Admin", "Manager", "HR", "Employee"], default: "Employee" },
+  role: { type: String, default: "Employee", trim: true },
   tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true, index: true },
   department: { type: String },
   departments: [{ type: String }],
@@ -40,16 +49,22 @@ const UserSchema: Schema = new Schema({
   photoUrl: { type: String, default: "" },
   shiftTime: { type: String, default: "09:00 AM - 05:00 PM" },
   shiftName: { type: String, default: "Standard Day Shift" },
+  employmentType: { type: String, default: "Permanent", trim: true },
+  socialLinks: {
+    linkedin: { type: String, default: "" },
+    twitter: { type: String, default: "" },
+    github: { type: String, default: "" },
+    website: { type: String, default: "" },
+    instagram: { type: String, default: "" },
+    facebook: { type: String, default: "" }
+  },
   createdAt: { type: Date, default: Date.now }
 });
 
 // Compound index for tenant user listing & role filtering
 UserSchema.index({ tenantId: 1, role: 1 });
 
-// In Next.js dev mode, hot-reload re-imports this module but mongoose.models.User
-// still holds the OLD compiled schema. Delete the cached model so the updated
-// UserSchema (with "HR" in the enum) is always registered fresh.
-if (process.env.NODE_ENV !== "production" && mongoose.models.User) {
+if (mongoose.models.User) {
   delete mongoose.models.User;
 }
 

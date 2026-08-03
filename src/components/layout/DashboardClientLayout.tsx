@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuthContext } from "@/context/AuthContext";
+import { usePermissions } from "@/hooks/usePermissions";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import { ZoomControl } from "@/components/layout/ZoomControl";
 import { NotificationBell } from "@/components/layout/NotificationBell";
@@ -29,6 +30,20 @@ interface DashboardClientLayoutProps {
   children: React.ReactNode;
 }
 
+const hrefToModuleKeyMap: Record<string, string> = {
+  "/dashboard": "overview",
+  "/dashboard/team": "team",
+  "/dashboard/calendar": "calendar",
+  "/dashboard/projects": "projects",
+  "/dashboard/chat": "chat",
+  "/dashboard/hr": "hr",
+  "/dashboard/goals": "goals",
+  "/dashboard/analytics": "analytics",
+  "/dashboard/clients": "clients",
+  "/dashboard/referrals": "referrals",
+  "/dashboard/settings": "settings",
+};
+
 // Map menu names to FontAwesome icons or use item.icon directly
 const fontAwesomeIconMap: Record<string, string> = {
   "Overview": "fa-solid fa-chart-simple",
@@ -46,6 +61,7 @@ const fontAwesomeIconMap: Record<string, string> = {
 
 export function DashboardClientLayout({ session, menuItems, children }: DashboardClientLayoutProps) {
   const { user } = useAuthContext();
+  const { canAccessModule } = usePermissions();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
@@ -97,7 +113,7 @@ export function DashboardClientLayout({ session, menuItems, children }: Dashboar
         <div className={cn("flex items-center justify-between h-16 border-b border-border transition-all", sidebarCollapsed ? "px-3 justify-center" : "px-6")}>
           <Link href="/dashboard" className="flex items-center gap-3 font-semibold text-lg tracking-tight overflow-hidden">
             <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-primary text-primary-foreground shadow-md shadow-primary/30 shrink-0">
-              <i className="fa-solid fa-sparkles text-base" />
+              <i className="fa-solid fa-wand-magic-sparkles text-base" />
             </div>
             {!sidebarCollapsed && (
               <span className="bg-gradient-to-r from-primary to-blue-500 bg-clip-text text-transparent font-bold truncate">
@@ -128,29 +144,34 @@ export function DashboardClientLayout({ session, menuItems, children }: Dashboar
 
         {/* Menu Navigation Items */}
         <div className="flex-1 px-3 py-4 space-y-1.5 overflow-y-auto">
-          {menuItems.map((item) => {
-            const isActive = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href));
-            const iconClass = fontAwesomeIconMap[item.name] || item.icon || "fa-solid fa-layer-group";
+          {menuItems
+            .filter((item) => {
+              const modKey = hrefToModuleKeyMap[item.href];
+              return modKey ? canAccessModule(modKey) : true;
+            })
+            .map((item) => {
+              const isActive = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href));
+              const iconClass = fontAwesomeIconMap[item.name] || item.icon || "fa-solid fa-layer-group";
 
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={() => setMobileOpen(false)}
-                className={cn(
-                  "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 group relative",
-                  isActive
-                    ? "bg-primary text-primary-foreground shadow-md shadow-primary/25 font-semibold"
-                    : "text-muted-foreground hover:text-foreground hover:bg-accent/60",
-                  sidebarCollapsed && "justify-center px-0"
-                )}
-                title={sidebarCollapsed ? item.name : undefined}
-              >
-                <i className={cn(iconClass, "text-base transition-transform group-hover:scale-110 shrink-0", isActive ? "text-primary-foreground" : "text-muted-foreground group-hover:text-foreground")} />
-                {!sidebarCollapsed && <span className="truncate">{item.name}</span>}
-              </Link>
-            );
-          })}
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  onClick={() => setMobileOpen(false)}
+                  className={cn(
+                    "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 group relative",
+                    isActive
+                      ? "bg-primary text-primary-foreground shadow-md shadow-primary/25 font-semibold"
+                      : "text-muted-foreground hover:text-foreground hover:bg-accent/60",
+                    sidebarCollapsed && "justify-center px-0"
+                  )}
+                  title={sidebarCollapsed ? item.name : undefined}
+                >
+                  <i className={cn(iconClass, "text-base transition-transform group-hover:scale-110 shrink-0", isActive ? "text-primary-foreground" : "text-muted-foreground group-hover:text-foreground")} />
+                  {!sidebarCollapsed && <span className="truncate">{item.name}</span>}
+                </Link>
+              );
+            })}
         </div>
 
         {/* User Footer Profile Card */}

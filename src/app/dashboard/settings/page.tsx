@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
+import { usePermissions } from "@/hooks/usePermissions";
 import { Preloader } from "@/components/ui/Preloader";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -10,9 +11,11 @@ import { Input } from "@/components/ui/input";
 import { cn, generateSecurePassword } from "@/lib/utils";
 import { useTabPersistence } from "@/hooks/useTabPersistence";
 import { UserManagementTab } from "@/components/settings/UserManagementTab";
+import { RoleDataControlTab } from "@/components/settings/RoleDataControlTab";
 
 export default function SettingsPage() {
   const { user, loading: authLoading, refreshUser } = useAuth();
+  const { can, isAdmin, isOPS } = usePermissions();
 
   const [activeTab, setActiveTab] = useTabPersistence<"profile" | "security" | "users" | "subscription" | "permissions">(
     "settings_active_tab",
@@ -25,6 +28,13 @@ export default function SettingsPage() {
   const [phone, setPhone] = useState("");
   const [bio, setBio] = useState("");
   const [skills, setSkills] = useState("");
+
+  const [linkedin, setLinkedin] = useState("");
+  const [twitter, setTwitter] = useState("");
+  const [github, setGithub] = useState("");
+  const [website, setWebsite] = useState("");
+  const [instagram, setInstagram] = useState("");
+  const [facebook, setFacebook] = useState("");
 
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -68,8 +78,28 @@ export default function SettingsPage() {
       setPhone(user.phone || "");
       setBio(user.bio || "");
       setSkills(user.skills ? user.skills.join(", ") : "");
+      setLinkedin(user.socialLinks?.linkedin || "");
+      setTwitter(user.socialLinks?.twitter || "");
+      setGithub(user.socialLinks?.github || "");
+      setWebsite(user.socialLinks?.website || "");
+      setInstagram(user.socialLinks?.instagram || "");
+      setFacebook(user.socialLinks?.facebook || "");
     }
   }, [user]);
+
+  useEffect(() => {
+    if (!authLoading && user) {
+      if (activeTab === "permissions" && !can("manageRolePermissions") && !isAdmin && !isOPS) {
+        setActiveTab("profile");
+      }
+      if (activeTab === "users" && !can("manageUsers") && !isAdmin && !isOPS) {
+        setActiveTab("profile");
+      }
+      if (activeTab === "subscription" && !can("viewBillingSubscription") && !isAdmin && !isOPS) {
+        setActiveTab("profile");
+      }
+    }
+  }, [activeTab, authLoading, user, isAdmin, isOPS]);
 
   const fetchSubscription = async () => {
     try {
@@ -233,7 +263,15 @@ export default function SettingsPage() {
       return;
     }
     const skillsArray = skills.split(",").map((s) => s.trim()).filter((s) => s.length > 0);
-    const profileData = { name, email, phone, bio, skills: skillsArray, code: "" };
+    const profileData = {
+      name,
+      email,
+      phone,
+      bio,
+      skills: skillsArray,
+      socialLinks: { linkedin, twitter, github, website, instagram, facebook },
+      code: ""
+    };
 
     setUpdatingProfile(true);
     try {
@@ -265,7 +303,15 @@ export default function SettingsPage() {
     e.preventDefault();
     if (!user) return;
     const skillsArray = skills.split(",").map((s) => s.trim()).filter((s) => s.length > 0);
-    const profileData = { name, email, phone, bio, skills: skillsArray, code: "" };
+    const profileData = {
+      name,
+      email,
+      phone,
+      bio,
+      skills: skillsArray,
+      socialLinks: { linkedin, twitter, github, website, instagram, facebook },
+      code: ""
+    };
     const emailChanged = email.toLowerCase() !== (user.email || "").toLowerCase();
 
     if (emailChanged) {
@@ -423,41 +469,47 @@ export default function SettingsPage() {
           <i className="fa-solid fa-shield-halved text-emerald-500 text-sm" /> Password & Security
         </button>
 
-        <button
-          onClick={() => setActiveTab("users")}
-          className={cn(
-            "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
-            activeTab === "users" ? "border-primary text-primary font-semibold" : "border-transparent text-muted-foreground hover:text-foreground"
-          )}
-        >
-          <i className="fa-solid fa-users-gear text-purple-500 text-sm" /> User Management
-        </button>
+        {(can("manageUsers") || isAdmin || isOPS) && (
+          <button
+            onClick={() => setActiveTab("users")}
+            className={cn(
+              "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
+              activeTab === "users" ? "border-primary text-primary font-semibold" : "border-transparent text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <i className="fa-solid fa-users-gear text-purple-500 text-sm" /> User Management
+          </button>
+        )}
 
-        <button
-          onClick={() => setActiveTab("permissions")}
-          className={cn(
-            "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
-            activeTab === "permissions" ? "border-primary text-primary font-semibold" : "border-transparent text-muted-foreground hover:text-foreground"
-          )}
-        >
-          <i className="fa-solid fa-lock text-sky-500 text-sm" /> Roles & Multi-Tenant Security
-        </button>
+        {(can("manageRolePermissions") || isAdmin || isOPS) && (
+          <button
+            onClick={() => setActiveTab("permissions")}
+            className={cn(
+              "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
+              activeTab === "permissions" ? "border-primary text-primary font-semibold" : "border-transparent text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <i className="fa-solid fa-lock text-sky-500 text-sm" /> Roles & Multi-Tenant Security
+          </button>
+        )}
 
-        <button
-          onClick={() => setActiveTab("subscription")}
-          className={cn(
-            "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
-            activeTab === "subscription" ? "border-primary text-primary font-semibold" : "border-transparent text-muted-foreground hover:text-foreground"
-          )}
-        >
-          <i className="fa-solid fa-credit-card text-amber-500 text-sm" /> SaaS Billing & Seats
-        </button>
+        {(can("viewBillingSubscription") || isAdmin || isOPS) && (
+          <button
+            onClick={() => setActiveTab("subscription")}
+            className={cn(
+              "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
+              activeTab === "subscription" ? "border-primary text-primary font-semibold" : "border-transparent text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <i className="fa-solid fa-credit-card text-amber-500 text-sm" /> SaaS Billing & Seats
+          </button>
+        )}
       </div>
 
       {/* Active Tab Content with Smooth Transition */}
       <div key={activeTab} className="animate-in fade-in-50 slide-in-from-bottom-2 duration-300 ease-out transition-all">
         {/* TAB: USER MANAGEMENT */}
-        {activeTab === "users" && <UserManagementTab />}
+        {activeTab === "users" && (can("manageUsers") || isAdmin || isOPS) && <UserManagementTab />}
 
       {/* TAB 1: USER PROFILE & ORGANIZATION */}
       {activeTab === "profile" && (
@@ -591,6 +643,83 @@ export default function SettingsPage() {
                   rows={3}
                   className="w-full px-3 py-2 text-sm bg-background border border-border rounded-md text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary resize-y"
                 />
+              </div>
+
+              {/* Social Media Profiles Section */}
+              <div className="pt-3 border-t border-border space-y-3">
+                <div className="flex items-center gap-2">
+                  <i className="fa-solid fa-share-nodes text-primary text-sm" />
+                  <h4 className="text-sm font-bold text-foreground">Social Media Profiles</h4>
+                </div>
+                <p className="text-xs text-muted-foreground">Add your profile URLs or social handles to connect with your team.</p>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                      <i className="fa-brands fa-linkedin text-sky-600 text-sm" /> LinkedIn
+                    </label>
+                    <Input
+                      value={linkedin}
+                      onChange={(e) => setLinkedin(e.target.value)}
+                      placeholder="https://linkedin.com/in/username"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                      <i className="fa-brands fa-x-twitter text-foreground text-sm" /> Twitter / X
+                    </label>
+                    <Input
+                      value={twitter}
+                      onChange={(e) => setTwitter(e.target.value)}
+                      placeholder="https://x.com/username"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                      <i className="fa-brands fa-github text-foreground text-sm" /> GitHub
+                    </label>
+                    <Input
+                      value={github}
+                      onChange={(e) => setGithub(e.target.value)}
+                      placeholder="https://github.com/username"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                      <i className="fa-solid fa-globe text-emerald-500 text-sm" /> Personal Website
+                    </label>
+                    <Input
+                      value={website}
+                      onChange={(e) => setWebsite(e.target.value)}
+                      placeholder="https://yourwebsite.com"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                      <i className="fa-brands fa-instagram text-pink-500 text-sm" /> Instagram
+                    </label>
+                    <Input
+                      value={instagram}
+                      onChange={(e) => setInstagram(e.target.value)}
+                      placeholder="https://instagram.com/username"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                      <i className="fa-brands fa-facebook text-blue-600 text-sm" /> Facebook
+                    </label>
+                    <Input
+                      value={facebook}
+                      onChange={(e) => setFacebook(e.target.value)}
+                      placeholder="https://facebook.com/username"
+                    />
+                  </div>
+                </div>
               </div>
 
               <Button color="primary" type="submit" disabled={updatingProfile} className="gap-2">
@@ -771,56 +900,9 @@ export default function SettingsPage() {
       )}
 
       {/* TAB 3: ROLES & MULTI-TENANT SECURITY */}
-      {activeTab === "permissions" && (
+      {activeTab === "permissions" && (can("manageRolePermissions") || isAdmin || isOPS) && (
         <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg font-bold flex items-center gap-2">
-                <i className="fa-solid fa-lock text-sky-500 text-lg" /> Role-Based Access Control (RBAC) Matrix
-              </CardTitle>
-              <CardDescription>Configurable permissions enforced across your multi-tenant client organization</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-muted/50 text-muted-foreground font-semibold border-b border-border uppercase">
-                    <tr>
-                      <th className="p-3">Module Feature</th>
-                      <th className="p-3">Employee</th>
-                      <th className="p-3">Manager / HR</th>
-                      <th className="p-3">Admin</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border">
-                    <tr className="hover:bg-accent/30">
-                      <td className="p-3 font-semibold text-foreground">Projects & Sprints</td>
-                      <td className="p-3 text-muted-foreground">View & Complete Assigned Tasks</td>
-                      <td className="p-3 font-medium text-sky-500">Create & Assign Sprint Tasks</td>
-                      <td className="p-3 font-bold text-emerald-500">Full Project Control</td>
-                    </tr>
-                    <tr className="hover:bg-accent/30">
-                      <td className="p-3 font-semibold text-foreground">Timesheets & Hours Logging</td>
-                      <td className="p-3 text-muted-foreground">Log Personal Hours</td>
-                      <td className="p-3 font-medium text-sky-500">Approve Direct Report Timesheets</td>
-                      <td className="p-3 font-bold text-emerald-500">Workspace Audit & Billing</td>
-                    </tr>
-                    <tr className="hover:bg-accent/30">
-                      <td className="p-3 font-semibold text-foreground">HR Portal & Appraisals</td>
-                      <td className="p-3 text-muted-foreground">Self-Service Leave Request</td>
-                      <td className="p-3 font-medium text-sky-500">Conduct Appraisals & Cases</td>
-                      <td className="p-3 font-bold text-emerald-500">Full HR Vault Access</td>
-                    </tr>
-                    <tr className="hover:bg-accent/30">
-                      <td className="p-3 font-semibold text-foreground">Drive Storage File Extensions</td>
-                      <td className="p-3 text-muted-foreground">Subject to Policy</td>
-                      <td className="p-3 text-muted-foreground">Subject to Policy</td>
-                      <td className="p-3 font-bold text-emerald-500">Configure Extension Rules</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </CardContent>
-          </Card>
+          <RoleDataControlTab isAdmin={user?.role === "Admin" || user?.role === "OPS"} showToast={showToast} />
 
           {/* Admin File Restrictions Control Panel */}
           {user?.role === "Admin" && (
@@ -866,7 +948,7 @@ export default function SettingsPage() {
       )}
 
       {/* TAB 4: SAAS BILLING & SUBSCRIPTION */}
-      {activeTab === "subscription" && (
+      {activeTab === "subscription" && (can("viewBillingSubscription") || isAdmin || isOPS) && (
         <div className="space-y-6">
           {/* Current Plan Overview */}
           <Card className="border-l-4 border-l-amber-500">

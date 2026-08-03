@@ -3,6 +3,7 @@ import { getSession } from "@/lib/session";
 import { connectToDatabase } from "@/lib/db";
 import { TimeEntry } from "@/models/TimeEntry";
 import { User } from "@/models/User";
+import { getUserDataScope } from "@/lib/dataScope";
 import mongoose from "mongoose";
 
 /**
@@ -24,11 +25,11 @@ export async function GET(request: Request) {
 
     await connectToDatabase();
 
+    const dataScope = await getUserDataScope(session);
+
     if (pending) {
-      // Role permission check: Manager or Admin
-      const isManagerOrAdmin = session.role === "Admin" || session.role === "Manager";
-      if (!isManagerOrAdmin) {
-        return NextResponse.json({ error: "Forbidden: Access denied" }, { status: 403 });
+      if (!dataScope.canViewFeature("approveTimesheets") && session.role !== "Admin" && session.role !== "OPS") {
+        return NextResponse.json({ error: "Forbidden: Timesheet approval permission required" }, { status: 403 });
       }
 
       let query: any = {
@@ -36,18 +37,23 @@ export async function GET(request: Request) {
         status: "Pending",
       };
 
-      if (session.role === "Manager") {
-        // Find users who report to this manager
+      if (dataScope.scope === "department") {
+        const loggedUser = await User.findById(session.userId).lean();
+        const userDept = loggedUser?.department;
         const reports = await User.find({
           tenantId: new mongoose.Types.ObjectId(session.tenantId),
-          managerId: new mongoose.Types.ObjectId(session.userId),
+          $or: [
+            { managerId: new mongoose.Types.ObjectId(session.userId) },
+            { department: userDept },
+          ]
         }).select("_id");
         
         const reportIds = reports.map((r) => r._id);
         query.userId = { $in: reportIds };
+      } else if (dataScope.scope === "own") {
+        query.userId = new mongoose.Types.ObjectId(session.userId);
       }
 
-      // Find pending timesheet entries
       const pendingEntries = await TimeEntry.find(query)
         .populate("userId", "name role department photoUrl")
         .sort({ date: 1 });
@@ -55,12 +61,23 @@ export async function GET(request: Request) {
       return NextResponse.json({ entries: pendingEntries });
     }
 
-    // If start and end are provided, filter by range; otherwise fetch all
     const query: any = {
       tenantId: new mongoose.Types.ObjectId(session.tenantId),
     };
 
-    if (session.role !== "Admin" && session.role !== "Manager") {
+    if (dataScope.scope === "department") {
+      const loggedUser = await User.findById(session.userId).lean();
+      const userDept = loggedUser?.department;
+      const reports = await User.find({
+        tenantId: new mongoose.Types.ObjectId(session.tenantId),
+        $or: [
+          { managerId: new mongoose.Types.ObjectId(session.userId) },
+          { department: userDept },
+        ]
+      }).select("_id");
+      const reportIds = reports.map((r) => r._id);
+      query.userId = { $in: reportIds };
+    } else if (dataScope.scope === "own") {
       query.userId = new mongoose.Types.ObjectId(session.userId);
     }
 

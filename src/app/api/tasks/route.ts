@@ -2,8 +2,10 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
 import { connectToDatabase } from "@/lib/db";
 import { Task } from "@/models/Task";
+import { Project } from "@/models/Project";
 import { ActivityLog } from "@/models/ActivityLog";
 import { User } from "@/models/User";
+import { getUserDataScope } from "@/lib/dataScope";
 import mongoose from "mongoose";
 
 /**
@@ -21,16 +23,79 @@ export async function GET(request: Request) {
     const sprintId = searchParams.get("sprintId");
 
     await connectToDatabase();
+    const dataScope = await getUserDataScope(session);
+    const userObjId = new mongoose.Types.ObjectId(session.userId);
 
     const query: any = {
       tenantId: new mongoose.Types.ObjectId(session.tenantId),
     };
 
-    if (projectId) {
+    if (projectId && projectId !== "all") {
       query.projectId = new mongoose.Types.ObjectId(projectId);
     }
+
     if (sprintId) {
       query.sprintId = new mongoose.Types.ObjectId(sprintId);
+    }
+
+    // Role-based task scoping
+    if (dataScope.scope === "own") {
+      // Find projects where the user is an assigned member
+      const userProjects = await Project.find({
+        tenantId: new mongoose.Types.ObjectId(session.tenantId),
+        $or: [
+          { members: userObjId },
+          { createdBy: userObjId },
+        ],
+      }).select("_id");
+      const userProjectIds = userProjects.map((p) => p._id);
+
+      const taskScopeCondition = {
+        $or: [
+          { assignee: userObjId },
+          { projectId: { $in: userProjectIds } },
+        ]
+      };
+
+      if (query.projectId) {
+        // If specific project selected, ensure user has access or task assigned
+        query.$and = [
+          { projectId: query.projectId },
+          taskScopeCondition,
+        ];
+        delete query.projectId;
+      } else {
+        query.$and = [taskScopeCondition];
+      }
+    } else if (dataScope.scope === "department") {
+      const loggedUser = await User.findById(session.userId).lean();
+      const userDept = loggedUser?.department;
+      const deptProjects = await Project.find({
+        tenantId: new mongoose.Types.ObjectId(session.tenantId),
+        $or: [
+          { members: userObjId },
+          { createdBy: userObjId },
+          { assignedDepartment: userDept },
+        ],
+      }).select("_id");
+      const deptProjectIds = deptProjects.map((p) => p._id);
+
+      const deptScopeCondition = {
+        $or: [
+          { assignee: userObjId },
+          { projectId: { $in: deptProjectIds } },
+        ]
+      };
+
+      if (query.projectId) {
+        query.$and = [
+          { projectId: query.projectId },
+          deptScopeCondition,
+        ];
+        delete query.projectId;
+      } else {
+        query.$and = [deptScopeCondition];
+      }
     }
 
     const tasks = await Task.find(query)

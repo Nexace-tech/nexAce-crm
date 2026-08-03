@@ -8,7 +8,7 @@ interface UserProfile {
   _id: string;
   name: string;
   email: string;
-  role: "Admin" | "Manager" | "HR" | "Employee";
+  role: "Admin" | "OPS" | "Manager" | "HR" | "Employee";
   tenantId: {
     _id: string;
     name: string;
@@ -19,6 +19,14 @@ interface UserProfile {
   skills?: string[];
   bio?: string;
   phone?: string;
+  socialLinks?: {
+    linkedin?: string;
+    twitter?: string;
+    github?: string;
+    website?: string;
+    instagram?: string;
+    facebook?: string;
+  };
 }
 
 interface AuthContextType {

@@ -184,6 +184,16 @@ export async function PUT(request: Request, { params }: RouteParams) {
       if (body.phone !== undefined) user.phone = body.phone;
       if (body.photoUrl !== undefined) user.photoUrl = body.photoUrl;
       if (body.skills !== undefined) user.skills = body.skills;
+      if (body.socialLinks !== undefined) {
+        user.socialLinks = {
+          linkedin: body.socialLinks.linkedin || "",
+          twitter: body.socialLinks.twitter || "",
+          github: body.socialLinks.github || "",
+          website: body.socialLinks.website || "",
+          instagram: body.socialLinks.instagram || "",
+          facebook: body.socialLinks.facebook || "",
+        };
+      }
     }
 
     await user.save();

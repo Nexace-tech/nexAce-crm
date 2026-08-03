@@ -25,7 +25,7 @@ function LoginForm() {
       <Card className="w-full max-w-md border border-border shadow-2xl relative z-10 animate-in fade-in zoom-in-95">
         <CardHeader className="text-center space-y-2 pb-2">
           <div className="flex items-center justify-center gap-2 text-primary font-bold text-xl tracking-tight">
-            <i className="fa-solid fa-sparkles text-primary" />
+            <i className="fa-solid fa-wand-magic-sparkles text-primary" />
             <span>NexAce CRM</span>
           </div>
           <CardTitle className="text-2xl font-bold tracking-tight text-foreground">Sign In</CardTitle>
@@ -68,7 +68,8 @@ function LoginForm() {
                 id="email"
                 name="email"
                 type="email"
-                defaultValue={urlEmail}
+                key={state?.enteredEmail ?? urlEmail}
+                defaultValue={state?.enteredEmail ?? urlEmail}
                 placeholder="e.g. admin@nexace.com"
                 required
               />
@@ -91,6 +92,8 @@ function LoginForm() {
                   id="password"
                   name="password"
                   type={showPassword ? "text" : "password"}
+                  key={state?.enteredPassword ?? "password-input"}
+                  defaultValue={state?.enteredPassword ?? ""}
                   placeholder="••••••••"
                   className="pr-10"
                   required

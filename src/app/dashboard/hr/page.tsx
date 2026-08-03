@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Preloader } from "@/components/ui/Preloader";
 import { cn } from "@/lib/utils";
 import { useTabPersistence } from "@/hooks/useTabPersistence";
+import { usePermissions } from "@/hooks/usePermissions";
 
 interface LeaveData {
   _id: string; userId: string; userName: string;
@@ -24,6 +25,7 @@ interface CaseData {
 
 export default function HRPage() {
   const { user, loading: authLoading } = useAuth();
+  const { can, isAdmin, isOPS } = usePermissions();
   const [activeTab, setActiveTab] = useTabPersistence<
     "directory" | "checklists" | "leaves" | "vault" | "cases" | "appraisals" | "probation" | "sandbox"
   >(
@@ -539,12 +541,16 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <Button variant="outline" size="sm" onClick={() => { setActiveTab("leaves"); setShowLeaveForm(true); }} className="gap-2 cursor-pointer">
-            <i className="fa-solid fa-calendar-days text-xs" /> Request Leave
-          </Button>
-          <Button color="primary" size="sm" onClick={() => { setActiveTab("cases"); setShowCaseForm(true); }} className="gap-2 cursor-pointer">
-            <i className="fa-solid fa-plus text-xs" /> Submit Case
-          </Button>
+          {(can("applyLeave") || isAdmin || isOPS) && (
+            <Button variant="outline" size="sm" onClick={() => { setActiveTab("leaves"); setShowLeaveForm(true); }} className="gap-2 cursor-pointer">
+              <i className="fa-solid fa-calendar-days text-xs" /> Request Leave
+            </Button>
+          )}
+          {(can("createHRCases") || isAdmin || isOPS) && (
+            <Button color="primary" size="sm" onClick={() => { setActiveTab("cases"); setShowCaseForm(true); }} className="gap-2 cursor-pointer">
+              <i className="fa-solid fa-plus text-xs" /> Submit Case
+            </Button>
+          )}
         </div>
       </div>
 

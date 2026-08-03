@@ -15,7 +15,7 @@ interface IUser {
   _id: string;
   name: string;
   email: string;
-  role: "Admin" | "Manager" | "HR" | "Employee";
+  role: string;
   status: "Active" | "Pending" | "On Leave" | "Suspended";
   department?: string;
   departments?: string[];
@@ -59,14 +59,25 @@ export function UserManagementTab() {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 8;
 
-  // Fetch Users
+  const [availableRoles, setAvailableRoles] = useState<string[]>(["Admin", "OPS", "Manager", "HR", "Employee"]);
+
+  // Fetch Users & Custom Roles
   const fetchUsers = async () => {
     try {
       setLoading(true);
-      const res = await fetch("/api/team");
-      if (res.ok) {
-        const data = await res.json();
+      const [teamRes, permRes] = await Promise.all([
+        fetch("/api/team"),
+        fetch("/api/settings/permissions"),
+      ]);
+      if (teamRes.ok) {
+        const data = await teamRes.json();
         setUsers(data.users || []);
+      }
+      if (permRes.ok) {
+        const pData = await permRes.json();
+        const custom: string[] = pData.customRoles || [];
+        const allRoles = Array.from(new Set(["Admin", "OPS", "Manager", "HR", "Employee", ...custom]));
+        setAvailableRoles(allRoles);
       }
     } catch (err) {
       console.error("Error fetching users:", err);
@@ -371,10 +382,11 @@ export function UserManagementTab() {
                 className="bg-background border border-input text-foreground text-sm rounded-xl px-3 py-1.5 focus:outline-none focus:border-primary"
               >
                 <option value="All">All Roles</option>
-                <option value="Admin">Admin</option>
-                <option value="Manager">Manager</option>
-                <option value="HR">HR</option>
-                <option value="Employee">Employee</option>
+                {availableRoles.map((r) => (
+                  <option key={r} value={r}>
+                    {r === "OPS" ? "OPS (SubAdmin)" : r}
+                  </option>
+                ))}
               </select>
             </div>
 
@@ -459,21 +471,25 @@ export function UserManagementTab() {
                           className={cn(
                             "font-medium border text-xs px-2.5 py-0.5",
                             u.role === "Admin" && "bg-amber-500/10 text-amber-500 border-amber-500/20",
+                            u.role === "OPS" && "bg-emerald-500/10 text-emerald-500 border-emerald-500/20",
                             u.role === "Manager" && "bg-purple-500/10 text-purple-500 border-purple-500/20",
                             u.role === "HR" && "bg-pink-500/10 text-pink-500 border-pink-500/20",
-                            u.role === "Employee" && "bg-blue-500/10 text-blue-500 border-blue-500/20"
+                            u.role === "Employee" && "bg-blue-500/10 text-blue-500 border-blue-500/20",
+                            !["Admin", "OPS", "Manager", "HR", "Employee"].includes(u.role) && "bg-indigo-500/10 text-indigo-500 border-indigo-500/20"
                           )}
                         >
                           <i
                             className={cn(
                               "mr-1.5 text-[10px]",
                               u.role === "Admin" && "fa-solid fa-user-shield",
+                              u.role === "OPS" && "fa-solid fa-user-ninja",
                               u.role === "Manager" && "fa-solid fa-user-gear",
                               u.role === "HR" && "fa-solid fa-user-group",
-                              u.role === "Employee" && "fa-solid fa-user"
+                              u.role === "Employee" && "fa-solid fa-user",
+                              !["Admin", "OPS", "Manager", "HR", "Employee"].includes(u.role) && "fa-solid fa-user-tag"
                             )}
                           />
-                          {u.role}
+                          {u.role === "OPS" ? "OPS (SubAdmin)" : u.role}
                         </Badge>
                       </td>
 
@@ -617,10 +633,11 @@ export function UserManagementTab() {
                     onChange={(e) => setFormData({ ...formData, role: e.target.value as any })}
                     className="w-full bg-background border border-input text-foreground text-sm rounded-xl p-2.5 focus:border-primary focus:outline-none"
                   >
-                    <option value="Admin">Admin</option>
-                    <option value="Manager">Manager</option>
-                    <option value="HR">HR</option>
-                    <option value="Employee">Employee</option>
+                    {availableRoles.map((r) => (
+                      <option key={r} value={r}>
+                        {r === "OPS" ? "OPS (SubAdmin)" : r}
+                      </option>
+                    ))}
                   </select>
                 </div>
 
@@ -739,10 +756,11 @@ export function UserManagementTab() {
                     onChange={(e) => setFormData({ ...formData, role: e.target.value as any })}
                     className="w-full bg-background border border-input text-foreground text-sm rounded-xl p-2.5 focus:border-primary focus:outline-none"
                   >
-                    <option value="Admin">Admin</option>
-                    <option value="Manager">Manager</option>
-                    <option value="HR">HR</option>
-                    <option value="Employee">Employee</option>
+                    {availableRoles.map((r) => (
+                      <option key={r} value={r}>
+                        {r === "OPS" ? "OPS (SubAdmin)" : r}
+                      </option>
+                    ))}
                   </select>
                 </div>
 
