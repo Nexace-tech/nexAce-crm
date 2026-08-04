@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
 import { connectToDatabase } from "@/lib/db";
 import { User } from "@/models/User";
+import { Attendance } from "@/models/Attendance";
 import { getUserDataScope } from "@/lib/dataScope";
 import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
@@ -85,9 +86,37 @@ export async function GET(request: Request) {
       .sort({ name: 1 })
       .lean();
 
-    return NextResponse.json({ users }, {
+    // Attach today's live shift attendance status
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todayEnd = new Date();
+    todayEnd.setHours(23, 59, 59, 999);
+
+    const todayAttendances = await Attendance.find({
+      tenantId: new mongoose.Types.ObjectId(session.tenantId),
+      date: { $gte: todayStart, $lte: todayEnd }
+    }).lean();
+
+    const attendanceMap: Record<string, any> = {};
+    todayAttendances.forEach((att) => {
+      attendanceMap[att.userId.toString()] = att;
+    });
+
+    const usersWithAttendance = users.map((u: any) => {
+      const att = attendanceMap[u._id.toString()];
+      const isClockedIn = Boolean(att && att.clockIn && !att.clockOut);
+      return {
+        ...u,
+        isClockedIn,
+        clockInTime: att?.clockIn || null,
+        clockOutTime: att?.clockOut || null,
+        attendanceStatus: isClockedIn ? "Active" : att?.clockOut ? "Shift Ended" : "Off Shift"
+      };
+    });
+
+    return NextResponse.json({ users: usersWithAttendance }, {
       headers: {
-        "Cache-Control": "private, max-age=15, stale-while-revalidate=60"
+        "Cache-Control": "private, max-age=10, stale-while-revalidate=30"
       }
     });
   } catch (error: any) {

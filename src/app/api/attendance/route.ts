@@ -15,6 +15,7 @@ const SHIFT_TARGET_HOURS = 8.0;
 
 /**
  * GET: Get current user's attendance status for today, standard shift metadata, and attendance history logs.
+ * Supports ?allUsers=true for Admins/Managers to view all employees' attendance logs.
  */
 export async function GET(request: Request) {
   try {
@@ -37,17 +38,24 @@ export async function GET(request: Request) {
 
     const { searchParams } = new URL(request.url);
     const limitParam = searchParams.get("limit");
+    const allUsersParam = searchParams.get("allUsers");
 
-    let historyQuery = Attendance.find({
-      userId: userObjectId,
-      tenantId: tenantObjectId,
-    }).sort({ date: -1 });
+    const isElevatedRole = session.role === "Admin" || session.role === "OPS" || session.role === "Manager";
 
-    if (limitParam !== "all") {
-      historyQuery = historyQuery.limit(limitParam ? parseInt(limitParam) : 30);
+    let historyFilter: any = { tenantId: tenantObjectId };
+    if (!isElevatedRole && allUsersParam !== "true") {
+      historyFilter.userId = userObjectId;
     }
 
-    const history = await historyQuery;
+    let historyQuery = Attendance.find(historyFilter)
+      .populate("userId", "name email role department photoUrl shiftName shiftTime employmentType")
+      .sort({ date: -1, clockIn: -1 });
+
+    if (limitParam !== "all") {
+      historyQuery = historyQuery.limit(limitParam ? parseInt(limitParam) : 50);
+    }
+
+    const history = await historyQuery.lean();
 
     const shiftInfo = {
       shiftName: "Standard Regular Shift",

@@ -90,12 +90,21 @@ const STATUS_CONFIG = {
   offshift: { label: "Off Shift",     icon: "fa-solid fa-circle-minus", dot: "bg-muted-foreground", text: "text-muted-foreground",                  bg: "bg-muted/20",       border: "border-border/30" },
 };
 
+const EMPLOYMENT_TYPE_CONFIG: Record<string, { badge: string; icon: string }> = {
+  "Permanent":  { badge: "bg-emerald-500/10 text-emerald-600 border-emerald-500/20", icon: "fa-solid fa-star text-emerald-500" },
+  "Freelancer": { badge: "bg-purple-500/10 text-purple-600 border-purple-500/20",   icon: "fa-solid fa-laptop-code text-purple-500" },
+  "Part-Time":  { badge: "bg-sky-500/10 text-sky-600 border-sky-500/20",            icon: "fa-solid fa-clock text-sky-500" },
+  "Contractor": { badge: "bg-amber-500/10 text-amber-600 border-amber-500/20",         icon: "fa-solid fa-briefcase text-amber-500" },
+  "Intern":     { badge: "bg-indigo-500/10 text-indigo-600 border-indigo-500/20",       icon: "fa-solid fa-user-graduate text-indigo-500" },
+};
+
 export function TeamShiftOverviewCard() {
   const [teamMembers, setTeamMembers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [shiftFilter, setShiftFilter] = useState("All");
   const [statusFilter, setStatusFilter] = useState("All");
+  const [typeFilter, setTypeFilter] = useState("All");
   const [viewMode, setViewMode] = useState<"table" | "cards">("table");
   const [now, setNow] = useState(new Date());
 
@@ -116,7 +125,17 @@ export function TeamShiftOverviewCard() {
     () => teamMembers.map((m) => {
       const shiftTiming = m.shiftTime || "09:00 AM - 05:00 PM";
       const shiftName   = m.shiftName  || "Standard Day Shift";
-      return { ...m, shiftTiming, shiftName, status: getShiftStatus(shiftTiming), progress: getShiftProgress(shiftTiming), isNight: shiftName.toLowerCase().includes("night") };
+      const empType     = m.employmentType || "Permanent";
+      const computedStatus = m.isClockedIn ? "active" : m.attendanceStatus === "Shift Ended" ? "ended" : getShiftStatus(shiftTiming);
+      return {
+        ...m,
+        shiftTiming,
+        shiftName,
+        empType,
+        status: computedStatus,
+        progress: getShiftProgress(shiftTiming),
+        isNight: shiftName.toLowerCase().includes("night")
+      };
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [teamMembers, now]
@@ -127,9 +146,10 @@ export function TeamShiftOverviewCard() {
       const q = searchQuery.toLowerCase();
       return (!q || m.name?.toLowerCase().includes(q) || m.username?.toLowerCase().includes(q) || m.email?.toLowerCase().includes(q) || m.department?.toLowerCase().includes(q) || m.role?.toLowerCase().includes(q))
         && (shiftFilter === "All" || m.shiftName.toLowerCase().includes(shiftFilter.toLowerCase()))
+        && (typeFilter === "All" || m.empType === typeFilter)
         && (statusFilter === "All" || m.status === statusFilter);
     }),
-    [enriched, searchQuery, shiftFilter, statusFilter]
+    [enriched, searchQuery, shiftFilter, typeFilter, statusFilter]
   );
 
   const stats = useMemo(() => ({
@@ -141,8 +161,8 @@ export function TeamShiftOverviewCard() {
   }), [enriched]);
 
   const formatTime = (d: Date) => d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true });
-  const hasFilters = !!(searchQuery || shiftFilter !== "All" || statusFilter !== "All");
-  const resetFilters = () => { setSearchQuery(""); setShiftFilter("All"); setStatusFilter("All"); };
+  const hasFilters = !!(searchQuery || shiftFilter !== "All" || typeFilter !== "All" || statusFilter !== "All");
+  const resetFilters = () => { setSearchQuery(""); setShiftFilter("All"); setTypeFilter("All"); setStatusFilter("All"); };
 
   const STAT_TABS = [
     { key: "All",      label: "Total",         value: stats.total,    icon: "fa-solid fa-users",        iconColor: "text-foreground" },
@@ -257,6 +277,18 @@ export function TeamShiftOverviewCard() {
             <option value="Evening">Evening</option>
             <option value="Night">Night</option>
           </select>
+          <select
+            value={typeFilter}
+            onChange={(e) => setTypeFilter(e.target.value)}
+            className="h-8 text-xs bg-background border border-border rounded-md px-2.5 text-foreground outline-none cursor-pointer shrink-0"
+          >
+            <option value="All">All Employment Types</option>
+            <option value="Permanent">Permanent</option>
+            <option value="Freelancer">Freelancer</option>
+            <option value="Part-Time">Part-Time</option>
+            <option value="Contractor">Contractor</option>
+            <option value="Intern">Intern</option>
+          </select>
           {hasFilters && (
             <button
               onClick={resetFilters}
@@ -279,6 +311,7 @@ export function TeamShiftOverviewCard() {
                 <tr>
                   <th className="py-2.5 px-3 whitespace-nowrap">Team Member</th>
                   <th className="py-2.5 px-3 whitespace-nowrap">Department</th>
+                  <th className="py-2.5 px-3 whitespace-nowrap">Employment Type</th>
                   <th className="py-2.5 px-3 whitespace-nowrap">Shift</th>
                   <th className="py-2.5 px-3 whitespace-nowrap">Timing</th>
                   <th className="py-2.5 px-3 whitespace-nowrap">Progress</th>
@@ -358,6 +391,17 @@ export function TeamShiftOverviewCard() {
                           <span className={cn("inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold border", dc)}>
                             {m.department || "Management"}
                           </span>
+                        </td>
+                        <td className="py-2.5 px-3">
+                          {(() => {
+                            const etc = EMPLOYMENT_TYPE_CONFIG[m.empType] || { badge: "bg-muted/40 text-muted-foreground border-border/40", icon: "fa-solid fa-user text-muted-foreground" };
+                            return (
+                              <span className={cn("inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold border whitespace-nowrap", etc.badge)}>
+                                <i className={cn("text-[8px]", etc.icon)} />
+                                {m.empType}
+                              </span>
+                            );
+                          })()}
                         </td>
                         <td className="py-2.5 px-3">
                           <span className="font-medium text-foreground flex items-center gap-1.5 whitespace-nowrap">

@@ -11,6 +11,7 @@ import { Preloader } from "@/components/ui/Preloader";
 import { cn } from "@/lib/utils";
 
 import { useTabPersistence } from "@/hooks/useTabPersistence";
+import { TeamShiftOverviewCard } from "@/components/dashboard/TeamShiftOverviewCard";
 
 export default function CalendarPage() {
   const { user: currentUser, loading: authLoading } = useAuth();
@@ -87,21 +88,30 @@ export default function CalendarPage() {
   const [totalSecondsWorked, setTotalSecondsWorked] = useState(0);
   const [timerIntervalId, setTimerIntervalId] = useState<NodeJS.Timeout | null>(null);
 
-  // Pagination & Export States for Attendance History
+  // Pagination, Date Filter & Export States for Attendance History
   const [attendancePage, setAttendancePage] = useState(1);
   const [attendanceRowsPerPage, setAttendanceRowsPerPage] = useState(5);
   const [showAllAttendance, setShowAllAttendance] = useState(false);
+  const [selectedDateFilter, setSelectedDateFilter] = useState<string>("");
 
   const exportAttendanceToCSV = () => {
-    if (!attendanceHistory || attendanceHistory.length === 0) {
-      showToast("No shift log data available to export!", "error");
+    const targetLogs = selectedDateFilter
+      ? attendanceHistory.filter((log) => new Date(log.date).toISOString().split("T")[0] === selectedDateFilter)
+      : attendanceHistory;
+
+    if (!targetLogs || targetLogs.length === 0) {
+      showToast("No shift log data available for the selected date filter!", "error");
       return;
     }
 
-    const headers = ["Date", "Status", "Clock In", "Clock Out", "Regular Hours", "Overtime Hours"];
+    const headers = ["Employee", "Email", "Role", "Date", "Status", "Clock In", "Clock Out", "Regular Hours", "Overtime Hours"];
     const csvRows = [headers.join(",")];
 
-    attendanceHistory.forEach((log) => {
+    targetLogs.forEach((log) => {
+      const empObj = typeof log.userId === "object" ? log.userId : null;
+      const empName = `"${empObj?.name || 'Employee'}"`;
+      const empEmail = `"${empObj?.email || ''}"`;
+      const empRole = `"${empObj?.role || 'Employee'}"`;
       const dateStr = `"${new Date(log.date).toLocaleDateString()}"`;
       const statusStr = `"${log.status || 'Present'}"`;
       const clockInStr = `"${log.clockIn ? new Date(log.clockIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }) : '--'}"`;
@@ -109,14 +119,14 @@ export default function CalendarPage() {
       const regHrs = log.regularHours || 0;
       const otHrs = log.overtimeHours || 0;
 
-      csvRows.push([dateStr, statusStr, clockInStr, clockOutStr, regHrs, otHrs].join(","));
+      csvRows.push([empName, empEmail, empRole, dateStr, statusStr, clockInStr, clockOutStr, regHrs, otHrs].join(","));
     });
 
     const blob = new Blob([csvRows.join("\n")], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
-    link.setAttribute("download", `Shift_Attendance_Log_${new Date().toISOString().split("T")[0]}.csv`);
+    link.setAttribute("download", `Shift_Attendance_Log_${selectedDateFilter || new Date().toISOString().split("T")[0]}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -225,7 +235,10 @@ export default function CalendarPage() {
 
   const fetchAttendance = async (loadAll: boolean = false) => {
     try {
-      const url = loadAll ? "/api/attendance?limit=all" : "/api/attendance";
+      const params = new URLSearchParams();
+      if (loadAll) params.append("limit", "all");
+      if (isAdmin || isOPS || can("viewTeamTimesheets")) params.append("allUsers", "true");
+      const url = `/api/attendance?${params.toString()}`;
       const res = await fetch(url);
       if (res.ok) {
         const data = await res.json();
@@ -1192,94 +1205,96 @@ export default function CalendarPage() {
       {/* Tab 3: Shift Clock & Attendance */}
       {activeTab === "attendance" && (
         <div className="space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Shift Timer & Clock Control Card */}
-            <Card className="lg:col-span-2 p-8 text-center flex flex-col justify-between items-center space-y-6 border border-border/80 bg-card/60">
-              <div className="inline-flex p-4 rounded-2xl bg-primary/10 text-primary">
-                <i className="fa-solid fa-clock text-4xl animate-pulse" />
-              </div>
+          {!isAdmin && !isOPS && (
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Shift Timer & Clock Control Card */}
+              <Card className="lg:col-span-2 p-8 text-center flex flex-col justify-between items-center space-y-6 border border-border/80 bg-card/60">
+                <div className="inline-flex p-4 rounded-2xl bg-primary/10 text-primary">
+                  <i className="fa-solid fa-clock text-4xl animate-pulse" />
+                </div>
 
-              <div className="space-y-1">
-                <h2 className="text-4xl font-extrabold tracking-tight text-foreground font-mono">{elapsedTime}</h2>
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                  Today's Active Shift Duration
-                </p>
-              </div>
+                <div className="space-y-1">
+                  <h2 className="text-4xl font-extrabold tracking-tight text-foreground font-mono">{elapsedTime}</h2>
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                    Today's Active Shift Duration
+                  </p>
+                </div>
 
-              {/* Action Buttons */}
-              <div className="flex flex-wrap items-center justify-center gap-3">
-                {!attendanceToday?.clockIn ? (
-                  <Button color="primary" size="lg" onClick={() => handleClockAction("in")} className="gap-2 px-8 font-bold">
-                    <i className="fa-solid fa-fingerprint text-lg" /> Clock In Now
-                  </Button>
-                ) : !attendanceToday?.clockOut ? (
-                  <Button color="destructive" size="lg" onClick={() => handleClockAction("out")} className="gap-2 px-8 font-bold">
-                    <i className="fa-solid fa-stopwatch text-lg" /> Clock Out Shift
-                  </Button>
-                ) : (
-                  <div className="flex flex-col sm:flex-row items-center gap-3">
-                    <Badge color="success" className="text-sm px-4 py-1.5 font-semibold">
-                      <i className="fa-solid fa-check-circle mr-1.5" /> Shift Completed Today
-                    </Badge>
-                    <Button variant="outline" size="sm" onClick={() => handleClockAction("resume")} className="gap-2 text-primary border-primary/40 hover:bg-primary/10">
-                      <i className="fa-solid fa-play text-xs" /> Resume Shift
+                {/* Action Buttons */}
+                <div className="flex flex-wrap items-center justify-center gap-3">
+                  {!attendanceToday?.clockIn ? (
+                    <Button color="primary" size="lg" onClick={() => handleClockAction("in")} className="gap-2 px-8 font-bold">
+                      <i className="fa-solid fa-fingerprint text-lg" /> Clock In Now
                     </Button>
-                  </div>
-                )}
-              </div>
-
-              {/* Timestamp Badges */}
-              <div className="grid grid-cols-2 gap-4 w-full max-w-sm pt-4 border-t border-border/60 text-xs">
-                <div className="p-2.5 rounded-lg bg-accent/30 border border-border/50">
-                  <span className="text-muted-foreground block text-[10px] uppercase font-semibold">Clock In Time</span>
-                  <span className="font-mono font-bold text-foreground">
-                    {attendanceToday?.clockIn ? new Date(attendanceToday.clockIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }) : "--:--"}
-                  </span>
+                  ) : !attendanceToday?.clockOut ? (
+                    <Button color="destructive" size="lg" onClick={() => handleClockAction("out")} className="gap-2 px-8 font-bold">
+                      <i className="fa-solid fa-stopwatch text-lg" /> Clock Out Shift
+                    </Button>
+                  ) : (
+                    <div className="flex flex-col sm:flex-row items-center gap-3">
+                      <Badge color="success" className="text-sm px-4 py-1.5 font-semibold">
+                        <i className="fa-solid fa-check-circle mr-1.5" /> Shift Completed Today
+                      </Badge>
+                      <Button variant="outline" size="sm" onClick={() => handleClockAction("resume")} className="gap-2 text-primary border-primary/40 hover:bg-primary/10">
+                        <i className="fa-solid fa-play text-xs" /> Resume Shift
+                      </Button>
+                    </div>
+                  )}
                 </div>
 
-                <div className="p-2.5 rounded-lg bg-accent/30 border border-border/50">
-                  <span className="text-muted-foreground block text-[10px] uppercase font-semibold">Clock Out Time</span>
-                  <span className="font-mono font-bold text-foreground">
-                    {attendanceToday?.clockOut ? new Date(attendanceToday.clockOut).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }) : (attendanceToday?.clockIn ? "Active" : "--:--")}
-                  </span>
-                </div>
-              </div>
-            </Card>
+                {/* Timestamp Badges */}
+                <div className="grid grid-cols-2 gap-4 w-full max-w-sm pt-4 border-t border-border/60 text-xs">
+                  <div className="p-2.5 rounded-lg bg-accent/30 border border-border/50">
+                    <span className="text-muted-foreground block text-[10px] uppercase font-semibold">Clock In Time</span>
+                    <span className="font-mono font-bold text-foreground">
+                      {attendanceToday?.clockIn ? new Date(attendanceToday.clockIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }) : "--:--"}
+                    </span>
+                  </div>
 
-            {/* Shift Metadata Information Panel */}
-            <Card className="p-6 border border-border/80 bg-card/60 flex flex-col justify-between space-y-4">
-              <div className="space-y-4">
-                <div className="flex items-center gap-2 pb-3 border-b border-border/60">
-                  <i className="fa-solid fa-user-clock text-primary text-sm" />
-                  <h3 className="text-sm font-bold text-foreground">Shift Schedule Details</h3>
-                </div>
-
-                <div className="space-y-3 text-xs">
-                  <div className="flex justify-between py-1 border-b border-border/40">
-                    <span className="text-muted-foreground">Assigned Shift</span>
-                    <span className="font-bold text-foreground">{shiftInfo?.shiftName || "Standard Regular Shift"}</span>
-                  </div>
-                  <div className="flex justify-between py-1 border-b border-border/40">
-                    <span className="text-muted-foreground">Shift Window</span>
-                    <span className="font-semibold text-foreground font-mono">{shiftInfo?.startTime || "09:00 AM"} - {shiftInfo?.endTime || "05:00 PM"}</span>
-                  </div>
-                  <div className="flex justify-between py-1 border-b border-border/40">
-                    <span className="text-muted-foreground">Daily Target</span>
-                    <span className="font-semibold text-foreground font-mono">{shiftInfo?.targetHours || 8.0} Hours</span>
-                  </div>
-                  <div className="flex justify-between py-1">
-                    <span className="text-muted-foreground">Work Location</span>
-                    <span className="font-semibold text-emerald-500">{shiftInfo?.location || "Hybrid"}</span>
+                  <div className="p-2.5 rounded-lg bg-accent/30 border border-border/50">
+                    <span className="text-muted-foreground block text-[10px] uppercase font-semibold">Clock Out Time</span>
+                    <span className="font-mono font-bold text-foreground">
+                      {attendanceToday?.clockOut ? new Date(attendanceToday.clockOut).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }) : (attendanceToday?.clockIn ? "Active" : "--:--")}
+                    </span>
                   </div>
                 </div>
-              </div>
+              </Card>
 
-              <div className="p-3 rounded-lg bg-primary/10 border border-primary/20 text-xs text-primary font-medium flex items-center gap-2">
-                <i className="fa-solid fa-circle-info text-sm" />
-                Clock-in records automatically calculate regular and overtime hours upon clock-out.
-              </div>
-            </Card>
-          </div>
+              {/* Shift Metadata Information Panel */}
+              <Card className="p-6 border border-border/80 bg-card/60 flex flex-col justify-between space-y-4">
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2 pb-3 border-b border-border/60">
+                    <i className="fa-solid fa-user-clock text-primary text-sm" />
+                    <h3 className="text-sm font-bold text-foreground">Shift Schedule Details</h3>
+                  </div>
+
+                  <div className="space-y-3 text-xs">
+                    <div className="flex justify-between py-1 border-b border-border/40">
+                      <span className="text-muted-foreground">Assigned Shift</span>
+                      <span className="font-bold text-foreground">{shiftInfo?.shiftName || "Standard Regular Shift"}</span>
+                    </div>
+                    <div className="flex justify-between py-1 border-b border-border/40">
+                      <span className="text-muted-foreground">Shift Window</span>
+                      <span className="font-semibold text-foreground font-mono">{shiftInfo?.startTime || "09:00 AM"} - {shiftInfo?.endTime || "05:00 PM"}</span>
+                    </div>
+                    <div className="flex justify-between py-1 border-b border-border/40">
+                      <span className="text-muted-foreground">Daily Target</span>
+                      <span className="font-semibold text-foreground font-mono">{shiftInfo?.targetHours || 8.0} Hours</span>
+                    </div>
+                    <div className="flex justify-between py-1">
+                      <span className="text-muted-foreground">Work Location</span>
+                      <span className="font-semibold text-emerald-500">{shiftInfo?.location || "Hybrid"}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-3 rounded-lg bg-primary/10 border border-primary/20 text-xs text-primary font-medium flex items-center gap-2">
+                  <i className="fa-solid fa-circle-info text-sm" />
+                  Clock-in records automatically calculate regular and overtime hours upon clock-out.
+                </div>
+              </Card>
+            </div>
+          )}
 
           {/* Recent Attendance History Table */}
           <Card className="p-6 border border-border/80 bg-card/60 space-y-4">
@@ -1317,11 +1332,102 @@ export default function CalendarPage() {
               </div>
             </div>
 
+            {/* Whole Day Date Filter & Summary Banner */}
+            <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 p-4 rounded-xl bg-accent/20 border border-border/60">
+              <div className="flex items-center gap-3 flex-wrap">
+                <div className="flex items-center gap-2">
+                  <i className="fa-solid fa-calendar-day text-primary text-sm" />
+                  <span className="text-xs font-bold text-foreground">Select Day:</span>
+                  <input
+                    type="date"
+                    value={selectedDateFilter}
+                    onChange={(e) => {
+                      setSelectedDateFilter(e.target.value);
+                      setAttendancePage(1);
+                    }}
+                    className="h-8 px-2.5 text-xs bg-background border border-border rounded-lg text-foreground outline-none cursor-pointer"
+                  />
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <Button
+                    size="sm"
+                    variant={selectedDateFilter === new Date().toISOString().split("T")[0] ? "default" : "outline"}
+                    onClick={() => {
+                      setSelectedDateFilter(new Date().toISOString().split("T")[0]);
+                      setAttendancePage(1);
+                    }}
+                    className="h-8 px-2.5 text-xs cursor-pointer"
+                  >
+                    Today
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant={selectedDateFilter === new Date(Date.now() - 86400000).toISOString().split("T")[0] ? "default" : "outline"}
+                    onClick={() => {
+                      setSelectedDateFilter(new Date(Date.now() - 86400000).toISOString().split("T")[0]);
+                      setAttendancePage(1);
+                    }}
+                    className="h-8 px-2.5 text-xs cursor-pointer"
+                  >
+                    Yesterday
+                  </Button>
+                  {selectedDateFilter && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        setSelectedDateFilter("");
+                        setAttendancePage(1);
+                      }}
+                      className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground cursor-pointer"
+                    >
+                      <i className="fa-solid fa-rotate-left mr-1" /> All Days
+                    </Button>
+                  )}
+                </div>
+              </div>
+
+              {/* Whole Day Summary Pills */}
+              {(() => {
+                const targetLogs = selectedDateFilter
+                  ? attendanceHistory.filter((log) => new Date(log.date).toISOString().split("T")[0] === selectedDateFilter)
+                  : attendanceHistory;
+
+                const totalStaff = targetLogs.length;
+                const totalRegHours = targetLogs.reduce((acc: number, log: any) => acc + (log.regularHours || 0), 0);
+                const totalOtHours = targetLogs.reduce((acc: number, log: any) => acc + (log.overtimeHours || 0), 0);
+
+                return (
+                  <div className="flex items-center gap-3 text-xs flex-wrap">
+                    <div className="px-3 py-1.5 rounded-lg bg-card border border-border/60 flex items-center gap-2">
+                      <i className="fa-solid fa-users text-primary text-xs" />
+                      <span className="text-muted-foreground">Staff Logs:</span>
+                      <strong className="text-foreground font-bold">{totalStaff}</strong>
+                    </div>
+                    <div className="px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center gap-2">
+                      <i className="fa-solid fa-clock text-xs" />
+                      <span>Day Hours:</span>
+                      <strong className="font-bold font-mono">{totalRegHours.toFixed(1)} hrs</strong>
+                    </div>
+                    <div className="px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center gap-2">
+                      <i className="fa-solid fa-fire text-xs" />
+                      <span>Day Overtime:</span>
+                      <strong className="font-bold font-mono">+{totalOtHours.toFixed(1)} hrs</strong>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+
             {(() => {
-              const totalItems = attendanceHistory.length;
+              const filteredHistory = selectedDateFilter
+                ? attendanceHistory.filter((log) => new Date(log.date).toISOString().split("T")[0] === selectedDateFilter)
+                : attendanceHistory;
+
+              const totalItems = filteredHistory.length;
               const totalPages = Math.ceil(totalItems / attendanceRowsPerPage) || 1;
               const startIndex = (attendancePage - 1) * attendanceRowsPerPage;
-              const paginatedItems = attendanceHistory.slice(startIndex, startIndex + attendanceRowsPerPage);
+              const paginatedItems = filteredHistory.slice(startIndex, startIndex + attendanceRowsPerPage);
 
               return (
                 <>
@@ -1329,6 +1435,7 @@ export default function CalendarPage() {
                     <table className="w-full text-xs text-left border-collapse">
                       <thead>
                         <tr className="border-b border-border text-muted-foreground font-semibold uppercase">
+                          {(isAdmin || isOPS) && <th className="py-3 px-3">Employee</th>}
                           <th className="py-3 px-3">Date</th>
                           <th className="py-3 px-3">Status</th>
                           <th className="py-3 px-3">Clock In</th>
@@ -1340,11 +1447,12 @@ export default function CalendarPage() {
                       <tbody className="divide-y divide-border/60">
                         {paginatedItems.length === 0 ? (
                           <tr>
-                            <td colSpan={6} className="py-6 text-center text-muted-foreground">No shift logs recorded yet.</td>
+                            <td colSpan={(isAdmin || isOPS) ? 7 : 6} className="py-6 text-center text-muted-foreground">No shift logs recorded yet.</td>
                           </tr>
                         ) : (
                           paginatedItems.map((log) => {
                             const isSelected = selectedAttendanceLog?._id === log._id;
+                            const empObj = typeof log.userId === "object" ? log.userId : null;
                             return (
                               <tr
                                 key={log._id}
@@ -1356,6 +1464,23 @@ export default function CalendarPage() {
                                     : "hover:bg-accent/30"
                                 )}
                               >
+                                {(isAdmin || isOPS) && (
+                                  <td className="py-3 px-3 font-semibold text-foreground">
+                                    {empObj ? (
+                                      <div className="flex items-center gap-2 min-w-[130px]">
+                                        <div className="w-6 h-6 rounded-full bg-primary/10 text-primary font-bold flex items-center justify-center text-[10px] border border-primary/20 shrink-0">
+                                          {empObj.name?.[0] || "U"}
+                                        </div>
+                                        <div className="min-w-0">
+                                          <div className="font-bold text-xs truncate leading-tight">{empObj.name}</div>
+                                          <div className="text-[10px] text-muted-foreground font-normal truncate">{empObj.role || "Employee"}</div>
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      <span className="text-muted-foreground italic">Employee Record</span>
+                                    )}
+                                  </td>
+                                )}
                                 <td className="py-3 px-3 font-semibold text-foreground flex items-center gap-2">
                                   <i className={cn("fa-solid fa-clock-rotate-left text-xs transition-transform group-hover:scale-110", isSelected ? "text-primary" : "text-primary/70")} />
                                   <span>{new Date(log.date).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}</span>
@@ -1440,6 +1565,9 @@ export default function CalendarPage() {
               );
             })()}
           </Card>
+
+          {/* Organization Team Shift Roster & Employee Shift Attendance Board */}
+          <TeamShiftOverviewCard />
         </div>
       )}
 
@@ -1601,74 +1729,141 @@ export default function CalendarPage() {
         </div>
       )}
 
-      {/* Selected Shift Attendance Log Details Modal */}
+      {/* Selected Shift Attendance Log & Employee Details Modal */}
       {selectedAttendanceLog && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in" onClick={() => setSelectedAttendanceLog(null)}>
-          <div className="w-full max-w-md bg-card border border-border rounded-xl p-6 shadow-2xl space-y-4 animate-in zoom-in-95" onClick={(e) => e.stopPropagation()}>
-            <div className="flex justify-between items-start border-b border-border/60 pb-3">
-              <div className="flex items-center gap-2">
-                <i className="fa-solid fa-user-clock text-primary text-base" />
-                <div>
-                  <h3 className="text-base font-bold text-foreground">Shift Record Details</h3>
-                  <p className="text-xs text-muted-foreground">
-                    {new Date(selectedAttendanceLog.date).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
-                  </p>
-                </div>
-              </div>
-              <Button variant="ghost" size="sm" onClick={() => setSelectedAttendanceLog(null)}>
-                <i className="fa-solid fa-xmark text-sm" />
-              </Button>
-            </div>
+          <div className="w-full max-w-xl bg-card border border-border rounded-xl p-6 shadow-2xl space-y-4 animate-in zoom-in-95 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            {(() => {
+              const empObj = typeof selectedAttendanceLog.userId === "object" ? selectedAttendanceLog.userId : null;
+              const empId = empObj?._id || selectedAttendanceLog.userId;
+              
+              const empLogs = attendanceHistory.filter((h) => {
+                const hId = typeof h.userId === "object" ? h.userId?._id : h.userId;
+                return String(hId) === String(empId);
+              });
 
-            <div className="space-y-3 text-xs">
-              <div className="flex justify-between items-center p-2.5 rounded-lg bg-accent/20 border border-border/50">
-                <span className="text-muted-foreground font-medium">Attendance Status</span>
-                <Badge color={selectedAttendanceLog.status === "Present" ? "success" : "warning"}>
-                  {selectedAttendanceLog.status || "Present"}
-                </Badge>
-              </div>
+              const totalEmpHours = empLogs.reduce((acc, h) => acc + (h.regularHours || 0), 0);
+              const totalEmpOvertime = empLogs.reduce((acc, h) => acc + (h.overtimeHours || 0), 0);
+              const empType = empObj?.employmentType || "Permanent";
 
-              <div className="grid grid-cols-2 gap-3">
-                <div className="p-3 rounded-lg border border-border/60 bg-muted/20">
-                  <span className="text-[10px] text-muted-foreground uppercase font-semibold flex items-center gap-1.5">
-                    <i className="fa-solid fa-fingerprint text-primary" /> Clock In
-                  </span>
-                  <span className="text-sm font-bold font-mono text-foreground block mt-1">
-                    {selectedAttendanceLog.clockIn ? new Date(selectedAttendanceLog.clockIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }) : "--:--"}
-                  </span>
-                </div>
+              return (
+                <>
+                  {/* Employee Profile & Record Header */}
+                  <div className="flex justify-between items-start border-b border-border/60 pb-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-primary/15 text-primary font-bold flex items-center justify-center text-sm border border-primary/30 shrink-0">
+                        {empObj?.name?.[0] || "U"}
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h3 className="text-base font-bold text-foreground">{empObj?.name || "Employee Attendance Record"}</h3>
+                          <Badge variant="soft" color="primary" className="text-[10px]">
+                            {empObj?.role || "Employee"}
+                          </Badge>
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-600 border border-emerald-500/20">
+                            {empType}
+                          </span>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {empObj?.email || ""} {empObj?.department ? `• ${empObj.department}` : ""}
+                        </p>
+                      </div>
+                    </div>
+                    <Button variant="ghost" size="sm" onClick={() => setSelectedAttendanceLog(null)}>
+                      <i className="fa-solid fa-xmark text-sm" />
+                    </Button>
+                  </div>
 
-                <div className="p-3 rounded-lg border border-border/60 bg-muted/20">
-                  <span className="text-[10px] text-muted-foreground uppercase font-semibold flex items-center gap-1.5">
-                    <i className="fa-solid fa-stopwatch text-rose-500" /> Clock Out
-                  </span>
-                  <span className="text-sm font-bold font-mono text-foreground block mt-1">
-                    {selectedAttendanceLog.clockOut ? new Date(selectedAttendanceLog.clockOut).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }) : (selectedAttendanceLog.clockIn ? "Shift Active" : "--:--")}
-                  </span>
-                </div>
-              </div>
+                  {/* All-Time Work Stats Cards */}
+                  <div className="grid grid-cols-3 gap-3 text-center">
+                    <div className="p-3 rounded-xl bg-accent/20 border border-border/60 space-y-0.5">
+                      <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Total Shifts Logged</span>
+                      <p className="text-lg font-extrabold text-foreground">{empLogs.length} Days</p>
+                    </div>
+                    <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 space-y-0.5">
+                      <span className="text-[10px] uppercase font-bold text-emerald-600 dark:text-emerald-400 tracking-wider">All-Time Worked</span>
+                      <p className="text-lg font-extrabold text-emerald-600 dark:text-emerald-400">{totalEmpHours.toFixed(1)} Hrs</p>
+                    </div>
+                    <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 space-y-0.5">
+                      <span className="text-[10px] uppercase font-bold text-amber-600 dark:text-amber-400 tracking-wider">All-Time Overtime</span>
+                      <p className="text-lg font-extrabold text-amber-600 dark:text-amber-400">+{totalEmpOvertime.toFixed(1)} Hrs</p>
+                    </div>
+                  </div>
 
-              <div className="p-3.5 rounded-lg border border-border/60 bg-card space-y-2">
-                <div className="flex justify-between items-center border-b border-border/40 pb-1.5">
-                  <span className="text-muted-foreground flex items-center gap-1.5">
-                    <i className="fa-solid fa-briefcase text-emerald-500" /> Regular Worked Hours
-                  </span>
-                  <span className="font-bold font-mono text-foreground">{selectedAttendanceLog.regularHours || 0} hrs</span>
-                </div>
-                <div className="flex justify-between items-center pt-0.5">
-                  <span className="text-muted-foreground flex items-center gap-1.5">
-                    <i className="fa-solid fa-fire text-amber-500" /> Overtime Hours
-                  </span>
-                  <span className="font-bold font-mono text-amber-500">{selectedAttendanceLog.overtimeHours ? `+${selectedAttendanceLog.overtimeHours} hrs` : "0 hrs"}</span>
-                </div>
-              </div>
-            </div>
+                  {/* Selected Single Shift Record Detail */}
+                  <div className="space-y-3 pt-2">
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                      <i className="fa-solid fa-calendar-day text-primary" /> Shift Session ({new Date(selectedAttendanceLog.date).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })})
+                    </h4>
 
-            <div className="flex justify-end pt-3 border-t border-border">
-              <Button variant="outline" size="sm" onClick={() => setSelectedAttendanceLog(null)}>
-                Close Record
-              </Button>
-            </div>
+                    <div className="grid grid-cols-2 gap-3 text-xs">
+                      <div className="p-3 rounded-lg border border-border/60 bg-muted/20 space-y-1">
+                        <span className="text-[10px] text-muted-foreground uppercase font-semibold flex items-center gap-1.5">
+                          <i className="fa-solid fa-fingerprint text-primary" /> Clock In Time
+                        </span>
+                        <span className="text-sm font-bold font-mono text-foreground block">
+                          {selectedAttendanceLog.clockIn ? new Date(selectedAttendanceLog.clockIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }) : "--:--"}
+                        </span>
+                      </div>
+
+                      <div className="p-3 rounded-lg border border-border/60 bg-muted/20 space-y-1">
+                        <span className="text-[10px] text-muted-foreground uppercase font-semibold flex items-center gap-1.5">
+                          <i className="fa-solid fa-stopwatch text-rose-500" /> Clock Out Time
+                        </span>
+                        <span className="text-sm font-bold font-mono text-foreground block">
+                          {selectedAttendanceLog.clockOut ? new Date(selectedAttendanceLog.clockOut).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }) : (selectedAttendanceLog.clockIn ? "Shift Active" : "--:--")}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* All-Time Attendance History Table for this Employee */}
+                  {empLogs.length > 0 && (
+                    <div className="space-y-2 pt-2 border-t border-border">
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                        <i className="fa-solid fa-history text-indigo-500" /> All-Time Attendance History Log ({empLogs.length})
+                      </h4>
+                      <div className="max-h-48 overflow-y-auto rounded-lg border border-border">
+                        <table className="w-full text-left text-xs">
+                          <thead className="bg-muted/50 text-muted-foreground font-semibold text-[10px] uppercase border-b border-border sticky top-0">
+                            <tr>
+                              <th className="p-2">Date</th>
+                              <th className="p-2">Clock In</th>
+                              <th className="p-2">Clock Out</th>
+                              <th className="p-2 text-right">Regular Hrs</th>
+                              <th className="p-2 text-right">Overtime</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-border/40">
+                            {empLogs.map((h) => (
+                              <tr key={h._id} className="hover:bg-accent/20">
+                                <td className="p-2 font-medium text-foreground">
+                                  {new Date(h.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                                </td>
+                                <td className="p-2 font-mono text-muted-foreground">
+                                  {h.clockIn ? new Date(h.clockIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }) : "--"}
+                                </td>
+                                <td className="p-2 font-mono text-muted-foreground">
+                                  {h.clockOut ? new Date(h.clockOut).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }) : (h.clockIn ? "Active" : "--")}
+                                </td>
+                                <td className="p-2 font-mono font-bold text-foreground text-right">{h.regularHours || 0} hrs</td>
+                                <td className="p-2 font-mono font-semibold text-amber-500 text-right">{h.overtimeHours ? `+${h.overtimeHours} hrs` : "0 hrs"}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex justify-end pt-3 border-t border-border">
+                    <Button variant="outline" size="sm" onClick={() => setSelectedAttendanceLog(null)}>
+                      Close Details
+                    </Button>
+                  </div>
+                </>
+              );
+            })()}
           </div>
         </div>
       )}

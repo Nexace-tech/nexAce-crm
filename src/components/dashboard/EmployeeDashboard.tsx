@@ -9,13 +9,57 @@ import { Button } from "@/components/ui/button";
 export function EmployeeDashboard({ user }: { user: any }) {
   const [clockedIn, setClockedIn] = useState(false);
   const [clockTime, setClockTime] = useState<string | null>(null);
+  const [clockInIso, setClockInIso] = useState<string | null>(null);
+  const [elapsedTime, setElapsedTime] = useState("00:00:00");
+  const [clocking, setClocking] = useState(false);
   const [tasks, setTasks] = useState<any[]>([]);
   const [timesheets, setTimesheets] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const fetchAttendanceStatus = async () => {
+    try {
+      const res = await fetch("/api/attendance");
+      if (res.ok) {
+        const data = await res.json();
+        if (data.attendance && data.attendance.clockIn && !data.attendance.clockOut) {
+          setClockedIn(true);
+          setClockInIso(data.attendance.clockIn);
+          const clockInDate = new Date(data.attendance.clockIn);
+          setClockTime(clockInDate.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: true }));
+        } else {
+          setClockedIn(false);
+          setClockInIso(null);
+          setClockTime(null);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to fetch attendance status:", err);
+    }
+  };
+
+  // Live stopwatch interval for active shift duration
+  useEffect(() => {
+    if (!clockedIn || !clockInIso) {
+      setElapsedTime("00:00:00");
+      return;
+    }
+    const startTime = new Date(clockInIso).getTime();
+    const interval = setInterval(() => {
+      const diffMs = Math.max(0, Date.now() - startTime);
+      const totalSecs = Math.floor(diffMs / 1000);
+      const hrs = Math.floor(totalSecs / 3600);
+      const mins = Math.floor((totalSecs % 3600) / 60);
+      const secs = totalSecs % 60;
+      const pad = (n: number) => String(n).padStart(2, "0");
+      setElapsedTime(`${pad(hrs)}:${pad(mins)}:${pad(secs)}`);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [clockedIn, clockInIso]);
+
   useEffect(() => {
     async function fetchEmployeeData() {
       try {
+        await fetchAttendanceStatus();
         const [taskRes, tsRes] = await Promise.all([
           fetch("/api/tasks"),
           fetch("/api/timesheets")
@@ -36,15 +80,28 @@ export function EmployeeDashboard({ user }: { user: any }) {
       }
     }
     fetchEmployeeData();
+
+    // Auto-sync polling every 30 seconds
+    const pollInterval = setInterval(fetchAttendanceStatus, 30_000);
+    return () => clearInterval(pollInterval);
   }, []);
 
-  const handleToggleClock = () => {
-    if (!clockedIn) {
-      setClockedIn(true);
-      setClockTime(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
-    } else {
-      setClockedIn(false);
-      setClockTime(null);
+  const handleToggleClock = async () => {
+    const action = clockedIn ? "out" : "in";
+    try {
+      setClocking(true);
+      const res = await fetch("/api/attendance", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action }),
+      });
+      if (res.ok) {
+        await fetchAttendanceStatus();
+      }
+    } catch (err) {
+      console.error("Failed to toggle clock state:", err);
+    } finally {
+      setClocking(false);
     }
   };
 
@@ -158,9 +215,14 @@ export function EmployeeDashboard({ user }: { user: any }) {
                 color={clockedIn ? "destructive" : "primary"}
                 size="sm"
                 onClick={handleToggleClock}
+                disabled={clocking}
                 className="gap-2 font-semibold shadow-md cursor-pointer"
               >
-                {clockedIn ? (
+                {clocking ? (
+                  <>
+                    <i className="fa-solid fa-spinner fa-spin text-xs" /> Syncing...
+                  </>
+                ) : clockedIn ? (
                   <>
                     <i className="fa-solid fa-square text-xs" /> Clock Out
                   </>
@@ -186,10 +248,19 @@ export function EmployeeDashboard({ user }: { user: any }) {
                   </p>
                 </div>
 
-                {clockTime && (
-                  <div className="text-right">
-                    <p className="text-xs text-muted-foreground">Clocked In At:</p>
-                    <p className="font-mono font-bold text-sm text-emerald-500">{clockTime}</p>
+                {clockedIn && (
+                  <div className="text-right sm:text-right flex flex-row sm:flex-col items-center sm:items-end justify-between w-full sm:w-auto pt-2 sm:pt-0 border-t sm:border-0 border-border">
+                    <div>
+                      <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Active Duration</p>
+                      <p className="font-mono font-extrabold text-lg text-emerald-500 tracking-tight flex items-center gap-1.5">
+                        <i className="fa-solid fa-stopwatch text-sm animate-pulse" /> {elapsedTime}
+                      </p>
+                    </div>
+                    {clockTime && (
+                      <p className="text-[11px] text-muted-foreground font-medium mt-0.5">
+                        Started at <strong className="font-mono text-foreground">{clockTime}</strong>
+                      </p>
+                    )}
                   </div>
                 )}
               </div>

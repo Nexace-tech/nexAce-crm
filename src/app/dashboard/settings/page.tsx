@@ -12,15 +12,16 @@ import { cn, generateSecurePassword } from "@/lib/utils";
 import { useTabPersistence } from "@/hooks/useTabPersistence";
 import { UserManagementTab } from "@/components/settings/UserManagementTab";
 import { RoleDataControlTab } from "@/components/settings/RoleDataControlTab";
+import { ShiftAndStatusTab } from "@/components/settings/ShiftAndStatusTab";
 
 export default function SettingsPage() {
   const { user, loading: authLoading, refreshUser } = useAuth();
   const { can, isAdmin, isOPS } = usePermissions();
 
-  const [activeTab, setActiveTab] = useTabPersistence<"profile" | "security" | "users" | "subscription" | "permissions">(
-    "settings_active_tab",
+  const [activeTab, setActiveTab] = useTabPersistence<"profile" | "security" | "users" | "shifts" | "subscription" | "permissions">(
+    "settings_active_tab_v2",
     "profile",
-    ["profile", "security", "users", "subscription", "permissions"]
+    ["profile", "security", "users", "shifts", "subscription", "permissions"]
   );
 
   const [name, setName] = useState("");
@@ -481,6 +482,18 @@ export default function SettingsPage() {
           </button>
         )}
 
+        {(can("manageShifts") || isAdmin || isOPS) && (
+          <button
+            onClick={() => setActiveTab("shifts")}
+            className={cn(
+              "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
+              activeTab === "shifts" ? "border-primary text-primary font-semibold" : "border-transparent text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <i className="fa-solid fa-clock-rotate-left text-amber-500 text-sm" /> Shifts &amp; Employment Types
+          </button>
+        )}
+
         {(can("manageRolePermissions") || isAdmin || isOPS) && (
           <button
             onClick={() => setActiveTab("permissions")}
@@ -510,6 +523,11 @@ export default function SettingsPage() {
       <div key={activeTab} className="animate-in fade-in-50 slide-in-from-bottom-2 duration-300 ease-out transition-all">
         {/* TAB: USER MANAGEMENT */}
         {activeTab === "users" && (can("manageUsers") || isAdmin || isOPS) && <UserManagementTab />}
+
+        {/* TAB: SHIFTS & EMPLOYMENT TYPES */}
+        {activeTab === "shifts" && (can("manageShifts") || isAdmin || isOPS) && (
+          <ShiftAndStatusTab isAdmin={isAdmin || isOPS} showToast={showToast} />
+        )}
 
       {/* TAB 1: USER PROFILE & ORGANIZATION */}
       {activeTab === "profile" && (
