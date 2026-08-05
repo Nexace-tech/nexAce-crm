@@ -63,8 +63,10 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Generate random 6-digit code
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    // Generate cryptographically secure 6-digit code
+    const arr = new Uint32Array(1);
+    crypto.getRandomValues(arr);
+    const code = String(100000 + (arr[0] % 900000));
 
     // Save/update code in DB
     await EmailVerification.findOneAndUpdate(
@@ -91,6 +93,9 @@ export async function POST(req: NextRequest) {
         port,
         secure: port === 465,
         auth: { user, pass },
+        tls: {
+          rejectUnauthorized: process.env.NODE_ENV === "production",
+        },
       });
 
       await transporter.sendMail({
@@ -169,8 +174,9 @@ export async function POST(req: NextRequest) {
       previewUrl: isProduction ? undefined : previewUrl, 
       devCode: isProduction ? undefined : (previewUrl ? code : undefined) 
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Failed to send verification code.";
     console.error("Failed to send verification code:", error);
-    return NextResponse.json({ error: error.message || "Failed to send verification code." }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

@@ -38,9 +38,10 @@ export interface FormState {
 /**
  * Helper to translate internal connection/configuration errors into descriptive user-facing tips.
  */
-function getDescriptiveErrorMessage(error: any, defaultMessage: string): string {
-  const errMsg = error?.message || "";
-  const errName = error?.name || "";
+function getDescriptiveErrorMessage(error: unknown, defaultMessage: string): string {
+  const err = error as { message?: string; name?: string };
+  const errMsg = err?.message || "";
+  const errName = err?.name || "";
 
   if (errMsg.includes("MONGODB_URI") || errMsg.includes("environment variable")) {
     return "Database connection failed: The MONGODB_URI environment variable is not defined in your Vercel project settings. Please add it to your project configuration.";
@@ -144,7 +145,7 @@ export async function registerAction(state: FormState | undefined, formData: For
 
     // 5. Hash Password & Create User with status: "Pending"
     const passwordHash = await bcrypt.hash(adminPassword, 10);
-    const user = await User.create({
+    await User.create({
       name: adminName.trim(),
       username: usernameRaw,
       email: adminEmail.toLowerCase(),
@@ -337,8 +338,10 @@ export async function forgotPasswordAction(state: FormState | undefined, formDat
       };
     }
 
-    // Generate random 6-digit verification code
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    // Generate cryptographically secure 6-digit verification code
+    const arr = new Uint32Array(1);
+    crypto.getRandomValues(arr);
+    const code = String(100000 + (arr[0] % 900000));
 
     // Save or update code in EmailVerification collection (expires in 10 mins)
     await EmailVerification.findOneAndUpdate(
@@ -394,7 +397,7 @@ export async function forgotPasswordAction(state: FormState | undefined, formDat
       previewUrl: mailResult.isDev ? mailResult.previewUrl : undefined,
       message: `A 6-digit verification code has been sent to ${email}.`,
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Forgot password error:", error);
     return {
       message: getDescriptiveErrorMessage(error, "An error occurred during password reset. Please try again.")

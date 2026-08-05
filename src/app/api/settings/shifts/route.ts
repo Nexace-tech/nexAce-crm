@@ -37,9 +37,9 @@ export async function GET() {
       : DEFAULT_EMPLOYMENT_TYPES;
 
     return NextResponse.json({ shifts, employmentTypes });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("GET Shifts API Error:", error);
-    return NextResponse.json({ error: error.message || "Internal Error" }, { status: 500 });
+    return NextResponse.json({ error: (error instanceof Error ? error.message : "Internal Server Error") || "Internal Error" }, { status: 500 });
   }
 }
 
@@ -97,8 +97,8 @@ export async function POST(request: Request) {
       employmentTypes: tenant.employmentTypes,
       message: "Workspace shifts and employment types updated"
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("POST Shifts API Error:", error);
-    return NextResponse.json({ error: error.message || "Internal Error" }, { status: 500 });
+    return NextResponse.json({ error: (error instanceof Error ? error.message : "Internal Server Error") || "Internal Error" }, { status: 500 });
   }
 }

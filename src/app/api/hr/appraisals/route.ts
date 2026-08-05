@@ -18,7 +18,7 @@ export async function GET(req: Request) {
 
     const appraisals = await HRAppraisal.find(query).sort({ createdAt: -1 }).lean();
     return NextResponse.json({ appraisals });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("GET /api/hr/appraisals error:", error);
     return NextResponse.json({ error: "Failed to fetch appraisals" }, { status: 500 });
   }
@@ -60,7 +60,7 @@ export async function POST(req: Request) {
     });
 
     return NextResponse.json({ appraisal }, { status: 201 });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("POST /api/hr/appraisals error:", error);
     return NextResponse.json({ error: "Failed to create appraisal" }, { status: 500 });
   }
@@ -111,7 +111,7 @@ export async function PUT(req: Request) {
 
     await appraisal.save();
     return NextResponse.json({ appraisal });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("PUT /api/hr/appraisals error:", error);
     return NextResponse.json({ error: "Failed to update appraisal" }, { status: 500 });
   }

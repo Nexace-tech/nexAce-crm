@@ -16,11 +16,19 @@ export default async function DashboardLayout({ children }: DashboardLayoutProps
     redirect("/login");
   }
 
-  // Validate session against database user to prevent stale cookie desync
+  // Validate session against database user and load role permissions concurrently
   await connectToDatabase();
+
+  const { RolePermission } = await import("@/models/RolePermission");
+
   let dbUser = null;
+  let permDoc = null;
+
   try {
-    dbUser = await User.findById(session.userId).select("name role tenantId").populate("tenantId");
+    [dbUser, permDoc] = await Promise.all([
+      User.findById(session.userId).select("name role tenantId").populate("tenantId"),
+      RolePermission.findOne({ tenantId: session.tenantId, role: session.role }),
+    ]);
   } catch {
     dbUser = null;
   }
@@ -41,19 +49,10 @@ export default async function DashboardLayout({ children }: DashboardLayoutProps
     tenantName,
   };
 
-  // Query tenant role permissions configuration
-  const { RolePermission } = await import("@/models/RolePermission");
+  // Extract custom permissions from already-fetched permDoc
   let customPermissions: any = null;
-  try {
-    const permDoc = await RolePermission.findOne({
-      tenantId: dbUser.tenantId,
-      role: role,
-    });
-    if (permDoc && permDoc.modulePermissions) {
-      customPermissions = permDoc.modulePermissions;
-    }
-  } catch (e) {
-    console.error(e);
+  if (permDoc && permDoc.modulePermissions) {
+    customPermissions = permDoc.modulePermissions;
   }
 
   // All available sidebar navigation modules

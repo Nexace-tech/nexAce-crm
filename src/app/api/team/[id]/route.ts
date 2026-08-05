@@ -34,9 +34,9 @@ export async function GET(request: Request, { params }: RouteParams) {
     }
 
     return NextResponse.json({ user });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("API GET Single Team error:", error);
-    return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: 500 });
+    const _msg = error instanceof Error ? error.message : "Internal Server Error"; return NextResponse.json({ error: _msg }, { status: 500 });
   }
 }
 
@@ -102,11 +102,11 @@ export async function PUT(request: Request, { params }: RouteParams) {
         return NextResponse.json({ error: pwdValidation.error }, { status: 400 });
       }
 
+      const bcrypt = await import("bcryptjs");
       if (isSelf) {
         if (!body.currentPassword) {
           return NextResponse.json({ error: "Current password is required to change password" }, { status: 400 });
         }
-        const bcrypt = await import("bcryptjs");
         const isMatch = await bcrypt.compare(body.currentPassword, user.passwordHash);
         if (!isMatch) {
           return NextResponse.json({ error: "Incorrect current password" }, { status: 400 });
@@ -122,7 +122,6 @@ export async function PUT(request: Request, { params }: RouteParams) {
         }
         await EmailVerification.deleteOne({ _id: verification._id });
       }
-      const bcrypt = await import("bcryptjs");
       user.passwordHash = await bcrypt.hash(body.newPassword, 10);
     }
 
@@ -199,9 +198,9 @@ export async function PUT(request: Request, { params }: RouteParams) {
     await user.save();
 
     return NextResponse.json({ success: true, user });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("API PUT Single Team error:", error);
-    return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: 500 });
+    const _msg = error instanceof Error ? error.message : "Internal Server Error"; return NextResponse.json({ error: _msg }, { status: 500 });
   }
 }
 
@@ -233,19 +232,25 @@ export async function DELETE(request: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Employee not found" }, { status: 404 });
     }
 
-    // Re-route reporting line: all direct reports now report to this user's manager (or CEO)
-    const newManagerId = user.managerId;
-    await User.updateMany(
-      { managerId: user._id },
-      { managerId: newManagerId }
-    );
+    // Re-route reporting line: all direct reports now report to this user's manager (or cleared if top-level)
+    if (user.managerId) {
+      await User.updateMany(
+        { managerId: user._id },
+        { managerId: user.managerId }
+      );
+    } else {
+      await User.updateMany(
+        { managerId: user._id },
+        { $unset: { managerId: 1 } }
+      );
+    }
 
     // Remove user
     await user.deleteOne();
 
     return NextResponse.json({ success: true, message: "Employee removed successfully" });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("API DELETE Single Team error:", error);
-    return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: 500 });
+    const _msg = error instanceof Error ? error.message : "Internal Server Error"; return NextResponse.json({ error: _msg }, { status: 500 });
   }
 }

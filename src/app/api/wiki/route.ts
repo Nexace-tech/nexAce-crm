@@ -23,9 +23,10 @@ export async function GET() {
       .sort({ updatedAt: -1 });
 
     return NextResponse.json({ articles });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Internal Server Error";
     console.error("API GET Wiki error:", error);
-    return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
@@ -57,9 +58,10 @@ export async function POST(request: Request) {
     });
 
     return NextResponse.json({ success: true, article: newArticle }, { status: 201 });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Internal Server Error";
     console.error("API POST Wiki error:", error);
-    return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
@@ -88,15 +90,16 @@ export async function PUT(request: Request) {
       return NextResponse.json({ error: "Article not found" }, { status: 404 });
     }
 
-    if (title !== undefined) article.title = title;
-    if (content !== undefined) article.content = content;
+    if (title !== undefined && title.trim()) article.title = title.trim();
+    if (content !== undefined && content.trim()) article.content = content.trim();
 
     await article.save();
 
     return NextResponse.json({ success: true, article });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Internal Server Error";
     console.error("API PUT Wiki error:", error);
-    return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
@@ -128,9 +131,10 @@ export async function DELETE(request: Request) {
     await article.deleteOne();
 
     return NextResponse.json({ success: true, message: "Wiki article deleted successfully" });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Internal Server Error";
     console.error("API DELETE Wiki error:", error);
-    return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 

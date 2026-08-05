@@ -70,9 +70,9 @@ export async function PUT(
     const updatedProject = await Project.findById(id).populate("members", "name role photoUrl");
 
     return NextResponse.json({ success: true, project: updatedProject });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("API PUT Project error:", error);
-    return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: 500 });
+    const _msg = error instanceof Error ? error.message : "Internal Server Error"; return NextResponse.json({ error: _msg }, { status: 500 });
   }
 }
 
@@ -113,8 +113,8 @@ export async function DELETE(
     await project.deleteOne();
 
     return NextResponse.json({ success: true, message: "Project deleted successfully" });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("API DELETE Project error:", error);
-    return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: 500 });
+    const _msg = error instanceof Error ? error.message : "Internal Server Error"; return NextResponse.json({ error: _msg }, { status: 500 });
   }
 }

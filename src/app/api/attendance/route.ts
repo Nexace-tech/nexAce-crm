@@ -4,10 +4,11 @@ import { connectToDatabase } from "@/lib/db";
 import { Attendance } from "@/models/Attendance";
 import mongoose from "mongoose";
 
-// Helper to get normalized date (midnight today in local/UTC date representation)
+// Helper to get normalized date at UTC midnight — prevents timezone mismatch
+// between server (UTC) and employees in other timezones (e.g. IST UTC+5:30)
 function getTodayDateNormalized(): Date {
   const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  today.setUTCHours(0, 0, 0, 0);
   return today;
 }
 
@@ -42,8 +43,9 @@ export async function GET(request: Request) {
 
     const isElevatedRole = session.role === "Admin" || session.role === "OPS" || session.role === "Manager";
 
-    let historyFilter: any = { tenantId: tenantObjectId };
-    if (!isElevatedRole && allUsersParam !== "true") {
+    const historyFilter: Record<string, unknown> = { tenantId: tenantObjectId };
+    // Employees always see only their own records — allUsers param is only honored for elevated roles
+    if (!isElevatedRole) {
       historyFilter.userId = userObjectId;
     }
 
@@ -70,9 +72,10 @@ export async function GET(request: Request) {
       history,
       shiftInfo,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Internal Server Error";
     console.error("API GET Attendance error:", error);
-    return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
@@ -112,8 +115,8 @@ export async function POST(request: Request) {
           tenantId: new mongoose.Types.ObjectId(session.tenantId),
         });
         return NextResponse.json({ success: true, attendance: newRecord }, { status: 201 });
-      } catch (mongoError: any) {
-        if (mongoError.code === 11000) {
+      } catch (mongoError: unknown) {
+        if ((mongoError as { code?: number })?.code === 11000) {
           return NextResponse.json({ error: "You are already clocked in for today" }, { status: 400 });
         }
         throw mongoError;
@@ -169,8 +172,12 @@ export async function POST(request: Request) {
 
       return NextResponse.json({ success: true, attendance: record, message: "Shift resumed successfully!" });
     }
-  } catch (error: any) {
+
+    // Fallback — should never reach here given prior validation
+    return NextResponse.json({ error: "Invalid action" }, { status: 400 });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Internal Server Error";
     console.error("API POST Attendance error:", error);
-    return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

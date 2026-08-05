@@ -22,7 +22,7 @@ export async function requireTenantSession(
   }
 
   if (allowedRoles && allowedRoles.length > 0) {
-    const hasRole = allowedRoles.includes(session.role as any);
+    const hasRole = (allowedRoles as string[]).includes(session.role);
     if (!hasRole) {
       return NextResponse.json(
         { error: `Forbidden: Requires one of [${allowedRoles.join(", ")}] roles` },

@@ -48,6 +48,7 @@ const ProjectSchema = new Schema<IProject>(
 // Performance indexes for multi-tenant queries & member lookups
 ProjectSchema.index({ tenantId: 1, createdAt: -1 });
 ProjectSchema.index({ tenantId: 1, members: 1 });
+ProjectSchema.index({ tenantId: 1, assignedDepartment: 1 });
 
 export const Project: Model<IProject> =
   mongoose.models.Project || mongoose.model<IProject>("Project", ProjectSchema);

@@ -15,7 +15,7 @@ export async function GET(req: Request) {
       .lean();
 
     return NextResponse.json({ sandboxItems });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("GET /api/hr/sandbox error:", error);
     return NextResponse.json({ error: "Failed to fetch HR sandbox configs" }, { status: 500 });
   }
@@ -46,7 +46,7 @@ export async function POST(req: Request) {
     });
 
     return NextResponse.json({ sandbox }, { status: 201 });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("POST /api/hr/sandbox error:", error);
     return NextResponse.json({ error: "Failed to create HR sandbox item" }, { status: 500 });
   }

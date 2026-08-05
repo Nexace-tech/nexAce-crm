@@ -29,6 +29,8 @@ const ActivityLogSchema = new Schema<IActivityLog>(
 // Performance indexes for paginated timeline lookups
 ActivityLogSchema.index({ tenantId: 1, createdAt: -1 });
 ActivityLogSchema.index({ projectId: 1, createdAt: -1 });
+// Compound index for per-user activity feed queries
+ActivityLogSchema.index({ tenantId: 1, userId: 1, createdAt: -1 });
 
 export const ActivityLog: Model<IActivityLog> =
   mongoose.models.ActivityLog || mongoose.model<IActivityLog>("ActivityLog", ActivityLogSchema);

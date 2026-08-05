@@ -54,19 +54,27 @@ export function generateSecurePassword(length: number = 12): string {
 
   const all = uppers + lowers + numbers + specials;
 
-  let password = [
-    uppers[Math.floor(Math.random() * uppers.length)],
-    lowers[Math.floor(Math.random() * lowers.length)],
-    numbers[Math.floor(Math.random() * numbers.length)],
-    specials[Math.floor(Math.random() * specials.length)],
+  // Use crypto.getRandomValues for cryptographically secure randomness
+  const randomIndex = (max: number): number => {
+    const arr = new Uint32Array(1);
+    crypto.getRandomValues(arr);
+    return arr[0] % max;
+  };
+
+  const password = [
+    uppers[randomIndex(uppers.length)],
+    lowers[randomIndex(lowers.length)],
+    numbers[randomIndex(numbers.length)],
+    specials[randomIndex(specials.length)],
   ];
 
   for (let i = password.length; i < length; i++) {
-    password.push(all[Math.floor(Math.random() * all.length)]);
+    password.push(all[randomIndex(all.length)]);
   }
 
+  // Fisher-Yates shuffle with secure random
   for (let i = password.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
+    const j = randomIndex(i + 1);
     [password[i], password[j]] = [password[j], password[i]];
   }
 

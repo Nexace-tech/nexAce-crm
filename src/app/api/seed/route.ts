@@ -371,8 +371,8 @@ export async function GET() {
       sprintsCreated: 2,
       tasksCreated: 4,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Database seed error:", error);
-    return NextResponse.json({ error: error.message || "Failed to seed database" }, { status: 500 });
+    return NextResponse.json({ error: (error instanceof Error ? error.message : "Internal Server Error") || "Failed to seed database" }, { status: 500 });
   }
 }

@@ -64,8 +64,4 @@ const UserSchema: Schema = new Schema({
 // Compound index for tenant user listing & role filtering
 UserSchema.index({ tenantId: 1, role: 1 });
 
-if (mongoose.models.User) {
-  delete mongoose.models.User;
-}
-
 export const User: Model<IUser> = mongoose.models.User || mongoose.model<IUser>("User", UserSchema);

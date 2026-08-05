@@ -6,10 +6,11 @@ import { ActivityLog } from "@/models/ActivityLog";
 import { Tenant } from "@/models/Tenant";
 import mongoose from "mongoose";
 import fs from "fs";
+import { writeFile, mkdir, unlink } from "fs/promises";
 import path from "path";
 
-// Define the local upload folder inside the workspace
-const UPLOAD_DIR = path.join(process.cwd(), "src", "uploads");
+// Define the local upload folder inside the workspace (resolved for path traversal safety)
+const UPLOAD_DIR = path.resolve(path.join(process.cwd(), "src", "uploads"));
 
 /**
  * GET: Fetch all drive files logged in the tenant.
@@ -30,9 +31,10 @@ export async function GET() {
       .sort({ createdAt: -1 });
 
     return NextResponse.json({ files });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Internal Server Error";
     console.error("API GET Drive error:", error);
-    return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
@@ -77,11 +79,9 @@ export async function POST(request: Request) {
 
     const folder = (formData.get("folder") as string) || "/";
     const targetDir = folder && folder !== "/" ? path.join(UPLOAD_DIR, folder) : UPLOAD_DIR;
-    
+
     // Ensure target directory exists (e.g. src/uploads/Chat)
-    if (!fs.existsSync(targetDir)) {
-      fs.mkdirSync(targetDir, { recursive: true });
-    }
+    await mkdir(targetDir, { recursive: true });
 
     const ext = fileExt ? `.${fileExt}` : "";
     const now = new Date();
@@ -89,7 +89,7 @@ export async function POST(request: Request) {
     const month = String(now.getMonth() + 1).padStart(2, "0");
     const day = String(now.getDate()).padStart(2, "0");
     const timestamp = now.getTime();
-    
+
     // Custom File Naming: NexAceCRM_Year_Month_Day_TimeStamp
     let savedFileName = fileName;
     let diskFileName = `${timestamp}-${fileName.replace(/[^a-zA-Z0-9.\-_]/g, "_")}`;
@@ -100,7 +100,8 @@ export async function POST(request: Request) {
     }
 
     const destinationPath = path.join(targetDir, diskFileName);
-    fs.writeFileSync(destinationPath, buffer);
+    // Fix #4: Use async write — avoids blocking the event loop during file uploads
+    await writeFile(destinationPath, buffer);
 
     const relativeFilePath = folder && folder !== "/" ? path.join(folder, diskFileName) : diskFileName;
 
@@ -129,9 +130,10 @@ export async function POST(request: Request) {
     });
 
     return NextResponse.json({ success: true, file: newFile }, { status: 201 });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Internal Server Error";
     console.error("API POST Drive error:", error);
-    return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
@@ -167,10 +169,16 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: "Forbidden: Access denied" }, { status: 403 });
     }
 
-    // Remove file from disk
-    const diskPath = path.join(UPLOAD_DIR, file.filePath);
-    if (fs.existsSync(diskPath)) {
-      try { fs.unlinkSync(diskPath); } catch (e) { console.error(e); }
+    // Remove file from disk — with path traversal guard
+    const diskPath = path.resolve(path.join(UPLOAD_DIR, file.filePath));
+    if (diskPath.startsWith(UPLOAD_DIR + path.sep) || diskPath === UPLOAD_DIR) {
+      try {
+        await unlink(diskPath);
+      } catch (e) {
+        console.error("Failed to delete file from disk:", e);
+      }
+    } else {
+      console.error(`Path traversal blocked on delete: ${file.filePath}`);
     }
 
     // Remove from DB
@@ -187,8 +195,9 @@ export async function DELETE(request: Request) {
     });
 
     return NextResponse.json({ success: true, message: "File deleted successfully" });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Internal Server Error";
     console.error("API DELETE Drive error:", error);
-    return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

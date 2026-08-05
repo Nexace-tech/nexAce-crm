@@ -12,8 +12,8 @@ export async function GET() {
 
     const okrs = await OKR.find({ tenantId: tenantObjectId }).sort({ deadline: 1 });
     return NextResponse.json({ okrs });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error: unknown) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Internal Server Error" }, { status: 500 });
   }
 }
 
@@ -44,8 +44,8 @@ export async function POST(request: Request) {
     });
 
     return NextResponse.json({ okr, message: "OKR created" }, { status: 201 });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error: unknown) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Internal Server Error" }, { status: 500 });
   }
 }
 
@@ -79,8 +79,8 @@ export async function PUT(request: Request) {
 
     if (!okr) return NextResponse.json({ error: "OKR not found" }, { status: 404 });
     return NextResponse.json({ okr, message: "OKR updated" });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error: unknown) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Internal Server Error" }, { status: 500 });
   }
 }
 
@@ -98,7 +98,7 @@ export async function DELETE(request: Request) {
     await OKR.findOneAndDelete({ _id: okrId, tenantId: tenantObjectId });
 
     return NextResponse.json({ message: "OKR deleted" });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error: unknown) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Internal Server Error" }, { status: 500 });
   }
 }

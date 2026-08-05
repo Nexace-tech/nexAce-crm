@@ -28,9 +28,5 @@ const RolePermissionSchema: Schema = new Schema(
 // Compound unique index so each tenant has 1 permission config per role
 RolePermissionSchema.index({ tenantId: 1, role: 1 }, { unique: true });
 
-if (mongoose.models.RolePermission) {
-  delete mongoose.models.RolePermission;
-}
-
 export const RolePermission: Model<IRolePermission> =
   mongoose.models.RolePermission || mongoose.model<IRolePermission>("RolePermission", RolePermissionSchema);

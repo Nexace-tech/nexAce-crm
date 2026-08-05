@@ -49,8 +49,9 @@ export async function POST(request: Request) {
     // Return the public URL path
     const photoUrl = `/uploads/${safeName}`;
     return NextResponse.json({ success: true, photoUrl });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Internal Server Error";
     console.error("API Profile Photo Upload error:", error);
-    return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

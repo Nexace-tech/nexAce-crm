@@ -23,7 +23,8 @@ export async function sendEmail({ to, subject, text, html }: SendMailOptions) {
         secure: port === 465,
         auth: { user, pass },
         tls: {
-          rejectUnauthorized: false,
+          // Only bypass certificate verification in development; enforce in production
+          rejectUnauthorized: process.env.NODE_ENV === "production",
         },
       });
 
@@ -36,10 +37,11 @@ export async function sendEmail({ to, subject, text, html }: SendMailOptions) {
       });
       console.log(`[SMTP] Live email sent successfully to ${to}`);
       return { success: true, isDev: false };
-    } catch (err: any) {
-      console.error("[SMTP Error] Failed to send email via SMTP:", err.message || err);
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      console.error("[SMTP Error] Failed to send email via SMTP:", errMsg);
       if (isProduction) {
-        throw new Error(`SMTP Email Error: ${err.message || "Failed to send reset email."}`);
+        throw new Error(`SMTP Email Error: ${errMsg}`);
       }
       console.log("[SMTP Fallback] Falling back to simulated dev mail due to SMTP error...");
     }
@@ -70,7 +72,7 @@ export async function sendEmail({ to, subject, text, html }: SendMailOptions) {
     const previewUrl = nodemailer.getTestMessageUrl(info) || "";
     console.log(`[SMTP Dev Mail] Sent to ${to}. Preview: ${previewUrl}`);
     return { success: true, isDev: true, previewUrl };
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("[SMTP Dev Error]", err);
     return { success: true, isDev: true };
   }

@@ -1,30 +1,27 @@
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/session";
+import { requireTenantSession, isAuthError } from "@/lib/auth-guard";
 import { connectToDatabase } from "@/lib/db";
 import { TimeEntry } from "@/models/TimeEntry";
 import { User } from "@/models/User";
 import { HRAppraisal } from "@/models/HRAppraisal";
 import { LeaveRequest } from "@/models/LeaveRequest";
 import { OKR } from "@/models/OKR";
-import mongoose from "mongoose";
 
 export async function GET() {
   try {
-    const session = await getSession();
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const authResult = await requireTenantSession();
+    if (isAuthError(authResult)) return authResult;
 
     await connectToDatabase();
-    const tenantIdObj = new mongoose.Types.ObjectId(session.tenantId);
+    const { tenantObjectId } = authResult;
 
     // Fetch parallel dataset for performance analytics
     const [users, timeEntries, appraisals, leaves, okrs] = await Promise.all([
-      User.find({ tenantId: tenantIdObj }).select("name role department email").lean(),
-      TimeEntry.find({ tenantId: tenantIdObj }).lean(),
-      HRAppraisal.find({ tenantId: tenantIdObj }).lean(),
-      LeaveRequest.find({ tenantId: tenantIdObj }).lean(),
-      OKR.find({ tenantId: tenantIdObj }).lean(),
+      User.find({ tenantId: tenantObjectId }).select("name role department email").lean(),
+      TimeEntry.find({ tenantId: tenantObjectId }).lean(),
+      HRAppraisal.find({ tenantId: tenantObjectId }).lean(),
+      LeaveRequest.find({ tenantId: tenantObjectId }).lean(),
+      OKR.find({ tenantId: tenantObjectId }).lean(),
     ]);
 
     // 1. Employee Time Utilization & Over/Under target calculation
@@ -91,8 +88,9 @@ export async function GET() {
         okrHealthPct,
       },
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Internal Server Error";
     console.error("API GET Analytics performance error:", error);
-    return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

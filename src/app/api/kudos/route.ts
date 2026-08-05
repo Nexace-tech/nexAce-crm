@@ -15,8 +15,8 @@ export async function GET() {
       .limit(50);
 
     return NextResponse.json({ kudos });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error: unknown) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Internal Server Error" }, { status: 500 });
   }
 }
 
@@ -45,7 +45,7 @@ export async function POST(request: Request) {
     });
 
     return NextResponse.json({ kudos, message: "Kudos given!" }, { status: 201 });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error: unknown) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Internal Server Error" }, { status: 500 });
   }
 }

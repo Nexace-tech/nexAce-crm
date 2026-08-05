@@ -2,8 +2,13 @@ import "server-only";
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 
-const secretKey = process.env.SESSION_SECRET || "default_fallback_session_secret_for_compilation_builds_only_do_not_use_in_prod";
-const encodedKey = new TextEncoder().encode(secretKey);
+const rawSecret = process.env.SESSION_SECRET;
+if (!rawSecret) {
+  throw new Error(
+    "SESSION_SECRET environment variable is not set. This is required for secure session management."
+  );
+}
+const encodedKey = new TextEncoder().encode(rawSecret);
 
 export interface SessionPayload {
   userId: string;
@@ -14,8 +19,10 @@ export interface SessionPayload {
   expiresAt: Date;
 }
 
-export async function encrypt(payload: any) {
-  return new SignJWT(payload)
+type EncryptPayload = Omit<SessionPayload, "expiresAt"> & { expiresAt: Date | string };
+
+export async function encrypt(payload: EncryptPayload) {
+  return new SignJWT(payload as Record<string, unknown>)
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime("7d")
@@ -62,15 +69,17 @@ export async function getSession() {
 
 export async function updateSession() {
   const cookieStore = await cookies();
-  const session = cookieStore.get("session")?.value;
-  const payload = await decrypt(session);
+  const sessionToken = cookieStore.get("session")?.value;
+  const payload = await decrypt(sessionToken);
 
-  if (!session || !payload) {
+  if (!sessionToken || !payload) {
     return null;
   }
 
   const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-  cookieStore.set("session", session, {
+  // Re-mint the JWT so both the cookie AND the token expiry are refreshed
+  const newToken = await encrypt({ ...payload, expiresAt: expires });
+  cookieStore.set("session", newToken, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     expires: expires,

@@ -6,3 +6,7 @@ node_modules
 .env.*
 !.env.example
 /v1
+
+# User uploaded files — ignore binaries, track directory structure only
+src/uploads/**
+!src/uploads/.gitkeep

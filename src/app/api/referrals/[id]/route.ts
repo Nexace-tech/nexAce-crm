@@ -37,9 +37,9 @@ export async function PATCH(
     await referral.save();
 
     return NextResponse.json({ referral, message: "Referral updated successfully" });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("API PATCH Referral error:", error);
-    return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: 500 });
+    const _msg = error instanceof Error ? error.message : "Internal Server Error"; return NextResponse.json({ error: _msg }, { status: 500 });
   }
 }
 
@@ -65,8 +65,8 @@ export async function DELETE(
     }
 
     return NextResponse.json({ message: "Referral record deleted successfully" });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("API DELETE Referral error:", error);
-    return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: 500 });
+    const _msg = error instanceof Error ? error.message : "Internal Server Error"; return NextResponse.json({ error: _msg }, { status: 500 });
   }
 }

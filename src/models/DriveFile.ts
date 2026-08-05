@@ -32,6 +32,8 @@ const DriveFileSchema = new Schema<IDriveFile>(
 // Performance indexes for folder navigation & recent file lookups
 DriveFileSchema.index({ tenantId: 1, folder: 1 });
 DriveFileSchema.index({ tenantId: 1, createdAt: -1 });
+// Index for recycle bin queries
+DriveFileSchema.index({ tenantId: 1, isRecycled: 1 });
 
 export const DriveFile: Model<IDriveFile> =
   mongoose.models.DriveFile || mongoose.model<IDriveFile>("DriveFile", DriveFileSchema);

@@ -40,9 +40,10 @@ export async function GET(request: Request) {
       .limit(100);
 
     return NextResponse.json({ messages });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Internal Server Error";
     console.error("API GET ChatMessages error:", error);
-    return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
@@ -83,11 +84,13 @@ export async function POST(request: Request) {
     const { Notification } = await import("@/models/Notification");
 
     if (isDM && recipientId) {
+      const safeContent = content || "";
+      const textSnippet = safeContent ? `"${safeContent.slice(0, 60)}${safeContent.length > 60 ? "..." : ""}"` : "Sent an attachment";
       await Notification.create({
         tenantId: tenantObjectId,
         recipientId,
         title: "New Direct Message",
-        message: `${session.userName}: "${content.slice(0, 60)}${content.length > 60 ? "..." : ""}"`,
+        message: `${session.userName}: ${textSnippet}`,
         type: "chat",
         linkUrl: "/dashboard/chat",
         read: false,
@@ -106,9 +109,10 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json({ message: newMessage }, { status: 201 });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Internal Server Error";
     console.error("API POST ChatMessage error:", error);
-    return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
@@ -177,9 +181,10 @@ export async function PUT(request: Request) {
     await message.save();
 
     return NextResponse.json({ success: true, message });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Internal Server Error";
     console.error("API PUT ChatMessage reaction error:", error);
-    return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
@@ -241,8 +246,9 @@ export async function DELETE(request: Request) {
     }
 
     return NextResponse.json({ success: true, message });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Internal Server Error";
     console.error("API DELETE ChatMessage error:", error);
-    return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

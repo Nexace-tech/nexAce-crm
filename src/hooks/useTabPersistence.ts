@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 
 export function useTabPersistence<T extends string>(
   storageKey: string,
@@ -9,21 +10,21 @@ export function useTabPersistence<T extends string>(
   validTabs: T[]
 ) {
   const searchParams = useSearchParams();
-  const [activeTab, setActiveTab] = useState<T>(defaultTab);
+  const router = useRouter();
 
-  useEffect(() => {
+  // Derive initial tab from URL or localStorage at first render — no effect needed
+  const getInitialTab = (): T => {
     const tabFromUrl = searchParams.get("tab") as T;
-    const tabFromStorage =
-      typeof window !== "undefined"
-        ? (localStorage.getItem(storageKey) as T)
-        : null;
+    if (tabFromUrl && validTabs.includes(tabFromUrl)) return tabFromUrl;
 
-    if (tabFromUrl && validTabs.includes(tabFromUrl)) {
-      setActiveTab(tabFromUrl);
-    } else if (tabFromStorage && validTabs.includes(tabFromStorage)) {
-      setActiveTab(tabFromStorage);
+    if (typeof window !== "undefined") {
+      const tabFromStorage = localStorage.getItem(storageKey) as T;
+      if (tabFromStorage && validTabs.includes(tabFromStorage)) return tabFromStorage;
     }
-  }, [searchParams, storageKey, validTabs]);
+    return defaultTab;
+  };
+
+  const [activeTab, setActiveTab] = useState<T>(getInitialTab);
 
   const handleTabChange = (tab: T) => {
     setActiveTab(tab);
@@ -31,8 +32,8 @@ export function useTabPersistence<T extends string>(
       localStorage.setItem(storageKey, tab);
       const params = new URLSearchParams(window.location.search);
       params.set("tab", tab);
-      const newUrl = `${window.location.pathname}?${params.toString()}`;
-      window.history.replaceState(null, "", newUrl);
+      // Use router.replace to keep URL in sync without a full navigation
+      router.replace(`${window.location.pathname}?${params.toString()}`, { scroll: false });
     }
   };
 

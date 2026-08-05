@@ -72,10 +72,5 @@ const ChatMessageSchema = new Schema<IChatMessage>(
 // Performance index for message feed retrieval
 ChatMessageSchema.index({ tenantId: 1, channel: 1, createdAt: 1 });
 
-// Force schema re-registration in Next.js HMR — prevents stale cached models
-if (mongoose.models.ChatMessage) {
-  delete mongoose.models.ChatMessage;
-}
-
 export const ChatMessage: Model<IChatMessage> =
-  mongoose.model<IChatMessage>("ChatMessage", ChatMessageSchema);
+  mongoose.models.ChatMessage || mongoose.model<IChatMessage>("ChatMessage", ChatMessageSchema);

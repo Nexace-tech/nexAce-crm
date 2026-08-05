@@ -32,7 +32,7 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: "Forbidden: Timesheet approval permission required" }, { status: 403 });
       }
 
-      let query: any = {
+      const query: Record<string, unknown> = {
         tenantId: new mongoose.Types.ObjectId(session.tenantId),
         status: "Pending",
       };
@@ -61,7 +61,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ entries: pendingEntries });
     }
 
-    const query: any = {
+    const query: Record<string, unknown> = {
       tenantId: new mongoose.Types.ObjectId(session.tenantId),
     };
 
@@ -90,9 +90,10 @@ export async function GET(request: Request) {
       .sort({ date: -1 });
 
     return NextResponse.json({ entries });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Internal Server Error";
     console.error("API GET Timesheets error:", error);
-    return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
@@ -112,14 +113,20 @@ export async function POST(request: Request) {
     await connectToDatabase();
 
     if (Array.isArray(body)) {
-      // Batch log/submit
-      // Batch log/submit with upsert to prevent duplicates
-      const bulkOps = body.map((entry: any) => ({
+      // Validate BEFORE building bulkOps to prevent partial writes of invalid entries
+      for (const e of body) {
+        if (!e.project || !e.date || isNaN(Number(e.hours)) || Number(e.hours) <= 0) {
+          return NextResponse.json({ error: "Each entry requires project, date, and hours > 0" }, { status: 400 });
+        }
+      }
+
+      // Batch upsert to prevent duplicate entries for the same date/project/task
+      const bulkOps: mongoose.mongo.AnyBulkWriteOperation<any>[] = body.map((entry: Record<string, unknown>) => ({
         updateOne: {
           filter: {
             userId: new mongoose.Types.ObjectId(session.userId),
             tenantId: new mongoose.Types.ObjectId(session.tenantId),
-            date: new Date(entry.date),
+            date: new Date(entry.date as string),
             project: entry.project,
             taskName: entry.taskName || "General Tasks",
           },
@@ -127,28 +134,21 @@ export async function POST(request: Request) {
             $set: {
               hours: Number(entry.hours),
               isBillable: entry.isBillable !== false,
-              status: entry.status || "Draft",
+              status: (entry.status as "Draft" | "Pending" | "Approved" | "Rejected") || "Draft",
             }
           },
           upsert: true
         }
       }));
 
-      // Basic validation
-      for (const e of body) {
-        if (!e.project || isNaN(Number(e.hours)) || !e.date) {
-          return NextResponse.json({ error: "Invalid timesheet entry payload fields" }, { status: 400 });
-        }
-      }
-
-      const result = await TimeEntry.bulkWrite(bulkOps);
+      const result = await TimeEntry.bulkWrite(bulkOps as any);
       return NextResponse.json({ success: true, count: result.upsertedCount + result.modifiedCount });
     } else {
       // Single entry log/submit
       const { project, taskName, hours, date, isBillable, status } = body;
 
-      if (!project || !taskName || !hours || !date) {
-        return NextResponse.json({ error: "Project, taskName, hours, and date are required" }, { status: 400 });
+      if (!project || !taskName || !hours || !date || Number(hours) <= 0) {
+        return NextResponse.json({ error: "Project, taskName, hours (> 0), and date are required" }, { status: 400 });
       }
 
       const newEntry = await TimeEntry.create({
@@ -164,9 +164,10 @@ export async function POST(request: Request) {
 
       return NextResponse.json({ success: true, entry: newEntry }, { status: 201 });
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Internal Server Error";
     console.error("API POST Timesheets error:", error);
-    return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
@@ -234,8 +235,9 @@ export async function PUT(request: Request) {
     );
 
     return NextResponse.json({ success: true, modifiedCount: result.modifiedCount });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Internal Server Error";
     console.error("API PUT Timesheets error:", error);
-    return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

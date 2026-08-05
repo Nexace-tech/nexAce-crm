@@ -28,7 +28,7 @@ export async function GET(req: Request) {
       .lean();
 
     return NextResponse.json({ users });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("GET /api/hr/directory error:", error);
     return NextResponse.json({ error: "Failed to fetch directory" }, { status: 500 });
   }

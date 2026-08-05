@@ -18,15 +18,15 @@ function ForgotPasswordForm() {
   const [resetState, resetAction, isResetPending] = useActionState(resetPasswordAction, undefined);
   const [showPassword, setShowPassword] = useState(false);
   const [newPasswordVal, setNewPasswordVal] = useState("");
-  const [codeVal, setCodeVal] = useState(urlCode || resetState?.enteredCode || "");
+  const derivedCode = resetState?.enteredCode || urlCode || "";
+  const [codeVal, setCodeVal] = useState(derivedCode);
+  const [prevDerivedCode, setPrevDerivedCode] = useState(derivedCode);
 
-  React.useEffect(() => {
-    if (resetState?.enteredCode) {
-      setCodeVal(resetState.enteredCode);
-    } else if (urlCode) {
-      setCodeVal(urlCode);
-    }
-  }, [resetState?.enteredCode, urlCode]);
+  // Sync state if derived props change without triggering cascading render warning
+  if (derivedCode !== prevDerivedCode) {
+    setPrevDerivedCode(derivedCode);
+    setCodeVal(derivedCode);
+  }
 
   const isResetStep = Boolean(urlCode && urlEmail) || requestState?.step === "reset" || resetState?.step === "reset";
   const isCompletedStep = resetState?.step === "completed";

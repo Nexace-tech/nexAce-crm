@@ -28,9 +28,10 @@ export async function GET() {
     });
 
     return NextResponse.json({ notifications, unreadCount });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Internal Server Error";
     console.error("API GET Notifications error:", error);
-    return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
@@ -42,7 +43,7 @@ export async function POST(request: Request) {
     const authResult = await requireTenantSession();
     if (isAuthError(authResult)) return authResult;
 
-    const { tenantObjectId, userObjectId } = authResult;
+    const { tenantObjectId, userObjectId, session } = authResult;
     const body = await request.json();
     const { recipientId, title, message, type, linkUrl, broadcast } = body;
 
@@ -71,8 +72,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: `Broadcast sent to ${docs.length} team members` }, { status: 201 });
     }
 
+    // Restrict specifying custom recipientId to Admin role only to prevent unauthorized user notifications
+    const targetRecipientId = (session.role === "Admin" && recipientId) ? recipientId : userObjectId;
+
     const newNotification = await Notification.create({
-      recipientId: recipientId || userObjectId,
+      recipientId: targetRecipientId,
       title: title.trim(),
       message: message.trim(),
       type: type || "system",
@@ -82,9 +86,10 @@ export async function POST(request: Request) {
     });
 
     return NextResponse.json({ notification: newNotification }, { status: 201 });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Internal Server Error";
     console.error("API POST Notification error:", error);
-    return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
@@ -119,9 +124,10 @@ export async function PATCH(request: Request) {
     }
 
     return NextResponse.json({ error: "Invalid request payload" }, { status: 400 });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Internal Server Error";
     console.error("API PATCH Notification error:", error);
-    return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
@@ -151,8 +157,9 @@ export async function DELETE(request: Request) {
     }
 
     return NextResponse.json({ error: "Notification ID or clearAll required" }, { status: 400 });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Internal Server Error";
     console.error("API DELETE Notification error:", error);
-    return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

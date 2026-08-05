@@ -63,9 +63,9 @@ export async function PUT(request: Request, { params }: RouteParams) {
     await department.save();
 
     return NextResponse.json({ success: true, department });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("API PUT Department error:", error);
-    return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: 500 });
+    const _msg = error instanceof Error ? error.message : "Internal Server Error"; return NextResponse.json({ error: _msg }, { status: 500 });
   }
 }
 
@@ -104,8 +104,8 @@ export async function DELETE(request: Request, { params }: RouteParams) {
     await department.deleteOne();
 
     return NextResponse.json({ success: true, message: `Department '${deptName}' deleted successfully` });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("API DELETE Department error:", error);
-    return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: 500 });
+    const _msg = error instanceof Error ? error.message : "Internal Server Error"; return NextResponse.json({ error: _msg }, { status: 500 });
   }
 }

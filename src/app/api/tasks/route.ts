@@ -104,9 +104,10 @@ export async function GET(request: Request) {
       .sort({ createdAt: 1 });
 
     return NextResponse.json({ tasks });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Internal Server Error";
     console.error("API GET Tasks error:", error);
-    return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: 500 });
+    const _msg = error instanceof Error ? error.message : "Internal Server Error"; return NextResponse.json({ error: _msg }, { status: 500 });
   }
 }
 
@@ -179,9 +180,10 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json({ success: true, task: newTask }, { status: 201 });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Internal Server Error";
     console.error("API POST Tasks error:", error);
-    return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: 500 });
+    const _msg = error instanceof Error ? error.message : "Internal Server Error"; return NextResponse.json({ error: _msg }, { status: 500 });
   }
 }
 
@@ -295,15 +297,14 @@ export async function PUT(request: Request) {
       });
     }
 
-    await task.save();
-
     // Populate assignee details before returning
     const updatedTask = await Task.findById(taskId).populate("assignee", "name role photoUrl");
 
     return NextResponse.json({ success: true, task: updatedTask });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Internal Server Error";
     console.error("API PUT Tasks error:", error);
-    return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: 500 });
+    const _msg = error instanceof Error ? error.message : "Internal Server Error"; return NextResponse.json({ error: _msg }, { status: 500 });
   }
 }
 
@@ -335,9 +336,10 @@ export async function DELETE(request: Request) {
     await task.deleteOne();
 
     return NextResponse.json({ success: true, message: "Task deleted successfully" });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Internal Server Error";
     console.error("API DELETE Tasks error:", error);
-    return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: 500 });
+    const _msg = error instanceof Error ? error.message : "Internal Server Error"; return NextResponse.json({ error: _msg }, { status: 500 });
   }
 }
 

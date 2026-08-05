@@ -17,9 +17,10 @@ export async function GET() {
     const referrals = await Referral.find({ tenantId: tenantObjectId }).sort({ createdAt: -1 });
 
     return NextResponse.json({ referrals });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Internal Server Error";
     console.error("API GET Referrals error:", error);
-    return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
@@ -49,7 +50,9 @@ export async function POST(request: Request) {
       .replace(/[^a-zA-Z]/g, "")
       .toUpperCase()
       .slice(0, 6) || "REF";
-    const randomNum = Math.floor(1000 + Math.random() * 9000);
+    const randArr = new Uint32Array(1);
+    crypto.getRandomValues(randArr);
+    const randomNum = 1000 + (randArr[0] % 9000);
     const generatedReferralCode = `${nameSlug}-${randomNum}`;
 
     const newReferral = await Referral.create({
@@ -68,8 +71,9 @@ export async function POST(request: Request) {
     });
 
     return NextResponse.json({ referral: newReferral, message: "Referral submitted successfully" }, { status: 201 });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Internal Server Error";
     console.error("API POST Referral error:", error);
-    return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

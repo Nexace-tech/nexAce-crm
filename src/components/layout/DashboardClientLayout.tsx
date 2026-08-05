@@ -44,20 +44,6 @@ const hrefToModuleKeyMap: Record<string, string> = {
   "/dashboard/settings": "settings",
 };
 
-// Map menu names to FontAwesome icons or use item.icon directly
-const fontAwesomeIconMap: Record<string, string> = {
-  "Overview": "fa-solid fa-chart-simple",
-  "My Team": "fa-solid fa-users",
-  "Calendar & Timesheets": "fa-solid fa-calendar-days",
-  "Projects & Drive": "fa-solid fa-folder-tree",
-  "Chat & Mail": "fa-solid fa-comments",
-  "HR Portal": "fa-solid fa-briefcase",
-  "Goals & OKRs": "fa-solid fa-bullseye",
-  "Analytics Logs": "fa-solid fa-chart-line",
-  "CRM Retainers": "fa-solid fa-handshake",
-  "Referral Pipeline": "fa-solid fa-link",
-  "Settings & Security": "fa-solid fa-gear",
-};
 
 export function DashboardClientLayout({ session, menuItems, children }: DashboardClientLayoutProps) {
   const { user } = useAuthContext();
@@ -151,7 +137,7 @@ export function DashboardClientLayout({ session, menuItems, children }: Dashboar
             })
             .map((item) => {
               const isActive = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href));
-              const iconClass = fontAwesomeIconMap[item.name] || item.icon || "fa-solid fa-layer-group";
+              const iconClass = item.icon || "fa-solid fa-layer-group";
 
               return (
                 <Link

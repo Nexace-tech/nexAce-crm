@@ -21,7 +21,7 @@ export async function GET(req: Request) {
 
     const docs = await HRDocument.find(query).sort({ createdAt: -1 }).lean();
     return NextResponse.json({ documents: docs });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("GET /api/hr/documents error:", error);
     return NextResponse.json({ error: "Failed to fetch documents" }, { status: 500 });
   }
@@ -54,7 +54,7 @@ export async function POST(req: Request) {
     });
 
     return NextResponse.json({ document: doc }, { status: 201 });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("POST /api/hr/documents error:", error);
     return NextResponse.json({ error: "Failed to upload document record" }, { status: 500 });
   }

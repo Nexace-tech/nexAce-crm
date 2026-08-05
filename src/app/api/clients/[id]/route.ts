@@ -30,8 +30,8 @@ export async function GET(
     }
 
     return NextResponse.json({ client });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message || "Server Error" }, { status: 500 });
+  } catch (error: unknown) {
+    return NextResponse.json({ error: (error instanceof Error ? error.message : "Internal Server Error") || "Server Error" }, { status: 500 });
   }
 }
 
@@ -94,8 +94,8 @@ export async function PATCH(
     await client.save();
 
     return NextResponse.json({ success: true, client });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message || "Server Error" }, { status: 500 });
+  } catch (error: unknown) {
+    return NextResponse.json({ error: (error instanceof Error ? error.message : "Internal Server Error") || "Server Error" }, { status: 500 });
   }
 }
 
@@ -125,7 +125,7 @@ export async function DELETE(
     }
 
     return NextResponse.json({ success: true, message: "Client deleted successfully" });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message || "Server Error" }, { status: 500 });
+  } catch (error: unknown) {
+    return NextResponse.json({ error: (error instanceof Error ? error.message : "Internal Server Error") || "Server Error" }, { status: 500 });
   }
 }

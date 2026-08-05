@@ -24,9 +24,10 @@ export async function GET() {
       : DEFAULT_EXTENSIONS;
 
     return NextResponse.json({ allowedExtensions });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Internal Server Error";
     console.error("API GET Allowed Files error:", error);
-    return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
@@ -73,8 +74,9 @@ export async function PUT(request: Request) {
       allowedExtensions: tenant?.allowedExtensions || cleanedExtensions,
       message: "File type restrictions updated successfully!",
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Internal Server Error";
     console.error("API PUT Allowed Files error:", error);
-    return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

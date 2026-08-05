@@ -18,8 +18,8 @@ export async function GET() {
 
     const leaves = await LeaveRequest.find(filter).sort({ createdAt: -1 });
     return NextResponse.json({ leaves });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error: unknown) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Internal Server Error" }, { status: 500 });
   }
 }
 
@@ -31,6 +31,9 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { type, startDate, endDate, reason } = body;
 
+    const validTypes = ["Casual", "Sick", "Maternity", "Paternity", "Unpaid", "Annual"];
+    const leaveType = validTypes.includes(type) ? type : "Casual";
+
     if (!startDate || !endDate || !reason) {
       return NextResponse.json({ error: "Start date, end date, and reason are required" }, { status: 400 });
     }
@@ -40,7 +43,7 @@ export async function POST(request: Request) {
     const leave = await LeaveRequest.create({
       userId: userObjectId,
       userName: session.userName,
-      type: type || "Casual",
+      type: leaveType,
       startDate: new Date(startDate),
       endDate: new Date(endDate),
       reason,
@@ -72,8 +75,8 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json({ leave, message: "Leave request submitted" }, { status: 201 });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error: unknown) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Internal Server Error" }, { status: 500 });
   }
 }
 
@@ -115,7 +118,7 @@ export async function PUT(request: Request) {
     }
 
     return NextResponse.json({ leave, message: `Leave ${status.toLowerCase()}` });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error: unknown) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Internal Server Error" }, { status: 500 });
   }
 }

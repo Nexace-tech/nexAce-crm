@@ -31,8 +31,11 @@ const AttendanceSchema = new Schema<IAttendance>(
   { timestamps: true }
 );
 
-// Compounded index to prevent duplicate daily checkins for the same user
+// Prevent duplicate daily check-ins for the same user
 AttendanceSchema.index({ userId: 1, date: 1 }, { unique: true });
+// Performance indexes for tenant-scoped dashboard and timesheet queries
+AttendanceSchema.index({ tenantId: 1, date: -1 });
+AttendanceSchema.index({ tenantId: 1, userId: 1, date: -1 });
 
 export const Attendance: Model<IAttendance> =
   mongoose.models.Attendance || mongoose.model<IAttendance>("Attendance", AttendanceSchema);

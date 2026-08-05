@@ -17,8 +17,8 @@ export async function GET() {
 
     const cases = await HRCase.find(filter).sort({ createdAt: -1 });
     return NextResponse.json({ cases });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error: unknown) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Internal Server Error" }, { status: 500 });
   }
 }
 
@@ -49,8 +49,8 @@ export async function POST(request: Request) {
     });
 
     return NextResponse.json({ case: hrCase, message: "HR case created" }, { status: 201 });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error: unknown) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Internal Server Error" }, { status: 500 });
   }
 }
 
@@ -100,7 +100,7 @@ export async function PUT(request: Request) {
     if (!hrCase) return NextResponse.json({ error: "Case not found" }, { status: 404 });
 
     return NextResponse.json({ case: hrCase, message: "Case updated" });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error: unknown) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Internal Server Error" }, { status: 500 });
   }
 }

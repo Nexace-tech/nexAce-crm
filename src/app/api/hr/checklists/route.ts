@@ -22,7 +22,7 @@ export async function GET(req: Request) {
 
     const checklists = await HROnboarding.find(query).sort({ createdAt: -1 }).lean();
     return NextResponse.json({ checklists });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("GET /api/hr/checklists error:", error);
     return NextResponse.json({ error: "Failed to fetch checklists" }, { status: 500 });
   }
@@ -70,7 +70,7 @@ export async function POST(req: Request) {
     });
 
     return NextResponse.json({ checklist }, { status: 201 });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("POST /api/hr/checklists error:", error);
     return NextResponse.json({ error: "Failed to create checklist" }, { status: 500 });
   }
@@ -113,7 +113,7 @@ export async function PUT(req: Request) {
 
     await checklist.save();
     return NextResponse.json({ checklist });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("PUT /api/hr/checklists error:", error);
     return NextResponse.json({ error: "Failed to update checklist item" }, { status: 500 });
   }

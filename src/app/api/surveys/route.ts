@@ -66,9 +66,10 @@ export async function GET() {
     });
 
     return NextResponse.json({ surveys: formattedSurveys });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Internal Server Error";
     console.error("API GET PulseSurveys error:", error);
-    return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
@@ -140,8 +141,9 @@ export async function POST(request: Request) {
 
     await survey.save();
     return NextResponse.json({ success: true, message: "Response recorded! Thank you for your feedback." });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Internal Server Error";
     console.error("API POST PulseSurveys error:", error);
-    return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

@@ -45,41 +45,44 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // check the session is valid or not
   // if not valid redirect to the login page
   // if valid set the user
-  const fetchUser = useCallback(async (retried = false) => {
-    try {
-      const response = await fetch("/api/auth/me", { cache: "no-store" });
-      if (response.ok) {
-        const data = await response.json();
-        if (data.user) {
-          setUser(data.user);
-          return;
+  const fetchUser = useCallback(async () => {
+    const executeFetch = async (retried = false): Promise<void> => {
+      try {
+        const response = await fetch("/api/auth/me", { cache: "no-store" });
+        if (response.ok) {
+          const data = await response.json();
+          if (data.user) {
+            setUser(data.user);
+            return;
+          }
         }
-      }
 
-      // If DB is waking up or temporary glitch, retry once after 800ms before treating as unauthenticated
-      if (!retried) {
-        await new Promise((resolve) => setTimeout(resolve, 800));
-        return await fetchUser(true);
-      }
+        if (!retried) {
+          await new Promise((resolve) => setTimeout(resolve, 800));
+          return await executeFetch(true);
+        }
 
-      setUser(null);
-      if (typeof window !== "undefined" && window.location.pathname.startsWith("/dashboard")) {
-        window.location.href = "/login";
+        setUser(null);
+        if (typeof window !== "undefined" && window.location.pathname.startsWith("/dashboard")) {
+          router.push("/login");
+        }
+      } catch (error) {
+        console.error("Error fetching user session:", error);
+        if (!retried) {
+          await new Promise((resolve) => setTimeout(resolve, 800));
+          return await executeFetch(true);
+        }
+        setUser(null);
+        if (typeof window !== "undefined" && window.location.pathname.startsWith("/dashboard")) {
+          router.push("/login");
+        }
+      } finally {
+        setLoading(false);
       }
-    } catch (error) {
-      console.error("Error fetching user session:", error);
-      if (!retried) {
-        await new Promise((resolve) => setTimeout(resolve, 800));
-        return await fetchUser(true);
-      }
-      setUser(null);
-      if (typeof window !== "undefined" && window.location.pathname.startsWith("/dashboard")) {
-        window.location.href = "/login";
-      }
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+    };
+
+    await executeFetch();
+  }, [router]);
 
   useEffect(() => {
     fetchUser();
