@@ -32,7 +32,7 @@ export async function GET() {
       OKR.find({ tenantId: tenantObjectId }).select("title description progress category targetDate").sort({ createdAt: -1 }).lean(),
       ActivityLog.find({ tenantId: tenantObjectId }).select("userName action details createdAt").sort({ createdAt: -1 }).limit(15).lean(),
       CalendarEvent.find({ tenantId: tenantObjectId }).select("title start end category type").sort({ start: 1 }).limit(20).lean(),
-      Notification.find({ userId: session.userId }).select("title message type read createdAt").sort({ createdAt: -1 }).limit(15).lean(),
+      Notification.find({ recipientId: session.userId, tenantId: tenantObjectId }).select("title message type read createdAt").sort({ createdAt: -1 }).limit(15).lean(),
     ]);
 
     return NextResponse.json(

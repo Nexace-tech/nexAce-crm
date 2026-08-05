@@ -65,7 +65,7 @@ export async function POST(request: Request) {
           tenantId: tenantObjectId,
           recipientId: mgr._id,
           title: "New Leave Request",
-          message: `${session.userName} submitted a ${type || "Casual"} Leave request (${new Date(startDate).toLocaleDateString()} - ${new Date(endDate).toLocaleDateString()}).`,
+          message: `${session.userName} submitted a ${leaveType} Leave request (${new Date(startDate).toLocaleDateString()} - ${new Date(endDate).toLocaleDateString()}).`,
           type: "system",
           linkUrl: "/dashboard/hr",
         });

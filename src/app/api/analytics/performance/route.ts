@@ -15,12 +15,16 @@ export async function GET() {
     await connectToDatabase();
     const { tenantObjectId } = authResult;
 
+    // Scope analytics to a rolling 4-week window to prevent full-table scans on tenants with large history
+    const fourWeeksAgo = new Date();
+    fourWeeksAgo.setDate(fourWeeksAgo.getDate() - 28);
+
     // Fetch parallel dataset for performance analytics
     const [users, timeEntries, appraisals, leaves, okrs] = await Promise.all([
       User.find({ tenantId: tenantObjectId }).select("name role department email").lean(),
-      TimeEntry.find({ tenantId: tenantObjectId }).lean(),
+      TimeEntry.find({ tenantId: tenantObjectId, date: { $gte: fourWeeksAgo } }).lean(),
       HRAppraisal.find({ tenantId: tenantObjectId }).lean(),
-      LeaveRequest.find({ tenantId: tenantObjectId }).lean(),
+      LeaveRequest.find({ tenantId: tenantObjectId, createdAt: { $gte: fourWeeksAgo } }).lean(),
       OKR.find({ tenantId: tenantObjectId }).lean(),
     ]);
 

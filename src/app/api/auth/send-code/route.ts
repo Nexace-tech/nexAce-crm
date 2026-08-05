@@ -77,7 +77,7 @@ export async function POST(req: NextRequest) {
 
     // Retrieve SMTP configs
     const host = process.env.SMTP_HOST;
-    const port = parseInt(process.env.SMTP_PORT || "587");
+    const port = parseInt(process.env.SMTP_PORT || "587", 10);
     const user = process.env.SMTP_USER;
     const pass = process.env.SMTP_PASS;
     const from = process.env.SMTP_FROM || user || "NexAce CRM <noreply@nexace.com>";
@@ -127,8 +127,8 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "Email verification service is currently misconfigured. Please contact support." }, { status: 500 });
       }
 
-      // 2. Fallback to programmatically created Ethereal Email account (developer mock) in non-production only
-      console.log("[SMTP] SMTP credentials not fully configured. Creating a simulated test account...");
+      // Fallback to programmatically created Ethereal Email account (developer mock) in non-production only
+      console.log("[SMTP DEV] SMTP credentials not fully configured. Creating a simulated test account...");
       const testAccount = await nodemailer.createTestAccount();
       
       transporter = nodemailer.createTransport({
@@ -165,8 +165,8 @@ export async function POST(req: NextRequest) {
       });
 
       previewUrl = nodemailer.getTestMessageUrl(info) || "";
-      console.log(`[SMTP] Developer Ethereal Email Sent! Code: ${code}`);
-      console.log(`[SMTP] Preview URL: ${previewUrl}`);
+      // Intentionally NOT logging the code value to prevent OTP exposure in server logs
+      console.log(`[SMTP DEV] Developer Ethereal Email Sent! Preview URL: ${previewUrl}`);
     }
 
     return NextResponse.json({ 

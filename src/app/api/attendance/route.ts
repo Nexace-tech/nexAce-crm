@@ -54,7 +54,9 @@ export async function GET(request: Request) {
       .sort({ date: -1, clockIn: -1 });
 
     if (limitParam !== "all") {
-      historyQuery = historyQuery.limit(limitParam ? parseInt(limitParam) : 50);
+      const parsedLimit = parseInt(limitParam ?? "50", 10);
+      const safeLimit = !isNaN(parsedLimit) && parsedLimit > 0 ? Math.min(parsedLimit, 500) : 50;
+      historyQuery = historyQuery.limit(safeLimit);
     }
 
     const history = await historyQuery.lean();
