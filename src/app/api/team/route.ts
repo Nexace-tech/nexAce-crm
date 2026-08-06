@@ -3,6 +3,7 @@ import { getSession } from "@/lib/session";
 import { connectToDatabase } from "@/lib/db";
 import { User } from "@/models/User";
 import { Attendance } from "@/models/Attendance";
+import { Notification } from "@/models/Notification";
 import { getUserDataScope } from "@/lib/dataScope";
 import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
@@ -206,6 +207,27 @@ export async function POST(request: Request) {
         createdUsers.push(newUser);
       }
 
+      // Notify HR + Admin users about bulk employee addition
+      if (createdUsers.length > 0) {
+        const notifyRoles = await User.find({
+          tenantId: tenantObjectId,
+          role: { $in: ["Admin", "HR"] },
+          status: "Active",
+        }).select("_id");
+
+        const addedNames = createdUsers.map((u: any) => u.name).join(", ");
+        const notifDocs = notifyRoles.map((r: any) => ({
+          tenantId: tenantObjectId,
+          recipientId: r._id,
+          title: `${createdUsers.length} New Employee(s) Added`,
+          message: `${session.userName} added ${createdUsers.length} new employee(s): ${addedNames}.`,
+          type: "system",
+          linkUrl: "/dashboard/team",
+          read: false,
+        }));
+        if (notifDocs.length > 0) await Notification.insertMany(notifDocs);
+      }
+
       return NextResponse.json({
         success: true,
         count: createdUsers.length,
@@ -245,6 +267,24 @@ export async function POST(request: Request) {
       photoUrl: photoUrl || "",
       status: "Active"
     });
+
+    // Notify HR + Admin users about new employee
+    const notifyRoles = await User.find({
+      tenantId: tenantObjectId,
+      role: { $in: ["Admin", "HR"] },
+      status: "Active",
+    }).select("_id");
+
+    const notifDocs = notifyRoles.map((r: any) => ({
+      tenantId: tenantObjectId,
+      recipientId: r._id,
+      title: "New Employee Added",
+      message: `${session.userName} added a new employee: ${name.trim()} (${role || "Employee"}).`,
+      type: "system",
+      linkUrl: "/dashboard/team",
+      read: false,
+    }));
+    if (notifDocs.length > 0) await Notification.insertMany(notifDocs);
 
     return NextResponse.json({ success: true, user: newUser }, { status: 201 });
   } catch (error: unknown) {

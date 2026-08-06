@@ -105,7 +105,7 @@ export default function TeamDashboardPage() {
 
   // Pagination state for Team Directory
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 8;
+  const [itemsPerPage, setItemsPerPage] = useState(8);
 
   // Add Single Employee Form States
   const [showAddForm, setShowAddForm] = useState(false);
@@ -670,6 +670,43 @@ export default function TeamDashboardPage() {
     });
   }, [users, currentUser?._id]);
 
+  const filteredUsers = useMemo(() => {
+    return users.filter((m) => {
+      const matchesDept = departmentFilter === "All" || m.department === departmentFilter || (m.departments && m.departments.includes(departmentFilter));
+      const query = searchQuery.toLowerCase().trim();
+      const matchesQuery = !query ||
+        m.name?.toLowerCase().includes(query) ||
+        m.email?.toLowerCase().includes(query) ||
+        m.role?.toLowerCase().includes(query) ||
+        m.phone?.includes(query) ||
+        (m.skills && m.skills.some((s: string) => s.toLowerCase().includes(query)));
+      return matchesDept && matchesQuery;
+    });
+  }, [users, departmentFilter, searchQuery]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredUsers.length / itemsPerPage));
+
+  const paginatedUsers = useMemo(() => {
+    const start = (currentPage - 1) * itemsPerPage;
+    return filteredUsers.slice(start, start + itemsPerPage);
+  }, [filteredUsers, currentPage, itemsPerPage]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, departmentFilter, itemsPerPage]);
+
+  // Auto-set reporting manager to first HR when adding an Employee
+  useEffect(() => {
+    if (addRole === "Employee") {
+      const firstHR = users.find((u) => u.role === "HR");
+      if (firstHR) {
+        setAddManagerId(firstHR._id);
+      }
+    } else {
+      setAddManagerId("");
+    }
+  }, [addRole, users]);
+
   if (!mounted || authLoading || permLoading || (currentUser && !canAccessModule("team"))) {
     return <Preloader label="Loading Team Directory & Hierarchy..." />;
   }
@@ -748,7 +785,7 @@ export default function TeamDashboardPage() {
               : "border-transparent text-muted-foreground hover:text-foreground"
           )}
         >
-          <i className="fa-solid fa-users" /> Directory ({users.length})
+          <i className="fa-solid fa-users" /> Directory ({filteredUsers.length})
         </button>
 
         <button
@@ -844,11 +881,11 @@ export default function TeamDashboardPage() {
           {/* User Cards Grid or Table */}
           {loading ? (
             <div className="py-12 text-center text-muted-foreground text-sm">Loading team members...</div>
-          ) : users.length === 0 ? (
+          ) : filteredUsers.length === 0 ? (
             <div className="py-12 text-center text-muted-foreground text-sm">No team members match your filter.</div>
           ) : viewMode === "grid" ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-              {users.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map((member) => {
+              {paginatedUsers.map((member) => {
                 const initials = member.name
                   .split(" ")
                   .map((n: string) => n[0])
@@ -1031,7 +1068,7 @@ export default function TeamDashboardPage() {
                         <th className="p-4 w-10">
                           <input
                             type="checkbox"
-                            checked={selectedUserIds.length === users.length && users.length > 0}
+                            checked={selectedUserIds.length === filteredUsers.length && filteredUsers.length > 0}
                             onChange={toggleSelectAllUsers}
                             className="rounded border-border text-primary focus:ring-primary"
                           />
@@ -1047,7 +1084,7 @@ export default function TeamDashboardPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
-                    {users.map((member) => {
+                    {paginatedUsers.map((member) => {
                       const initials = member.name
                         .split(" ")
                         .map((n: string) => n[0])
@@ -1168,6 +1205,34 @@ export default function TeamDashboardPage() {
                 </table>
               </div>
             </Card>
+          )}
+
+          {/* Directory Pagination Controls */}
+          {filteredUsers.length > 0 && (
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t border-border/60">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <span>Cards per page:</span>
+                <select
+                  value={itemsPerPage}
+                  onChange={(e) => setItemsPerPage(Number(e.target.value))}
+                  className="h-8 px-2 bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-1 focus:ring-primary text-xs cursor-pointer"
+                >
+                  <option value={8}>8 cards</option>
+                  <option value={12}>12 cards</option>
+                  <option value={16}>16 cards</option>
+                  <option value={24}>24 cards</option>
+                  <option value={50}>50 cards</option>
+                </select>
+              </div>
+
+              <Pagination
+                currentPage={currentPage}
+                totalPages={totalPages}
+                onPageChange={setCurrentPage}
+                totalItems={filteredUsers.length}
+                itemsPerPage={itemsPerPage}
+              />
+            </div>
           )}
         </div>
       )}
@@ -1728,6 +1793,11 @@ export default function TeamDashboardPage() {
                     className="w-full h-9 px-3 text-sm bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
                   >
                     <option value="">None (Reports to CEO)</option>
+                    {users.filter((u) => u.role === "HR").map((u) => (
+                      <option key={u._id} value={u._id}>
+                        {u.name} (HR)
+                      </option>
+                    ))}
                     {users.filter((u) => u.role === "Manager").map((u) => (
                       <option key={u._id} value={u._id}>
                         {u.name} (Manager)

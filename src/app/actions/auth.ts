@@ -158,10 +158,13 @@ export async function registerAction(state: FormState | undefined, formData: For
       tenantId: tenant._id,
     });
 
-    // Notify existing tenant admins about new registration
+    // Notify existing tenant Admins AND HR users about new registration
     const tenantAdmins = await User.find({ tenantId: tenant._id, role: "Admin", status: "Active" });
-    if (tenantAdmins.length > 0) {
-      const notifDocs = tenantAdmins.map((a) => ({
+    const tenantHRs = await User.find({ tenantId: tenant._id, role: "HR", status: "Active" });
+    const notifyRecipients = [...tenantAdmins, ...tenantHRs];
+
+    if (notifyRecipients.length > 0) {
+      const notifDocs = notifyRecipients.map((a) => ({
         tenantId: tenant._id,
         recipientId: a._id,
         title: "New Employee Account Pending Approval",
@@ -173,10 +176,10 @@ export async function registerAction(state: FormState | undefined, formData: For
       await Notification.insertMany(notifDocs);
 
       const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000";
-      for (const adminUser of tenantAdmins) {
+      for (const recipient of notifyRecipients) {
         try {
           await sendEmail({
-            to: adminUser.email,
+            to: recipient.email,
             subject: `[NexAce CRM] New Employee Approval Request: ${adminName}`,
             text: `New account awaiting approval: ${adminName} (@${usernameRaw}, ${adminEmail}). Please review and approve in your dashboard.`,
             html: `
@@ -191,15 +194,15 @@ export async function registerAction(state: FormState | undefined, formData: For
                   <p style="margin: 4px 0; font-size: 14px; color: #1e293b;"><strong>Email:</strong> ${adminEmail}</p>
                   <p style="margin: 4px 0; font-size: 14px; color: #d97706;"><strong>Status:</strong> Pending Approval</p>
                 </div>
-                <p style="color: #475569; font-size: 14px;">Please sign in to your admin dashboard to approve or manage this account.</p>
+                <p style="color: #475569; font-size: 14px;">Please sign in to your dashboard to approve or manage this account.</p>
                 <div style="margin-top: 24px;">
-                  <a href="${appUrl}/dashboard/team" style="display: inline-block; padding: 10px 20px; background-color: #2563eb; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 14px;">Review & Approve Employee</a>
+                  <a href="${appUrl}/dashboard/team" style="display: inline-block; padding: 10px 20px; background-color: #2563eb; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 14px;">Review &amp; Approve Employee</a>
                 </div>
               </div>
             `
           });
         } catch (mailErr) {
-          console.error("Failed to send admin approval email:", mailErr);
+          console.error("Failed to send approval email:", mailErr);
         }
       }
     }
