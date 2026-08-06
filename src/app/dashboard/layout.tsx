@@ -26,7 +26,7 @@ export default async function DashboardLayout({ children }: DashboardLayoutProps
 
   try {
     [dbUser, permDoc] = await Promise.all([
-      User.findById(session.userId).select("name role tenantId").populate("tenantId"),
+      User.findById(session.userId).select("name role tenantId status").populate("tenantId"),
       RolePermission.findOne({ tenantId: session.tenantId, role: session.role }),
     ]);
   } catch {
@@ -41,6 +41,8 @@ export default async function DashboardLayout({ children }: DashboardLayoutProps
   const role = dbUser.role || session.role;
   const userName = dbUser.name || session.userName;
   const tenantName = (dbUser.tenantId as any)?.name || session.tenantName || "Workspace";
+
+  const isPending = (dbUser as any).status === "Pending";
 
   const updatedSession = {
     ...session,
@@ -90,7 +92,7 @@ export default async function DashboardLayout({ children }: DashboardLayoutProps
   }
 
   return (
-    <DashboardClientLayout session={updatedSession} menuItems={menuItems}>
+    <DashboardClientLayout session={updatedSession} menuItems={menuItems} isPending={isPending}>
       {children}
     </DashboardClientLayout>
   );

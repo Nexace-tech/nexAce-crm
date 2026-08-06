@@ -144,14 +144,17 @@ export async function registerAction(state: FormState | undefined, formData: For
     }
 
     // 5. Hash Password & Create User with status: "Pending"
+    const existingUserCount = await User.countDocuments({ tenantId: tenant._id });
+    const assignedRole = existingUserCount === 0 ? "Admin" : "Employee";
+
     const passwordHash = await bcrypt.hash(adminPassword, 10);
-    await User.create({
+    const newUser = await User.create({
       name: adminName.trim(),
       username: usernameRaw,
       email: adminEmail.toLowerCase(),
       passwordHash,
-      role: "Admin",
-      status: "Pending",
+      role: assignedRole,
+      status: assignedRole === "Admin" ? "Active" : "Pending",
       tenantId: tenant._id,
     });
 
@@ -200,6 +203,15 @@ export async function registerAction(state: FormState | undefined, formData: For
         }
       }
     }
+
+    // 6. Create session immediately and redirect to dashboard (where Demo Preview Mode is rendered)
+    await createSession(
+      String(newUser._id),
+      String(tenant._id),
+      newUser.name,
+      tenant.name,
+      newUser.role
+    );
   } catch (error: any) {
     console.error("Registration error:", error);
     return {
@@ -207,8 +219,7 @@ export async function registerAction(state: FormState | undefined, formData: For
     };
   }
 
-  // 6. Redirect to Login with pending approval notification
-  redirect(`/login?pending=true&email=${encodeURIComponent(adminEmail.toLowerCase())}`);
+  redirect("/dashboard");
 }
 
 /**
@@ -255,14 +266,7 @@ export async function loginAction(state: FormState | undefined, formData: FormDa
       };
     }
 
-    // Check account approval status
-    if (user.status === "Pending") {
-      return {
-        message: "Your employee account registration is currently pending administrator approval. Please wait for an admin to approve your account.",
-        enteredEmail: email,
-        enteredPassword: password
-      };
-    }
+    // Check account status
     if (user.status === "Suspended") {
       return {
         message: "Your employee account has been suspended. Please contact your workspace administrator.",

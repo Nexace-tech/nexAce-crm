@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import mongoose from "mongoose";
 import { connectToDatabase } from "@/lib/db";
 import { ChatMessage } from "@/models/ChatMessage";
 import { User } from "@/models/User";
@@ -63,34 +64,82 @@ export async function GET(request: Request) {
 
     const channel = searchParams.get("channel") || "general";
 
-    // Build query conditions (with legacy fallback for DM channels)
+    // Build query conditions (with precise target user isolation for DM channels)
     let queryCondition: any = { tenantId: tenantObjectId, channel };
     const possibleChannels = new Set<string>([channel]);
 
     if (channel.startsWith("dm_")) {
       const raw = channel.replace("dm_", "");
       const parts = raw.split("_");
-      parts.forEach((p) => {
-        if (p) possibleChannels.add(`dm_${p}`);
-      });
-      // Also add pairwise fallback combinations
-      for (let i = 0; i < parts.length; i++) {
-        for (let j = i + 1; j <= parts.length; j++) {
-          possibleChannels.add(`dm_${parts.slice(i, j).join("_")}`);
+      const isObjectId = (str: string) => /^[0-9a-fA-F]{24}$/.test(str);
+      
+      const objectIdStrs = parts.filter(isObjectId);
+      let targetUser: any = null;
+
+      if (objectIdStrs.length >= 2 && objectIdStrs[0] === objectIdStrs[1]) {
+        targetUser = await User.findById(objectIdStrs[0]).lean();
+      } else {
+        const otherIdStr = objectIdStrs.find((id) => id !== userObjectId.toString());
+        if (otherIdStr) {
+          targetUser = await User.findById(otherIdStr).lean();
+        } else if (parts.length > 0) {
+          targetUser = await User.findOne({
+            tenantId: tenantObjectId,
+            $or: [
+              { name: { $regex: new RegExp(parts.filter(Boolean).join("|"), "i") } }
+            ]
+          }).lean();
         }
       }
-      queryCondition = {
-        tenantId: tenantObjectId,
-        channel: { $in: Array.from(possibleChannels) },
-      };
+
+      const myIdStr = userObjectId.toString();
+      const myNameKey = session.userName ? session.userName.toLowerCase().replace(/[^a-z0-9]/g, "_") : "";
+
+      if (targetUser) {
+        const targetIdStr = targetUser._id.toString();
+        const targetNameKey = targetUser.name ? targetUser.name.toLowerCase().replace(/[^a-z0-9]/g, "_") : "";
+
+        // Pairwise channels specifically for this 2-user conversation
+        const pairIdKey = [myIdStr, targetIdStr].sort().join("_");
+        possibleChannels.add(`dm_${pairIdKey}`);
+        possibleChannels.add(`dm_${targetIdStr}`);
+        if (targetNameKey) possibleChannels.add(`dm_${targetNameKey}`);
+        if (myNameKey && targetNameKey) {
+          possibleChannels.add(`dm_${myNameKey}_${targetNameKey}`);
+          possibleChannels.add(`dm_${targetNameKey}_${myNameKey}`);
+        }
+
+        const targetObjId = new mongoose.Types.ObjectId(targetIdStr);
+        queryCondition = {
+          tenantId: tenantObjectId,
+          $or: [
+            { channel: { $in: Array.from(possibleChannels) } },
+            { senderId: userObjectId, recipientId: targetObjId },
+            { senderId: targetObjId, recipientId: userObjectId }
+          ]
+        };
+      } else {
+        queryCondition = {
+          tenantId: tenantObjectId,
+          channel: { $in: Array.from(possibleChannels) }
+        };
+      }
     }
 
     // Automatically mark unread messages in this channel sent by others as read by current user
     const userIdentifier = session?.userName || userObjectId.toString();
+    const markReadFilter = channel.startsWith("dm_")
+      ? queryCondition
+      : {
+          tenantId: tenantObjectId,
+          channel: { $in: Array.from(possibleChannels) },
+          senderId: { $ne: userObjectId },
+          read: false,
+        };
+
     await ChatMessage.updateMany(
       {
-        tenantId: tenantObjectId,
-        channel: { $in: Array.from(possibleChannels) },
+        ...markReadFilter,
         senderId: { $ne: userObjectId },
         read: false,
       },
@@ -170,7 +219,7 @@ export async function POST(request: Request) {
         }
       }
 
-      if (targetRecipientId) {
+      if (targetRecipientId && targetRecipientId !== userObjectId.toString()) {
         await notify(tenantObjectId, targetRecipientId, {
           title: `💬 ${session.userName}`,
           message: snippet,

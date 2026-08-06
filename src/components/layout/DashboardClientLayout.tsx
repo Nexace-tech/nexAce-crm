@@ -27,6 +27,7 @@ interface DashboardClientLayoutProps {
     tenantName: string;
   };
   menuItems: MenuItem[];
+  isPending?: boolean;
   children: React.ReactNode;
 }
 
@@ -45,7 +46,7 @@ const hrefToModuleKeyMap: Record<string, string> = {
 };
 
 
-export function DashboardClientLayout({ session, menuItems, children }: DashboardClientLayoutProps) {
+export function DashboardClientLayout({ session, menuItems, isPending = false, children }: DashboardClientLayoutProps) {
   const { user } = useAuthContext();
   const { canAccessModule } = usePermissions();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -64,6 +65,12 @@ export function DashboardClientLayout({ session, menuItems, children }: Dashboar
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
+
+  useEffect(() => {
+    if (user?.status === "Pending" && pathname !== "/dashboard") {
+      window.location.href = "/dashboard";
+    }
+  }, [user?.status, pathname]);
 
   const userName = user?.name || session.userName;
   const role = user?.role || session.role;
@@ -138,6 +145,28 @@ export function DashboardClientLayout({ session, menuItems, children }: Dashboar
             .map((item) => {
               const isActive = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href));
               const iconClass = item.icon || "fa-solid fa-layer-group";
+              const isDisabled = isPending && item.href !== "/dashboard";
+
+              if (isDisabled) {
+                return (
+                  <div
+                    key={item.href}
+                    title={sidebarCollapsed ? item.name : "Locked until account is approved"}
+                    className={cn(
+                      "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium relative select-none opacity-40 cursor-not-allowed",
+                      sidebarCollapsed && "justify-center px-0"
+                    )}
+                  >
+                    <i className={cn(iconClass, "text-base shrink-0 text-muted-foreground")} />
+                    {!sidebarCollapsed && (
+                      <>
+                        <span className="truncate text-muted-foreground">{item.name}</span>
+                        <i className="fa-solid fa-lock text-[10px] ml-auto text-muted-foreground/60" />
+                      </>
+                    )}
+                  </div>
+                );
+              }
 
               return (
                 <Link

@@ -126,6 +126,33 @@ export default function CommunicationHub() {
   const [selectedChannel, setSelectedChannel] = useState<string>("general");
   const [messages, setMessages] = useState<ChatMsg[]>([]);
   const [recentConversations, setRecentConversations] = useState<any[]>([]);
+  const [pinnedDMs, setPinnedDMs] = useState<string[]>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const saved = localStorage.getItem("pinned_dm_channels");
+        return saved ? JSON.parse(saved) : [];
+      } catch {
+        return [];
+      }
+    }
+    return [];
+  });
+
+  const togglePinDM = (dmChannel: string) => {
+    setPinnedDMs((prev) => {
+      const updated = prev.includes(dmChannel) ? prev.filter((id) => id !== dmChannel) : [...prev, dmChannel];
+      if (typeof window !== "undefined") {
+        try {
+          localStorage.setItem("pinned_dm_channels", JSON.stringify(updated));
+        } catch (e) {
+          console.error(e);
+        }
+      }
+      return updated;
+    });
+  };
+
+  const [sidebarSearch, setSidebarSearch] = useState("");
   const [newMessageText, setNewMessageText] = useState("");
   const [replyingToMsg, setReplyingToMsg] = useState<ChatMsg | null>(null);
   const [loadingChat, setLoadingChat] = useState(false);
@@ -323,7 +350,7 @@ export default function CommunicationHub() {
 
   const fetchTeam = async () => {
     try {
-      let res = await fetch("/api/team");
+      let res = await fetch("/api/team?all=true");
       if (!res.ok) {
         res = await fetch("/api/hr/directory");
       }
@@ -922,9 +949,20 @@ export default function CommunicationHub() {
       {activeTab === "chat" && (
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 h-[calc(100vh-220px)] min-h-[520px] max-h-[720px]">
           {/* Channels & DMs Sidebar */}
-          <Card className="p-4 space-y-4 flex flex-col justify-between overflow-hidden">
-            <div className="space-y-4">
-              <div>
+          <Card className="p-4 flex flex-col justify-between overflow-hidden">
+            <div className="flex-1 flex flex-col min-h-0 space-y-3 overflow-hidden">
+              <div className="relative shrink-0">
+                <i className="fa-solid fa-magnifying-glass absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground" />
+                <Input
+                  type="text"
+                  placeholder="Search channels & team..."
+                  value={sidebarSearch}
+                  onChange={(e) => setSidebarSearch(e.target.value)}
+                  className="h-8 pl-8 text-xs bg-muted/30 border-border/60"
+                />
+              </div>
+
+              <div className="shrink-0">
                 <div className="flex items-center justify-between mb-2">
                   <h3 className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
                     <i className="fa-solid fa-hashtag text-xs text-primary" /> Channels
@@ -940,9 +978,9 @@ export default function CommunicationHub() {
                   )}
                 </div>
 
-                <div className="space-y-1 max-h-[140px] overflow-y-auto no-scrollbar">
+                <div className="space-y-1 max-h-[100px] overflow-y-auto no-scrollbar">
                   {(() => {
-                    const activeChannels = channelsList.length > 0
+                    const rawChannels = channelsList.length > 0
                       ? channelsList.filter((ch: any) => ch.isActive !== false)
                       : [
                           { name: "general", _id: "c1", isPinned: true, isActive: true },
@@ -950,6 +988,11 @@ export default function CommunicationHub() {
                           { name: "engineering", _id: "c3", isPinned: false, isActive: true },
                           { name: "random", _id: "c4", isPinned: false, isActive: true },
                         ];
+                    
+                    const activeChannels = rawChannels.filter((chObj: any) => {
+                      const chName = typeof chObj === "string" ? chObj : chObj.name;
+                      return !sidebarSearch || chName.toLowerCase().includes(sidebarSearch.toLowerCase());
+                    });
 
                     return activeChannels.map((chObj: any) => {
                       const chName = typeof chObj === "string" ? chObj : chObj.name;
@@ -1056,11 +1099,11 @@ export default function CommunicationHub() {
                 )}
               </div>
 
-              <div>
-                <h3 className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
+              <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+                <h3 className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5 shrink-0">
                   <i className="fa-solid fa-user-group text-xs text-emerald-500" /> Direct Messages
                 </h3>
-                <div className="space-y-1">
+                <div className="space-y-1 flex-1 overflow-y-auto pr-1 scrollbar-thin">
                   {(() => {
                     const getDMChannel = (targetUser: any) => {
                       const myId = user?._id || user?.name || "";
@@ -1081,34 +1124,88 @@ export default function CommunicationHub() {
                           { name: "David Kim", role: "Operations Lead", _id: "u3", status: "Offline" },
                         ];
 
-                    const dmUsers = sourceList.filter((m: any) => {
-                      const isSelf = (m._id && user?._id && m._id === user._id) || (m.name && user?.name && m.name === user.name);
-                      return !isSelf;
+                    // Include self as a "Personal Notes / Yourself" target at the top of DM list
+                    const selfUser = user ? { ...user, isSelf: true } : { name: "Personal Space (You)", _id: "self", isSelf: true };
+
+                    const filteredMembers = sourceList.filter((m: any) => {
+                      const matchesSearch = !sidebarSearch || (m.name && m.name.toLowerCase().includes(sidebarSearch.toLowerCase())) || (m.email && m.email.toLowerCase().includes(sidebarSearch.toLowerCase()));
+                      return matchesSearch;
                     });
 
-                    // Sort DM users by recent conversation activity & unread messages
-                    const sortedDmUsers = [...dmUsers].sort((a, b) => {
+                    // Ensure self is in the list with isSelf mark
+                    const hasSelfInList = filteredMembers.some((m: any) => (m._id && user?._id && m._id === user._id) || (m.name && user?.name && m.name === user.name));
+                    const finalDmUsers = hasSelfInList
+                      ? filteredMembers.map((m: any) => {
+                          const isSelf = (m._id && user?._id && m._id === user._id) || (m.name && user?.name && m.name === user.name);
+                          return isSelf ? { ...m, isSelf: true } : m;
+                        })
+                      : [{ ...selfUser, isSelf: true }, ...filteredMembers];
+
+                    // Multi-Tier DM Sorting: Pinned & Self -> Recent Conversations (by time) -> Active (Online) Users -> Others (Offline)
+                    const sortedDmUsers = [...finalDmUsers].sort((a, b) => {
                       const channelA = getDMChannel(a);
                       const channelB = getDMChannel(b);
+
+                      const isPinnedA = Boolean(a.isSelf || pinnedDMs.includes(channelA));
+                      const isPinnedB = Boolean(b.isSelf || pinnedDMs.includes(channelB));
+
+                      // 1. Pinned & Self always on top
+                      if (isPinnedA && !isPinnedB) return -1;
+                      if (!isPinnedA && isPinnedB) return 1;
+
+                      if (isPinnedA && isPinnedB) {
+                        if (a.isSelf) return -1;
+                        if (b.isSelf) return 1;
+                      }
+
+                      // 2. Recent Chat Users next (ordered by most recent message timestamp)
                       const convA = recentConversations.find((c: any) => c._id === channelA || (a.name && c._id.includes(a.name.toLowerCase().replace(/[^a-z0-9]/g, "_"))));
                       const convB = recentConversations.find((c: any) => c._id === channelB || (b.name && c._id.includes(b.name.toLowerCase().replace(/[^a-z0-9]/g, "_"))));
+                      
                       const timeA = convA?.lastMessageAt ? new Date(convA.lastMessageAt).getTime() : 0;
                       const timeB = convB?.lastMessageAt ? new Date(convB.lastMessageAt).getTime() : 0;
-                      return timeB - timeA;
+
+                      const hasRecentA = timeA > 0;
+                      const hasRecentB = timeB > 0;
+
+                      if (hasRecentA && !hasRecentB) return -1;
+                      if (!hasRecentA && hasRecentB) return 1;
+
+                      if (hasRecentA && hasRecentB) {
+                        if (timeA !== timeB) return timeB - timeA;
+                      }
+
+                      // 3. Active (Online) Users next
+                      const isOnlineA = a.isSelf ? true : typeof a.isOnline === "boolean" ? a.isOnline : Boolean(a.isClockedIn || (a.lastActiveAt && Date.now() - new Date(a.lastActiveAt).getTime() < 5 * 60 * 1000));
+                      const isOnlineB = b.isSelf ? true : typeof b.isOnline === "boolean" ? b.isOnline : Boolean(b.isClockedIn || (b.lastActiveAt && Date.now() - new Date(b.lastActiveAt).getTime() < 5 * 60 * 1000));
+
+                      if (isOnlineA && !isOnlineB) return -1;
+                      if (!isOnlineA && isOnlineB) return 1;
+
+                      // 4. Alphabetical fallback
+                      const nameA = (a.name || a.email || "").toLowerCase();
+                      const nameB = (b.name || b.email || "").toLowerCase();
+                      return nameA.localeCompare(nameB);
                     });
 
-                    return sortedDmUsers.map((mUser: any, idx: number) => {
+                    return sortedDmUsers.map((mUser: any) => {
                       const dmChannel = getDMChannel(mUser);
-                      const isOnline = mUser.status ? mUser.status === "Active" : idx % 2 === 0;
+                      const isSelfUser = Boolean(mUser.isSelf);
+                      const isPinned = Boolean(isSelfUser || pinnedDMs.includes(dmChannel));
+                      const isOnline = isSelfUser
+                        ? true
+                        : typeof mUser.isOnline === "boolean"
+                        ? mUser.isOnline
+                        : Boolean(mUser.isClockedIn || (mUser.lastActiveAt && (Date.now() - new Date(mUser.lastActiveAt).getTime() < 5 * 60 * 1000)));
                       const conv = recentConversations.find((c: any) => c._id === dmChannel || (mUser.name && c._id.includes(mUser.name.toLowerCase().replace(/[^a-z0-9]/g, "_"))));
-                      const unreadCount = conv?.unreadCount || 0;
+                      const unreadCount = isSelfUser ? 0 : conv?.unreadCount || 0;
 
                       return (
-                        <button
+                        <div
                           key={mUser._id || mUser.name}
                           onClick={() => setSelectedChannel(dmChannel)}
                           className={cn(
-                            "w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-colors cursor-pointer text-left",
+                            "group w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer text-left relative",
                             selectedChannel === dmChannel
                               ? "bg-primary text-primary-foreground font-bold shadow-xs"
                               : unreadCount > 0
@@ -1116,11 +1213,32 @@ export default function CommunicationHub() {
                               : "text-muted-foreground hover:bg-accent hover:text-foreground"
                           )}
                         >
-                          <span className="flex items-center gap-2 truncate">
-                            <i className="fa-solid fa-circle-user text-sm" />
-                            <span className="truncate">{mUser.name || mUser.email}</span>
+                          <span className="flex items-center gap-2 truncate min-w-0 flex-1 mr-1">
+                            <i className={isSelfUser ? "fa-solid fa-bookmark text-amber-400 text-sm shrink-0" : isPinned ? "fa-solid fa-thumbtack text-amber-400 text-xs shrink-0" : "fa-solid fa-circle-user text-sm shrink-0"} />
+                            <span className="truncate">
+                              {mUser.name || mUser.email} {isSelfUser ? "(You)" : ""}
+                            </span>
                           </span>
+                          
                           <div className="flex items-center gap-1.5 shrink-0">
+                            {!isSelfUser && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  togglePinDM(dmChannel);
+                                }}
+                                className="p-1 text-[10px] opacity-0 group-hover:opacity-100 hover:text-amber-400 transition-opacity"
+                                title={isPinned ? "Unpin Direct Message" : "Pin Direct Message to Top"}
+                              >
+                                <i className={`fa-solid fa-thumbtack ${isPinned ? "text-amber-400" : ""}`} />
+                              </button>
+                            )}
+                            {isSelfUser && (
+                              <Badge variant="outline" className="text-[9px] px-1.5 py-0 border-amber-500/30 text-amber-500 bg-amber-500/10">
+                                Notes
+                              </Badge>
+                            )}
                             {unreadCount > 0 && selectedChannel !== dmChannel && (
                               <Badge className="bg-rose-600 text-white font-bold text-[10px] px-1.5 py-0.2 animate-pulse border-0">
                                 {unreadCount} new
@@ -1140,7 +1258,7 @@ export default function CommunicationHub() {
                               )}
                             </span>
                           </div>
-                        </button>
+                        </div>
                       );
                     });
                   })()}
@@ -1148,7 +1266,7 @@ export default function CommunicationHub() {
               </div>
             </div>
 
-            <div className="p-2.5 rounded-lg border border-border/80 bg-muted/20 text-[11px] text-muted-foreground space-y-1">
+            <div className="shrink-0 mt-3 p-2.5 rounded-lg border border-border/80 bg-muted/20 text-[11px] text-muted-foreground space-y-1">
               <p className="font-semibold text-foreground flex items-center gap-1">
                 <i className="fa-solid fa-circle-info text-primary" /> Pro-Tip
               </p>

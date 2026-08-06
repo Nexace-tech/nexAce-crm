@@ -28,6 +28,7 @@ export interface IUser extends Document {
     instagram?: string;
     facebook?: string;
   };
+  lastActiveAt?: Date;
   createdAt: Date;
 }
 
@@ -58,6 +59,7 @@ const UserSchema: Schema = new Schema({
     instagram: { type: String, default: "" },
     facebook: { type: String, default: "" }
   },
+  lastActiveAt: { type: Date, default: Date.now },
   createdAt: { type: Date, default: Date.now }
 });
 

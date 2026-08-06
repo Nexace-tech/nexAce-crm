@@ -17,7 +17,11 @@ export async function GET() {
     
     let user = null;
     try {
-      user = await User.findById(session.userId)
+      user = await User.findByIdAndUpdate(
+        session.userId,
+        { $set: { lastActiveAt: new Date() } },
+        { new: true }
+      )
         .select("-passwordHash")
         .populate("tenantId")
         .lean();

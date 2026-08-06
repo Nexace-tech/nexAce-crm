@@ -21,6 +21,7 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const department = searchParams.get("department");
     const search = searchParams.get("search");
+    const all = searchParams.get("all") === "true";
 
     const dataScope = await getUserDataScope(session);
 
@@ -33,8 +34,8 @@ export async function GET(request: Request) {
       tenantId: new mongoose.Types.ObjectId(session.tenantId)
     };
 
-    // Role-based data scoping:
-    if (dataScope.scope === "department") {
+    // Role-based data scoping (skipped when all=true for workspace chat/directory):
+    if (!all && dataScope.scope === "department") {
       // Logged-in user's own profile to get department & ID
       const loggedUser = await User.findById(session.userId).lean();
       const userDept = loggedUser?.department;
@@ -106,11 +107,18 @@ export async function GET(request: Request) {
       attendanceMap[att.userId.toString()] = att;
     });
 
+    const fiveMinsAgo = new Date(Date.now() - 5 * 60 * 1000);
+
     const usersWithAttendance = users.map((u: any) => {
       const att = attendanceMap[u._id.toString()];
       const isClockedIn = Boolean(att && att.clockIn && !att.clockOut);
+      const isSelf = u._id.toString() === session.userId;
+      const isRecentlyActive = u.lastActiveAt ? new Date(u.lastActiveAt) >= fiveMinsAgo : false;
+      const isOnline = isSelf || isClockedIn || isRecentlyActive;
+
       return {
         ...u,
+        isOnline,
         isClockedIn,
         clockInTime: att?.clockIn || null,
         clockOutTime: att?.clockOut || null,
