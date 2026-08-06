@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/db";
 import { HRAppraisal } from "@/models/HRAppraisal";
 import { requireTenantSession, isAuthError } from "@/lib/auth-guard";
+import { notify, notifyAdmins } from "@/lib/notify";
 
 export async function GET(req: Request) {
   try {
@@ -59,6 +60,14 @@ export async function POST(req: Request) {
       probationEndDate: probationEndDate ? new Date(probationEndDate) : undefined,
     });
 
+    // Send Notification to Employee
+    await notify(tenantObjectId, userId, {
+      title: "Performance Review Created",
+      message: `Your ${type || "Quarterly Appraisal"} (${cycle}) has been initiated.`,
+      type: "appraisal",
+      linkUrl: "/dashboard/hr?tab=appraisals",
+    });
+
     return NextResponse.json({ appraisal }, { status: 201 });
   } catch (error: unknown) {
     console.error("POST /api/hr/appraisals error:", error);
@@ -93,6 +102,14 @@ export async function PUT(req: Request) {
       appraisal.overallSelfRating = Number((totalSelf / appraisal.kras.length).toFixed(1));
       appraisal.status = "Self Review Submitted";
       appraisal.submittedAt = new Date();
+
+      // Notify Admins and Manager
+      await notifyAdmins(tenantObjectId, {
+        title: "Self Review Submitted",
+        message: `${session.userName} submitted self review for ${appraisal.cycle}.`,
+        type: "appraisal",
+        linkUrl: "/dashboard/hr?tab=appraisals",
+      });
     } else if (action === "submit_manager_review") {
       if (session.role !== "Admin" && session.role !== "Manager") {
         return NextResponse.json({ error: "Unauthorized for manager review" }, { status: 401 });
@@ -107,6 +124,14 @@ export async function PUT(req: Request) {
       appraisal.finalRating = finalRating || appraisal.overallManagerRating;
       appraisal.status = "Finalized";
       appraisal.completedAt = new Date();
+
+      // Notify Employee of finalized appraisal
+      await notify(tenantObjectId, appraisal.userId.toString(), {
+        title: "Appraisal Finalized",
+        message: `Your performance review (${appraisal.cycle}) has been finalized by ${session.userName}.`,
+        type: "appraisal",
+        linkUrl: "/dashboard/hr?tab=appraisals",
+      });
     }
 
     await appraisal.save();

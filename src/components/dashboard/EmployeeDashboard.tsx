@@ -296,7 +296,7 @@ export function EmployeeDashboard({ user }: { user: any }) {
                 <CardDescription>Deliverables assigned to you</CardDescription>
               </div>
               <Button asChild variant="ghost" size="sm">
-                <Link href="/dashboard/tasks" className="gap-1 text-primary">
+                <Link href="/dashboard/projects" className="gap-1 text-primary">
                   View All Tasks <i className="fa-solid fa-arrow-up-right-from-square text-xs" />
                 </Link>
               </Button>

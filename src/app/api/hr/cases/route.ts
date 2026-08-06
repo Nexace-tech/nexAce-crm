@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/db";
 import { HRCase } from "@/models/HRCase";
 import { requireTenantSession, isAuthError } from "@/lib/auth-guard";
+import { notify, notifyAdmins } from "@/lib/notify";
 
 export async function GET() {
   try {
@@ -47,6 +48,14 @@ export async function POST(request: Request) {
       comments: [],
       tenantId: tenantObjectId,
     });
+
+    // Notify Admin + HR that a new case was opened
+    await notifyAdmins(tenantObjectId, {
+      title: "New HR Case Opened",
+      message: `${session.userName} opened a ${category || "General"} case: "${subject}"`,
+      type: "hr",
+      linkUrl: "/dashboard/hr",
+    }, ["Admin", "HR"]);
 
     return NextResponse.json({ case: hrCase, message: "HR case created" }, { status: 201 });
   } catch (error: unknown) {
@@ -98,6 +107,16 @@ export async function PUT(request: Request) {
     }
 
     if (!hrCase) return NextResponse.json({ error: "Case not found" }, { status: 404 });
+
+    // Notify the case creator if an admin/HR changed the status
+    if (status && hrCase.userId && hrCase.userId.toString() !== userObjectId.toString()) {
+      await notify(tenantObjectId, hrCase.userId.toString(), {
+        title: "Your HR Case Status Updated",
+        message: `Your case "${hrCase.subject}" has been updated to '${status}'.`,
+        type: "hr",
+        linkUrl: "/dashboard/hr",
+      });
+    }
 
     return NextResponse.json({ case: hrCase, message: "Case updated" });
   } catch (error: unknown) {

@@ -55,6 +55,6 @@ export function usePermissions() {
     loading,
     role: user?.role || 'Employee',
     isAdmin: user?.role === 'Admin',
-    isOPS: user?.role === 'OPS' || user?.role === 'Admin',
+    isOPS: user?.role === 'OPS',  // OPS is sub-admin; Admin is separate
   };
 }

@@ -36,6 +36,7 @@ export function CommandPalette({
     { id: "nav-team", title: "My Team Directory", category: "Navigation", icon: "fa-solid fa-users", href: "/dashboard/team", moduleKey: "team" },
     { id: "nav-calendar", title: "Calendar & Timesheets", category: "Navigation", icon: "fa-solid fa-calendar-days", href: "/dashboard/calendar", moduleKey: "calendar" },
     { id: "nav-projects", title: "Projects, Sprints & Drive", category: "Navigation", icon: "fa-solid fa-folder-tree", href: "/dashboard/projects", moduleKey: "projects" },
+    { id: "nav-tasks", title: "HR Tasks & Workflows", category: "Navigation", icon: "fa-solid fa-list-check", href: "/dashboard/hr?tab=tasks", moduleKey: "hr" },
     { id: "nav-chat", title: "Chat & Direct Messages", category: "Navigation", icon: "fa-solid fa-comments", href: "/dashboard/chat", moduleKey: "chat" },
     { id: "nav-hr", title: "HR Portal & Appraisals", category: "Navigation", icon: "fa-solid fa-briefcase", href: "/dashboard/hr", moduleKey: "hr" },
     { id: "nav-goals", title: "Goals, OKRs & Surveys", category: "Navigation", icon: "fa-solid fa-bullseye", href: "/dashboard/goals", moduleKey: "goals" },

@@ -23,6 +23,14 @@ export async function GET() {
       tenantId: new mongoose.Types.ObjectId(session.tenantId),
     };
 
+    // Also find any project IDs where the user has assigned tasks
+    const { Task } = await import("@/models/Task");
+    const assignedTasks = await Task.find({
+      tenantId: new mongoose.Types.ObjectId(session.tenantId),
+      assignee: new mongoose.Types.ObjectId(session.userId),
+    }).select("projectId").lean();
+    const assignedProjectIds = assignedTasks.map((t: any) => t.projectId).filter(Boolean);
+
     if (dataScope.scope === "department") {
       const loggedUser = await User.findById(session.userId).lean();
       const userDept = loggedUser?.department;
@@ -32,12 +40,14 @@ export async function GET() {
         { members: userObjId },
         { createdBy: userObjId },
         { assignedDepartment: userDept },
+        { _id: { $in: assignedProjectIds } },
       ];
     } else if (dataScope.scope === "own") {
       const userObjId = new mongoose.Types.ObjectId(session.userId);
       query.$or = [
         { members: userObjId },
         { createdBy: userObjId },
+        { _id: { $in: assignedProjectIds } },
       ];
     }
 

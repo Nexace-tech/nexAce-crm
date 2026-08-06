@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/db";
 import { Announcement } from "@/models/Announcement";
 import { requireTenantSession, isAuthError } from "@/lib/auth-guard";
+import { notify } from "@/lib/notify";
 
 /**
  * GET: Fetch company announcements.
@@ -53,6 +54,14 @@ export async function POST(request: Request) {
       authorId: userObjectId,
       pinned: Boolean(pinned),
       tenantId: tenantObjectId,
+    });
+
+    // Broadcast notification to all workspace members
+    await notify(tenantObjectId, "broadcast", {
+      title: `📣 ${title.trim()}`,
+      message: `${session.userName} posted a${pinned ? " pinned" : ""} ${category || "Company News"} announcement.`,
+      type: "announcement",
+      linkUrl: "/dashboard/chat",
     });
 
     return NextResponse.json({ announcement: newAnnouncement, message: "Announcement published" }, { status: 201 });

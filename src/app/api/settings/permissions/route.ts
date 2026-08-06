@@ -36,7 +36,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, Record<string, boolean>> =
     overview: true,
     team: true,
     calendar: true,
-    projects: false,
+    projects: true,
     chat: true,
     hr: true,
     goals: true,
@@ -153,9 +153,9 @@ export const DEFAULT_FEATURE_PERMISSIONS: Record<string, Record<string, boolean>
     viewClients: false, createClients: false, editClients: false, deleteClients: false, viewDeals: false, manageDeals: false, exportClientData: false, manageClientContacts: false,
     // Referrals
     submitReferral: false, viewOwnReferrals: false, viewAllReferrals: false, manageReferrals: false,
-    // Admin & Users
-    manageUsers: true, changeUserRoles: false, resetUserPasswords: false, viewBillingSubscription: false, manageBilling: false,
-    // Settings
+    // Admin & Users — HR cannot manage user accounts, roles, or billing
+    manageUsers: false, changeUserRoles: false, resetUserPasswords: false, viewBillingSubscription: false, manageBilling: false,
+    // Settings — HR can only access own profile & password settings
     viewWorkspaceSettings: true, editWorkspaceSettings: false, manageFileRestrictions: false, manageRolePermissions: false, viewIntegrations: false, manageIntegrations: false,
   },
   Employee: {
@@ -232,6 +232,11 @@ export async function GET() {
         }
       }
     });
+
+    // Ensure HR role has Projects module access enabled by default
+    if (permissionsMap.HR) {
+      permissionsMap.HR.projects = true;
+    }
 
     const customRoles = dbPermissions.filter((d) => d.isCustom).map((d) => d.role);
 

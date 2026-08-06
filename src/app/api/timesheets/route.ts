@@ -4,6 +4,7 @@ import { connectToDatabase } from "@/lib/db";
 import { TimeEntry } from "@/models/TimeEntry";
 import { User } from "@/models/User";
 import { getUserDataScope } from "@/lib/dataScope";
+import { notify, notifyAdmins } from "@/lib/notify";
 import mongoose from "mongoose";
 
 /**
@@ -203,6 +204,15 @@ export async function PUT(request: Request) {
         { status: "Pending" }
       );
 
+      if (result.modifiedCount > 0) {
+        await notifyAdmins(session.tenantId, {
+          title: "Timesheet Pending Approval",
+          message: `${session.userName} submitted ${result.modifiedCount} timesheet entry(ies) for approval.`,
+          type: "system",
+          linkUrl: "/dashboard/calendar",
+        });
+      }
+
       return NextResponse.json({ success: true, submittedCount: result.modifiedCount });
     }
 
@@ -222,6 +232,12 @@ export async function PUT(request: Request) {
       return NextResponse.json({ error: "Invalid status value" }, { status: 400 });
     }
 
+    // Find entry owners before updating to send notifications
+    const targetEntries = await TimeEntry.find({
+      _id: { $in: entryIds.map((id) => new mongoose.Types.ObjectId(id)) },
+      tenantId: new mongoose.Types.ObjectId(session.tenantId),
+    }).select("userId");
+
     // Verify and update matching entries belonging to the tenant
     const result = await TimeEntry.updateMany(
       {
@@ -233,6 +249,19 @@ export async function PUT(request: Request) {
         approvedBy: new mongoose.Types.ObjectId(session.userId),
       }
     );
+
+    // Send notification to unique entry owners
+    const ownerIds = Array.from(new Set(targetEntries.map((e: any) => e.userId?.toString()).filter(Boolean)));
+    for (const ownerId of ownerIds) {
+      if (ownerId !== session.userId) {
+        await notify(session.tenantId, ownerId, {
+          title: `Timesheet ${status}`,
+          message: `Your submitted timesheet entries have been ${status.toLowerCase()} by ${session.userName}.`,
+          type: "system",
+          linkUrl: "/dashboard/calendar",
+        });
+      }
+    }
 
     return NextResponse.json({ success: true, modifiedCount: result.modifiedCount });
   } catch (error: unknown) {

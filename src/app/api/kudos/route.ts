@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/db";
 import { Kudos } from "@/models/Kudos";
 import { requireTenantSession, isAuthError } from "@/lib/auth-guard";
+import { notify } from "@/lib/notify";
 
 export async function GET() {
   try {
@@ -42,6 +43,14 @@ export async function POST(request: Request) {
       message,
       companyValue,
       tenantId: tenantObjectId,
+    });
+
+    // Notify the recipient
+    await notify(tenantObjectId, toUserId, {
+      title: "🎉 You Received Kudos!",
+      message: `${session.userName} gave you kudos: "${message.length > 80 ? message.substring(0, 80) + "..." : message}"`,
+      type: "kudos",
+      linkUrl: "/dashboard/goals",
     });
 
     return NextResponse.json({ kudos, message: "Kudos given!" }, { status: 201 });

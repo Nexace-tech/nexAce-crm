@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/db";
 import { Referral } from "@/models/Referral";
 import { requireTenantSession, isAuthError } from "@/lib/auth-guard";
+import { notify, notifyAdmins } from "@/lib/notify";
 
 /**
  * GET: Fetch all candidate referrals for the authenticated tenant.
@@ -70,10 +71,65 @@ export async function POST(request: Request) {
       tenantId: tenantObjectId,
     });
 
+    // Notify Admins and HR when a new candidate referral is submitted
+    await notifyAdmins(tenantObjectId, {
+      title: "New Candidate Referral",
+      message: `${session.userName} referred candidate '${candidateName}' for ${position}`,
+      type: "referral",
+      linkUrl: "/dashboard/referrals",
+    });
+
     return NextResponse.json({ referral: newReferral, message: "Referral submitted successfully" }, { status: 201 });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Internal Server Error";
     console.error("API POST Referral error:", error);
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
+/**
+ * PATCH: Update referral status (Admin/HR only) and notify the referrer.
+ */
+export async function PATCH(request: Request) {
+  try {
+    const authResult = await requireTenantSession(["Admin", "Manager", "HR"]);
+    if (isAuthError(authResult)) return authResult;
+
+    const { tenantObjectId, userObjectId } = authResult;
+    const body = await request.json();
+    const { referralId, status, payoutStatus } = body;
+
+    if (!referralId || !status) {
+      return NextResponse.json({ error: "referralId and status are required" }, { status: 400 });
+    }
+
+    await connectToDatabase();
+
+    const updates: any = { status };
+    if (payoutStatus) updates.payoutStatus = payoutStatus;
+
+    const referral = await Referral.findOneAndUpdate(
+      { _id: referralId, tenantId: tenantObjectId },
+      updates,
+      { new: true }
+    );
+
+    if (!referral) return NextResponse.json({ error: "Referral not found" }, { status: 404 });
+
+    // Notify the person who submitted the referral
+    if (referral.referrerId && referral.referrerId.toString() !== userObjectId.toString()) {
+      await notify(tenantObjectId, referral.referrerId.toString(), {
+        title: "Referral Status Updated",
+        message: `Your referral for ${referral.candidateName} has been updated to '${status}'.`,
+        type: "referral",
+        linkUrl: "/dashboard/referrals",
+      });
+    }
+
+    return NextResponse.json({ referral, message: "Referral updated" });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Internal Server Error";
+    console.error("API PATCH Referral error:", error);
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

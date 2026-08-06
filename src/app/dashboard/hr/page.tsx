@@ -10,6 +10,7 @@ import { Preloader } from "@/components/ui/Preloader";
 import { cn } from "@/lib/utils";
 import { useTabPersistence } from "@/hooks/useTabPersistence";
 import { usePermissions } from "@/hooks/usePermissions";
+import { HRTasksTab } from "@/components/hr/HRTasksTab";
 
 interface LeaveData {
   _id: string; userId: string; userName: string;
@@ -27,11 +28,11 @@ export default function HRPage() {
   const { user, loading: authLoading } = useAuth();
   const { can, isAdmin, isOPS } = usePermissions();
   const [activeTab, setActiveTab] = useTabPersistence<
-    "directory" | "checklists" | "leaves" | "vault" | "cases" | "appraisals" | "probation" | "sandbox"
+    "directory" | "tasks" | "checklists" | "leaves" | "vault" | "cases" | "appraisals" | "probation" | "sandbox"
   >(
     "hr_active_tab_v2",
     "directory",
-    ["directory", "checklists", "leaves", "vault", "cases", "appraisals", "probation", "sandbox"]
+    ["directory", "tasks", "checklists", "leaves", "vault", "cases", "appraisals", "probation", "sandbox"]
   );
 
   const [loading, setLoading] = useState(true);
@@ -254,6 +255,16 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
       }
     } catch (e) { console.error(e); }
   };
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const tabParam = params.get("tab");
+      if (tabParam && ["directory", "tasks", "checklists", "leaves", "vault", "cases", "appraisals", "probation", "sandbox"].includes(tabParam)) {
+        setActiveTab(tabParam as any);
+      }
+    }
+  }, []);
 
   useEffect(() => {
     const init = async () => {
@@ -642,6 +653,12 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
           )}>
             <i className="fa-solid fa-address-book text-xs" /> Employee Directory
           </button>
+          <button onClick={() => setActiveTab("tasks")} className={cn(
+            "px-4 py-2 text-xs font-semibold rounded-lg transition-all flex items-center gap-2 cursor-pointer shrink-0",
+            activeTab === "tasks" ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+          )}>
+            <i className="fa-solid fa-list-check text-xs text-indigo-400" /> HR Tasks & Workflows
+          </button>
           <button onClick={() => setActiveTab("checklists")} className={cn(
             "px-4 py-2 text-xs font-semibold rounded-lg transition-all flex items-center gap-2 cursor-pointer shrink-0",
             activeTab === "checklists" ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
@@ -700,6 +717,9 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
           <i className="fa-solid fa-chevron-right text-xs" />
         </button>
       </div>
+
+      {/* TAB: HR TASKS & WORKFLOWS */}
+      {activeTab === "tasks" && <HRTasksTab />}
 
       {/* TAB 1: EMPLOYEE DIRECTORY */}
       {activeTab === "directory" && (

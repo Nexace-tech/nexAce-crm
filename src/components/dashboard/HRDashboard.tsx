@@ -90,10 +90,15 @@ export function HRDashboard({ user }: { user: any }) {
             Overview of company workforce, leave approvals, onboarding checklists, cases, and appraisals.
           </p>
         </div>
-        <div className="flex items-center gap-3 flex-wrap">
-          <Button asChild color="primary" size="sm" className="cursor-pointer gap-2">
-            <Link href="/dashboard/hr">
-              <i className="fa-solid fa-briefcase" /> HR Management Portal
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <Button asChild color="primary" size="sm" className="cursor-pointer gap-2 shadow-sm">
+            <Link href="/dashboard/hr?tab=tasks">
+              <i className="fa-solid fa-list-check" /> HR Tasks & Workflows
+            </Link>
+          </Button>
+          <Button asChild variant="outline" size="sm" className="cursor-pointer gap-2">
+            <Link href="/dashboard/hr?tab=directory">
+              <i className="fa-solid fa-address-book" /> HR Directory
             </Link>
           </Button>
           <Button asChild variant="outline" size="sm" className="cursor-pointer gap-2">
@@ -106,80 +111,90 @@ export function HRDashboard({ user }: { user: any }) {
 
       {/* HR Metric Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-        <Card className="hover:shadow-md transition-all border-l-4 border-l-purple-500">
-          <CardContent className="p-5 flex items-center justify-between">
-            <div className="space-y-1">
-              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Total Workforce</p>
-              <p className="text-2xl font-bold text-foreground">{loading ? "..." : directoryUsers.length}</p>
-              <p className="text-xs text-purple-500 font-medium flex items-center gap-1 mt-1">
-                <i className="fa-solid fa-circle-check text-xs" /> Active Staff
-              </p>
-            </div>
-            <div className="p-3 bg-purple-500/10 text-purple-500 rounded-xl">
-              <i className="fa-solid fa-users text-xl" />
-            </div>
-          </CardContent>
-        </Card>
+        <Link href="/dashboard/hr?tab=directory" className="block">
+          <Card className="hover:shadow-md hover:scale-[1.02] transition-all border-l-4 border-l-purple-500 cursor-pointer h-full">
+            <CardContent className="p-5 flex items-center justify-between">
+              <div className="space-y-1">
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Total Workforce</p>
+                <p className="text-2xl font-bold text-foreground">{loading ? "..." : directoryUsers.length}</p>
+                <p className="text-xs text-purple-500 font-medium flex items-center gap-1 mt-1">
+                  <i className="fa-solid fa-circle-check text-xs" /> Active Staff
+                </p>
+              </div>
+              <div className="p-3 bg-purple-500/10 text-purple-500 rounded-xl">
+                <i className="fa-solid fa-users text-xl" />
+              </div>
+            </CardContent>
+          </Card>
+        </Link>
 
-        <Card className="hover:shadow-md transition-all border-l-4 border-l-amber-500">
-          <CardContent className="p-5 flex items-center justify-between">
-            <div className="space-y-1">
-              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Pending Leaves</p>
-              <p className="text-2xl font-bold text-foreground">{loading ? "..." : pendingLeaves.length}</p>
-              <p className="text-xs text-amber-500 font-medium flex items-center gap-1 mt-1">
-                <i className="fa-solid fa-clock text-xs" /> Require Approval
-              </p>
-            </div>
-            <div className="p-3 bg-amber-500/10 text-amber-500 rounded-xl">
-              <i className="fa-solid fa-calendar-xmark text-xl" />
-            </div>
-          </CardContent>
-        </Card>
+        <Link href="/dashboard/hr?tab=leaves" className="block">
+          <Card className="hover:shadow-md hover:scale-[1.02] transition-all border-l-4 border-l-amber-500 cursor-pointer h-full">
+            <CardContent className="p-5 flex items-center justify-between">
+              <div className="space-y-1">
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Pending Leaves</p>
+                <p className="text-2xl font-bold text-foreground">{loading ? "..." : pendingLeaves.length}</p>
+                <p className="text-xs text-amber-500 font-medium flex items-center gap-1 mt-1">
+                  <i className="fa-solid fa-clock text-xs" /> Require Approval
+                </p>
+              </div>
+              <div className="p-3 bg-amber-500/10 text-amber-500 rounded-xl">
+                <i className="fa-solid fa-calendar-xmark text-xl" />
+              </div>
+            </CardContent>
+          </Card>
+        </Link>
 
-        <Card className="hover:shadow-md transition-all border-l-4 border-l-sky-500">
-          <CardContent className="p-5 flex items-center justify-between">
-            <div className="space-y-1">
-              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Open HR Cases</p>
-              <p className="text-2xl font-bold text-foreground">{loading ? "..." : openCases.length}</p>
-              <p className="text-xs text-sky-500 font-medium flex items-center gap-1 mt-1">
-                <i className="fa-solid fa-ticket text-xs" /> Help Desk Tickets
-              </p>
-            </div>
-            <div className="p-3 bg-sky-500/10 text-sky-500 rounded-xl">
-              <i className="fa-solid fa-circle-question text-xl" />
-            </div>
-          </CardContent>
-        </Card>
+        <Link href="/dashboard/hr?tab=cases" className="block">
+          <Card className="hover:shadow-md hover:scale-[1.02] transition-all border-l-4 border-l-sky-500 cursor-pointer h-full">
+            <CardContent className="p-5 flex items-center justify-between">
+              <div className="space-y-1">
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Open HR Cases</p>
+                <p className="text-2xl font-bold text-foreground">{loading ? "..." : openCases.length}</p>
+                <p className="text-xs text-sky-500 font-medium flex items-center gap-1 mt-1">
+                  <i className="fa-solid fa-ticket text-xs" /> Help Desk Tickets
+                </p>
+              </div>
+              <div className="p-3 bg-sky-500/10 text-sky-500 rounded-xl">
+                <i className="fa-solid fa-circle-question text-xl" />
+              </div>
+            </CardContent>
+          </Card>
+        </Link>
 
-        <Card className="hover:shadow-md transition-all border-l-4 border-l-emerald-500">
-          <CardContent className="p-5 flex items-center justify-between">
-            <div className="space-y-1">
-              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Active Onboarding</p>
-              <p className="text-2xl font-bold text-foreground">{loading ? "..." : activeChecklists.length}</p>
-              <p className="text-xs text-emerald-500 font-medium flex items-center gap-1 mt-1">
-                <i className="fa-solid fa-list-check text-xs" /> In Progress
-              </p>
-            </div>
-            <div className="p-3 bg-emerald-500/10 text-emerald-500 rounded-xl">
-              <i className="fa-solid fa-user-plus text-xl" />
-            </div>
-          </CardContent>
-        </Card>
+        <Link href="/dashboard/hr?tab=checklists" className="block">
+          <Card className="hover:shadow-md hover:scale-[1.02] transition-all border-l-4 border-l-emerald-500 cursor-pointer h-full">
+            <CardContent className="p-5 flex items-center justify-between">
+              <div className="space-y-1">
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Active Onboarding</p>
+                <p className="text-2xl font-bold text-foreground">{loading ? "..." : activeChecklists.length}</p>
+                <p className="text-xs text-emerald-500 font-medium flex items-center gap-1 mt-1">
+                  <i className="fa-solid fa-list-check text-xs" /> In Progress
+                </p>
+              </div>
+              <div className="p-3 bg-emerald-500/10 text-emerald-500 rounded-xl">
+                <i className="fa-solid fa-user-plus text-xl" />
+              </div>
+            </CardContent>
+          </Card>
+        </Link>
 
-        <Card className="hover:shadow-md transition-all border-l-4 border-l-indigo-500">
-          <CardContent className="p-5 flex items-center justify-between">
-            <div className="space-y-1">
-              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Pending Appraisals</p>
-              <p className="text-2xl font-bold text-foreground">{loading ? "..." : pendingAppraisals.length}</p>
-              <p className="text-xs text-indigo-500 font-medium flex items-center gap-1 mt-1">
-                <i className="fa-solid fa-star-half-stroke text-xs" /> Awaiting Review
-              </p>
-            </div>
-            <div className="p-3 bg-indigo-500/10 text-indigo-500 rounded-xl">
-              <i className="fa-solid fa-award text-xl" />
-            </div>
-          </CardContent>
-        </Card>
+        <Link href="/dashboard/hr?tab=appraisals" className="block">
+          <Card className="hover:shadow-md hover:scale-[1.02] transition-all border-l-4 border-l-indigo-500 cursor-pointer h-full">
+            <CardContent className="p-5 flex items-center justify-between">
+              <div className="space-y-1">
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Pending Appraisals</p>
+                <p className="text-2xl font-bold text-foreground">{loading ? "..." : pendingAppraisals.length}</p>
+                <p className="text-xs text-indigo-500 font-medium flex items-center gap-1 mt-1">
+                  <i className="fa-solid fa-star text-xs" /> Awaiting Review
+                </p>
+              </div>
+              <div className="p-3 bg-indigo-500/10 text-indigo-500 rounded-xl">
+                <i className="fa-solid fa-award text-xl" />
+              </div>
+            </CardContent>
+          </Card>
+        </Link>
       </div>
 
       {/* Main Grid */}
@@ -346,14 +361,15 @@ export function HRDashboard({ user }: { user: any }) {
             </CardHeader>
             <CardContent className="space-y-2.5">
               {[
-                { href: "/dashboard/hr", icon: "fa-solid fa-address-book", label: "Employee Directory", color: "text-purple-500" },
-                { href: "/dashboard/hr", icon: "fa-solid fa-list-check", label: "Onboarding / Offboarding", color: "text-emerald-500" },
-                { href: "/dashboard/hr", icon: "fa-solid fa-calendar-minus", label: "Leave Management", color: "text-amber-500" },
-                { href: "/dashboard/hr", icon: "fa-solid fa-vault", label: "Restricted Document Vault", color: "text-sky-500" },
-                { href: "/dashboard/hr", icon: "fa-solid fa-award", label: "Appraisals & KRAs", color: "text-indigo-500" },
-                { href: "/dashboard/hr", icon: "fa-solid fa-hourglass-half", label: "Probation & Review Cycle", color: "text-orange-500" },
+                { href: "/dashboard/hr?tab=directory", icon: "fa-solid fa-address-book", label: "Employee Directory", color: "text-purple-500" },
+                { href: "/dashboard/hr?tab=tasks", icon: "fa-solid fa-list-check", label: "HR Tasks & Workflows", color: "text-indigo-400" },
+                { href: "/dashboard/hr?tab=checklists", icon: "fa-solid fa-clipboard-check", label: "Onboarding / Offboarding", color: "text-emerald-500" },
+                { href: "/dashboard/hr?tab=leaves", icon: "fa-solid fa-calendar-minus", label: "Leave Management", color: "text-amber-500" },
+                { href: "/dashboard/hr?tab=vault", icon: "fa-solid fa-vault", label: "Restricted Document Vault", color: "text-sky-500" },
+                { href: "/dashboard/hr?tab=appraisals", icon: "fa-solid fa-award", label: "Appraisals & KRAs", color: "text-indigo-500" },
+                { href: "/dashboard/hr?tab=probation", icon: "fa-solid fa-hourglass-half", label: "Probation & Review Cycle", color: "text-orange-500" },
               ].map(({ href, icon, label, color }) => (
-                <Button key={label} asChild variant="outline" className="w-full justify-start gap-2 text-xs cursor-pointer">
+                <Button key={label} asChild variant="outline" className="w-full justify-start gap-2 text-xs cursor-pointer hover:bg-accent">
                   <Link href={href}>
                     <i className={`${icon} ${color}`} /> {label}
                   </Link>

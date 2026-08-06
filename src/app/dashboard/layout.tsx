@@ -83,7 +83,7 @@ export default async function DashboardLayout({ children }: DashboardLayoutProps
       // Fallback defaults
       if (role === "OPS") return true; // OPS (SubAdmin) defaults to full operational access
       if (role === "Manager") return mod.key !== "analytics" && mod.key !== "clients";
-      if (role === "HR") return ["overview", "team", "calendar", "chat", "hr", "goals", "settings"].includes(mod.key);
+      if (role === "HR") return ["overview", "team", "calendar", "projects", "chat", "hr", "goals", "settings"].includes(mod.key);
       // Employee
       return ["overview", "calendar", "projects", "chat", "hr", "referrals", "settings"].includes(mod.key);
     });

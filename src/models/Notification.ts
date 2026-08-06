@@ -4,7 +4,7 @@ export interface INotification extends Document {
   recipientId: mongoose.Types.ObjectId;
   title: string;
   message: string;
-  type: "chat" | "announcement" | "task" | "system";
+  type: "chat" | "announcement" | "task" | "leave" | "hr" | "appraisal" | "kudos" | "okr" | "referral" | "system";
   linkUrl?: string;
   read: boolean;
   tenantId: mongoose.Types.ObjectId;
@@ -19,7 +19,7 @@ const NotificationSchema = new Schema<INotification>(
     message: { type: String, required: true, trim: true },
     type: {
       type: String,
-      enum: ["chat", "announcement", "task", "system"],
+      enum: ["chat", "announcement", "task", "leave", "hr", "appraisal", "kudos", "okr", "referral", "system"],
       default: "system",
     },
     linkUrl: { type: String, trim: true },
@@ -32,5 +32,9 @@ const NotificationSchema = new Schema<INotification>(
 // Performance index for unread notification badge lookups
 NotificationSchema.index({ tenantId: 1, recipientId: 1, read: 1, createdAt: -1 });
 
+if (mongoose.models.Notification) {
+  delete (mongoose.models as any).Notification;
+}
+
 export const Notification: Model<INotification> =
-  mongoose.models.Notification || mongoose.model<INotification>("Notification", NotificationSchema);
+  mongoose.model<INotification>("Notification", NotificationSchema);

@@ -1260,7 +1260,15 @@ export default function ProjectsPage() {
                                   <i className="fa-solid fa-user-circle text-primary text-xs" /> {log.userName} ({log.userRole || "Member"})
                                 </span>
                                 <span className="text-[10px] text-muted-foreground font-mono">
-                                  {new Date(log.createdAt).toLocaleString(undefined, { hour12: true })}
+                                  {new Date(log.createdAt).toLocaleString("en-US", {
+                                    month: "2-digit",
+                                    day: "2-digit",
+                                    year: "numeric",
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                    second: "2-digit",
+                                    hour12: true,
+                                  })}
                                 </span>
                               </div>
                               <p className="text-xs font-semibold text-primary">{log.action}: {log.targetName}</p>

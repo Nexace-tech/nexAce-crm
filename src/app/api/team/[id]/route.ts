@@ -72,16 +72,16 @@ export async function PUT(request: Request, { params }: RouteParams) {
     // Determine allowed updates
     // Both Self and Admin can update name and email (with duplicate checking and email code verification)
     if (body.email && body.email.toLowerCase() !== user.email) {
-      // 1. Verify code
+      // 1. Verify code against the CURRENT email (that's where the OTP was sent)
       if (!body.code) {
         return NextResponse.json({ error: "Verification code is required to update email address." }, { status: 400 });
       }
-      const verification = await EmailVerification.findOne({ email: body.email.toLowerCase() });
+      const verification = await EmailVerification.findOne({ email: user.email });
       if (!verification || verification.code !== body.code) {
-        return NextResponse.json({ error: "Incorrect or expired email verification code. Please request a new code." }, { status: 400 });
+        return NextResponse.json({ error: "Incorrect or expired verification code. Please request a new code." }, { status: 400 });
       }
 
-      // 2. Duplicate checking
+      // 2. Duplicate checking on new email
       const existingUser = await User.findOne({ email: body.email.toLowerCase() });
       if (existingUser) {
         return NextResponse.json({ error: "Email address is already in use by another user." }, { status: 400 });

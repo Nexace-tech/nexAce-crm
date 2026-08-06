@@ -24,6 +24,10 @@ export async function GET(request: Request) {
 
     const dataScope = await getUserDataScope(session);
 
+    if (!dataScope.canViewModule("team")) {
+      return NextResponse.json({ error: "Forbidden: Team module access disabled" }, { status: 403 });
+    }
+
     // Base query: tenant ID constraint
     const query: any = {
       tenantId: new mongoose.Types.ObjectId(session.tenantId)

@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/db";
 import { ChatMessage } from "@/models/ChatMessage";
+import { User } from "@/models/User";
 import { requireTenantSession, isAuthError } from "@/lib/auth-guard";
+import { notify } from "@/lib/notify";
 
 /**
  * GET: Fetch chat messages by channel.
@@ -13,16 +15,82 @@ export async function GET(request: Request) {
 
     const { session, tenantObjectId, userObjectId } = authResult;
     const { searchParams } = new URL(request.url);
-    const channel = searchParams.get("channel") || "general";
+    const mode = searchParams.get("mode");
 
     await connectToDatabase();
+
+    // Mode 1: Fetch recent conversation threads with unread counts
+    if (mode === "conversations") {
+      const conversations = await ChatMessage.aggregate([
+        {
+          $match: {
+            tenantId: tenantObjectId,
+            $or: [
+              { recipientId: userObjectId },
+              { senderId: userObjectId },
+              { channel: { $regex: /^dm_/ } }
+            ]
+          }
+        },
+        { $sort: { createdAt: -1 } },
+        {
+          $group: {
+            _id: "$channel",
+            lastMessage: { $first: "$content" },
+            lastMessageAt: { $first: "$createdAt" },
+            senderName: { $first: "$senderName" },
+            senderId: { $first: "$senderId" },
+            unreadCount: {
+              $sum: {
+                $cond: [
+                  {
+                    $and: [
+                      { $ne: ["$senderId", userObjectId] },
+                      { $eq: ["$read", false] }
+                    ]
+                  },
+                  1,
+                  0
+                ]
+              }
+            }
+          }
+        },
+        { $sort: { lastMessageAt: -1 } }
+      ]);
+      return NextResponse.json({ conversations });
+    }
+
+    const channel = searchParams.get("channel") || "general";
+
+    // Build query conditions (with legacy fallback for DM channels)
+    let queryCondition: any = { tenantId: tenantObjectId, channel };
+    const possibleChannels = new Set<string>([channel]);
+
+    if (channel.startsWith("dm_")) {
+      const raw = channel.replace("dm_", "");
+      const parts = raw.split("_");
+      parts.forEach((p) => {
+        if (p) possibleChannels.add(`dm_${p}`);
+      });
+      // Also add pairwise fallback combinations
+      for (let i = 0; i < parts.length; i++) {
+        for (let j = i + 1; j <= parts.length; j++) {
+          possibleChannels.add(`dm_${parts.slice(i, j).join("_")}`);
+        }
+      }
+      queryCondition = {
+        tenantId: tenantObjectId,
+        channel: { $in: Array.from(possibleChannels) },
+      };
+    }
 
     // Automatically mark unread messages in this channel sent by others as read by current user
     const userIdentifier = session?.userName || userObjectId.toString();
     await ChatMessage.updateMany(
       {
         tenantId: tenantObjectId,
-        channel,
+        channel: { $in: Array.from(possibleChannels) },
         senderId: { $ne: userObjectId },
         read: false,
       },
@@ -32,10 +100,7 @@ export async function GET(request: Request) {
       }
     );
 
-    const messages = await ChatMessage.find({
-      tenantId: tenantObjectId,
-      channel,
-    })
+    const messages = await ChatMessage.find(queryCondition)
       .sort({ createdAt: 1 })
       .limit(100);
 
@@ -80,33 +145,83 @@ export async function POST(request: Request) {
       tenantId: tenantObjectId,
     });
 
-    // Real-time Notification triggers for DM and Mentions
-    const { Notification } = await import("@/models/Notification");
+    // ── Notification logic ──────────────────────────────────────────────────
+    const channelStr = channel || "general";
+    const safeContent = trimmedContent || (attachments?.[0] ? `[Attachment] ${attachments[0].name}` : "Sent an attachment");
+    const snippet = safeContent.length > 80 ? `${safeContent.slice(0, 80)}...` : safeContent;
 
-    if (isDM && recipientId) {
-      const safeContent = content || "";
-      const textSnippet = safeContent ? `"${safeContent.slice(0, 60)}${safeContent.length > 60 ? "..." : ""}"` : "Sent an attachment";
-      await Notification.create({
+    // Case 1: Direct Message channel (channel name starts with "dm_")
+    //   Format: "dm_<recipientUserId>" or "dm_<idA>_<idB>"
+    const isDMChannel = channelStr.startsWith("dm_");
+    if (isDMChannel) {
+      let targetRecipientId = recipientId;
+      if (!targetRecipientId) {
+        const raw = channelStr.replace("dm_", "");
+        const parts = raw.split("_");
+        const foundUser = await User.findOne({
+          tenantId: tenantObjectId,
+          _id: { $ne: userObjectId },
+          $or: [
+            { name: { $regex: new RegExp(parts.filter(Boolean).join("|"), "i") } },
+          ]
+        }).select("_id").lean();
+        if (foundUser) {
+          targetRecipientId = foundUser._id.toString();
+        }
+      }
+
+      if (targetRecipientId) {
+        await notify(tenantObjectId, targetRecipientId, {
+          title: `💬 ${session.userName}`,
+          message: snippet,
+          type: "chat",
+          linkUrl: `/dashboard/chat?channel=${encodeURIComponent(channelStr)}`,
+        });
+      }
+    } else if (Array.isArray(mentions) && mentions.length > 0 && !mentions.includes("everyone")) {
+      // Case 2: @mention of specific users in a public channel
+      // mentions[] contains user NAMES — look up their IDs
+      const mentionedUsers = await User.find({
         tenantId: tenantObjectId,
-        recipientId,
-        title: "New Direct Message",
-        message: `${session.userName}: ${textSnippet}`,
+        name: { $in: mentions },
+        _id: { $ne: userObjectId },
+      }).select("_id").lean();
+
+      if (mentionedUsers.length > 0) {
+        const ids = mentionedUsers.map((u: any) => u._id.toString());
+        await notify(tenantObjectId, ids, {
+          title: `📣 You were mentioned in #${channelStr}`,
+          message: `${session.userName}: ${snippet}`,
+          type: "chat",
+          linkUrl: `/dashboard/chat?channel=${encodeURIComponent(channelStr)}`,
+        });
+      }
+    } else if (mentions.includes("everyone")) {
+      // Case 3: @everyone — notify the whole tenant
+      await notify(tenantObjectId, "broadcast", {
+        title: `📣 @everyone in #${channelStr}`,
+        message: `${session.userName}: ${snippet}`,
         type: "chat",
-        linkUrl: "/dashboard/chat",
-        read: false,
+        linkUrl: `/dashboard/chat?channel=${encodeURIComponent(channelStr)}`,
       });
-    } else if (Array.isArray(mentions) && mentions.length > 0) {
-      const mentionDocs = mentions.map((mId: string) => ({
+    } else {
+      // Case 4: Regular channel message — notify all other tenant members
+      const otherMembers = await User.find({
         tenantId: tenantObjectId,
-        recipientId: mId,
-        title: "You were mentioned in Chat",
-        message: `${session.userName} mentioned you in #${channel || "general"}`,
-        type: "chat",
-        linkUrl: "/dashboard/chat",
-        read: false,
-      }));
-      await Notification.insertMany(mentionDocs);
+        _id: { $ne: userObjectId },
+      }).select("_id").lean();
+
+      if (otherMembers.length > 0) {
+        const ids = otherMembers.map((u: any) => u._id.toString());
+        await notify(tenantObjectId, ids, {
+          title: `#${channelStr}`,
+          message: `${session.userName}: ${snippet}`,
+          type: "chat",
+          linkUrl: "/dashboard/chat",
+        });
+      }
     }
+    // ────────────────────────────────────────────────────────────────────────
 
     return NextResponse.json({ message: newMessage }, { status: 201 });
   } catch (error: unknown) {

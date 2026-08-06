@@ -2,37 +2,48 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { decrypt } from "@/lib/session";
 
-// Specify protected and public routes
-const protectedRoutes = ["/dashboard"];
-const authRoutes = ["/login", "/register"];
-
+/**
+ * Next.js Proxy — runs before any page is rendered.
+ * Protects all /dashboard/* routes by validating the session cookie.
+ * Unauthenticated requests are redirected to /login immediately,
+ * preventing any flash of authenticated UI.
+ */
 export async function proxy(request: NextRequest) {
-  const path = request.nextUrl.pathname;
-  
-  // Check if the current route is protected or auth-only
-  const isProtectedRoute = protectedRoutes.some((route) => path.startsWith(route));
-  const isAuthRoute = authRoutes.includes(path);
+  const { pathname } = request.nextUrl;
 
-  // Retrieve the session cookie
-  const cookie = request.cookies.get("session")?.value;
-  const session = await decrypt(cookie);
+  // Only guard dashboard routes
+  if (pathname.startsWith("/dashboard")) {
+    const sessionCookie = request.cookies.get("session")?.value;
 
-  // Redirect rules
-  
-  // If trying to access a protected route without being logged in, redirect to login
-  if (isProtectedRoute && !session?.userId) {
-    return NextResponse.redirect(new URL("/login", request.nextUrl));
+    if (!sessionCookie) {
+      return NextResponse.redirect(new URL("/login", request.url));
+    }
+
+    const session = await decrypt(sessionCookie);
+
+    if (!session || !session.userId || !session.tenantId) {
+      // Clear stale/invalid cookie and redirect
+      const response = NextResponse.redirect(new URL("/login", request.url));
+      response.cookies.delete("session");
+      return response;
+    }
   }
 
-  // If trying to access login/register while already logged in, redirect to dashboard
-  if (isAuthRoute && session?.userId) {
-    return NextResponse.redirect(new URL("/dashboard", request.nextUrl));
+  // Redirect authenticated users away from login/register pages
+  if (pathname === "/login" || pathname === "/register") {
+    const sessionCookie = request.cookies.get("session")?.value;
+    if (sessionCookie) {
+      const session = await decrypt(sessionCookie);
+      if (session?.userId) {
+        return NextResponse.redirect(new URL("/dashboard", request.url));
+      }
+    }
   }
 
   return NextResponse.next();
 }
 
-// Routes proxy should run on
 export const config = {
+  // Match all dashboard routes and auth pages
   matcher: ["/dashboard/:path*", "/login", "/register"],
 };

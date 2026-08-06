@@ -54,7 +54,9 @@ export async function getUserDataScope(session: { userId: string; role: string; 
   if (role === "Manager") {
     scope = canViewFeature("viewTeamDirectory") || canViewFeature("viewTeamTimesheets") ? "department" : "own";
   } else if (role === "HR") {
-    scope = canViewFeature("viewTeamDirectory") ? "all" : "own";
+    // HR sees their own department members and direct reports (not the entire org).
+    // HR Portal data (leaves, cases, appraisals) is handled by dedicated APIs separately.
+    scope = "department";
   } else {
     if (canViewFeature("viewTeamDirectory") || canViewFeature("viewAllReferrals")) {
       scope = "all";

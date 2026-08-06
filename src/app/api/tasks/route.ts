@@ -6,6 +6,7 @@ import { Project } from "@/models/Project";
 import { ActivityLog } from "@/models/ActivityLog";
 import { User } from "@/models/User";
 import { getUserDataScope } from "@/lib/dataScope";
+import { notify, notifyAdmins } from "@/lib/notify";
 import mongoose from "mongoose";
 
 /**
@@ -70,12 +71,19 @@ export async function GET(request: Request) {
     } else if (dataScope.scope === "department") {
       const loggedUser = await User.findById(session.userId).lean();
       const userDept = loggedUser?.department;
+      const assignedTasks = await Task.find({
+        tenantId: new mongoose.Types.ObjectId(session.tenantId),
+        assignee: userObjId,
+      }).select("projectId").lean();
+      const assignedProjectIds = assignedTasks.map((t: any) => t.projectId).filter(Boolean);
+
       const deptProjects = await Project.find({
         tenantId: new mongoose.Types.ObjectId(session.tenantId),
         $or: [
           { members: userObjId },
           { createdBy: userObjId },
           { assignedDepartment: userDept },
+          { _id: { $in: assignedProjectIds } },
         ],
       }).select("_id");
       const deptProjectIds = deptProjects.map((p) => p._id);
@@ -167,17 +175,21 @@ export async function POST(request: Request) {
 
     // Real-time Notification for Assignee
     if (assignee) {
-      const { Notification } = await import("@/models/Notification");
-      await Notification.create({
-        tenantId: new mongoose.Types.ObjectId(session.tenantId),
-        recipientId: new mongoose.Types.ObjectId(assignee),
+      await notify(session.tenantId, assignee, {
         title: "New Task Assigned",
         message: `${session.userName} assigned you task: '${title}'`,
         type: "task",
-        linkUrl: "/dashboard/tasks",
-        read: false,
+        linkUrl: "/dashboard/hr?tab=tasks",
       });
     }
+
+    // Notify Admins of task creation
+    await notifyAdmins(session.tenantId, {
+      title: "Task Created",
+      message: `${session.userName} created task: '${title}' (${status || "To Do"})`,
+      type: "task",
+      linkUrl: "/dashboard/hr?tab=tasks",
+    });
 
     return NextResponse.json({ success: true, task: newTask }, { status: 201 });
   } catch (error: unknown) {
@@ -269,6 +281,15 @@ export async function PUT(request: Request) {
         targetName: task.title,
         details: `Assigned task '${task.title}' to ${assigneeName}`,
       });
+      // Notify the newly assigned user
+      if (assignee) {
+        await notify(session.tenantId, assignee, {
+          title: "Task Assigned to You",
+          message: `${session.userName} assigned you task: '${task.title}'`,
+          type: "task",
+          linkUrl: "/dashboard/projects",
+        });
+      }
     }
 
     if (priority !== undefined && priority !== oldPriority) {
@@ -297,6 +318,55 @@ export async function PUT(request: Request) {
       });
     }
 
+    // Notify the task assignee if updated by someone else (e.g., Admin or Manager)
+    const taskAssigneeId = task.assignee ? task.assignee.toString() : null;
+    if (taskAssigneeId && taskAssigneeId !== session.userId) {
+      const isStatusChange = status !== undefined && status !== oldStatus;
+      const isPriorityChange = priority !== undefined && priority !== oldPriority;
+      
+      let notifTitle = "Task Updated";
+      let notifMessage = `${session.userName} updated task: '${task.title}'`;
+
+      if (isStatusChange) {
+        notifTitle = "Task Status Updated";
+        notifMessage = `${session.userName} changed status of your task '${task.title}' to '${status}'`;
+      } else if (isPriorityChange) {
+        notifTitle = "Task Priority Changed";
+        notifMessage = `${session.userName} updated priority of your task '${task.title}' to '${priority}'`;
+      } else if (commentText) {
+        notifTitle = "New Comment on Your Task";
+        notifMessage = `${session.userName} commented on '${task.title}': "${commentText.length > 60 ? commentText.substring(0, 60) + "..." : commentText}"`;
+      }
+
+      await notify(session.tenantId, taskAssigneeId, {
+        title: notifTitle,
+        message: notifMessage,
+        type: "task",
+        linkUrl: "/dashboard/hr?tab=tasks",
+      });
+    }
+
+    // Always Notify Admins whenever a task is updated by any user
+    const updateSummary = status
+      ? `changed status to '${status}'`
+      : priority
+      ? `changed priority to '${priority}'`
+      : commentText
+      ? `commented on task`
+      : `updated task details`;
+
+    await notifyAdmins(
+      session.tenantId,
+      {
+        title: "Task Updated",
+        message: `${session.userName} ${updateSummary} for task: '${task.title}'`,
+        type: "task",
+        linkUrl: "/dashboard/hr?tab=tasks",
+      },
+      ["Admin"],
+      session.userId
+    );
+
     // Populate assignee details before returning
     const updatedTask = await Task.findById(taskId).populate("assignee", "name role photoUrl");
 
@@ -307,6 +377,8 @@ export async function PUT(request: Request) {
     const _msg = error instanceof Error ? error.message : "Internal Server Error"; return NextResponse.json({ error: _msg }, { status: 500 });
   }
 }
+
+export const PATCH = PUT;
 
 /**
  * DELETE: Delete a task.
@@ -334,6 +406,14 @@ export async function DELETE(request: Request) {
     }
 
     await task.deleteOne();
+
+    // Notify Admins on task deletion
+    await notifyAdmins(session.tenantId, {
+      title: "Task Deleted",
+      message: `${session.userName} deleted task: '${task.title}'`,
+      type: "task",
+      linkUrl: "/dashboard/hr?tab=tasks",
+    });
 
     return NextResponse.json({ success: true, message: "Task deleted successfully" });
   } catch (error: unknown) {

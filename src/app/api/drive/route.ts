@@ -4,6 +4,7 @@ import { connectToDatabase } from "@/lib/db";
 import { DriveFile } from "@/models/DriveFile";
 import { ActivityLog } from "@/models/ActivityLog";
 import { Tenant } from "@/models/Tenant";
+import { notifyAdmins } from "@/lib/notify";
 import mongoose from "mongoose";
 import fs from "fs";
 import { writeFile, mkdir, unlink } from "fs/promises";
@@ -127,6 +128,14 @@ export async function POST(request: Request) {
       action: "FILE_UPLOADED",
       targetName: fileName,
       details: `Uploaded shared document '${fileName}' (${Math.round(size / 1024)} KB)`,
+    });
+
+    // Notify Workspace Admins of file upload
+    await notifyAdmins(session.tenantId, {
+      title: "New File Uploaded",
+      message: `${session.userName} uploaded '${fileName}' to shared Drive.`,
+      type: "system",
+      linkUrl: "/dashboard/projects?tab=drive",
     });
 
     return NextResponse.json({ success: true, file: newFile }, { status: 201 });

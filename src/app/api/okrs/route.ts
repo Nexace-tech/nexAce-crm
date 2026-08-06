@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/db";
 import { OKR } from "@/models/OKR";
 import { requireTenantSession, isAuthError } from "@/lib/auth-guard";
+import { notify } from "@/lib/notify";
 
 export async function GET() {
   try {
@@ -41,6 +42,14 @@ export async function POST(request: Request) {
       status: "On Track",
       keyResults: keyResults || [],
       tenantId: tenantObjectId,
+    });
+
+    // Broadcast to all team members (Company-level OKRs affect everyone)
+    await notify(tenantObjectId, "broadcast", {
+      title: "New OKR Goal Created",
+      message: `${session.userName} created a new ${level || "Team"} OKR: "${title}"`,
+      type: "okr",
+      linkUrl: "/dashboard/goals",
     });
 
     return NextResponse.json({ okr, message: "OKR created" }, { status: 201 });

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/db";
 import { HROnboarding } from "@/models/HROnboarding";
 import { requireTenantSession, isAuthError } from "@/lib/auth-guard";
+import { notify, notifyAdmins } from "@/lib/notify";
 
 export async function GET(req: Request) {
   try {
@@ -69,6 +70,14 @@ export async function POST(req: Request) {
       items: items && items.length > 0 ? items : defaultItems,
     });
 
+    // Notify employee of assigned checklist
+    await notify(tenantObjectId, userId, {
+      title: `New ${type} Checklist Assigned`,
+      message: `You have been assigned a new ${type} checklist.`,
+      type: "hr",
+      linkUrl: "/dashboard/hr?tab=checklists",
+    });
+
     return NextResponse.json({ checklist }, { status: 201 });
   } catch (error: unknown) {
     console.error("POST /api/hr/checklists error:", error);
@@ -107,6 +116,14 @@ export async function PUT(req: Request) {
     if (allDone) {
       checklist.status = "Completed";
       checklist.completedDate = new Date();
+
+      // Notify Admins when checklist fully completed
+      await notifyAdmins(tenantObjectId, {
+        title: `${checklist.type} Checklist Completed`,
+        message: `${checklist.userName} completed all ${checklist.type} checklist items.`,
+        type: "hr",
+        linkUrl: "/dashboard/hr?tab=checklists",
+      });
     } else {
       checklist.status = "In Progress";
     }

@@ -93,7 +93,7 @@ export default function SettingsPage() {
       if (activeTab === "permissions" && !can("manageRolePermissions") && !isAdmin && !isOPS) {
         setActiveTab("profile");
       }
-      if (activeTab === "users" && !can("manageUsers") && !isAdmin && !isOPS) {
+      if (activeTab === "users" && !isAdmin) {
         setActiveTab("profile");
       }
       if (activeTab === "subscription" && !can("viewBillingSubscription") && !isAdmin && !isOPS) {
@@ -266,7 +266,7 @@ export default function SettingsPage() {
     const skillsArray = skills.split(",").map((s) => s.trim()).filter((s) => s.length > 0);
     const profileData = {
       name,
-      email,
+      email,          // new email — sent to backend after verification
       phone,
       bio,
       skills: skillsArray,
@@ -276,10 +276,11 @@ export default function SettingsPage() {
 
     setUpdatingProfile(true);
     try {
+      // Send the OTP to the CURRENT email to verify ownership before switching
       const res = await fetch("/api/auth/send-code", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, type: "change-email" }),
+        body: JSON.stringify({ email: user.email, type: "profile-update" }),
       });
       const data = await res.json();
       if (res.ok) {
@@ -351,7 +352,7 @@ export default function SettingsPage() {
       const res = await fetch("/api/auth/send-code", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: user.email }),
+        body: JSON.stringify({ email: user.email, type: "profile-update" }),
       });
       const data = await res.json();
       if (res.ok) {
@@ -470,7 +471,7 @@ export default function SettingsPage() {
           <i className="fa-solid fa-shield-halved text-emerald-500 text-sm" /> Password & Security
         </button>
 
-        {(can("manageUsers") || isAdmin || isOPS) && (
+        {isAdmin && (
           <button
             onClick={() => setActiveTab("users")}
             className={cn(
@@ -522,7 +523,7 @@ export default function SettingsPage() {
       {/* Active Tab Content with Smooth Transition */}
       <div key={activeTab} className="animate-in fade-in-50 slide-in-from-bottom-2 duration-300 ease-out transition-all">
         {/* TAB: USER MANAGEMENT */}
-        {activeTab === "users" && (can("manageUsers") || isAdmin || isOPS) && <UserManagementTab />}
+        {activeTab === "users" && isAdmin && <UserManagementTab />}
 
         {/* TAB: SHIFTS & EMPLOYMENT TYPES */}
         {activeTab === "shifts" && (can("manageShifts") || isAdmin || isOPS) && (
@@ -1081,10 +1082,10 @@ export default function SettingsPage() {
           <Card className="w-full max-w-md border border-border shadow-2xl animate-in fade-in zoom-in-95">
             <CardHeader className="space-y-1">
               <CardTitle className="text-lg font-bold flex items-center gap-2">
-                <i className="fa-solid fa-envelope text-primary text-base" /> Verify New Email Address
+                <i className="fa-solid fa-shield-halved text-primary text-base" /> Verify Your Identity
               </CardTitle>
               <CardDescription className="text-xs text-muted-foreground">
-                A 6-digit verification code was sent to <strong className="text-foreground">{pendingProfileData?.email}</strong>.
+                A 6-digit verification code was sent to your <strong className="text-foreground">current email ({user?.email})</strong> to confirm this change.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">

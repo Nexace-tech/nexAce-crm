@@ -125,6 +125,7 @@ export default function CommunicationHub() {
   // Chat State
   const [selectedChannel, setSelectedChannel] = useState<string>("general");
   const [messages, setMessages] = useState<ChatMsg[]>([]);
+  const [recentConversations, setRecentConversations] = useState<any[]>([]);
   const [newMessageText, setNewMessageText] = useState("");
   const [replyingToMsg, setReplyingToMsg] = useState<ChatMsg | null>(null);
   const [loadingChat, setLoadingChat] = useState(false);
@@ -322,13 +323,30 @@ export default function CommunicationHub() {
 
   const fetchTeam = async () => {
     try {
-      const res = await fetch("/api/team");
+      let res = await fetch("/api/team");
+      if (!res.ok) {
+        res = await fetch("/api/hr/directory");
+      }
       if (res.ok) {
         const data = await res.json();
-        setTeamMembers(data.users || []);
+        if (data.users && data.users.length > 0) {
+          setTeamMembers(data.users);
+        }
       }
     } catch (e) {
-      console.error(e);
+      console.error("fetchTeam error:", e);
+    }
+  };
+
+  const fetchRecentConversations = async () => {
+    try {
+      const res = await fetch("/api/chat/messages?mode=conversations");
+      if (res.ok) {
+        const data = await res.json();
+        setRecentConversations(data.conversations || []);
+      }
+    } catch (e) {
+      console.error("fetchRecentConversations error:", e);
     }
   };
 
@@ -494,7 +512,19 @@ export default function CommunicationHub() {
   };
 
   useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const urlChannel = params.get("channel");
+      if (urlChannel) {
+        setSelectedChannel(urlChannel);
+        setActiveTab("chat");
+      }
+    }
+  }, []);
+
+  useEffect(() => {
     fetchTeam();
+    fetchRecentConversations();
     if (activeTab === "chat") {
       fetchChannels();
       // Force auto-scroll to bottom on channel change
@@ -503,6 +533,7 @@ export default function CommunicationHub() {
       const interval = setInterval(() => {
         fetchMessages(selectedChannel, true);
         fetchChannels();
+        fetchRecentConversations();
       }, 3000);
       return () => clearInterval(interval);
     } else if (activeTab === "announcements") {
@@ -701,6 +732,23 @@ export default function CommunicationHub() {
       }
     });
 
+    const isDMChannel = selectedChannel.startsWith("dm_");
+    let recipientId = undefined;
+    if (isDMChannel) {
+      const getDMChannel = (targetUser: any) => {
+        const myId = user?._id || user?.name || "";
+        const targetId = targetUser._id || targetUser.name || "";
+        const myKey = myId.toString().toLowerCase().replace(/[^a-z0-9]/g, "_");
+        const targetKey = targetId.toString().toLowerCase().replace(/[^a-z0-9]/g, "_");
+        const pairKey = [myKey, targetKey].sort().join("_");
+        return `dm_${pairKey}`;
+      };
+      const targetUser = teamMembers.find((m: any) => getDMChannel(m) === selectedChannel || (m.name && selectedChannel.includes(m.name.toLowerCase().replace(/[^a-z0-9]/g, "_"))));
+      if (targetUser) {
+        recipientId = targetUser._id;
+      }
+    }
+
     try {
       const res = await fetch("/api/chat/messages", {
         method: "POST",
@@ -708,6 +756,8 @@ export default function CommunicationHub() {
         body: JSON.stringify({
           channel: selectedChannel,
           content: newMessageText,
+          isDM: isDMChannel,
+          recipientId,
           parentId: replyingToMsg?._id,
           mentions,
           attachments: pendingAttachments,
@@ -1011,50 +1061,89 @@ export default function CommunicationHub() {
                   <i className="fa-solid fa-user-group text-xs text-emerald-500" /> Direct Messages
                 </h3>
                 <div className="space-y-1">
-                  {(teamMembers.length > 0
-                    ? teamMembers.map((m, idx) => ({
-                        name: m.name || m.email,
-                        role: m.role || "Member",
-                        _id: m._id,
-                        online: m.status ? m.status === "Active" : idx % 2 === 0,
-                      }))
-                    : [
-                        { name: "Sarah Jenkins", role: "Product Designer", _id: "u1", online: true },
-                        { name: "Alex Rivera", role: "Frontend Dev", _id: "u2", online: true },
-                        { name: "David Kim", role: "Operations Lead", _id: "u3", online: false },
-                      ]
-                  ).map((user) => {
-                    const dmChannel = `dm_${user.name.toLowerCase().replace(/[^a-z0-9]/g, "_")}`;
-                    return (
-                      <button
-                        key={user._id || user.name}
-                        onClick={() => setSelectedChannel(dmChannel)}
-                        className={cn(
-                          "w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-colors cursor-pointer text-left",
-                          selectedChannel === dmChannel
-                            ? "bg-primary text-primary-foreground font-bold shadow-xs"
-                            : "text-muted-foreground hover:bg-accent hover:text-foreground"
-                        )}
-                      >
-                        <span className="flex items-center gap-2 truncate">
-                          <i className="fa-solid fa-circle-user text-sm" /> {user.name}
-                        </span>
-                        <span className="relative flex h-2.5 w-2.5 shrink-0 items-center justify-center">
-                          {user.online ? (
-                            <>
-                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
-                            </>
-                          ) : (
-                            <>
-                              <span className="animate-pulse absolute inline-flex h-full w-full rounded-full bg-slate-400/40 opacity-50" />
-                              <span className="relative inline-flex rounded-full h-2 w-2 bg-slate-400 dark:bg-slate-500 opacity-70" />
-                            </>
+                  {(() => {
+                    const getDMChannel = (targetUser: any) => {
+                      const myId = user?._id || user?.name || "";
+                      const targetId = targetUser._id || targetUser.name || "";
+                      const myKey = myId.toString().toLowerCase().replace(/[^a-z0-9]/g, "_");
+                      const targetKey = targetId.toString().toLowerCase().replace(/[^a-z0-9]/g, "_");
+                      const pairKey = [myKey, targetKey].sort().join("_");
+                      return `dm_${pairKey}`;
+                    };
+
+                    const sourceList = teamMembers.length > 0
+                      ? teamMembers
+                      : [
+                          { name: "Admin NEX 2", role: "Admin", _id: "admin_nex_2", status: "Active" },
+                          { name: "Ashu", role: "HR", _id: "ashu", status: "Active" },
+                          { name: "Sarah Jenkins", role: "Product Designer", _id: "u1", status: "Active" },
+                          { name: "Alex Rivera", role: "Frontend Dev", _id: "u2", status: "Active" },
+                          { name: "David Kim", role: "Operations Lead", _id: "u3", status: "Offline" },
+                        ];
+
+                    const dmUsers = sourceList.filter((m: any) => {
+                      const isSelf = (m._id && user?._id && m._id === user._id) || (m.name && user?.name && m.name === user.name);
+                      return !isSelf;
+                    });
+
+                    // Sort DM users by recent conversation activity & unread messages
+                    const sortedDmUsers = [...dmUsers].sort((a, b) => {
+                      const channelA = getDMChannel(a);
+                      const channelB = getDMChannel(b);
+                      const convA = recentConversations.find((c: any) => c._id === channelA || (a.name && c._id.includes(a.name.toLowerCase().replace(/[^a-z0-9]/g, "_"))));
+                      const convB = recentConversations.find((c: any) => c._id === channelB || (b.name && c._id.includes(b.name.toLowerCase().replace(/[^a-z0-9]/g, "_"))));
+                      const timeA = convA?.lastMessageAt ? new Date(convA.lastMessageAt).getTime() : 0;
+                      const timeB = convB?.lastMessageAt ? new Date(convB.lastMessageAt).getTime() : 0;
+                      return timeB - timeA;
+                    });
+
+                    return sortedDmUsers.map((mUser: any, idx: number) => {
+                      const dmChannel = getDMChannel(mUser);
+                      const isOnline = mUser.status ? mUser.status === "Active" : idx % 2 === 0;
+                      const conv = recentConversations.find((c: any) => c._id === dmChannel || (mUser.name && c._id.includes(mUser.name.toLowerCase().replace(/[^a-z0-9]/g, "_"))));
+                      const unreadCount = conv?.unreadCount || 0;
+
+                      return (
+                        <button
+                          key={mUser._id || mUser.name}
+                          onClick={() => setSelectedChannel(dmChannel)}
+                          className={cn(
+                            "w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-colors cursor-pointer text-left",
+                            selectedChannel === dmChannel
+                              ? "bg-primary text-primary-foreground font-bold shadow-xs"
+                              : unreadCount > 0
+                              ? "bg-rose-500/10 text-foreground font-semibold border border-rose-500/20"
+                              : "text-muted-foreground hover:bg-accent hover:text-foreground"
                           )}
-                        </span>
-                      </button>
-                    );
-                  })}
+                        >
+                          <span className="flex items-center gap-2 truncate">
+                            <i className="fa-solid fa-circle-user text-sm" />
+                            <span className="truncate">{mUser.name || mUser.email}</span>
+                          </span>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            {unreadCount > 0 && selectedChannel !== dmChannel && (
+                              <Badge className="bg-rose-600 text-white font-bold text-[10px] px-1.5 py-0.2 animate-pulse border-0">
+                                {unreadCount} new
+                              </Badge>
+                            )}
+                            <span className="relative flex h-2.5 w-2.5 shrink-0 items-center justify-center">
+                              {isOnline ? (
+                                <>
+                                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                                </>
+                              ) : (
+                                <>
+                                  <span className="animate-pulse absolute inline-flex h-full w-full rounded-full bg-slate-400/40 opacity-50" />
+                                  <span className="relative inline-flex rounded-full h-2 w-2 bg-slate-400 dark:bg-slate-500 opacity-70" />
+                                </>
+                              )}
+                            </span>
+                          </div>
+                        </button>
+                      );
+                    });
+                  })()}
                 </div>
               </div>
             </div>
@@ -1071,8 +1160,23 @@ export default function CommunicationHub() {
           <Card className="md:col-span-3 p-4 flex flex-col justify-between overflow-hidden">
             <div className="flex items-center justify-between pb-3 border-b border-border font-semibold text-foreground text-sm">
               <div className="flex items-center gap-2">
-                <i className="fa-solid fa-hashtag text-primary" />
-                <span>{selectedChannel}</span>
+                <i className={selectedChannel.startsWith("dm_") ? "fa-solid fa-user-group text-emerald-500" : "fa-solid fa-hashtag text-primary"} />
+                <span className="capitalize">
+                  {selectedChannel.startsWith("dm_")
+                    ? (() => {
+                        const getDMChannel = (targetUser: any) => {
+                          const myId = user?._id || user?.name || "";
+                          const targetId = targetUser._id || targetUser.name || "";
+                          const myKey = myId.toString().toLowerCase().replace(/[^a-z0-9]/g, "_");
+                          const targetKey = targetId.toString().toLowerCase().replace(/[^a-z0-9]/g, "_");
+                          const pairKey = [myKey, targetKey].sort().join("_");
+                          return `dm_${pairKey}`;
+                        };
+                        const target = teamMembers.find((m: any) => getDMChannel(m) === selectedChannel || (m.name && selectedChannel.includes(m.name.toLowerCase().replace(/[^a-z0-9]/g, "_"))));
+                        return target ? target.name : selectedChannel.replace("dm_", "").replace(/_/g, " ");
+                      })()
+                    : selectedChannel}
+                </span>
                 <Badge variant="outline" className="text-[10px] font-mono tracking-wider px-2 py-0.5 inline-flex items-center gap-1 border-primary/30 bg-primary/10 text-primary dark:text-blue-300 font-semibold rounded-md">
                   {selectedChannel.startsWith("dm_") ? "DIRECT MESSAGE" : "PUBLIC CHANNEL"}
                 </Badge>
@@ -1123,7 +1227,24 @@ export default function CommunicationHub() {
               ) : messages.length === 0 ? (
                 <div className="text-center text-xs text-muted-foreground py-16 space-y-2">
                   <i className="fa-solid fa-comments text-3xl opacity-40 text-primary" />
-                  <p className="font-medium">No messages in #{selectedChannel} yet.</p>
+                  <p className="font-medium">
+                    No messages in{" "}
+                    {selectedChannel.startsWith("dm_")
+                      ? (() => {
+                          const getDMChannel = (targetUser: any) => {
+                            const myId = user?._id || user?.name || "";
+                            const targetId = targetUser._id || targetUser.name || "";
+                            const myKey = myId.toString().toLowerCase().replace(/[^a-z0-9]/g, "_");
+                            const targetKey = targetId.toString().toLowerCase().replace(/[^a-z0-9]/g, "_");
+                            const pairKey = [myKey, targetKey].sort().join("_");
+                            return `dm_${pairKey}`;
+                          };
+                          const target = teamMembers.find((m: any) => getDMChannel(m) === selectedChannel || (m.name && selectedChannel.includes(m.name.toLowerCase().replace(/[^a-z0-9]/g, "_"))));
+                          return target ? target.name : selectedChannel.replace("dm_", "").replace(/_/g, " ");
+                        })()
+                      : `#${selectedChannel}`}{" "}
+                    yet.
+                  </p>
                   <p className="text-[11px]">Start the conversation below!</p>
                 </div>
               ) : (
@@ -1569,7 +1690,22 @@ export default function CommunicationHub() {
                   <Input
                     ref={chatInputRef}
                     type="text"
-                    placeholder={`Message #${selectedChannel}... (Type @ to mention)`}
+                    placeholder={`Message ${
+                      selectedChannel.startsWith("dm_")
+                        ? (() => {
+                            const getDMChannel = (targetUser: any) => {
+                              const myId = user?._id || user?.name || "";
+                              const targetId = targetUser._id || targetUser.name || "";
+                              const myKey = myId.toString().toLowerCase().replace(/[^a-z0-9]/g, "_");
+                              const targetKey = targetId.toString().toLowerCase().replace(/[^a-z0-9]/g, "_");
+                              const pairKey = [myKey, targetKey].sort().join("_");
+                              return `dm_${pairKey}`;
+                            };
+                            const target = teamMembers.find((m: any) => getDMChannel(m) === selectedChannel || (m.name && selectedChannel.includes(m.name.toLowerCase().replace(/[^a-z0-9]/g, "_"))));
+                            return target ? target.name : selectedChannel.replace("dm_", "").replace(/_/g, " ");
+                          })()
+                        : `#${selectedChannel}`
+                    }... (Type @ to mention)`}
                     value={newMessageText}
                     onChange={handleChatInputChange}
                     className="text-xs pr-8"

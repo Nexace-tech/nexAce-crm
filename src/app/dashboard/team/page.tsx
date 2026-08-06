@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useMemo, startTransition } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
+import { usePermissions } from "@/hooks/usePermissions";
 import { Preloader } from "@/components/ui/Preloader";
 import { OrgChartNode, OrgNode } from "@/components/features/OrgChartNode";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
@@ -43,7 +44,10 @@ const generateDeptCode = (name: string): string => {
 };
 
 export default function TeamDashboardPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const { user: currentUser, loading: authLoading } = useAuth();
+  const { canAccessModule, loading: permLoading } = usePermissions();
   const [users, setUsers] = useState<any[]>([]);
   const [departmentsList, setDepartmentsList] = useState<IDepartmentItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -143,11 +147,14 @@ export default function TeamDashboardPage() {
   };
 
   // URL & LocalStorage Active Tab Persistence
-  const searchParams = useSearchParams();
-  const router = useRouter();
-
   useEffect(() => {
     setMounted(true);
+
+    if (!permLoading && currentUser && !canAccessModule("team")) {
+      router.replace("/dashboard");
+      return;
+    }
+
     const tabFromUrl = searchParams.get("tab") as any;
     const tabFromStorage = typeof window !== "undefined" ? localStorage.getItem("team_active_tab") as any : null;
     const validTabs = ["directory", "orgchart", "manager", "departments"];
@@ -157,7 +164,7 @@ export default function TeamDashboardPage() {
     } else if (tabFromStorage && validTabs.includes(tabFromStorage)) {
       setActiveTab(tabFromStorage);
     }
-  }, [searchParams]);
+  }, [searchParams, permLoading, currentUser]);
 
   const handleTabChange = (tab: "directory" | "orgchart" | "manager" | "departments") => {
     startTransition(() => {
@@ -663,7 +670,7 @@ export default function TeamDashboardPage() {
     });
   }, [users, currentUser?._id]);
 
-  if (!mounted || authLoading) {
+  if (!mounted || authLoading || permLoading || (currentUser && !canAccessModule("team"))) {
     return <Preloader label="Loading Team Directory & Hierarchy..." />;
   }
 
