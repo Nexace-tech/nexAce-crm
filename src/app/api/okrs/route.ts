@@ -60,9 +60,9 @@ export async function POST(request: Request) {
 
 export async function PUT(request: Request) {
   try {
-    const authResult = await requireTenantSession();
+    const authResult = await requireTenantSession(["Admin", "Manager", "HR"]);
     if (isAuthError(authResult)) return authResult;
-    const { tenantObjectId } = authResult;
+    const { tenantObjectId, session } = authResult;
     const body = await request.json();
     const { okrId, status, keyResults, title, description, level, deadline } = body;
 
@@ -72,7 +72,10 @@ export async function PUT(request: Request) {
 
     await connectToDatabase();
 
-    const updates: any = {};
+    const okr = await OKR.findOne({ _id: okrId, tenantId: tenantObjectId });
+    if (!okr) return NextResponse.json({ error: "OKR not found" }, { status: 404 });
+
+    const updates: Record<string, unknown> = {};
     if (status) updates.status = status;
     if (keyResults) updates.keyResults = keyResults;
     if (title) updates.title = title;
@@ -80,13 +83,9 @@ export async function PUT(request: Request) {
     if (level) updates.level = level;
     if (deadline) updates.deadline = new Date(deadline);
 
-    const okr = await OKR.findOneAndUpdate(
-      { _id: okrId, tenantId: tenantObjectId },
-      updates,
-      { new: true }
-    );
+    Object.assign(okr, updates);
+    await okr.save();
 
-    if (!okr) return NextResponse.json({ error: "OKR not found" }, { status: 404 });
     return NextResponse.json({ okr, message: "OKR updated" });
   } catch (error: unknown) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Internal Server Error" }, { status: 500 });

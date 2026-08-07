@@ -35,11 +35,10 @@ export async function GET() {
  */
 export async function POST(request: Request) {
   try {
-    const session = await getSession();
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const authResult = await requireTenantSession(["Admin", "Manager", "HR"]);
+    if (isAuthError(authResult)) return authResult;
 
+    const { session } = authResult;
     const body = await request.json();
     const { title, content, category } = body;
 
@@ -71,11 +70,10 @@ export async function POST(request: Request) {
  */
 export async function PUT(request: Request) {
   try {
-    const session = await getSession();
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const authResult = await requireTenantSession(["Admin", "Manager", "HR"]);
+    if (isAuthError(authResult)) return authResult;
 
+    const { tenantObjectId } = authResult;
     const body = await request.json();
     const { articleId, title, content } = body;
 
@@ -85,8 +83,8 @@ export async function PUT(request: Request) {
 
     await connectToDatabase();
 
-    const article = await Wiki.findById(articleId);
-    if (!article || article.tenantId.toString() !== session.tenantId) {
+    const article = await Wiki.findOne({ _id: articleId, tenantId: tenantObjectId });
+    if (!article) {
       return NextResponse.json({ error: "Article not found" }, { status: 404 });
     }
 
@@ -109,11 +107,10 @@ export async function PUT(request: Request) {
  */
 export async function DELETE(request: Request) {
   try {
-    const session = await getSession();
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const authResult = await requireTenantSession(["Admin", "Manager"]);
+    if (isAuthError(authResult)) return authResult;
 
+    const { tenantObjectId } = authResult;
     const { searchParams } = new URL(request.url);
     const articleId = searchParams.get("articleId");
 
@@ -123,8 +120,8 @@ export async function DELETE(request: Request) {
 
     await connectToDatabase();
 
-    const article = await Wiki.findById(articleId);
-    if (!article || article.tenantId.toString() !== session.tenantId) {
+    const article = await Wiki.findOne({ _id: articleId, tenantId: tenantObjectId });
+    if (!article) {
       return NextResponse.json({ error: "Article not found" }, { status: 404 });
     }
 

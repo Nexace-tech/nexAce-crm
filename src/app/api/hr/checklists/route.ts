@@ -89,7 +89,7 @@ export async function PUT(req: Request) {
   try {
     const authResult = await requireTenantSession();
     if (isAuthError(authResult)) return authResult;
-    const { tenantObjectId, session } = authResult;
+    const { tenantObjectId, session, userObjectId } = authResult;
 
     await connectToDatabase();
     const body = await req.json();
@@ -102,6 +102,13 @@ export async function PUT(req: Request) {
 
     if (!checklist) {
       return NextResponse.json({ error: "Checklist not found" }, { status: 404 });
+    }
+
+    const isOwner = checklist.userId.toString() === userObjectId.toString();
+    const isPrivileged = session.role === "Admin" || session.role === "Manager" || session.role === "HR";
+
+    if (!isOwner && !isPrivileged) {
+      return NextResponse.json({ error: "Forbidden: you can only update your own checklist" }, { status: 403 });
     }
 
     const item = checklist.items.find((i: any) => i.id === itemId);

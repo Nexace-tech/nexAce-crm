@@ -378,7 +378,7 @@ export async function forgotPasswordAction(state: FormState | undefined, formDat
     );
 
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-    const resetLink = `${baseUrl}/forgot-password?email=${encodeURIComponent(email)}&code=${code}`;
+    const resetLink = `${baseUrl}/forgot-password`;
 
     // Send reset email via Nodemailer
     const mailResult = await sendEmail({

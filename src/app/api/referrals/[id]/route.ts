@@ -11,11 +11,11 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const authResult = await requireTenantSession();
+    const authResult = await requireTenantSession(["Admin", "Manager", "HR"]);
     if (isAuthError(authResult)) return authResult;
 
     const { id } = await params;
-    const { tenantObjectId } = authResult;
+    const { tenantObjectId, session } = authResult;
     const body = await request.json();
 
     await connectToDatabase();
@@ -25,18 +25,23 @@ export async function PATCH(
       return NextResponse.json({ error: "Referral not found" }, { status: 404 });
     }
 
-    if (body.candidateName !== undefined) referral.candidateName = body.candidateName;
-    if (body.candidateEmail !== undefined) referral.candidateEmail = body.candidateEmail;
-    if (body.phone !== undefined) referral.phone = body.phone;
-    if (body.position !== undefined) referral.position = body.position;
-    if (body.status !== undefined) referral.status = body.status;
-    if (body.rewardAmount !== undefined) referral.rewardAmount = Number(body.rewardAmount);
-    if (body.payoutStatus !== undefined) referral.payoutStatus = body.payoutStatus;
-    if (body.notes !== undefined) referral.notes = body.notes;
+    const allowedFields: Record<string, boolean> = {
+      status: true, payoutStatus: true, rewardAmount: true, notes: true
+    };
 
-    await referral.save();
+    const updates: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(body)) {
+      if (allowedFields[key]) {
+        updates[key] = value;
+      }
+    }
 
-    return NextResponse.json({ referral, message: "Referral updated successfully" });
+    if (Object.keys(updates).length === 0) {
+      return NextResponse.json({ error: "No updatable fields provided" }, { status: 400 });
+    }
+
+    const updated = await Referral.findByIdAndUpdate(id, { $set: updates }, { new: true, tenantId: tenantObjectId });
+    return NextResponse.json({ referral: updated, message: "Referral updated successfully" });
   } catch (error: unknown) {
     console.error("API PATCH Referral error:", error);
     const _msg = error instanceof Error ? error.message : "Internal Server Error"; return NextResponse.json({ error: _msg }, { status: 500 });

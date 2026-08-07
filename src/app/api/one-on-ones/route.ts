@@ -115,11 +115,10 @@ export async function POST(request: Request) {
  */
 export async function PUT(request: Request) {
   try {
-    const session = await getSession();
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const authResult = await requireTenantSession();
+    if (isAuthError(authResult)) return authResult;
 
+    const { session, tenantObjectId, userObjectId } = authResult;
     const body = await request.json();
     const { meetingId, notes, status, actionItems } = body;
 
@@ -136,6 +135,14 @@ export async function PUT(request: Request) {
 
     if (!meeting) {
       return NextResponse.json({ error: "Meeting record not found" }, { status: 404 });
+    }
+
+    const isManager = meeting.managerId.toString() === userObjectId.toString();
+    const isEmployee = meeting.employeeId.toString() === userObjectId.toString();
+    const isAdmin = session.role === "Admin" || session.role === "Manager";
+
+    if (!isManager && !isEmployee && !isAdmin) {
+      return NextResponse.json({ error: "Forbidden: you are not a participant in this meeting" }, { status: 403 });
     }
 
     if (notes !== undefined) meeting.notes = notes;

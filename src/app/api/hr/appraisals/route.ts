@@ -95,6 +95,10 @@ export async function PUT(req: Request) {
     }
 
     if (action === "submit_self_review") {
+      if (appraisal.userId.toString() !== userObjectId.toString()) {
+        return NextResponse.json({ error: "Forbidden: you can only submit a self-review for your own appraisal" }, { status: 403 });
+      }
+
       if (kras) appraisal.kras = kras;
       if (selfFeedback) appraisal.selfFeedback = selfFeedback;
 

@@ -47,11 +47,10 @@ export async function GET(request: Request) {
  */
 export async function POST(request: Request) {
   try {
-    const session = await getSession();
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const authResult = await requireTenantSession(["Admin", "Manager", "HR"]);
+    if (isAuthError(authResult)) return authResult;
 
+    const { tenantObjectId, session } = authResult;
     const body = await request.json();
     const { projectId, action, targetName, details } = body;
 
@@ -61,15 +60,17 @@ export async function POST(request: Request) {
 
     await connectToDatabase();
 
+    const sanitize = (input: string) => input.replace(/[\x00-\x1F\x7F]/g, "").slice(0, 1000);
+
     const newLog = await ActivityLog.create({
       tenantId: new mongoose.Types.ObjectId(session.tenantId),
       projectId: projectId && mongoose.Types.ObjectId.isValid(projectId) ? new mongoose.Types.ObjectId(projectId) : undefined,
       userId: new mongoose.Types.ObjectId(session.userId),
       userName: session.userName,
       userRole: session.role,
-      action,
-      targetName,
-      details,
+      action: sanitize(action),
+      targetName: sanitize(targetName),
+      details: sanitize(details),
     });
 
     return NextResponse.json({ success: true, log: newLog }, { status: 201 });
