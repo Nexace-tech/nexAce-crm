@@ -26,7 +26,7 @@ export async function GET() {
     // Parallel optimized lean() queries in a single DB round-trip
     const [projects, clients, timesheets, chatMessages, okrs, logs, calendarEvents, notifications] = await Promise.all([
       Project.find({ tenantId: tenantObjectId }).select("name description status priority startDate endDate").sort({ createdAt: -1 }).limit(10).lean(),
-      Client.find({ tenantId: tenantObjectId }).select("companyName name email retainerValue status").lean(),
+      Client.find({ tenantId: tenantObjectId }).select("projectId clientAccount venture projectName deliveryOwner phase priority startDate targetEndDate health billingType estHours actualHours progressPercent").lean(),
       TimeEntry.find({ tenantId: tenantObjectId }).select("date hours description status").sort({ date: -1 }).limit(10).lean(),
       ChatMessage.find({ tenantId: tenantObjectId, channel: "general" }).select("senderName text createdAt").sort({ createdAt: -1 }).limit(20).lean(),
       OKR.find({ tenantId: tenantObjectId }).select("title description progress category targetDate").sort({ createdAt: -1 }).lean(),

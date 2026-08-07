@@ -12,6 +12,11 @@ import { Sprint } from "@/models/Sprint";
 import { Event } from "@/models/Event";
 import { TimeEntry } from "@/models/TimeEntry";
 import { Attendance } from "@/models/Attendance";
+import { ChatMessage } from "@/models/ChatMessage";
+import { Announcement } from "@/models/Announcement";
+import { Referral } from "@/models/Referral";
+import { Notification } from "@/models/Notification";
+import { Client } from "@/models/Client";
 
 export async function GET() {
   // Only allow seeding in development environment
@@ -33,6 +38,11 @@ export async function GET() {
     await Event.deleteMany({});
     await TimeEntry.deleteMany({});
     await Attendance.deleteMany({});
+    await ChatMessage.deleteMany({});
+    await Announcement.deleteMany({});
+    await Referral.deleteMany({});
+    await Notification.deleteMany({});
+    await Client.deleteMany({});
 
     // 2. Create Tenant
     const tenant = await Tenant.create({
@@ -53,6 +63,7 @@ export async function GET() {
       role: "Admin",
       tenantId,
       department: "Management",
+      status: "Active",
       bio: "CEO & Co-founder. Overseeing overall strategic direction.",
       phone: "+1-555-0100",
       photoUrl: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&h=150&fit=crop&crop=face",
@@ -70,6 +81,7 @@ export async function GET() {
       tenantId,
       department: "Engineering",
       managerId: ceoId,
+      status: "Active",
       bio: "VP of Engineering. Hailing from MIT, loves scalable architectures and clean code.",
       phone: "+1-555-0120",
       photoUrl: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&h=150&fit=crop&crop=face",
@@ -84,6 +96,7 @@ export async function GET() {
       tenantId,
       department: "Design",
       managerId: ceoId,
+      status: "Active",
       bio: "Creative Director. Passionate about glassmorphism, responsive designs, and dark aesthetics.",
       phone: "+1-555-0130",
       photoUrl: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&h=150&fit=crop&crop=face",
@@ -102,6 +115,7 @@ export async function GET() {
       tenantId,
       department: "Engineering",
       managerId: engManagerId,
+      status: "Active",
       bio: "Senior Software Engineer. Focuses on Next.js backend API optimizations and routing.",
       phone: "+1-555-0121",
       photoUrl: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&h=150&fit=crop&crop=face",
@@ -116,6 +130,7 @@ export async function GET() {
       tenantId,
       department: "Engineering",
       managerId: engManagerId,
+      status: "Active",
       bio: "Frontend Developer. Enjoys building micro-interactions and smooth scroll timelines.",
       phone: "+1-555-0122",
       photoUrl: "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=150&h=150&fit=crop&crop=face",
@@ -130,6 +145,7 @@ export async function GET() {
       tenantId,
       department: "Design",
       managerId: designManagerId,
+      status: "Active",
       bio: "Junior UI Designer. Focused on layout hierarchy and vector typography illustrations.",
       phone: "+1-555-0131",
       photoUrl: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&h=150&fit=crop&crop=face",
@@ -144,6 +160,7 @@ export async function GET() {
       tenantId,
       department: "Marketing",
       managerId: ceoId,
+      status: "Active",
       bio: "Marketing Specialist. Organizes campaigns and tracks retainer performance goals.",
       phone: "+1-555-0140",
       photoUrl: "https://images.unsplash.com/photo-1513956589380-bad6acb9b9d4?w=150&h=150&fit=crop&crop=face",

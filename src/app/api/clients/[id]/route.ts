@@ -29,6 +29,15 @@ export async function GET(
       return NextResponse.json({ error: "Client not found" }, { status: 404 });
     }
 
+    const isElevatedRole = session.role === "Admin";
+    const isOwner = client.uploadedBy?.toString() === session.userId;
+    const escapedName = session.userName.replace(/[-\/\\^$*+?.()|[\]{}]/g, "\\$&");
+    const isDeliveryOwner = new RegExp(escapedName, "i").test(client.deliveryOwner || "");
+
+    if (!isElevatedRole && !isOwner && !isDeliveryOwner) {
+      return NextResponse.json({ error: "Forbidden: Access denied" }, { status: 403 });
+    }
+
     return NextResponse.json({ client });
   } catch (error: unknown) {
     return NextResponse.json({ error: (error instanceof Error ? error.message : "Internal Server Error") || "Server Error" }, { status: 500 });
@@ -66,6 +75,15 @@ export async function PATCH(
       return NextResponse.json({ error: "Client not found" }, { status: 404 });
     }
 
+    const isElevatedRole = session.role === "Admin";
+    const isOwner = client.uploadedBy?.toString() === session.userId;
+    const escapedName = session.userName.replace(/[-\/\\^$*+?.()|[\]{}]/g, "\\$&");
+    const isDeliveryOwner = new RegExp(escapedName, "i").test(client.deliveryOwner || "");
+
+    if (!isElevatedRole && !isOwner && !isDeliveryOwner) {
+      return NextResponse.json({ error: "Forbidden: Access denied" }, { status: 403 });
+    }
+
     // Mode A: Log retainer hours used
     if (typeof body.logHours === "number") {
       client.usedHours = (client.usedHours || 0) + body.logHours;
@@ -83,16 +101,33 @@ export async function PATCH(
     }
 
     // Mode C: Update fields directly
-    if (body.name) client.name = body.name;
-    if (body.company) client.company = body.company;
-    if (body.email) client.email = body.email;
-    if (body.phone !== undefined) client.phone = body.phone;
-    if (body.status) client.status = body.status;
-    if (body.pipelineStage) client.pipelineStage = body.pipelineStage;
-    if (body.retainerHours !== undefined) client.retainerHours = body.retainerHours;
-    if (body.usedHours !== undefined && typeof body.logHours !== "number") client.usedHours = body.usedHours;
-    if (body.monthlyValue !== undefined) client.monthlyValue = body.monthlyValue;
-    if (body.renewalDate !== undefined) client.renewalDate = body.renewalDate ? new Date(body.renewalDate) : undefined;
+    if (body.projectId) client.projectId = body.projectId;
+    if (body.clientAccount) {
+      client.clientAccount = body.clientAccount;
+      client.name = body.clientAccount;
+      client.company = body.clientAccount;
+    }
+    if (body.venture) client.venture = body.venture;
+    if (body.projectName) client.projectName = body.projectName;
+    if (body.deliveryOwner) client.deliveryOwner = body.deliveryOwner;
+    if (body.phase) {
+      client.phase = body.phase;
+      client.status = body.phase === "On Hold" ? "On Hold" : body.phase?.startsWith("Closed") ? "Archived" : "Active";
+    }
+    if (body.priority) client.priority = body.priority;
+    if (body.startDate) client.startDate = new Date(body.startDate);
+    if (body.targetEndDate) client.targetEndDate = new Date(body.targetEndDate);
+    if (body.health) client.health = body.health;
+    if (body.billingType) client.billingType = body.billingType;
+    if (body.estHours !== undefined) {
+      client.estHours = Number(body.estHours);
+      client.retainerHours = Number(body.estHours);
+    }
+    if (body.actualHours !== undefined) {
+      client.actualHours = Number(body.actualHours);
+      client.usedHours = Number(body.actualHours);
+    }
+    if (body.progressPercent !== undefined) client.progressPercent = Number(body.progressPercent);
     if (body.notes !== undefined) client.notes = body.notes;
 
     await client.save();
@@ -116,8 +151,8 @@ export async function DELETE(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    if (session.role !== "Admin" && session.role !== "Manager") {
-      return NextResponse.json({ error: "Forbidden: Admins or Managers only" }, { status: 403 });
+    if (session.role !== "Admin") {
+      return NextResponse.json({ error: "Forbidden: Only administrators can delete projects." }, { status: 403 });
     }
 
     const { id } = await params;

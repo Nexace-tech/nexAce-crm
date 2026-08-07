@@ -30,33 +30,13 @@ export async function requireTenantSession(
 
   await connectToDatabase();
 
-  // Look up the user scoped to the session's tenant so a forged cross-tenant
-  // token / id cannot pass.
   const user = await User.findOne({
     _id: session.userId,
     tenantId: new mongoose.Types.ObjectId(session.tenantId),
   }).lean();
 
-  if (!user) {
-    // Token refers to a user that no longer exists (or different tenant) — invalidate.
-    return NextResponse.json({ error: "Unauthorized access" }, { status: 401 });
-  }
-
-  // Immediately reject suspended accounts, regardless of the JWT claims.
-  if (user.status === "Suspended") {
-    return NextResponse.json(
-      { error: "Your account has been suspended. Please contact your workspace administrator." },
-      { status: 403 }
-    );
-  }
-
-  // The JWT role must match the current DB role. This defeats stale-token
-  // privilege escalation (e.g. a demoted Admin keeps "Admin" in a 7-day JWT).
-  if (user.role !== session.role) {
-    return NextResponse.json(
-      { error: "Session role is out of sync with the server. Please sign in again." },
-      { status: 401 }
-    );
+  if (!user || user.status === "Pending" || user.status === "Suspended") {
+    return NextResponse.json({ error: "Unauthorized access: Account not active" }, { status: 401 });
   }
 
   if (allowedRoles && allowedRoles.length > 0) {

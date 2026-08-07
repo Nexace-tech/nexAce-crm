@@ -79,7 +79,7 @@ export default function RegisterPage() {
         setDevPreviewUrl(data.previewUrl || "");
         setDevCode(data.devCode || "");
         setCodeSent(true);
-        setResendCooldown(5);
+        setResendCooldown(30);
       } else {
         if (data.userExists || (data.error && data.error.includes("already registered"))) {
           setVerificationError("An account with this email address already exists. Redirecting to Sign In...");
@@ -252,9 +252,26 @@ export default function RegisterPage() {
 
             {/* 3. 6-Digit OTP Verification Code */}
             <div className="space-y-1.5">
-              <label htmlFor="code" className="text-xs font-semibold text-foreground flex items-center gap-1.5">
-                <i className="fa-solid fa-key text-muted-foreground text-xs" /> 6-Digit Email Verification Code
-              </label>
+              <div className="flex justify-between items-center">
+                <label htmlFor="code" className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                  <i className="fa-solid fa-key text-muted-foreground text-xs" /> 6-Digit Email Verification Code
+                </label>
+                {codeSent && (
+                  <button
+                    type="button"
+                    onClick={handleSendCode}
+                    disabled={sendingCode || resendCooldown > 0}
+                    className="text-[11px] font-semibold text-primary hover:underline disabled:opacity-50 disabled:no-underline cursor-pointer flex items-center gap-1.5"
+                  >
+                    <i className="fa-solid fa-rotate-right text-[10px]" />
+                    {sendingCode
+                      ? "Resending..."
+                      : resendCooldown > 0
+                      ? `Resend in ${resendCooldown}s`
+                      : "Resend Code"}
+                  </button>
+                )}
+              </div>
               <Input
                 id="code"
                 name="code"

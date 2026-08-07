@@ -35,10 +35,19 @@ export async function GET() {
     // force re-authentication rather than trusting the token's self-asserted
     // role/status.
     if (!user) {
+      const { deleteSession } = await import("@/lib/session");
+      await deleteSession();
       return NextResponse.json({ user: null }, { status: 401 });
     }
 
-    return NextResponse.json({ user });
+    return NextResponse.json(
+      { user },
+      {
+        headers: {
+          "Cache-Control": "no-store, max-age=0, must-revalidate",
+        },
+      }
+    );
   } catch (error) {
     console.error("API Auth Me error:", error);
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });

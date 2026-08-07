@@ -41,7 +41,7 @@ export function CommandPalette({
     { id: "nav-hr", title: "HR Portal & Appraisals", category: "Navigation", icon: "fa-solid fa-briefcase", href: "/dashboard/hr", moduleKey: "hr" },
     { id: "nav-goals", title: "Goals, OKRs & Surveys", category: "Navigation", icon: "fa-solid fa-bullseye", href: "/dashboard/goals", moduleKey: "goals" },
     { id: "nav-analytics", title: "Analytics & Audit Logs", category: "Navigation", icon: "fa-solid fa-chart-line", href: "/dashboard/analytics", moduleKey: "analytics" },
-    { id: "nav-crm", title: "CRM Client Retainers", category: "Navigation", icon: "fa-solid fa-handshake", href: "/dashboard/clients", moduleKey: "clients" },
+    { id: "nav-crm", title: "Operations Projects", category: "Navigation", icon: "fa-solid fa-list-check", href: "/dashboard/clients", moduleKey: "clients" },
     { id: "nav-referrals", title: "Referral Pipeline", category: "Navigation", icon: "fa-solid fa-link", href: "/dashboard/referrals", moduleKey: "referrals" },
     { id: "nav-notifs", title: "Notification Center", category: "Navigation", icon: "fa-solid fa-bell", href: "/dashboard/notifications" },
     { id: "nav-settings", title: "Settings & Administration", category: "Navigation", icon: "fa-solid fa-gear", href: "/dashboard/settings", moduleKey: "settings" },
@@ -51,7 +51,7 @@ export function CommandPalette({
     { id: "act-kudos", title: "Give Kudos to Colleague", category: "Quick Actions", icon: "fa-solid fa-wand-magic-sparkles", href: "/dashboard/goals", featureKey: "sendKudos" },
     { id: "act-referral", title: "Submit Candidate Referral", category: "Quick Actions", icon: "fa-solid fa-user-plus", href: "/dashboard/referrals", featureKey: "submitReferral" },
     { id: "act-timesheet", title: "Log Timesheet Hours", category: "Quick Actions", icon: "fa-solid fa-clock", href: "/dashboard/calendar", featureKey: "logOwnTimesheet" },
-    { id: "act-client", title: "Add Client Retainer", category: "Quick Actions", icon: "fa-solid fa-handshake", href: "/dashboard/clients", featureKey: "createClients" },
+    { id: "act-client", title: "Add Operations Project", category: "Quick Actions", icon: "fa-solid fa-list-check", href: "/dashboard/clients", featureKey: "createClients" },
     { id: "act-drive", title: "Upload Drive Document", category: "Quick Actions", icon: "fa-solid fa-cloud-arrow-up", href: "/dashboard/projects", featureKey: "uploadDriveFiles" },
 
     // System

@@ -67,7 +67,7 @@ export default async function DashboardLayout({ children }: DashboardLayoutProps
     { key: "hr", name: "HR Portal", href: "/dashboard/hr", icon: "fa-solid fa-briefcase" },
     { key: "goals", name: "Goals & OKRs", href: "/dashboard/goals", icon: "fa-solid fa-bullseye" },
     { key: "analytics", name: "Analytics Logs", href: "/dashboard/analytics", icon: "fa-solid fa-chart-line" },
-    { key: "clients", name: "CRM Retainers", href: "/dashboard/clients", icon: "fa-solid fa-handshake" },
+    { key: "clients", name: "Operations", href: "/dashboard/clients", icon: "fa-solid fa-list-check" },
     { key: "referrals", name: "Referral Pipeline", href: "/dashboard/referrals", icon: "fa-solid fa-link" },
     { key: "settings", name: "Settings & Security", href: "/dashboard/settings", icon: "fa-solid fa-gear" },
   ];

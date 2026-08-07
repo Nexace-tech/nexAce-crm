@@ -49,7 +49,7 @@ export function AdminDashboard({ user }: { user: any }) {
   }, []);
 
   // Dynamic metrics computations
-  const totalRetainersValue = clients.reduce((acc, c) => acc + (c.monthlyValue || 0), 0);
+  const activeOperationsCount = clients.filter((c) => c.phase === "In Delivery").length;
   const pendingTimesheetsCount = timesheets.filter((t) => t.status === "Submitted" || t.status === "Pending").length;
   const activeSprintsCount = projects.filter((p) => !p.status || p.status.toLowerCase() === "active" || p.status.toLowerCase() === "in progress" || p.status.toLowerCase() === "planning").length;
 
@@ -122,16 +122,16 @@ export function AdminDashboard({ user }: { user: any }) {
           <Card className="hover:shadow-lg transition-all duration-200 border-l-4 border-l-emerald-500 group-hover:border-l-emerald-400 group-hover:translate-y-[-2px] cursor-pointer">
             <CardContent className="p-5 flex items-center justify-between">
               <div className="space-y-1">
-                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground group-hover:text-emerald-500 transition-colors">Monthly Retainers</p>
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground group-hover:text-emerald-500 transition-colors">Operations Projects</p>
                 <p className="text-2xl font-bold text-foreground">
-                  {loading ? "..." : totalRetainersValue > 0 ? `$${totalRetainersValue.toLocaleString()}` : "$42,800"}
+                  {loading ? "..." : clients.length}
                 </p>
                 <p className="text-xs text-emerald-500 font-medium flex items-center gap-1 mt-1">
-                  <i className="fa-solid fa-handshake text-xs" /> {clients.length > 0 ? clients.length : 4} Active Retainer Clients
+                  <i className="fa-solid fa-list-check text-xs" /> {loading ? "..." : activeOperationsCount} Active in Delivery
                 </p>
               </div>
               <div className="p-3 bg-emerald-500/10 text-emerald-500 rounded-xl flex items-center justify-center w-12 h-12 group-hover:scale-110 transition-transform">
-                <i className="fa-solid fa-wallet text-xl" />
+                <i className="fa-solid fa-list-check text-xl" />
               </div>
             </CardContent>
           </Card>

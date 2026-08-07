@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
+import { requireTenantSession, isAuthError } from "@/lib/auth-guard";
 import { connectToDatabase } from "@/lib/db";
 import { OneOnOneMeeting } from "@/models/OneOnOneMeeting";
 import { User } from "@/models/User";

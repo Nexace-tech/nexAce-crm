@@ -79,7 +79,7 @@ export async function PUT(req: Request) {
   try {
     const authResult = await requireTenantSession();
     if (isAuthError(authResult)) return authResult;
-    const { tenantObjectId, session } = authResult;
+    const { tenantObjectId, session, userObjectId } = authResult;
 
     await connectToDatabase();
     const body = await req.json();

@@ -25,9 +25,16 @@ export async function GET() {
 
     await connectToDatabase();
 
-    const files = await DriveFile.find({
+    const isElevatedRole = session.role === "Admin";
+    const queryCondition: any = {
       tenantId: new mongoose.Types.ObjectId(session.tenantId),
-    })
+    };
+
+    if (!isElevatedRole) {
+      queryCondition.uploadedBy = new mongoose.Types.ObjectId(session.userId);
+    }
+
+    const files = await DriveFile.find(queryCondition)
       .populate("uploadedBy", "name role")
       .sort({ createdAt: -1 });
 
