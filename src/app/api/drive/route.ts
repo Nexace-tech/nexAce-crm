@@ -68,9 +68,9 @@ export async function POST(request: Request) {
 
     // Check uploaded file extension
     const fileExt = fileName.includes(".") ? fileName.split(".").pop()?.toLowerCase() || "" : "";
-    if (fileExt && !allowedExts.includes(fileExt)) {
+    if (!allowedExts.includes(fileExt)) {
       return NextResponse.json({
-        error: `File type '.${fileExt}' is not allowed by your Admin workspace policy. Allowed formats: ${allowedExts.map(e => `.${e}`).join(", ")}`
+        error: `File type '${fileExt ? `.${fileExt}` : "no extension"}' is not allowed by your Admin workspace policy. Allowed formats: ${allowedExts.map(e => `.${e}`).join(", ")}`
       }, { status: 400 });
     }
 
@@ -79,7 +79,12 @@ export async function POST(request: Request) {
     const buffer = Buffer.from(arrayBuffer);
 
     const folder = (formData.get("folder") as string) || "/";
-    const targetDir = folder && folder !== "/" ? path.join(UPLOAD_DIR, folder) : UPLOAD_DIR;
+    const targetDir = path.resolve(folder && folder !== "/" ? path.join(UPLOAD_DIR, folder) : UPLOAD_DIR);
+
+    // Enforce folder remains within upload directory boundary
+    if (!targetDir.startsWith(UPLOAD_DIR)) {
+      return NextResponse.json({ error: "Forbidden: Invalid folder path" }, { status: 400 });
+    }
 
     // Ensure target directory exists (e.g. src/uploads/Chat)
     await mkdir(targetDir, { recursive: true });
@@ -100,11 +105,11 @@ export async function POST(request: Request) {
       diskFileName = savedFileName;
     }
 
-    const destinationPath = path.join(targetDir, diskFileName);
+    const destinationPath = path.join(/*turbopackIgnore: true*/ targetDir, diskFileName);
     // Fix #4: Use async write — avoids blocking the event loop during file uploads
     await writeFile(destinationPath, buffer);
 
-    const relativeFilePath = folder && folder !== "/" ? path.join(folder, diskFileName) : diskFileName;
+    const relativeFilePath = folder && folder !== "/" ? path.join(/*turbopackIgnore: true*/ folder, diskFileName) : diskFileName;
 
     await connectToDatabase();
 

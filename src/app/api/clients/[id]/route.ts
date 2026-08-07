@@ -48,6 +48,10 @@ export async function PATCH(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    if (session.role !== "Admin" && session.role !== "Manager") {
+      return NextResponse.json({ error: "Forbidden: Admins or Managers only" }, { status: 403 });
+    }
+
     const { id } = await params;
     const body = await request.json();
 
@@ -112,7 +116,12 @@ export async function DELETE(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    if (session.role !== "Admin" && session.role !== "Manager") {
+      return NextResponse.json({ error: "Forbidden: Admins or Managers only" }, { status: 403 });
+    }
+
     const { id } = await params;
+
     await connectToDatabase();
 
     const client = await Client.findOneAndDelete({

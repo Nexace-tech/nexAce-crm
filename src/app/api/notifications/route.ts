@@ -54,6 +54,11 @@ export async function POST(request: Request) {
     await connectToDatabase();
 
     if (broadcast) {
+      // Only privileged roles may broadcast to the entire tenant; prevent Employee spam/abuse
+      if (!["Admin", "OPS", "Manager", "HR"].includes(session.role)) {
+        return NextResponse.json({ error: "Forbidden: Insufficient permissions to broadcast notifications" }, { status: 403 });
+      }
+
       // Import User model dynamically to get all tenant members
       const { User } = await import("@/models/User");
       const tenantUsers = await User.find({ tenantId: tenantObjectId }).select("_id");

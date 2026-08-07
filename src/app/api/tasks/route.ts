@@ -147,6 +147,22 @@ export async function POST(request: Request) {
 
     await connectToDatabase();
 
+    // Authorization: non-privileged users must be a member of the target project
+    if (session.role !== "Admin" && session.role !== "Manager") {
+      if (!mongoose.Types.ObjectId.isValid(projectId)) {
+        return NextResponse.json({ error: "Invalid project ID" }, { status: 400 });
+      }
+      const userObjId = new mongoose.Types.ObjectId(session.userId);
+      const project = await Project.findOne({
+        _id: new mongoose.Types.ObjectId(projectId),
+        tenantId: new mongoose.Types.ObjectId(session.tenantId),
+        $or: [{ members: userObjId }, { createdBy: userObjId }],
+      });
+      if (!project) {
+        return NextResponse.json({ error: "Forbidden: you are not a member of this project" }, { status: 403 });
+      }
+    }
+
     const newTask = await Task.create({
       title,
       description: description || "",
@@ -222,6 +238,28 @@ export async function PUT(request: Request) {
     const task = await Task.findById(taskId);
     if (!task || task.tenantId.toString() !== session.tenantId) {
       return NextResponse.json({ error: "Task not found" }, { status: 404 });
+    }
+
+    const tenantObjId = new mongoose.Types.ObjectId(session.tenantId);
+    const userObjId = new mongoose.Types.ObjectId(session.userId);
+    const isPrivileged = session.role === "Admin" || session.role === "Manager";
+
+    if (!isPrivileged) {
+      const isAssignee = task.assignee && task.assignee.toString() === session.userId;
+      const isMember = task.projectId
+        ? await Project.exists({
+            _id: task.projectId,
+            tenantId: tenantObjId,
+            $or: [{ members: userObjId }, { createdBy: userObjId }],
+          })
+        : false;
+      if (!isAssignee && !isMember) {
+        return NextResponse.json({ error: "Forbidden: you do not have access to this task" }, { status: 403 });
+      }
+      // Non-privileged users cannot reassign a task to a different user
+      if (assignee !== undefined && assignee !== null && assignee !== session.userId) {
+        return NextResponse.json({ error: "Forbidden: you can only reassign tasks to yourself" }, { status: 403 });
+      }
     }
 
     const oldStatus = task.status;
@@ -396,6 +434,11 @@ export async function DELETE(request: Request) {
 
     if (!taskId) {
       return NextResponse.json({ error: "Task ID is required" }, { status: 400 });
+    }
+
+    // Authorization: only privileged roles may delete tasks
+    if (session.role !== "Admin" && session.role !== "Manager") {
+      return NextResponse.json({ error: "Forbidden: Admins or Managers only" }, { status: 403 });
     }
 
     await connectToDatabase();

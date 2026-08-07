@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import nodemailer from "nodemailer";
 import { connectToDatabase } from "@/lib/db";
 import { EmailVerification } from "@/models/EmailVerification";
+import { rateLimitOtp, getClientIp } from "@/lib/rateLimiter";
 
 import dns from "dns";
 
@@ -16,6 +17,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         { error: "Please enter a valid, complete email address (e.g. user@company.com)." },
         { status: 400 }
+      );
+    }
+
+    // 0b. Rate limit OTP requests per email and per IP to prevent brute-force / enumeration
+    const rate = rateLimitOtp(cleanEmail, await getClientIp());
+    if (!rate.allowed) {
+      return NextResponse.json(
+        { error: `Too many verification attempts. Try again in ${Math.ceil(rate.retryAfterMs / 1000)}s.` },
+        { status: 429, headers: { "Retry-After": String(Math.ceil(rate.retryAfterMs / 1000)) } }
       );
     }
 
@@ -171,8 +181,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ 
       success: true, 
-      previewUrl: isProduction ? undefined : previewUrl, 
-      devCode: isProduction ? undefined : (previewUrl ? code : undefined) 
+      previewUrl: isProduction ? undefined : previewUrl,
     });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Failed to send verification code.";

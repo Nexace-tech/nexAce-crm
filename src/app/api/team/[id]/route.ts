@@ -123,6 +123,8 @@ export async function PUT(request: Request, { params }: RouteParams) {
         await EmailVerification.deleteOne({ _id: verification._id });
       }
       user.passwordHash = await bcrypt.hash(body.newPassword, 10);
+      // Setting a password (by admin or self) satisfies the first-run reset requirement
+      user.forcePasswordReset = false;
     }
 
     // Admin-specific updates
@@ -197,7 +199,9 @@ export async function PUT(request: Request, { params }: RouteParams) {
 
     await user.save();
 
-    return NextResponse.json({ success: true, user });
+    // Never return the password hash to the client
+    const { passwordHash: _ph, ...safeUser } = user.toObject();
+    return NextResponse.json({ success: true, user: safeUser });
   } catch (error: unknown) {
     console.error("API PUT Single Team error:", error);
     const _msg = error instanceof Error ? error.message : "Internal Server Error"; return NextResponse.json({ error: _msg }, { status: 500 });

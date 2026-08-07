@@ -28,16 +28,17 @@ export interface IUser extends Document {
     instagram?: string;
     facebook?: string;
   };
-  lastActiveAt?: Date;
-  createdAt: Date;
-}
+   lastActiveAt?: Date;
+   forcePasswordReset?: boolean;
+   createdAt: Date;
+ }
 
 const UserSchema: Schema = new Schema({
   name: { type: String, required: true, trim: true },
   username: { type: String, unique: true, sparse: true, lowercase: true, trim: true },
   email: { type: String, required: true, unique: true, lowercase: true, trim: true },
   passwordHash: { type: String, required: true },
-  role: { type: String, default: "Employee", trim: true },
+  role: { type: String, enum: ["Admin", "OPS", "Manager", "HR", "Employee"], default: "Employee", trim: true },
   tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true, index: true },
   department: { type: String },
   departments: [{ type: String }],
@@ -59,8 +60,9 @@ const UserSchema: Schema = new Schema({
     instagram: { type: String, default: "" },
     facebook: { type: String, default: "" }
   },
-  lastActiveAt: { type: Date, default: Date.now },
-  createdAt: { type: Date, default: Date.now }
+   lastActiveAt: { type: Date, default: Date.now },
+   forcePasswordReset: { type: Boolean, default: false },
+   createdAt: { type: Date, default: Date.now }
 });
 
 // Compound index for tenant user listing & role filtering

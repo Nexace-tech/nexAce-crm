@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
-import fs from "fs";
+import { writeFile, mkdir } from "fs/promises";
 import path from "path";
 
 // Define the public uploads directory
@@ -35,16 +35,14 @@ export async function POST(request: Request) {
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    // Ensure public/uploads exists
-    if (!fs.existsSync(PUBLIC_UPLOAD_DIR)) {
-      fs.mkdirSync(PUBLIC_UPLOAD_DIR, { recursive: true });
-    }
+    // Ensure public/uploads exists asynchronously
+    await mkdir(PUBLIC_UPLOAD_DIR, { recursive: true });
 
     // Save with unique name to prevent collisions
     const safeName = `avatar-${session.userId}-${Date.now()}${extension}`;
     const destinationPath = path.join(PUBLIC_UPLOAD_DIR, safeName);
     
-    fs.writeFileSync(destinationPath, buffer);
+    await writeFile(destinationPath, buffer);
 
     // Return the public URL path
     const photoUrl = `/uploads/${safeName}`;

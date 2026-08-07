@@ -30,20 +30,10 @@ export async function GET() {
       user = null;
     }
 
-    if (!user && session) {
-      user = {
-        _id: session.userId,
-        name: session.userName,
-        role: session.role,
-        tenantId: {
-          _id: session.tenantId,
-          name: session.tenantName,
-          slug: session.tenantName?.toLowerCase().replace(/\s+/g, "-") || "workspace"
-        },
-        status: "Active"
-      };
-    }
-
+    // Security: do NOT fabricate a user from unverified JWT claims. If the user
+    // cannot be found in the DB (deleted, cross-tenant, or transient error),
+    // force re-authentication rather than trusting the token's self-asserted
+    // role/status.
     if (!user) {
       return NextResponse.json({ user: null }, { status: 401 });
     }

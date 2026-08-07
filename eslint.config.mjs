@@ -12,6 +12,7 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
     "src/app/api/seed/**", // seed routes contain intentional dynamic data shapes
+    "scratch_*.js",
   ]),
   {
     rules: {

@@ -54,7 +54,20 @@ function LoginForm() {
               </div>
             )}
 
-            {state?.message && (
+            {state?.step === "reset" && (
+              <div className="p-3.5 text-xs bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/30 rounded-lg font-medium space-y-1">
+                <div className="flex items-center gap-1.5 font-bold text-sm">
+                  <i className="fa-solid fa-circle-exclamation text-amber-500" /> Password Reset Required
+                </div>
+                <p className="leading-relaxed">{state.message}</p>
+                <p className="leading-relaxed">
+                  Use the <span className="text-primary font-semibold">Forgot?</span> link below to receive a
+                  verification code and set a new password.
+                </p>
+              </div>
+            )}
+
+            {state?.message && state?.step !== "reset" && (
               <div className="p-3 text-xs bg-destructive/10 text-destructive border border-destructive/20 rounded-md font-medium">
                 {state.message}
               </div>

@@ -10,6 +10,7 @@ import { redirect } from "next/navigation";
 import { sendEmail } from "@/lib/mail";
 import { Notification } from "@/models/Notification";
 import { validatePasswordPattern } from "@/lib/utils";
+import { rateLimitOtp, rateLimitVerify, getClientIp } from "@/lib/rateLimiter";
 
 export interface FormState {
   errors?: {
@@ -175,7 +176,7 @@ export async function registerAction(state: FormState | undefined, formData: For
       }));
       await Notification.insertMany(notifDocs);
 
-      const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000";
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
       for (const recipient of notifyRecipients) {
         try {
           await sendEmail({
@@ -278,6 +279,17 @@ export async function loginAction(state: FormState | undefined, formData: FormDa
       };
     }
 
+    // Enforce first-run password reset for provisioned accounts (weak/temp passwords)
+    if (user.forcePasswordReset) {
+      return {
+        step: "reset",
+        resetEmail: email,
+        enteredEmail: email,
+        enteredPassword: password,
+        message: "You must set a new password before signing in. Check your email for a verification code or use the Forgot Password link.",
+      };
+    }
+
     // Get tenant details
     const tenant = user.tenantId as any; // Cast populated tenantId
     if (!tenant) {
@@ -325,12 +337,20 @@ export async function forgotPasswordAction(state: FormState | undefined, formDat
 
   const errors: NonNullable<FormState["errors"]> = {};
 
-  if (!email || !email.includes("@")) {
-    errors.email = ["Please enter a valid email address."];
-    return { errors };
-  }
+    if (!email || !email.includes("@")) {
+      errors.email = ["Please enter a valid email address."];
+      return { errors };
+    }
 
-  try {
+    // Rate limit password-reset OTP requests per email and per IP
+    const rate = rateLimitOtp(email, await getClientIp());
+    if (!rate.allowed) {
+      return {
+        message: `Too many password reset attempts. Try again in ${Math.ceil(rate.retryAfterMs / 1000)} seconds.`,
+      };
+    }
+
+    try {
     await connectToDatabase();
 
     // Check if the user exists
@@ -400,7 +420,6 @@ export async function forgotPasswordAction(state: FormState | undefined, formDat
       success: true,
       step: "reset",
       resetEmail: email,
-      devCode: mailResult.isDev ? code : undefined,
       previewUrl: mailResult.isDev ? mailResult.previewUrl : undefined,
       message: `A 6-digit verification code has been sent to ${email}.`,
     };
@@ -439,6 +458,17 @@ export async function resetPasswordAction(state: FormState | undefined, formData
     return { errors, step: "reset", resetEmail: email, enteredCode: code };
   }
 
+  // Rate limit verification attempts to prevent brute-forcing the 6-digit OTP
+  const rate = rateLimitVerify(email, await getClientIp());
+  if (!rate.allowed) {
+    return {
+      step: "reset",
+      resetEmail: email,
+      enteredCode: code,
+      message: `Too many code attempts. Try again in ${Math.ceil(rate.retryAfterMs / 1000)} seconds.`,
+    };
+  }
+
   try {
     await connectToDatabase();
 
@@ -467,6 +497,7 @@ export async function resetPasswordAction(state: FormState | undefined, formData
     // Hash new password & update User record
     const passwordHash = await bcrypt.hash(newPassword, 10);
     user.passwordHash = passwordHash;
+    user.forcePasswordReset = false;
     await user.save();
 
     // Delete verification record

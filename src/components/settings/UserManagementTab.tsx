@@ -53,6 +53,7 @@ export function UserManagementTab() {
     newPassword: "",
   });
   const [formError, setFormError] = useState("");
+  const [createdTempPassword, setCreatedTempPassword] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Pagination
@@ -192,6 +193,7 @@ export function UserManagementTab() {
         throw new Error(data.error || "Failed to create user");
       }
 
+      setCreatedTempPassword(data.tempPassword || null);
       setShowCreateModal(false);
       setFormData({
         name: "",
@@ -274,6 +276,7 @@ export function UserManagementTab() {
                 newPassword: "",
               });
               setFormError("");
+              setCreatedTempPassword(null);
               setShowCreateModal(true);
             }}
             className="bg-primary hover:bg-primary/90 text-primary-foreground gap-2 font-medium shadow-md"
@@ -701,6 +704,24 @@ export function UserManagementTab() {
         </div>
       )}
 
+      {/* One-time temporary password banner (shown after a successful user creation) */}
+      {createdTempPassword && (
+        <div className="mb-4 p-3.5 text-xs bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 rounded-lg flex items-start gap-2">
+          <i className="fa-solid fa-circle-check mt-0.5 text-emerald-500" />
+          <div>
+            <span className="font-semibold">User created.</span> Share this temporary password securely; the user must reset it on first login.
+            <div className="mt-1 font-mono text-base break-all bg-emerald-500/10 border border-emerald-500/20 rounded p-2">{createdTempPassword}</div>
+          </div>
+          <button
+            onClick={() => setCreatedTempPassword(null)}
+            className="text-emerald-600 dark:text-emerald-400 hover:text-foreground"
+            aria-label="Dismiss"
+          >
+            <i className="fa-solid fa-xmark text-sm" />
+          </button>
+        </div>
+      )}
+
       {/* Create User Modal */}
       {showCreateModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm">
@@ -777,7 +798,7 @@ export function UserManagementTab() {
               </div>
 
               <p className="text-xs text-muted-foreground italic">
-                * Note: Default initial password will be set to <code className="text-primary font-mono font-bold">password123</code>. The user can change it upon logging in.
+                * A strong, random temporary password is generated and shown after creation. The user must reset it on first login.
               </p>
 
               <div className="flex justify-end gap-3 pt-4 border-t border-border">

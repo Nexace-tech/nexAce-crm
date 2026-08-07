@@ -5,6 +5,8 @@ import { User } from "@/models/User";
 import { Attendance } from "@/models/Attendance";
 import { Notification } from "@/models/Notification";
 import { getUserDataScope } from "@/lib/dataScope";
+import { canAssignRole } from "@/lib/roles";
+import { generateSecurePassword } from "@/lib/utils";
 import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
 
@@ -160,7 +162,13 @@ export async function POST(request: Request) {
     await connectToDatabase();
 
     const tenantObjectId = new mongoose.Types.ObjectId(session.tenantId);
-    const defaultPasswordHash = await bcrypt.hash("password123", 10);
+
+    // Helper: generate a strong, unique one-time password for each provisioned account
+    const provisionPassword = async () => {
+      const tempPassword = generateSecurePassword(12);
+      const hash = await bcrypt.hash(tempPassword, 10);
+      return { tempPassword, hash };
+    };
 
     // Check if bulk insert payload
     if (Array.isArray(body.members)) {
@@ -169,12 +177,20 @@ export async function POST(request: Request) {
       }
 
       const createdUsers = [];
+      const tempPasswords: Record<string, string> = {};
       const errors = [];
 
       for (let i = 0; i < body.members.length; i++) {
         const item = body.members[i];
         if (!item.name || !item.email) {
           errors.push(`Row ${i + 1}: Name and email are required`);
+          continue;
+        }
+
+        // Privilege-escalation guard: prevent assigning Admin/OPS unless caller is Admin/OPS
+        const memberRole = (item.role || "Employee") as string;
+        if (!canAssignRole(session.role, memberRole)) {
+          errors.push(`Row ${i + 1} (${item.email}): your role cannot assign the '${memberRole}' role`);
           continue;
         }
 
@@ -188,11 +204,13 @@ export async function POST(request: Request) {
           ? item.departments
           : (item.department ? [item.department] : ["General"]);
 
+        const { tempPassword, hash } = await provisionPassword();
+
         const newUser = await User.create({
           name: item.name.trim(),
           email: item.email.toLowerCase().trim(),
-          passwordHash: defaultPasswordHash,
-          role: item.role || "Employee",
+          passwordHash: hash,
+          role: memberRole,
           tenantId: tenantObjectId,
           department: depts[0] || "General",
           departments: depts,
@@ -201,10 +219,14 @@ export async function POST(request: Request) {
           bio: item.bio || "",
           phone: item.phone || "",
           photoUrl: item.photoUrl || "",
-          status: "Active"
+          status: "Active",
+          forcePasswordReset: true,
         });
 
-        createdUsers.push(newUser);
+        tempPasswords[newUser.email] = tempPassword;
+        // Never return the passwordHash to the client
+        const { passwordHash: _ph, ...safeUser } = newUser.toObject();
+        createdUsers.push(safeUser);
       }
 
       // Notify HR + Admin users about bulk employee addition
@@ -232,6 +254,7 @@ export async function POST(request: Request) {
         success: true,
         count: createdUsers.length,
         users: createdUsers,
+        tempPasswords,
         errors: errors.length > 0 ? errors : undefined
       }, { status: 201 });
     }
@@ -243,6 +266,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Name and email are required fields" }, { status: 400 });
     }
 
+    // Privilege-escalation guard: only Admin/OPS may grant Admin/OPS roles
+    const validatedRole = (role || "Employee") as string;
+    if (!canAssignRole(session.role, validatedRole)) {
+      return NextResponse.json(
+        { error: `Forbidden: your role cannot assign the '${validatedRole}' role` },
+        { status: 403 }
+      );
+    }
+
     const existingUser = await User.findOne({ email: email.toLowerCase().trim() });
     if (existingUser) {
       return NextResponse.json({ error: "An employee with this email already exists" }, { status: 400 });
@@ -252,11 +284,13 @@ export async function POST(request: Request) {
       ? departments
       : (department ? [department] : ["General"]);
 
+    const { tempPassword, hash } = await provisionPassword();
+
     const newUser = await User.create({
       name: name.trim(),
       email: email.toLowerCase().trim(),
-      passwordHash: defaultPasswordHash,
-      role: role || "Employee",
+      passwordHash: hash,
+      role: validatedRole,
       tenantId: tenantObjectId,
       department: deptsList[0] || "General",
       departments: deptsList,
@@ -265,7 +299,8 @@ export async function POST(request: Request) {
       bio: bio || "",
       phone: phone || "",
       photoUrl: photoUrl || "",
-      status: "Active"
+      status: "Active",
+      forcePasswordReset: true,
     });
 
     // Notify HR + Admin users about new employee
@@ -279,14 +314,16 @@ export async function POST(request: Request) {
       tenantId: tenantObjectId,
       recipientId: r._id,
       title: "New Employee Added",
-      message: `${session.userName} added a new employee: ${name.trim()} (${role || "Employee"}).`,
+      message: `${session.userName} added a new employee: ${name.trim()} (${validatedRole}).`,
       type: "system",
       linkUrl: "/dashboard/team",
       read: false,
     }));
     if (notifDocs.length > 0) await Notification.insertMany(notifDocs);
 
-    return NextResponse.json({ success: true, user: newUser }, { status: 201 });
+    // Never return the passwordHash to the client; hand the one-time password to the caller
+    const { passwordHash: _ph, ...safeUser } = newUser.toObject();
+    return NextResponse.json({ success: true, user: safeUser, tempPassword }, { status: 201 });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Internal Server Error";
     console.error("API POST Team error:", error);

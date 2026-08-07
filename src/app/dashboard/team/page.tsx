@@ -117,6 +117,8 @@ export default function TeamDashboardPage() {
   const [addSkills, setAddSkills] = useState("");
   const [formError, setFormError] = useState("");
   const [formSuccess, setFormSuccess] = useState("");
+  const [createdTempPassword, setCreatedTempPassword] = useState<string | null>(null);
+
 
   // Department CRUD States
   const [showAddDeptModal, setShowAddDeptModal] = useState(false);
@@ -469,16 +471,21 @@ export default function TeamDashboardPage() {
 
       const data = await response.json();
       if (response.ok) {
-        setFormSuccess("Employee added successfully! Default password is 'password123'.");
+        setCreatedTempPassword(data.tempPassword || null);
+        setFormSuccess(data.tempPassword
+          ? "Employee added! Temporary password generated (shown below)."
+          : "Employee added successfully!");
         setAddName("");
         setAddEmail("");
         setAddSkills("");
         setAddManagerId("");
-        await fetchTeam();
-        setTimeout(() => {
-          setShowAddForm(false);
-          setFormSuccess("");
-        }, 1500);
+         await fetchTeam();
+         if (!data.tempPassword) {
+           setTimeout(() => {
+             setShowAddForm(false);
+             setFormSuccess("");
+           }, 1500);
+         }
       } else {
         setFormError(data.error || "Failed to add employee.");
       }
@@ -1757,6 +1764,12 @@ export default function TeamDashboardPage() {
 
             {formError && <div className="p-3 text-xs bg-destructive/10 text-destructive border border-destructive/20 rounded-md">{formError}</div>}
             {formSuccess && <div className="p-3 text-xs bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 rounded-md">{formSuccess}</div>}
+            {createdTempPassword && (
+              <div className="p-3 text-xs bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 rounded-md">
+                <span className="font-semibold">Share this temporary password securely:</span>
+                <div className="mt-1 font-mono text-base break-all bg-emerald-500/10 border border-emerald-500/20 rounded p-2">{createdTempPassword}</div>
+              </div>
+            )}
 
             <form onSubmit={handleAddEmployee} className="space-y-3">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
