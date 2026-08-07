@@ -34,11 +34,36 @@ export async function POST(request: Request) {
 
     const { tenantObjectId } = authResult;
     const body = await request.json();
-    const { name, company, email, phone, status, retainerHours, usedHours, monthlyValue, notes } = body;
+    const {
+      projectId,
+      clientAccount,
+      venture,
+      projectName,
+      deliveryOwner,
+      phase,
+      priority,
+      startDate,
+      targetEndDate,
+      health,
+      billingType,
+      estHours,
+      actualHours,
+      progressPercent,
+      notes,
+    } = body;
 
-    if (!name || !company || !email) {
+    // Fallbacks and mappings for backwards compatibility
+    const finalProjectId = projectId || "CLP-001";
+    const finalClientAccount = clientAccount || body.company || body.name || "Default Client";
+    const finalVenture = venture || "Ace Consultancys";
+    const finalProjectName = projectName || "Monthly Retainer";
+    const finalDeliveryOwner = deliveryOwner || "Barkha";
+    const finalStartDate = startDate ? new Date(startDate) : new Date();
+    const finalTargetEndDate = targetEndDate ? new Date(targetEndDate) : new Date(Date.now() + 90 * 24 * 60 * 60 * 1000);
+
+    if (!finalClientAccount || !finalProjectName || !finalDeliveryOwner) {
       return NextResponse.json(
-        { error: "Client Name, Company, and Email are required" },
+        { error: "Client/Account, Project Name, and Delivery Owner are required" },
         { status: 400 }
       );
     }
@@ -46,19 +71,36 @@ export async function POST(request: Request) {
     await connectToDatabase();
 
     const newClient = await Client.create({
-      name,
-      company,
-      email,
-      phone: phone || "",
-      status: status || "Active",
-      retainerHours: Number(retainerHours) || 0,
-      usedHours: Number(usedHours) || 0,
-      monthlyValue: Number(monthlyValue) || 0,
+      projectId: finalProjectId,
+      clientAccount: finalClientAccount,
+      venture: finalVenture,
+      projectName: finalProjectName,
+      deliveryOwner: finalDeliveryOwner,
+      phase: phase || "In Delivery",
+      priority: priority || "Medium",
+      startDate: finalStartDate,
+      targetEndDate: finalTargetEndDate,
+      health: health || "Green",
+      billingType: billingType || "Retainer",
+      estHours: Number(estHours) || 0,
+      actualHours: Number(actualHours) || 0,
+      progressPercent: Number(progressPercent) || 0,
       notes: notes || "",
       tenantId: tenantObjectId,
+
+      // old fields fallback
+      name: finalClientAccount,
+      company: finalClientAccount,
+      email: body.email || `${finalClientAccount.toLowerCase().replace(/\s+/g, "")}@example.com`,
+      phone: body.phone || "",
+      status: phase === "On Hold" ? "On Hold" : phase?.startsWith("Closed") ? "Archived" : "Active",
+      pipelineStage: phase === "In Delivery" ? "Active Retainer" : "Closed",
+      retainerHours: Number(estHours) || 0,
+      usedHours: Number(actualHours) || 0,
+      monthlyValue: body.monthlyValue || 1500,
     });
 
-    return NextResponse.json({ client: newClient, message: "Client created successfully" }, { status: 201 });
+    return NextResponse.json({ client: newClient, message: "Project created successfully" }, { status: 201 });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Internal Server Error";
     console.error("API POST Client error:", error);

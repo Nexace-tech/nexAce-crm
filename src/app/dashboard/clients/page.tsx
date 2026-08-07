@@ -8,120 +8,134 @@ import { Input } from "@/components/ui/input";
 import { Pagination } from "@/components/ui/pagination";
 import { cn } from "@/lib/utils";
 
-interface ContactLog {
-  _id?: string;
-  date: string;
-  type: "Email" | "Call" | "Meeting" | "Note";
-  summary: string;
-  authorName: string;
-}
-
 interface ClientData {
   _id: string;
-  name: string;
-  company: string;
-  email: string;
-  phone?: string;
-  status: "Active" | "Lead" | "On Hold" | "Archived";
-  pipelineStage: "Lead" | "Negotiation" | "Active Retainer" | "On Hold" | "Closed";
-  retainerHours: number;
-  usedHours: number;
-  monthlyValue: number;
-  renewalDate?: string;
+  projectId: string;
+  clientAccount: string;
+  venture: string;
+  projectName: string;
+  deliveryOwner: string;
+  phase: "In Delivery" | "Closed - follow" | "On Hold" | "Closed - Not" | "Closed";
+  priority: "High" | "Medium" | "Low";
+  startDate: string;
+  targetEndDate: string;
+  health: "Green" | "Amber" | "Red";
+  billingType: string;
+  estHours: number;
+  actualHours: number;
+  progressPercent: number;
   notes?: string;
-  contactHistory: ContactLog[];
   createdAt: string;
 }
 
-export default function ClientsPage() {
-  const [clients, setClients] = useState<ClientData[]>([]);
+export default function OperationsPage() {
+  const [projects, setProjects] = useState<ClientData[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("All");
+  const [phaseFilter, setPhaseFilter] = useState<string>("All");
+  const [healthFilter, setHealthFilter] = useState<string>("All");
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 6;
+  const itemsPerPage = 10;
 
   const [showModal, setShowModal] = useState(false);
-  const [editingClient, setEditingClient] = useState<ClientData | null>(null);
+  const [editingProject, setEditingProject] = useState<ClientData | null>(null);
 
   const [formData, setFormData] = useState({
-    name: "",
-    company: "",
-    email: "",
-    phone: "",
-    status: "Active" as ClientData["status"],
-    pipelineStage: "Active Retainer" as ClientData["pipelineStage"],
-    retainerHours: 20,
-    usedHours: 0,
-    monthlyValue: 1500,
-    renewalDate: "",
+    projectId: "",
+    clientAccount: "",
+    venture: "Ace Consultancys",
+    projectName: "",
+    deliveryOwner: "",
+    phase: "In Delivery" as ClientData["phase"],
+    priority: "Medium" as ClientData["priority"],
+    startDate: "",
+    targetEndDate: "",
+    health: "Green" as ClientData["health"],
+    billingType: "Retainer",
+    estHours: 0,
+    actualHours: 0,
+    progressPercent: 0,
     notes: "",
   });
 
-  // Contact history modal
-  const [activeHistoryClient, setActiveHistoryClient] = useState<ClientData | null>(null);
-  const [newLogType, setNewLogType] = useState<"Email" | "Call" | "Meeting" | "Note">("Meeting");
-  const [newLogSummary, setNewLogSummary] = useState("");
-
-  const fetchClients = async () => {
+  const fetchProjects = async () => {
     try {
       setLoading(true);
       const res = await fetch("/api/clients");
       if (res.ok) {
         const data = await res.json();
-        setClients(data.clients || []);
+        setProjects(data.clients || []);
       }
     } catch (err) {
-      console.error("Failed to fetch clients:", err);
+      console.error("Failed to fetch projects:", err);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchClients();
+    fetchProjects();
   }, []);
 
-  const handleOpenModal = (client?: ClientData) => {
-    if (client) {
-      setEditingClient(client);
+  const handleOpenModal = (project?: ClientData) => {
+    if (project) {
+      setEditingProject(project);
       setFormData({
-        name: client.name,
-        company: client.company,
-        email: client.email,
-        phone: client.phone || "",
-        status: client.status,
-        pipelineStage: client.pipelineStage || "Active Retainer",
-        retainerHours: client.retainerHours,
-        usedHours: client.usedHours,
-        monthlyValue: client.monthlyValue,
-        renewalDate: client.renewalDate ? client.renewalDate.split("T")[0] : "",
-        notes: client.notes || "",
+        projectId: project.projectId || "",
+        clientAccount: project.clientAccount || "",
+        venture: project.venture || "Ace Consultancys",
+        projectName: project.projectName || "",
+        deliveryOwner: project.deliveryOwner || "",
+        phase: project.phase || "In Delivery",
+        priority: project.priority || "Medium",
+        startDate: project.startDate ? project.startDate.split("T")[0] : "",
+        targetEndDate: project.targetEndDate ? project.targetEndDate.split("T")[0] : "",
+        health: project.health || "Green",
+        billingType: project.billingType || "Retainer",
+        estHours: project.estHours || 0,
+        actualHours: project.actualHours || 0,
+        progressPercent: project.progressPercent || 0,
+        notes: project.notes || "",
       });
     } else {
-      setEditingClient(null);
+      setEditingProject(null);
+      // Auto generate project ID based on max existing ID
+      const nextIdNum = projects.reduce((max, p) => {
+        const match = p.projectId?.match(/CLP-(\d+)/);
+        if (match) {
+          const num = parseInt(match[1], 10);
+          return num > max ? num : max;
+        }
+        return max;
+      }, 0) + 1;
+      const autoId = `CLP-${String(nextIdNum).padStart(3, "0")}`;
+
       setFormData({
-        name: "",
-        company: "",
-        email: "",
-        phone: "",
-        status: "Active",
-        pipelineStage: "Active Retainer",
-        retainerHours: 20,
-        usedHours: 0,
-        monthlyValue: 1500,
-        renewalDate: "",
+        projectId: autoId,
+        clientAccount: "",
+        venture: "Ace Consultancys",
+        projectName: "",
+        deliveryOwner: "",
+        phase: "In Delivery",
+        priority: "Medium",
+        startDate: new Date().toISOString().split("T")[0],
+        targetEndDate: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+        health: "Green",
+        billingType: "Retainer",
+        estHours: 120,
+        actualHours: 0,
+        progressPercent: 0,
         notes: "",
       });
     }
     setShowModal(true);
   };
 
-  const handleSaveClient = async (e: React.FormEvent) => {
+  const handleSaveProject = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const url = editingClient ? `/api/clients/${editingClient._id}` : "/api/clients";
-      const method = editingClient ? "PATCH" : "POST";
+      const url = editingProject ? `/api/clients/${editingProject._id}` : "/api/clients";
+      const method = editingProject ? "PATCH" : "POST";
 
       const res = await fetch(url, {
         method,
@@ -131,85 +145,80 @@ export default function ClientsPage() {
 
       if (res.ok) {
         setShowModal(false);
-        fetchClients();
+        fetchProjects();
       } else {
         const err = await res.json();
-        alert(err.error || "Failed to save client");
+        alert(err.error || "Failed to save project");
       }
     } catch (err) {
-      console.error("Save client error:", err);
+      console.error("Save project error:", err);
     }
   };
 
-  const handleAddContactLog = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!activeHistoryClient || !newLogSummary.trim()) return;
-
-    try {
-      const res = await fetch(`/api/clients/${activeHistoryClient._id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contactLog: {
-            type: newLogType,
-            summary: newLogSummary,
-          },
-        }),
-      });
-
-      if (res.ok) {
-        setNewLogSummary("");
-        const updated = await res.json();
-        setActiveHistoryClient(updated.client);
-        fetchClients();
-      }
-    } catch (err) {
-      console.error("Add contact log error:", err);
-    }
-  };
-
-  const handleDeleteClient = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this client retainer?")) return;
+  const handleDeleteProject = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this project?")) return;
     try {
       const res = await fetch(`/api/clients/${id}`, { method: "DELETE" });
       if (res.ok) {
-        fetchClients();
+        fetchProjects();
       } else {
         const err = await res.json();
-        alert(err.error || "Failed to delete client");
+        alert(err.error || "Failed to delete project");
       }
     } catch (err) {
-      console.error("Delete client error:", err);
+      console.error("Delete project error:", err);
     }
   };
 
-  const filteredClients = useMemo(() => {
-    return clients.filter((c) => {
+  const filteredProjects = useMemo(() => {
+    return projects.filter((p) => {
       const matchesSearch =
-        c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        c.company.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        c.email.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesStatus = statusFilter === "All" || c.status === statusFilter;
-      return matchesSearch && matchesStatus;
+        p.projectId?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        p.clientAccount?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        p.projectName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        p.deliveryOwner?.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesPhase = phaseFilter === "All" || p.phase === phaseFilter;
+      const matchesHealth = healthFilter === "All" || p.health === healthFilter;
+      return matchesSearch && matchesPhase && matchesHealth;
     });
-  }, [clients, searchQuery, statusFilter]);
+  }, [projects, searchQuery, phaseFilter, healthFilter]);
 
-  const totalPages = Math.ceil(filteredClients.length / itemsPerPage);
-  const paginatedClients = useMemo(() => {
+  const totalPages = Math.ceil(filteredProjects.length / itemsPerPage);
+  const paginatedProjects = useMemo(() => {
     const start = (currentPage - 1) * itemsPerPage;
-    return filteredClients.slice(start, start + itemsPerPage);
-  }, [filteredClients, currentPage, itemsPerPage]);
+    return filteredProjects.slice(start, start + itemsPerPage);
+  }, [filteredProjects, currentPage, itemsPerPage]);
 
   const metrics = useMemo(() => {
-    const totalRetainers = clients.length;
-    const activeRetainers = clients.filter((c) => c.status === "Active").length;
-    const totalMonthlyValue = clients.reduce((acc, c) => acc + (c.monthlyValue || 0), 0);
-    const totalAllocated = clients.reduce((acc, c) => acc + (c.retainerHours || 0), 0);
-    const totalUsed = clients.reduce((acc, c) => acc + (c.usedHours || 0), 0);
-    const overallUtilization = totalAllocated > 0 ? Math.round((totalUsed / totalAllocated) * 100) : 0;
+    const total = projects.length;
+    const active = projects.filter((p) => p.phase === "In Delivery").length;
+    const estHoursTotal = projects.reduce((acc, p) => acc + (p.estHours || 0), 0);
+    const actualHoursTotal = projects.reduce((acc, p) => acc + (p.actualHours || 0), 0);
+    const onHold = projects.filter((p) => p.phase === "On Hold").length;
 
-    return { totalRetainers, activeRetainers, totalMonthlyValue, overallUtilization };
-  }, [clients]);
+    return { total, active, estHoursTotal, actualHoursTotal, onHold };
+  }, [projects]);
+
+  // Color mappings
+  const phaseColors: Record<string, string> = {
+    "In Delivery": "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20",
+    "Closed - follow": "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20",
+    "On Hold": "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20",
+    "Closed - Not": "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20",
+    "Closed": "bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/20",
+  };
+
+  const healthColors: Record<string, string> = {
+    Green: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30",
+    Amber: "bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30",
+    Red: "bg-red-500/15 text-red-600 dark:text-red-400 border border-red-500/30",
+  };
+
+  const priorityColors: Record<string, string> = {
+    High: "bg-rose-500/10 text-rose-500 border border-rose-500/20",
+    Medium: "bg-amber-500/10 text-amber-500 border border-amber-500/20",
+    Low: "bg-slate-500/10 text-slate-500 border border-slate-500/20",
+  };
 
   return (
     <div className="space-y-8">
@@ -217,15 +226,15 @@ export default function ClientsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
-            <i className="fa-solid fa-handshake text-primary text-xl" /> CRM & Client Retainers
+            <i className="fa-solid fa-list-check text-primary text-xl" /> Operations Center
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Retainer hours pipeline, contact interaction history logs, and renewal tracking.
+            Every billable client project/retainer — scope, owner, budget, phase, and health.
           </p>
         </div>
 
-        <Button color="primary" size="sm" onClick={() => handleOpenModal()} className="gap-2">
-          <i className="fa-solid fa-user-plus text-xs" /> Add Client Retainer
+        <Button color="primary" size="sm" onClick={() => handleOpenModal()} className="gap-2 font-semibold">
+          <i className="fa-solid fa-plus text-xs" /> Add Project / Retainer
         </Button>
       </div>
 
@@ -234,11 +243,11 @@ export default function ClientsPage() {
         <Card className="border-l-4 border-l-primary">
           <CardContent className="p-5 flex items-center justify-between">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Total Retainers</p>
-              <p className="text-2xl font-bold text-foreground">{metrics.totalRetainers}</p>
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Total Projects</p>
+              <p className="text-2xl font-bold text-foreground">{metrics.total}</p>
             </div>
             <div className="p-3 bg-primary/10 text-primary rounded-xl">
-              <i className="fa-solid fa-handshake text-xl" />
+              <i className="fa-solid fa-diagram-project text-xl" />
             </div>
           </CardContent>
         </Card>
@@ -246,23 +255,11 @@ export default function ClientsPage() {
         <Card className="border-l-4 border-l-emerald-500">
           <CardContent className="p-5 flex items-center justify-between">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Active Clients</p>
-              <p className="text-2xl font-bold text-foreground">{metrics.activeRetainers}</p>
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Active in Delivery</p>
+              <p className="text-2xl font-bold text-foreground">{metrics.active}</p>
             </div>
             <div className="p-3 bg-emerald-500/10 text-emerald-500 rounded-xl">
-              <i className="fa-solid fa-circle-check text-xl" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-l-4 border-l-sky-500">
-          <CardContent className="p-5 flex items-center justify-between">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Monthly Revenue</p>
-              <p className="text-2xl font-bold text-foreground">${metrics.totalMonthlyValue.toLocaleString()}</p>
-            </div>
-            <div className="p-3 bg-sky-500/10 text-sky-500 rounded-xl">
-              <i className="fa-solid fa-dollar-sign text-xl" />
+              <i className="fa-solid fa-circle-play text-xl" />
             </div>
           </CardContent>
         </Card>
@@ -270,10 +267,24 @@ export default function ClientsPage() {
         <Card className="border-l-4 border-l-amber-500">
           <CardContent className="p-5 flex items-center justify-between">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Hours Utilization</p>
-              <p className="text-2xl font-bold text-foreground">{metrics.overallUtilization}%</p>
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Projects on Hold</p>
+              <p className="text-2xl font-bold text-foreground">{metrics.onHold}</p>
             </div>
             <div className="p-3 bg-amber-500/10 text-amber-500 rounded-xl">
+              <i className="fa-solid fa-circle-pause text-xl" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-l-4 border-l-sky-500">
+          <CardContent className="p-5 flex items-center justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Staff Hours Logged</p>
+              <p className="text-2xl font-bold text-foreground">
+                {metrics.actualHoursTotal} / {metrics.estHoursTotal} hrs
+              </p>
+            </div>
+            <div className="p-3 bg-sky-500/10 text-sky-500 rounded-xl">
               <i className="fa-solid fa-clock text-xl" />
             </div>
           </CardContent>
@@ -281,255 +292,388 @@ export default function ClientsPage() {
       </div>
 
       {/* Filter Bar */}
-      <Card className="p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
-        <div className="relative w-full sm:max-w-md">
+      <Card className="p-4 flex flex-col sm:flex-row items-center gap-4">
+        <div className="relative flex-1 w-full">
           <i className="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground" />
           <Input
             type="text"
-            placeholder="Search by name, company, email..."
+            placeholder="Search by ID, client/account, project name, or owner..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-9"
           />
         </div>
 
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          className="h-9 px-3 text-sm bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary w-full sm:w-auto"
-        >
-          <option value="All">All Statuses</option>
-          <option value="Active">Active</option>
-          <option value="Lead">Lead</option>
-          <option value="On Hold">On Hold</option>
-          <option value="Archived">Archived</option>
-        </select>
+        <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
+          <select
+            value={phaseFilter}
+            onChange={(e) => setPhaseFilter(e.target.value)}
+            className="h-9 px-3 text-sm bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary w-full sm:w-auto"
+          >
+            <option value="All">All Phases</option>
+            <option value="In Delivery">In Delivery</option>
+            <option value="Closed - follow">Closed - follow</option>
+            <option value="On Hold">On Hold</option>
+            <option value="Closed - Not">Closed - Not</option>
+            <option value="Closed">Closed</option>
+          </select>
+
+          <select
+            value={healthFilter}
+            onChange={(e) => setHealthFilter(e.target.value)}
+            className="h-9 px-3 text-sm bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary w-full sm:w-auto"
+          >
+            <option value="All">All Healths</option>
+            <option value="Green">Green</option>
+            <option value="Amber">Amber</option>
+            <option value="Red">Red</option>
+          </select>
+        </div>
       </Card>
 
-      {/* Client Cards Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-        {paginatedClients.map((client) => {
-          const usagePercent =
-            client.retainerHours > 0
-              ? Math.min(100, Math.round((client.usedHours / client.retainerHours) * 100))
-              : 0;
+      {/* Spreadsheet Master Grid Table */}
+      <Card className="border border-border shadow-sm overflow-hidden">
+        <CardHeader className="pb-3 border-b border-border bg-muted/20">
+          <CardTitle className="text-base font-bold flex items-center gap-2">
+            <i className="fa-solid fa-table-list text-primary" /> Master Project Operations Grid
+          </CardTitle>
+          <CardDescription>
+            Master view of all client ventures, allocated hour variance, health, and status progress.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto w-full">
+            <table className="w-full text-left text-xs min-w-[1200px]">
+              <thead className="bg-muted/40 border-b border-border text-muted-foreground font-bold text-[11px] uppercase tracking-wider">
+                <tr>
+                  <th className="py-3 px-4">Project ID</th>
+                  <th className="py-3 px-3">Client/Account</th>
+                  <th className="py-3 px-3">Venture</th>
+                  <th className="py-3 px-3">Project Name</th>
+                  <th className="py-3 px-3">Delivery Owner</th>
+                  <th className="py-3 px-3">Phase</th>
+                  <th className="py-3 px-3">Priority</th>
+                  <th className="py-3 px-3">Start Date</th>
+                  <th className="py-3 px-3">Target End Date</th>
+                  <th className="py-3 px-3 text-center">Days Left</th>
+                  <th className="py-3 px-3 text-center">Health</th>
+                  <th className="py-3 px-3">Billing Type</th>
+                  <th className="py-3 px-3 text-center">Est. Hours</th>
+                  <th className="py-3 px-3 text-center">Actual Hours</th>
+                  <th className="py-3 px-3 text-center">Variance</th>
+                  <th className="py-3 px-3 text-center">% Tasks Complete</th>
+                  <th className="py-3 px-4 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border/40 font-medium">
+                {loading ? (
+                  Array.from({ length: 5 }).map((_, idx) => (
+                    <tr key={idx} className="animate-pulse">
+                      <td colSpan={17} className="py-4 px-4 text-center text-muted-foreground">
+                        Loading operations data...
+                      </td>
+                    </tr>
+                  ))
+                ) : paginatedProjects.length === 0 ? (
+                  <tr>
+                    <td colSpan={17} className="py-12 text-center text-muted-foreground">
+                      <div className="flex flex-col items-center gap-2">
+                        <i className="fa-solid fa-diagram-project text-4xl opacity-30" />
+                        <span className="text-sm">No operations projects match your criteria.</span>
+                      </div>
+                    </td>
+                  </tr>
+                ) : (
+                  paginatedProjects.map((p) => {
+                    const daysRemaining = p.targetEndDate
+                      ? Math.max(0, Math.ceil((new Date(p.targetEndDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
+                      : 0;
+                    const hoursVariance = (p.estHours || 0) - (p.actualHours || 0);
 
-          return (
-            <Card key={client._id} className="hover:shadow-md transition-all flex flex-col justify-between border-l-4 border-l-primary">
-              <CardHeader className="flex flex-row items-start justify-between pb-3">
-                <div>
-                  <CardTitle className="text-base font-bold text-foreground">{client.company}</CardTitle>
-                  <p className="text-xs text-primary font-semibold mt-0.5">{client.name}</p>
-                </div>
-                <div className="flex flex-col items-end gap-1">
-                  <Badge color={client.status === "Active" ? "success" : client.status === "Lead" ? "info" : "warning"} variant="soft">
-                    {client.status}
-                  </Badge>
-                  <Badge variant="outline" className="text-[10px]">
-                    {client.pipelineStage || "Active Retainer"}
-                  </Badge>
-                </div>
-              </CardHeader>
-
-              <CardContent className="space-y-4">
-                <div className="text-xs text-muted-foreground space-y-1">
-                  <p className="flex items-center gap-2"><i className="fa-solid fa-envelope text-xs" /> {client.email}</p>
-                  {client.phone && <p className="flex items-center gap-2"><i className="fa-solid fa-phone text-xs" /> {client.phone}</p>}
-                  {client.renewalDate && (
-                    <p className="flex items-center gap-2 text-amber-500 font-semibold">
-                      <i className="fa-solid fa-calendar-days text-xs" /> Renewal: {new Date(client.renewalDate).toLocaleDateString()}
-                    </p>
-                  )}
-                </div>
-
-                <div className="space-y-1.5">
-                  <div className="flex justify-between text-xs font-semibold">
-                    <span>Monthly Retainer Hours</span>
-                    <span className="text-foreground">{client.usedHours} / {client.retainerHours} hrs ({usagePercent}%)</span>
-                  </div>
-                  <div className="h-2 bg-muted rounded-full overflow-hidden">
-                    <div className="h-full bg-primary rounded-full" style={{ width: `${usagePercent}%` }} />
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between pt-3 border-t border-border">
-                  <div>
-                    <p className="text-[10px] uppercase font-semibold text-muted-foreground">Monthly Value</p>
-                    <p className="text-lg font-bold text-foreground">${client.monthlyValue.toLocaleString()}</p>
-                  </div>
-
-                  <div className="flex items-center gap-1">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setActiveHistoryClient(client)}
-                      className="gap-1 text-xs"
-                    >
-                      <i className="fa-solid fa-clock-rotate-left text-xs" /> Logs ({client.contactHistory?.length || 0})
-                    </Button>
-                    <Button variant="ghost" size="icon" onClick={() => handleOpenModal(client)} className="h-8 w-8">
-                      <i className="fa-solid fa-pen-to-square text-xs" />
-                    </Button>
-                    <Button variant="ghost" size="icon" onClick={() => handleDeleteClient(client._id)} className="h-8 w-8 text-destructive">
-                      <i className="fa-solid fa-trash text-xs" />
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          );
-        })}
-      </div>
+                    return (
+                      <tr key={p._id} className="hover:bg-accent/20 transition-colors">
+                        <td className="py-3 px-4 font-mono font-bold text-foreground">{p.projectId}</td>
+                        <td className="py-3 px-3 truncate max-w-[120px]" title={p.clientAccount}>{p.clientAccount}</td>
+                        <td className="py-3 px-3 truncate max-w-[120px]" title={p.venture}>{p.venture}</td>
+                        <td className="py-3 px-3 truncate max-w-[160px] font-semibold text-foreground" title={p.projectName}>{p.projectName}</td>
+                        <td className="py-3 px-3 font-semibold text-primary">{p.deliveryOwner}</td>
+                        <td className="py-3 px-3">
+                          <span className={cn("inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border", phaseColors[p.phase])}>
+                            {p.phase}
+                          </span>
+                        </td>
+                        <td className="py-3 px-3">
+                          <span className={cn("inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold", priorityColors[p.priority])}>
+                            {p.priority}
+                          </span>
+                        </td>
+                        <td className="py-3 px-3 whitespace-nowrap text-muted-foreground">
+                          {p.startDate ? new Date(p.startDate).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" }) : "—"}
+                        </td>
+                        <td className="py-3 px-3 whitespace-nowrap text-muted-foreground">
+                          {p.targetEndDate ? new Date(p.targetEndDate).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" }) : "—"}
+                        </td>
+                        <td className="py-3 px-3 text-center font-mono font-bold text-foreground">{daysRemaining}</td>
+                        <td className="py-3 px-3 text-center">
+                          <span className={cn("inline-flex items-center justify-center w-16 py-0.5 rounded-md text-[10px] font-bold", healthColors[p.health])}>
+                            {p.health}
+                          </span>
+                        </td>
+                        <td className="py-3 px-3 font-medium text-foreground">{p.billingType}</td>
+                        <td className="py-3 px-3 text-center font-mono">{p.estHours}</td>
+                        <td className="py-3 px-3 text-center font-mono text-foreground">{p.actualHours}</td>
+                        <td className={cn("py-3 px-3 text-center font-mono font-bold", hoursVariance < 0 ? "text-rose-500" : "text-emerald-500")}>
+                          {hoursVariance > 0 ? `+${hoursVariance}` : hoursVariance}
+                        </td>
+                        <td className="py-3 px-3">
+                          <div className="flex items-center gap-1.5 justify-center">
+                            <div className="w-12 h-1.5 bg-muted rounded-full overflow-hidden">
+                              <div
+                                className={cn("h-full rounded-full", p.progressPercent === 100 ? "bg-emerald-500" : "bg-primary")}
+                                style={{ width: `${p.progressPercent}%` }}
+                              />
+                            </div>
+                            <span className="text-[10px] font-bold font-mono">{p.progressPercent}%</span>
+                          </div>
+                        </td>
+                        <td className="py-3 px-4 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => handleOpenModal(p)}
+                              className="p-1 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors cursor-pointer"
+                              title="Edit Project"
+                            >
+                              <i className="fa-solid fa-pen-to-square text-xs" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteProject(p._id)}
+                              className="p-1 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer"
+                              title="Delete Project"
+                            >
+                              <i className="fa-solid fa-trash text-xs" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
 
       <Pagination
         currentPage={currentPage}
         totalPages={totalPages}
         onPageChange={setCurrentPage}
-        totalItems={filteredClients.length}
+        totalItems={filteredProjects.length}
         itemsPerPage={itemsPerPage}
       />
 
-      {/* Add / Edit Client Modal */}
+      {/* Add / Edit Operations Modal */}
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in" onClick={() => setShowModal(false)}>
-          <div className="w-full max-w-lg bg-card border border-border rounded-xl p-6 shadow-2xl space-y-4 animate-in zoom-in-95" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in"
+          onClick={() => setShowModal(false)}
+        >
+          <div
+            className="w-full max-w-xl bg-card border border-border rounded-xl p-6 shadow-2xl space-y-4 animate-in zoom-in-95"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-center justify-between border-b border-border pb-3">
               <h3 className="font-bold text-lg text-foreground flex items-center gap-2">
-                <i className="fa-solid fa-handshake text-primary text-base" /> {editingClient ? "Edit Client Retainer" : "Add Client Retainer"}
+                <i className="fa-solid fa-list-check text-primary text-base" />
+                {editingProject ? "Edit Operations Project" : "Add Operations Project"}
               </h3>
-              <button onClick={() => setShowModal(false)} className="text-muted-foreground hover:text-foreground cursor-pointer"><i className="fa-solid fa-xmark text-sm" /></button>
+              <button
+                onClick={() => setShowModal(false)}
+                className="text-muted-foreground hover:text-foreground cursor-pointer"
+              >
+                <i className="fa-solid fa-xmark text-sm" />
+              </button>
             </div>
-            <form onSubmit={handleSaveClient} className="space-y-4">
-              <div className="grid grid-cols-2 gap-3">
+            <form onSubmit={handleSaveProject} className="space-y-4">
+              <div className="grid grid-cols-3 gap-3">
                 <div className="space-y-1">
-                  <label className="text-xs font-semibold text-foreground">Contact Name *</label>
-                  <Input value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} placeholder="John Doe" required />
+                  <label className="text-xs font-semibold text-foreground">Project ID *</label>
+                  <Input
+                    value={formData.projectId}
+                    onChange={(e) => setFormData({ ...formData, projectId: e.target.value })}
+                    placeholder="e.g. CLP-001"
+                    required
+                  />
                 </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-foreground">Company Name *</label>
-                  <Input value={formData.company} onChange={(e) => setFormData({ ...formData, company: e.target.value })} placeholder="Acme Corp" required />
+                <div className="space-y-1 col-span-2">
+                  <label className="text-xs font-semibold text-foreground">Client / Account *</label>
+                  <Input
+                    value={formData.clientAccount}
+                    onChange={(e) => setFormData({ ...formData, clientAccount: e.target.value })}
+                    placeholder="e.g. Ziqsy"
+                    required
+                  />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <label className="text-xs font-semibold text-foreground">Email Address *</label>
-                  <Input type="email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} required />
+                  <label className="text-xs font-semibold text-foreground">Venture *</label>
+                  <Input
+                    value={formData.venture}
+                    onChange={(e) => setFormData({ ...formData, venture: e.target.value })}
+                    placeholder="e.g. Ace Consultancys"
+                    required
+                  />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-xs font-semibold text-foreground">Phone Number</label>
-                  <Input value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} />
+                  <label className="text-xs font-semibold text-foreground">Project Name *</label>
+                  <Input
+                    value={formData.projectName}
+                    onChange={(e) => setFormData({ ...formData, projectName: e.target.value })}
+                    placeholder="e.g. Q3 Growth Retainer"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div className="space-y-1 col-span-2">
+                  <label className="text-xs font-semibold text-foreground">Account / Delivery Owner *</label>
+                  <Input
+                    value={formData.deliveryOwner}
+                    onChange={(e) => setFormData({ ...formData, deliveryOwner: e.target.value })}
+                    placeholder="e.g. Barkha"
+                    required
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-foreground">Billing Type</label>
+                  <Input
+                    value={formData.billingType}
+                    onChange={(e) => setFormData({ ...formData, billingType: e.target.value })}
+                    placeholder="e.g. Retainer"
+                  />
                 </div>
               </div>
 
               <div className="grid grid-cols-3 gap-3">
                 <div className="space-y-1">
-                  <label className="text-xs font-semibold text-foreground">Status</label>
-                  <select value={formData.status} onChange={(e) => setFormData({ ...formData, status: e.target.value as any })} className="w-full h-9 px-3 text-sm bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary">
-                    <option value="Active">Active</option>
-                    <option value="Lead">Lead</option>
+                  <label className="text-xs font-semibold text-foreground">Phase</label>
+                  <select
+                    value={formData.phase}
+                    onChange={(e) => setFormData({ ...formData, phase: e.target.value as any })}
+                    className="w-full h-9 px-3 text-sm bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                  >
+                    <option value="In Delivery">In Delivery</option>
+                    <option value="Closed - follow">Closed - follow</option>
                     <option value="On Hold">On Hold</option>
-                    <option value="Archived">Archived</option>
-                  </select>
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-foreground">Pipeline Stage</label>
-                  <select value={formData.pipelineStage} onChange={(e) => setFormData({ ...formData, pipelineStage: e.target.value as any })} className="w-full h-9 px-3 text-sm bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary">
-                    <option value="Lead">Lead</option>
-                    <option value="Negotiation">Negotiation</option>
-                    <option value="Active Retainer">Active Retainer</option>
-                    <option value="On Hold">On Hold</option>
+                    <option value="Closed - Not">Closed - Not</option>
                     <option value="Closed">Closed</option>
                   </select>
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-xs font-semibold text-foreground">Renewal Date</label>
-                  <Input type="date" value={formData.renewalDate} onChange={(e) => setFormData({ ...formData, renewalDate: e.target.value })} />
+                  <label className="text-xs font-semibold text-foreground">Priority</label>
+                  <select
+                    value={formData.priority}
+                    onChange={(e) => setFormData({ ...formData, priority: e.target.value as any })}
+                    className="w-full h-9 px-3 text-sm bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                  >
+                    <option value="Low">Low</option>
+                    <option value="Medium">Medium</option>
+                    <option value="High">High</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-foreground">Health</label>
+                  <select
+                    value={formData.health}
+                    onChange={(e) => setFormData({ ...formData, health: e.target.value as any })}
+                    className="w-full h-9 px-3 text-sm bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                  >
+                    <option value="Green">Green</option>
+                    <option value="Amber">Amber</option>
+                    <option value="Red">Red</option>
+                  </select>
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <label className="text-xs font-semibold text-foreground">Monthly Retainer Hours</label>
-                  <Input type="number" value={formData.retainerHours} onChange={(e) => setFormData({ ...formData, retainerHours: Number(e.target.value) })} required />
+                  <label className="text-xs font-semibold text-foreground">Start Date</label>
+                  <Input
+                    type="date"
+                    value={formData.startDate}
+                    onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-foreground">Target End Date</label>
+                  <Input
+                    type="date"
+                    value={formData.targetEndDate}
+                    onChange={(e) => setFormData({ ...formData, targetEndDate: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-foreground">Est. Hours</label>
+                  <Input
+                    type="number"
+                    value={formData.estHours}
+                    onChange={(e) => setFormData({ ...formData, estHours: Number(e.target.value) })}
+                    required
+                  />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-xs font-semibold text-foreground">Monthly Value ($)</label>
-                  <Input type="number" value={formData.monthlyValue} onChange={(e) => setFormData({ ...formData, monthlyValue: Number(e.target.value) })} required />
+                  <label className="text-xs font-semibold text-foreground">Actual Hours Logged</label>
+                  <Input
+                    type="number"
+                    value={formData.actualHours}
+                    onChange={(e) => setFormData({ ...formData, actualHours: Number(e.target.value) })}
+                    required
+                  />
                 </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-foreground">% Tasks Complete</label>
+                  <Input
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={formData.progressPercent}
+                    onChange={(e) => setFormData({ ...formData, progressPercent: Number(e.target.value) })}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-foreground">Project Notes</label>
+                <textarea
+                  value={formData.notes}
+                  onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                  rows={2}
+                  className="w-full px-3 py-2 text-sm bg-background border border-border rounded-md text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary resize-none"
+                  placeholder="Additional project notes, scope details..."
+                />
               </div>
 
               <div className="flex justify-end gap-2 pt-2 border-t border-border">
-                <Button variant="outline" size="sm" type="button" onClick={() => setShowModal(false)}>Cancel</Button>
-                <Button color="primary" size="sm" type="submit">Save Client</Button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Contact History Log Modal */}
-      {activeHistoryClient && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in" onClick={() => setActiveHistoryClient(null)}>
-          <div className="w-full max-w-xl bg-card border border-border rounded-xl p-6 shadow-2xl space-y-4 animate-in zoom-in-95 max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between border-b border-border pb-3">
-              <div>
-                <h3 className="font-bold text-lg text-foreground flex items-center gap-2">
-                  <i className="fa-solid fa-clock-rotate-left text-sky-500 text-base" /> Contact History Timeline
-                </h3>
-                <p className="text-xs text-muted-foreground">{activeHistoryClient.company} ({activeHistoryClient.name})</p>
-              </div>
-              <button onClick={() => setActiveHistoryClient(null)} className="text-muted-foreground hover:text-foreground cursor-pointer"><i className="fa-solid fa-xmark text-sm" /></button>
-            </div>
-
-            {/* Form to log interaction */}
-            <form onSubmit={handleAddContactLog} className="p-3 bg-muted/40 rounded-lg border border-border space-y-3">
-              <p className="text-xs font-semibold text-foreground">Log New Interaction</p>
-              <div className="flex gap-2">
-                <select
-                  value={newLogType}
-                  onChange={(e) => setNewLogType(e.target.value as any)}
-                  className="h-8 px-2 text-xs bg-background border border-border rounded-md text-foreground focus:outline-none"
-                >
-                  <option value="Meeting">Meeting</option>
-                  <option value="Call">Call</option>
-                  <option value="Email">Email</option>
-                  <option value="Note">Note</option>
-                </select>
-                <Input
-                  placeholder="Summary of conversation, email sent, or meeting outcome..."
-                  value={newLogSummary}
-                  onChange={(e) => setNewLogSummary(e.target.value)}
-                  className="text-xs flex-1 h-8"
-                  required
-                />
-                <Button color="primary" size="sm" type="submit" className="h-8 text-xs gap-1">
-                  <i className="fa-solid fa-paper-plane text-xs" /> Log
+                <Button variant="outline" size="sm" type="button" onClick={() => setShowModal(false)}>
+                  Cancel
+                </Button>
+                <Button color="primary" size="sm" type="submit" className="font-semibold">
+                  Save Project
                 </Button>
               </div>
             </form>
-
-            {/* Interaction history list */}
-            <div className="space-y-3 pt-2">
-              {activeHistoryClient.contactHistory?.length === 0 ? (
-                <p className="text-xs text-muted-foreground text-center py-4">No contact history logged yet for this client.</p>
-              ) : (
-                activeHistoryClient.contactHistory?.map((item, idx) => (
-                  <div key={idx} className="p-3 rounded-lg border border-border bg-accent/20 space-y-1 text-xs">
-                    <div className="flex items-center justify-between font-semibold">
-                      <div className="flex items-center gap-2">
-                        <Badge variant="outline" className="text-[10px]">{item.type}</Badge>
-                        <span className="text-foreground">{item.authorName}</span>
-                      </div>
-                      <span className="text-[10px] text-muted-foreground">{new Date(item.date).toLocaleString()}</span>
-                    </div>
-                    <p className="text-muted-foreground whitespace-pre-line">{item.summary}</p>
-                  </div>
-                ))
-              )}
-            </div>
           </div>
         </div>
       )}

@@ -194,13 +194,13 @@ export function DashboardClientLayout({ session, menuItems, isPending = false, c
           <div className={cn("flex items-center rounded-lg bg-accent/50 border border-border/50", sidebarCollapsed ? "justify-center p-2" : "gap-3 p-2")}>
             <Avatar className="h-9 w-9 shrink-0 border border-primary/20">
               <AvatarFallback className="bg-primary/10 text-primary font-bold text-xs">
-                {session.userName ? session.userName.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2) : "U"}
+                {userName ? userName.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2) : "U"}
               </AvatarFallback>
             </Avatar>
             {!sidebarCollapsed && (
               <div className="flex flex-col min-w-0 flex-1">
-                <p className="text-xs font-bold text-foreground truncate">{session.userName}</p>
-                <span className="text-[10px] text-muted-foreground font-medium truncate">{session.role} • {tenantName}</span>
+                <p className="text-xs font-bold text-foreground truncate">{userName}</p>
+                <span className="text-[10px] text-muted-foreground font-medium truncate">{role} • {tenantName}</span>
               </div>
             )}
           </div>

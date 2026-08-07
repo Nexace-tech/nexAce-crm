@@ -30,25 +30,20 @@ export async function GET() {
       user = null;
     }
 
-    if (!user && session) {
-      user = {
-        _id: session.userId,
-        name: session.userName,
-        role: session.role,
-        tenantId: {
-          _id: session.tenantId,
-          name: session.tenantName,
-          slug: session.tenantName?.toLowerCase().replace(/\s+/g, "-") || "workspace"
-        },
-        status: "Active"
-      };
-    }
-
     if (!user) {
+      const { deleteSession } = await import("@/lib/session");
+      await deleteSession();
       return NextResponse.json({ user: null }, { status: 401 });
     }
 
-    return NextResponse.json({ user });
+    return NextResponse.json(
+      { user },
+      {
+        headers: {
+          "Cache-Control": "no-store, max-age=0, must-revalidate",
+        },
+      }
+    );
   } catch (error) {
     console.error("API Auth Me error:", error);
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });

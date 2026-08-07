@@ -50,6 +50,7 @@ export default function SettingsPage() {
   const [pendingProfileData, setPendingProfileData] = useState<any>(null);
   const [devPreviewUrl, setDevPreviewUrl] = useState("");
   const [devCode, setDevCode] = useState("");
+  const [resendEmailCooldown, setResendEmailCooldown] = useState(0);
 
   const [updatingProfile, setUpdatingProfile] = useState(false);
   const [updatingPassword, setUpdatingPassword] = useState(false);
@@ -230,6 +231,42 @@ export default function SettingsPage() {
     }
   };
 
+  // Countdown timer for email resend cooldown
+  useEffect(() => {
+    if (resendEmailCooldown <= 0) return;
+    const timer = setTimeout(() => {
+      setResendEmailCooldown((prev) => prev - 1);
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [resendEmailCooldown]);
+
+  const handleResendEmailCode = async () => {
+    if (!user || resendEmailCooldown > 0) return;
+    setUpdatingProfile(true);
+    setEmailCodeError("");
+    try {
+      const res = await fetch("/api/auth/send-code", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: user.email, type: "profile-update" }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setDevPreviewUrl(data.previewUrl || "");
+        setDevCode(data.devCode || "");
+        showToast("Verification code resent to your email.", "success");
+        setResendEmailCooldown(30); // 30s cooldown
+      } else {
+        setEmailCodeError(data.error || "Failed to resend verification code.");
+      }
+    } catch (err) {
+      console.error(err);
+      setEmailCodeError("Network error resending verification code.");
+    } finally {
+      setUpdatingProfile(false);
+    }
+  };
+
   const executeUpdateProfile = async (profileData: any) => {
     if (!user) return;
     setUpdatingProfile(true);
@@ -290,6 +327,7 @@ export default function SettingsPage() {
         setEmailCode("");
         setEmailCodeError("");
         setShowEmailModal(true);
+        setResendEmailCooldown(30); // Start 30s cooldown initially
       } else {
         showToast(data.error || "Failed to request email verification code.", "error");
       }
@@ -1117,9 +1155,24 @@ export default function SettingsPage() {
               )}
 
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
-                  <i className="fa-solid fa-key text-muted-foreground text-xs" /> 6-Digit Email Verification Code
-                </label>
+                <div className="flex justify-between items-center">
+                  <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                    <i className="fa-solid fa-key text-muted-foreground text-xs" /> 6-Digit Email Verification Code
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleResendEmailCode}
+                    disabled={updatingProfile || resendEmailCooldown > 0}
+                    className="text-[11px] font-semibold text-primary hover:underline disabled:opacity-50 disabled:no-underline cursor-pointer flex items-center gap-1"
+                  >
+                    <i className="fa-solid fa-rotate-right text-[10px]" />
+                    {updatingProfile && resendEmailCooldown === 0
+                      ? "Resending..."
+                      : resendEmailCooldown > 0
+                      ? `Resend in ${resendEmailCooldown}s`
+                      : "Resend Code"}
+                  </button>
+                </div>
                 <Input
                   type="text"
                   maxLength={6}

@@ -36,7 +36,7 @@ export default function RootLayout({
         />
       </head>
       <body suppressHydrationWarning className="bg-background text-foreground antialiased min-h-screen">
-        <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+        <ThemeProvider defaultTheme="system">
           <AuthProvider>
             {children}
           </AuthProvider>

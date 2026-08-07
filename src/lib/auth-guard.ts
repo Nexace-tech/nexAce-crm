@@ -21,8 +21,21 @@ export async function requireTenantSession(
     return NextResponse.json({ error: "Unauthorized access" }, { status: 401 });
   }
 
+  // Always verify user and role fresh from database to handle dynamic role changes
+  const { User } = await import("@/models/User");
+  let dbUser = null;
+  try {
+    dbUser = await User.findById(session.userId).select("role status");
+  } catch (err) {
+    console.error("Database user lookup error in auth-guard:", err);
+  }
+
+  if (!dbUser || dbUser.status === "Pending" || dbUser.status === "Suspended") {
+    return NextResponse.json({ error: "Unauthorized access: Account not active" }, { status: 401 });
+  }
+
   if (allowedRoles && allowedRoles.length > 0) {
-    const hasRole = (allowedRoles as string[]).includes(session.role);
+    const hasRole = (allowedRoles as string[]).includes(dbUser.role);
     if (!hasRole) {
       return NextResponse.json(
         { error: `Forbidden: Requires one of [${allowedRoles.join(", ")}] roles` },
