@@ -367,6 +367,42 @@ export default function SettingsPage() {
   const [passwordDevCode, setPasswordDevCode] = useState("");
   const [passwordDevPreviewUrl, setPasswordDevPreviewUrl] = useState("");
   const [sendingPasswordCode, setSendingPasswordCode] = useState(false);
+  const [resendPasswordCooldown, setResendPasswordCooldown] = useState(0);
+
+  // Countdown timer for password email resend cooldown
+  useEffect(() => {
+    if (resendPasswordCooldown <= 0) return;
+    const timer = setTimeout(() => {
+      setResendPasswordCooldown((prev) => prev - 1);
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [resendPasswordCooldown]);
+
+  const handleResendPasswordCode = async () => {
+    if (!user || resendPasswordCooldown > 0) return;
+    setSendingPasswordCode(true);
+    try {
+      const res = await fetch("/api/auth/send-code", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: user.email, type: "profile-update" }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setPasswordDevPreviewUrl(data.previewUrl || "");
+        setPasswordDevCode(data.devCode || "");
+        showToast("Verification code resent to your email.", "success");
+        setResendPasswordCooldown(30); // 30s cooldown
+      } else {
+        showToast(data.error || "Failed to resend verification code.", "error");
+      }
+    } catch (err) {
+      console.error(err);
+      showToast("Network error resending verification code.", "error");
+    } finally {
+      setSendingPasswordCode(false);
+    }
+  };
 
   const handleRequestPasswordCode = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -397,6 +433,7 @@ export default function SettingsPage() {
         setPasswordDevPreviewUrl(data.previewUrl || "");
         setPasswordDevCode(data.devCode || "");
         setPasswordStep("verify");
+        setResendPasswordCooldown(30); // Start 30s cooldown
         showToast("Verification code sent to your email address.", "success");
       } else {
         showToast(data.error || "Failed to send verification code.", "error");
@@ -919,9 +956,24 @@ export default function SettingsPage() {
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
-                      <i className="fa-solid fa-key text-muted-foreground text-xs" /> 6-Digit Email Verification Code
-                    </label>
+                    <div className="flex justify-between items-center">
+                      <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                        <i className="fa-solid fa-key text-muted-foreground text-xs" /> 6-Digit Email Verification Code
+                      </label>
+                      <button
+                        type="button"
+                        onClick={handleResendPasswordCode}
+                        disabled={sendingPasswordCode || resendPasswordCooldown > 0}
+                        className="text-[11px] font-semibold text-primary hover:underline disabled:opacity-50 disabled:no-underline cursor-pointer flex items-center gap-1"
+                      >
+                        <i className="fa-solid fa-rotate-right text-[10px]" />
+                        {sendingPasswordCode
+                          ? "Resending..."
+                          : resendPasswordCooldown > 0
+                          ? `Resend in ${resendPasswordCooldown}s`
+                          : "Resend Code"}
+                      </button>
+                    </div>
                     <Input
                       type="text"
                       maxLength={6}

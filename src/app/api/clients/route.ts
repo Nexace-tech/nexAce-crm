@@ -11,10 +11,21 @@ export async function GET() {
     const authResult = await requireTenantSession();
     if (isAuthError(authResult)) return authResult;
 
-    const { tenantObjectId } = authResult;
+    const { tenantObjectId, userObjectId, session } = authResult;
     await connectToDatabase();
 
-    const clients = await Client.find({ tenantId: tenantObjectId }).sort({ createdAt: -1 });
+    const isElevatedRole = session.role === "Admin";
+    const queryCondition: any = { tenantId: tenantObjectId };
+
+    if (!isElevatedRole) {
+      const escapedName = session.userName.replace(/[-\/\\^$*+?.()|[\]{}]/g, "\\$&");
+      queryCondition.$or = [
+        { uploadedBy: userObjectId },
+        { deliveryOwner: { $regex: new RegExp(escapedName, "i") } }
+      ];
+    }
+
+    const clients = await Client.find(queryCondition).sort({ createdAt: -1 });
 
     return NextResponse.json({ clients });
   } catch (error: unknown) {
@@ -32,7 +43,7 @@ export async function POST(request: Request) {
     const authResult = await requireTenantSession(["Admin", "Manager"]);
     if (isAuthError(authResult)) return authResult;
 
-    const { tenantObjectId } = authResult;
+    const { tenantObjectId, userObjectId } = authResult;
     const body = await request.json();
     const {
       projectId,
@@ -87,6 +98,7 @@ export async function POST(request: Request) {
       progressPercent: Number(progressPercent) || 0,
       notes: notes || "",
       tenantId: tenantObjectId,
+      uploadedBy: userObjectId,
 
       // old fields fallback
       name: finalClientAccount,

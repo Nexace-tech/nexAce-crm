@@ -24,6 +24,7 @@ export interface IClient extends Document {
   estHours: number;
   actualHours: number;
   progressPercent: number; // % Tasks Complete
+  uploadedBy?: mongoose.Types.ObjectId;
 
   // Old fields for compatibility
   name?: string;
@@ -106,6 +107,7 @@ const ClientSchema = new Schema<IClient>(
       },
     ],
     tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true, index: true },
+    uploadedBy: { type: Schema.Types.ObjectId, ref: "User", index: true },
   },
   { timestamps: true }
 );

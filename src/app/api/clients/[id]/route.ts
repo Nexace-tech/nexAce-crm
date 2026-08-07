@@ -29,6 +29,15 @@ export async function GET(
       return NextResponse.json({ error: "Client not found" }, { status: 404 });
     }
 
+    const isElevatedRole = session.role === "Admin";
+    const isOwner = client.uploadedBy?.toString() === session.userId;
+    const escapedName = session.userName.replace(/[-\/\\^$*+?.()|[\]{}]/g, "\\$&");
+    const isDeliveryOwner = new RegExp(escapedName, "i").test(client.deliveryOwner || "");
+
+    if (!isElevatedRole && !isOwner && !isDeliveryOwner) {
+      return NextResponse.json({ error: "Forbidden: Access denied" }, { status: 403 });
+    }
+
     return NextResponse.json({ client });
   } catch (error: unknown) {
     return NextResponse.json({ error: (error instanceof Error ? error.message : "Internal Server Error") || "Server Error" }, { status: 500 });
@@ -60,6 +69,15 @@ export async function PATCH(
 
     if (!client) {
       return NextResponse.json({ error: "Client not found" }, { status: 404 });
+    }
+
+    const isElevatedRole = session.role === "Admin";
+    const isOwner = client.uploadedBy?.toString() === session.userId;
+    const escapedName = session.userName.replace(/[-\/\\^$*+?.()|[\]{}]/g, "\\$&");
+    const isDeliveryOwner = new RegExp(escapedName, "i").test(client.deliveryOwner || "");
+
+    if (!isElevatedRole && !isOwner && !isDeliveryOwner) {
+      return NextResponse.json({ error: "Forbidden: Access denied" }, { status: 403 });
     }
 
     // Mode A: Log retainer hours used
@@ -127,6 +145,10 @@ export async function DELETE(
     const session = await getSession();
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    if (session.role !== "Admin") {
+      return NextResponse.json({ error: "Forbidden: Only administrators can delete projects." }, { status: 403 });
     }
 
     const { id } = await params;
