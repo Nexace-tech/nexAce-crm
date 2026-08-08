@@ -333,6 +333,9 @@ export function RoleDataControlTab({ isAdmin, showToast }: RoleDataControlTabPro
       if (res.ok) {
         showToast(`Permission policy for '${selectedRole}' saved!`, "success");
         await fetchPermissions();
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new Event("permissions-updated"));
+        }
       } else {
         const err = await res.json();
         showToast(err.error || "Failed to update permissions", "error");
@@ -373,6 +376,9 @@ export function RoleDataControlTab({ isAdmin, showToast }: RoleDataControlTabPro
         setShowAddRoleModal(false);
         await fetchPermissions();
         setSelectedRole(trimmed);
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new Event("permissions-updated"));
+        }
       } else {
         const err = await res.json();
         showToast(err.error || "Failed to create custom role", "error");

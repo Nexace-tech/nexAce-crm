@@ -91,17 +91,17 @@ export default function SettingsPage() {
 
   useEffect(() => {
     if (!authLoading && user) {
-      if (activeTab === "permissions" && !can("manageRolePermissions") && !isAdmin && !isOPS) {
+      if (activeTab === "permissions" && !can("manageRolePermissions") && !isAdmin) {
         setActiveTab("profile");
       }
-      if (activeTab === "users" && !isAdmin) {
+      if (activeTab === "users" && !can("manageUsers") && !isAdmin) {
         setActiveTab("profile");
       }
-      if (activeTab === "subscription" && !can("viewBillingSubscription") && !isAdmin && !isOPS) {
+      if (activeTab === "subscription" && !can("viewBillingSubscription") && !isAdmin) {
         setActiveTab("profile");
       }
     }
-  }, [activeTab, authLoading, user, isAdmin, isOPS]);
+  }, [activeTab, authLoading, user, isAdmin, can]);
 
   const fetchSubscription = async () => {
     try {
@@ -546,7 +546,7 @@ export default function SettingsPage() {
           <i className="fa-solid fa-shield-halved text-emerald-500 text-sm" /> Password & Security
         </button>
 
-        {isAdmin && (
+        {(can("manageUsers") || isAdmin) && (
           <button
             onClick={() => setActiveTab("users")}
             className={cn(
@@ -558,7 +558,7 @@ export default function SettingsPage() {
           </button>
         )}
 
-        {(can("manageShifts") || isAdmin || isOPS) && (
+        {(can("manageShifts") || isAdmin) && (
           <button
             onClick={() => setActiveTab("shifts")}
             className={cn(
@@ -570,7 +570,7 @@ export default function SettingsPage() {
           </button>
         )}
 
-        {(can("manageRolePermissions") || isAdmin || isOPS) && (
+        {(can("manageRolePermissions") || isAdmin) && (
           <button
             onClick={() => setActiveTab("permissions")}
             className={cn(
@@ -582,7 +582,7 @@ export default function SettingsPage() {
           </button>
         )}
 
-        {(can("viewBillingSubscription") || isAdmin || isOPS) && (
+        {(can("viewBillingSubscription") || isAdmin) && (
           <button
             onClick={() => setActiveTab("subscription")}
             className={cn(
@@ -598,11 +598,11 @@ export default function SettingsPage() {
       {/* Active Tab Content with Smooth Transition */}
       <div key={activeTab} className="animate-in fade-in-50 slide-in-from-bottom-2 duration-300 ease-out transition-all">
         {/* TAB: USER MANAGEMENT */}
-        {activeTab === "users" && isAdmin && <UserManagementTab />}
+        {activeTab === "users" && (can("manageUsers") || isAdmin) && <UserManagementTab />}
 
         {/* TAB: SHIFTS & EMPLOYMENT TYPES */}
-        {activeTab === "shifts" && (can("manageShifts") || isAdmin || isOPS) && (
-          <ShiftAndStatusTab isAdmin={isAdmin || isOPS} showToast={showToast} />
+        {activeTab === "shifts" && (can("manageShifts") || isAdmin) && (
+          <ShiftAndStatusTab isAdmin={can("manageShifts") || isAdmin} showToast={showToast} />
         )}
 
       {/* TAB 1: USER PROFILE & ORGANIZATION */}

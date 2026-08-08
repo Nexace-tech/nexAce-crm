@@ -68,7 +68,7 @@ export const DEFAULT_FEATURE_PERMISSIONS: Record<string, Record<string, boolean>
     // Team
     viewTeamDirectory: true, viewEmployeeProfiles: true, inviteTeamMembers: true, editEmployeeProfiles: true, deactivateEmployees: true, viewSalaryData: true, viewOrgChart: true,
     // Calendar & Time
-    logOwnTimesheet: true, editOwnTimesheet: true, viewTeamTimesheets: true, approveTimesheets: true, manageShifts: true, exportTimesheets: true, viewShiftCalendar: true, clockInOut: true,
+    logOwnTimesheet: true, editOwnTimesheet: true, viewTeamTimesheets: true, approveTimesheets: true, manageShifts: false, exportTimesheets: true, viewShiftCalendar: true, clockInOut: true,
     // Projects
     viewProjects: true, createProjects: true, deleteProjects: true, assignTasksToOthers: true, changeTaskStatus: true, commentOnTasks: true, deleteTaskComments: true, manageProjectWiki: true, viewProjectGantt: true, exportProjectData: true,
     // Sprints
@@ -90,9 +90,9 @@ export const DEFAULT_FEATURE_PERMISSIONS: Record<string, Record<string, boolean>
     // Referrals
     submitReferral: true, viewOwnReferrals: true, viewAllReferrals: true, manageReferrals: true,
     // Admin & Users
-    manageUsers: true, changeUserRoles: true, resetUserPasswords: true, viewBillingSubscription: true, manageBilling: false,
+    manageUsers: false, changeUserRoles: false, resetUserPasswords: false, viewBillingSubscription: false, manageBilling: false,
     // Settings
-    viewWorkspaceSettings: true, editWorkspaceSettings: true, manageFileRestrictions: true, manageRolePermissions: false, viewIntegrations: true, manageIntegrations: false,
+    viewWorkspaceSettings: true, editWorkspaceSettings: true, manageFileRestrictions: false, manageRolePermissions: false, viewIntegrations: true, manageIntegrations: false,
   },
   Manager: {
     // Overview

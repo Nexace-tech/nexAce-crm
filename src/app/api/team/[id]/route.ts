@@ -63,9 +63,13 @@ export async function PUT(request: Request, { params }: RouteParams) {
     }
 
     const isSelf = user._id.toString() === session.userId;
-    const isAdmin = session.role === "Admin";
+    const { getUserDataScope } = await import("@/lib/dataScope");
+    const dataScope = await getUserDataScope(session);
+    const canManageUsers = session.role === "Admin" || dataScope.canViewFeature("manageUsers");
+    const canChangeRoles = session.role === "Admin" || dataScope.canViewFeature("changeUserRoles");
+    const canEditOthers = canManageUsers || canChangeRoles;
 
-    if (!isSelf && !isAdmin) {
+    if (!isSelf && !canEditOthers) {
       return NextResponse.json({ error: "Forbidden: Access denied" }, { status: 403 });
     }
 
@@ -127,10 +131,13 @@ export async function PUT(request: Request, { params }: RouteParams) {
       user.forcePasswordReset = false;
     }
 
-    // Admin-specific updates
-    if (isAdmin) {
-      if (body.role && ["Admin", "Manager", "HR", "Employee"].includes(body.role)) {
-        user.role = body.role;
+    // Admin / Permitted user updates
+    if (canEditOthers) {
+      if (body.role && typeof body.role === "string") {
+        if (!canChangeRoles) {
+          return NextResponse.json({ error: "Forbidden: You do not have permission to change user roles" }, { status: 403 });
+        }
+        user.role = body.role.trim();
       }
       if (body.departments && Array.isArray(body.departments)) {
         user.departments = body.departments;
@@ -219,8 +226,12 @@ export async function DELETE(request: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    if (session.role !== "Admin") {
-      return NextResponse.json({ error: "Forbidden: Admins only" }, { status: 403 });
+    const { getUserDataScope } = await import("@/lib/dataScope");
+    const dataScope = await getUserDataScope(session);
+    const canManageUsers = session.role === "Admin" || dataScope.canViewFeature("manageUsers");
+
+    if (!canManageUsers) {
+      return NextResponse.json({ error: "Forbidden: You do not have permission to manage user accounts" }, { status: 403 });
     }
 
     const { id } = await params;

@@ -3,11 +3,13 @@
 import React from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { AdminDashboard } from "@/components/dashboard/AdminDashboard";
+import { SubAdminDashboard } from "@/components/dashboard/SubAdminDashboard";
 import { ManagerDashboard } from "@/components/dashboard/ManagerDashboard";
 import { HRDashboard } from "@/components/dashboard/HRDashboard";
 import { EmployeeDashboard } from "@/components/dashboard/EmployeeDashboard";
 import { PendingApprovalDashboard } from "@/components/dashboard/PendingApprovalDashboard";
 import { Preloader } from "@/components/ui/Preloader";
+import { isSubAdminRole } from "@/lib/roles";
 
 export default function DashboardHome() {
   const { user, loading } = useAuth();
@@ -33,6 +35,11 @@ export default function DashboardHome() {
   // 2. Separate views based on role (Admin, Manager, HR, Employee)
   if (role === "admin") {
     return <AdminDashboard user={user} />;
+  }
+
+  // SubAdmin / OPS role gets dedicated operational dashboard
+  if (isSubAdminRole(user.role)) {
+    return <SubAdminDashboard user={user} />;
   }
 
   if (role === "manager") {

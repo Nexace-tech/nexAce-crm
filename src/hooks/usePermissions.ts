@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
+import { isSubAdminRole, normalizeRoleKey } from '@/lib/roles';
 
 export function usePermissions() {
   const { user } = useAuth();
@@ -9,11 +10,17 @@ export function usePermissions() {
   const [featurePermissions, setFeaturePermissions] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
 
+  // Case-insensitive Admin check (handles 'Admin', 'admin', ' ADMIN ', etc.)
+  const isAdmin = Boolean(
+    user?.role && user.role.trim().toLowerCase() === 'admin'
+  );
+
   useEffect(() => {
     async function loadPermissions() {
       if (!user) return;
-      // Admin and OPS have full access by default
-      if (user.role === 'Admin' || user.role === 'OPS') {
+
+      // Root Admin has absolute full access by default
+      if (isAdmin) {
         setLoading(false);
         return;
       }
@@ -23,9 +30,19 @@ export function usePermissions() {
         const res = await fetch('/api/settings/permissions');
         if (res.ok) {
           const data = await res.json();
-          const userRole = user.role;
-          setModulePermissions(data.permissions?.[userRole] || {});
-          setFeaturePermissions(data.featurePermissions?.[userRole] || {});
+          const roleKey = normalizeRoleKey(user.role);
+
+          const roleModulePerms =
+            data.permissions?.[roleKey] ||
+            data.permissions?.[user.role] ||
+            {};
+          const roleFeaturePerms =
+            data.featurePermissions?.[roleKey] ||
+            data.featurePermissions?.[user.role] ||
+            {};
+
+          setModulePermissions(roleModulePerms);
+          setFeaturePermissions(roleFeaturePerms);
         }
       } catch (err) {
         console.error('Error loading user permissions:', err);
@@ -35,18 +52,35 @@ export function usePermissions() {
     }
 
     loadPermissions();
-  }, [user]);
+
+    if (typeof window !== "undefined") {
+      window.addEventListener("permissions-updated", loadPermissions);
+      return () => window.removeEventListener("permissions-updated", loadPermissions);
+    }
+  }, [user, isAdmin]);
 
   const can = (featureKey: string): boolean => {
     if (!user) return false;
-    if (user.role === 'Admin' || user.role === 'OPS') return true;
-    return featurePermissions[featureKey] ?? false;
+    if (isAdmin) return true;
+    if (featurePermissions[featureKey] !== undefined) {
+      return Boolean(featurePermissions[featureKey]);
+    }
+    // Default administrative features to false for SubAdmin / OPS
+    if (["manageUsers", "changeUserRoles", "manageRolePermissions", "resetUserPasswords", "viewBillingSubscription", "manageBilling", "manageShifts"].includes(featureKey)) {
+      return false;
+    }
+    if (isSubAdminRole(user.role)) return true;
+    return false;
   };
 
   const canAccessModule = (moduleKey: string): boolean => {
     if (!user) return false;
-    if (user.role === 'Admin' || user.role === 'OPS') return true;
-    return modulePermissions[moduleKey] ?? true;
+    if (isAdmin) return true;
+    if (modulePermissions[moduleKey] !== undefined) {
+      return Boolean(modulePermissions[moduleKey]);
+    }
+    if (isSubAdminRole(user.role)) return true;
+    return true;
   };
 
   return {
@@ -54,7 +88,7 @@ export function usePermissions() {
     canAccessModule,
     loading,
     role: user?.role || 'Employee',
-    isAdmin: user?.role === 'Admin',
-    isOPS: user?.role === 'OPS',  // OPS is sub-admin; Admin is separate
+    isAdmin,
+    isOPS: isSubAdminRole(user?.role),
   };
 }

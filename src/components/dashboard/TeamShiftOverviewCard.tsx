@@ -111,7 +111,7 @@ export function TeamShiftOverviewCard() {
   useEffect(() => {
     async function fetchTeamShifts() {
       try {
-        const res = await fetch("/api/team");
+        const res = await fetch("/api/team?all=true");
         if (res.ok) { const data = await res.json(); setTeamMembers(data.users || []); }
       } catch (err) { console.error("Failed to fetch team shift times:", err); }
       finally { setLoading(false); }

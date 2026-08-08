@@ -23,8 +23,8 @@ export async function GET() {
     await connectToDatabase();
     const tenantObjectId = new mongoose.Types.ObjectId(session.tenantId);
 
-    // Parallel optimized lean() queries in a single DB round-trip
-    const [projects, clients, timesheets, chatMessages, okrs, logs, calendarEvents, notifications] = await Promise.all([
+    // Parallel optimized lean() queries with Promise.allSettled to guarantee fault-tolerant response
+    const results = await Promise.allSettled([
       Project.find({ tenantId: tenantObjectId }).select("name description status priority startDate endDate").sort({ createdAt: -1 }).limit(10).lean(),
       Client.find({ tenantId: tenantObjectId }).select("projectId clientAccount venture projectName deliveryOwner phase priority startDate targetEndDate health billingType estHours actualHours progressPercent").lean(),
       TimeEntry.find({ tenantId: tenantObjectId }).select("date hours description status").sort({ date: -1 }).limit(10).lean(),
@@ -35,16 +35,18 @@ export async function GET() {
       Notification.find({ recipientId: session.userId, tenantId: tenantObjectId }).select("title message type read createdAt").sort({ createdAt: -1 }).limit(15).lean(),
     ]);
 
+    const getVal = (res: PromiseSettledResult<any>) => (res.status === "fulfilled" ? res.value : []);
+
     return NextResponse.json(
       {
-        projects,
-        clients,
-        timesheets,
-        chatMessages,
-        okrs,
-        logs,
-        calendarEvents,
-        notifications,
+        projects: getVal(results[0]),
+        clients: getVal(results[1]),
+        timesheets: getVal(results[2]),
+        chatMessages: getVal(results[3]),
+        okrs: getVal(results[4]),
+        logs: getVal(results[5]),
+        calendarEvents: getVal(results[6]),
+        notifications: getVal(results[7]),
       },
       {
         headers: {

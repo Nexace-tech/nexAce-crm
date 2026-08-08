@@ -1132,14 +1132,19 @@ export default function CommunicationHub() {
                       return matchesSearch;
                     });
 
-                    // Ensure self is in the list with isSelf mark
-                    const hasSelfInList = filteredMembers.some((m: any) => (m._id && user?._id && m._id === user._id) || (m.name && user?.name && m.name === user.name));
-                    const finalDmUsers = hasSelfInList
-                      ? filteredMembers.map((m: any) => {
-                          const isSelf = (m._id && user?._id && m._id === user._id) || (m.name && user?.name && m.name === user.name);
-                          return isSelf ? { ...m, isSelf: true } : m;
-                        })
-                      : [{ ...selfUser, isSelf: true }, ...filteredMembers];
+                    // Deduplicate self from member list so user never appears twice
+                    const isSameUser = (u1: any, u2: any) => {
+                      if (!u1 || !u2) return false;
+                      const id1 = (u1._id || u1.id || "").toString();
+                      const id2 = (u2._id || u2.id || "").toString();
+                      if (id1 && id2 && id1 === id2) return true;
+                      const name1 = (u1.name || u1.userName || "").toLowerCase().trim();
+                      const name2 = (u2.name || u2.userName || "").toLowerCase().trim();
+                      return Boolean(name1 && name2 && name1 === name2);
+                    };
+
+                    const otherMembers = filteredMembers.filter((m: any) => !isSameUser(m, user));
+                    const finalDmUsers = [{ ...selfUser, isSelf: true }, ...otherMembers];
 
                     // Multi-Tier DM Sorting: Pinned & Self -> Recent Conversations (by time) -> Active (Online) Users -> Others (Offline)
                     const sortedDmUsers = [...finalDmUsers].sort((a, b) => {

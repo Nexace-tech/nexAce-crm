@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSession, SessionPayload } from "@/lib/session";
 import { connectToDatabase } from "@/lib/db";
 import { User } from "@/models/User";
+import { isSubAdminRole } from "@/lib/roles";
 import mongoose from "mongoose";
 
 export interface AuthenticatedContext {
@@ -20,7 +21,7 @@ export interface AuthenticatedContext {
  * Returns either the authenticated context or an immediate NextResponse error.
  */
 export async function requireTenantSession(
-  allowedRoles?: Array<"Admin" | "OPS" | "Manager" | "HR" | "Employee">
+  allowedRoles?: string[]
 ): Promise<AuthenticatedContext | NextResponse> {
   const session = await getSession();
 
@@ -40,7 +41,9 @@ export async function requireTenantSession(
   }
 
   if (allowedRoles && allowedRoles.length > 0) {
-    const hasRole = (allowedRoles as string[]).includes(user.role);
+    const isAdmin = Boolean(user.role && user.role.trim().toLowerCase() === "admin");
+    const isSuperRole = isAdmin || isSubAdminRole(user.role);
+    const hasRole = isSuperRole || allowedRoles.some((r) => r.toLowerCase() === user.role.toLowerCase());
     if (!hasRole) {
       return NextResponse.json(
         { error: `Forbidden: Requires one of [${allowedRoles.join(", ")}] roles` },

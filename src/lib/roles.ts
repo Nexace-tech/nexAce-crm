@@ -26,15 +26,38 @@ export const ALL_ROLES: Role[] = Object.values(ROLES);
 export const MANAGER_ASSIGNABLE_ROLES: Role[] = [ROLES.Manager, ROLES.HR, ROLES.Employee];
 
 /**
+ * Helper to check if a role is SubAdmin / OPS (accepting 'OPS', 'Sub Admin', 'SubAdmin', etc.).
+ */
+export function isSubAdminRole(role?: string | null): boolean {
+  if (!role) return false;
+  const normalized = role.trim().toLowerCase();
+  return (
+    normalized === "ops" ||
+    normalized === "sub admin" ||
+    normalized === "subadmin" ||
+    normalized === "sub-admin" ||
+    normalized.includes("sub admin") ||
+    normalized.includes("subadmin")
+  );
+}
+
+/**
+ * Helper to normalize any role variation to its standard canonical key.
+ * (e.g. 'Sub Admin' -> 'OPS', 'admin' -> 'Admin')
+ */
+export function normalizeRoleKey(role?: string | null): string {
+  if (!role) return "Employee";
+  if (isSubAdminRole(role)) return "OPS";
+  if (role.trim().toLowerCase() === "admin") return "Admin";
+  return role.trim();
+}
+
+/**
  * Returns true when the acting `actorRole` is allowed to set `targetRole`.
  * Only Admin / OPS can assign Admin or OPS; any Manager can assign the rest.
  */
 export function canAssignRole(actorRole: string, targetRole: string): boolean {
-  const assignable = [...MANAGER_ASSIGNABLE_ROLES, ...SUPER_ROLES] as string[];
-  if (!assignable.includes(targetRole)) return false;
-  if (SUPER_ROLES.includes(targetRole as Role)) {
-    // Only a super-role holder may grant Admin/OPS
-    return SUPER_ROLES.includes(actorRole as Role);
-  }
+  if (actorRole === "Admin" || isSubAdminRole(actorRole)) return true;
+  if (isSubAdminRole(targetRole) || targetRole === "Admin") return false;
   return true;
 }

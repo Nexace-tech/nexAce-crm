@@ -5,6 +5,8 @@ import { User } from "@/models/User";
 import "@/models/Tenant";
 import { DashboardClientLayout } from "@/components/layout/DashboardClientLayout";
 
+import { isSubAdminRole } from "@/lib/roles";
+
 interface DashboardLayoutProps {
   children: React.ReactNode;
 }
@@ -25,9 +27,13 @@ export default async function DashboardLayout({ children }: DashboardLayoutProps
   let permDoc = null;
 
   try {
+    const roleKey = isSubAdminRole(session.role) ? "OPS" : session.role;
     [dbUser, permDoc] = await Promise.all([
       User.findById(session.userId).select("name role tenantId status").populate("tenantId"),
-      RolePermission.findOne({ tenantId: session.tenantId, role: session.role }),
+      RolePermission.findOne({
+        tenantId: session.tenantId,
+        $or: [{ role: session.role }, { role: roleKey }, { role: "OPS" }, { role: "Sub Admin" }],
+      }),
     ]);
   } catch {
     dbUser = null;
@@ -83,7 +89,7 @@ export default async function DashboardLayout({ children }: DashboardLayoutProps
         return customPermissions[mod.key] === true;
       }
       // Fallback defaults
-      if (role === "OPS") return true; // OPS (SubAdmin) defaults to full operational access
+      if (isSubAdminRole(role)) return true; // OPS (SubAdmin) defaults to full operational access
       if (role === "Manager") return mod.key !== "analytics" && mod.key !== "clients";
       if (role === "HR") return ["overview", "team", "calendar", "projects", "chat", "hr", "goals", "settings"].includes(mod.key);
       // Employee

@@ -38,7 +38,7 @@ const UserSchema: Schema = new Schema({
   username: { type: String, unique: true, sparse: true, lowercase: true, trim: true },
   email: { type: String, required: true, unique: true, lowercase: true, trim: true },
   passwordHash: { type: String, required: true },
-  role: { type: String, enum: ["Admin", "OPS", "Manager", "HR", "Employee"], default: "Employee", trim: true },
+  role: { type: String, default: "Employee", trim: true },
   tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true, index: true },
   department: { type: String },
   departments: [{ type: String }],

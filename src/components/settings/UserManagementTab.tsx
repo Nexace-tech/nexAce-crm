@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from "react";
 import { useAuth } from "@/hooks/useAuth";
+import { usePermissions } from "@/hooks/usePermissions";
 import { Preloader } from "@/components/ui/Preloader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -31,6 +32,11 @@ interface IUser {
 
 export function UserManagementTab() {
   const { user: currentUser, loading: authLoading } = useAuth();
+  const { can, isAdmin } = usePermissions();
+  const canManageUsers = isAdmin || can("manageUsers");
+  const canChangeRoles = isAdmin || can("changeUserRoles");
+  const canEditUser = canManageUsers || canChangeRoles;
+
   const [users, setUsers] = useState<IUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
@@ -239,8 +245,6 @@ export function UserManagementTab() {
     return <Preloader label="Loading User Management System..." />;
   }
 
-  const isAdmin = currentUser?.role === "Admin";
-
   return (
     <div className="space-y-6">
       {/* Header Banner */}
@@ -264,7 +268,7 @@ export function UserManagementTab() {
           </div>
         </div>
 
-        {isAdmin && (
+        {canManageUsers && (
           <Button
             onClick={() => {
               setFormData({
@@ -530,7 +534,7 @@ export function UserManagementTab() {
                       </td>
 
                       <td className="px-6 py-4 text-right">
-                        {isAdmin ? (
+                        {canEditUser ? (
                           <div className="flex items-center justify-end gap-2">
                             <Button
                               variant="ghost"
@@ -541,7 +545,7 @@ export function UserManagementTab() {
                             >
                               <i className="fa-solid fa-pen-to-square text-sm" />
                             </Button>
-                            {!isCurrent && (
+                            {canManageUsers && !isCurrent && (
                               <Button
                                 variant="ghost"
                                 size="sm"

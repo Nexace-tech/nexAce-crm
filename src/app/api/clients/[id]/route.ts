@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
 import { connectToDatabase } from "@/lib/db";
 import { Client } from "@/models/Client";
+import { getUserDataScope } from "@/lib/dataScope";
+import { isSubAdminRole } from "@/lib/roles";
 import mongoose from "mongoose";
 
 /**
@@ -13,7 +15,7 @@ export async function GET(
 ) {
   try {
     const session = await getSession();
-    if (!session) {
+    if (!session || !session.userId || !session.tenantId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -29,9 +31,15 @@ export async function GET(
       return NextResponse.json({ error: "Client not found" }, { status: 404 });
     }
 
-    const isElevatedRole = session.role === "Admin";
+    const dataScope = await getUserDataScope(session);
+    const isElevatedRole =
+      session.role === "Admin" ||
+      isSubAdminRole(session.role) ||
+      dataScope.scope === "all" ||
+      dataScope.canViewFeature("viewClients");
+
     const isOwner = client.uploadedBy?.toString() === session.userId;
-    const escapedName = session.userName.replace(/[-\/\\^$*+?.()|[\]{}]/g, "\\$&");
+    const escapedName = session.userName ? session.userName.replace(/[-\/\\^$*+?.()|[\]{}]/g, "\\$&") : "";
     const isDeliveryOwner = new RegExp(escapedName, "i").test(client.deliveryOwner || "");
 
     if (!isElevatedRole && !isOwner && !isDeliveryOwner) {
@@ -53,12 +61,19 @@ export async function PATCH(
 ) {
   try {
     const session = await getSession();
-    if (!session) {
+    if (!session || !session.userId || !session.tenantId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    if (session.role !== "Admin" && session.role !== "Manager") {
-      return NextResponse.json({ error: "Forbidden: Admins or Managers only" }, { status: 403 });
+    const dataScope = await getUserDataScope(session);
+    const canEdit =
+      session.role === "Admin" ||
+      isSubAdminRole(session.role) ||
+      dataScope.canViewFeature("editClients") ||
+      dataScope.canViewFeature("manageDeals");
+
+    if (!canEdit) {
+      return NextResponse.json({ error: "Forbidden: Permission required to edit clients" }, { status: 403 });
     }
 
     const { id } = await params;
@@ -73,15 +88,6 @@ export async function PATCH(
 
     if (!client) {
       return NextResponse.json({ error: "Client not found" }, { status: 404 });
-    }
-
-    const isElevatedRole = session.role === "Admin";
-    const isOwner = client.uploadedBy?.toString() === session.userId;
-    const escapedName = session.userName.replace(/[-\/\\^$*+?.()|[\]{}]/g, "\\$&");
-    const isDeliveryOwner = new RegExp(escapedName, "i").test(client.deliveryOwner || "");
-
-    if (!isElevatedRole && !isOwner && !isDeliveryOwner) {
-      return NextResponse.json({ error: "Forbidden: Access denied" }, { status: 403 });
     }
 
     // Mode A: Log retainer hours used
@@ -147,12 +153,18 @@ export async function DELETE(
 ) {
   try {
     const session = await getSession();
-    if (!session) {
+    if (!session || !session.userId || !session.tenantId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    if (session.role !== "Admin") {
-      return NextResponse.json({ error: "Forbidden: Only administrators can delete projects." }, { status: 403 });
+    const dataScope = await getUserDataScope(session);
+    const canDelete =
+      session.role === "Admin" ||
+      isSubAdminRole(session.role) ||
+      dataScope.canViewFeature("deleteClients");
+
+    if (!canDelete) {
+      return NextResponse.json({ error: "Forbidden: Permission required to delete clients" }, { status: 403 });
     }
 
     const { id } = await params;
