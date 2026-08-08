@@ -186,8 +186,8 @@ export async function PUT(request: Request, { params }: RouteParams) {
       if (body.shiftName !== undefined) user.shiftName = body.shiftName;
     }
 
-    // Personal profile meta updates (Allowed for Self and Admin)
-    if (isSelf || isAdmin) {
+    // Personal profile meta updates (Allowed for Self and Permitted editors)
+    if (isSelf || canEditOthers) {
       if (body.bio !== undefined) user.bio = body.bio;
       if (body.phone !== undefined) user.phone = body.phone;
       if (body.photoUrl !== undefined) user.photoUrl = body.photoUrl;
