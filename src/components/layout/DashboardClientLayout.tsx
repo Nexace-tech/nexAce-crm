@@ -41,6 +41,7 @@ const hrefToModuleKeyMap: Record<string, string> = {
   "/dashboard/goals": "goals",
   "/dashboard/analytics": "analytics",
   "/dashboard/clients": "clients",
+  "/dashboard/it": "it",
   "/dashboard/referrals": "referrals",
   "/dashboard/settings": "settings",
 };

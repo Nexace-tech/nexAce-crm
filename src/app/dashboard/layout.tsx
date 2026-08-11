@@ -74,6 +74,7 @@ export default async function DashboardLayout({ children }: DashboardLayoutProps
     { key: "goals", name: "Goals & OKRs", href: "/dashboard/goals", icon: "fa-solid fa-bullseye" },
     { key: "analytics", name: "Analytics Logs", href: "/dashboard/analytics", icon: "fa-solid fa-chart-line" },
     { key: "clients", name: "Operations", href: "/dashboard/clients", icon: "fa-solid fa-list-check" },
+    { key: "it", name: "IT Command Center", href: "/dashboard/it", icon: "fa-solid fa-terminal" },
     { key: "referrals", name: "Referral Pipeline", href: "/dashboard/referrals", icon: "fa-solid fa-link" },
     { key: "settings", name: "Settings & Security", href: "/dashboard/settings", icon: "fa-solid fa-gear" },
   ];
@@ -90,7 +91,7 @@ export default async function DashboardLayout({ children }: DashboardLayoutProps
       }
       // Fallback defaults
       if (isSubAdminRole(role)) return true; // OPS (SubAdmin) defaults to full operational access
-      if (role === "Manager") return mod.key !== "analytics" && mod.key !== "clients";
+      if (role === "Manager") return mod.key !== "analytics" && mod.key !== "clients" && mod.key !== "it";
       if (role === "HR") return ["overview", "team", "calendar", "projects", "chat", "hr", "goals", "settings"].includes(mod.key);
       // Employee
       return ["overview", "calendar", "projects", "chat", "hr", "referrals", "settings"].includes(mod.key);

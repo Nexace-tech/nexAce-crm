@@ -1,77 +1,89 @@
 import { NextResponse } from "next/server";
+import { getSession } from "@/lib/session";
 import { connectToDatabase } from "@/lib/db";
 import { Referral } from "@/models/Referral";
-import { requireTenantSession, isAuthError } from "@/lib/auth-guard";
+import { getUserDataScope } from "@/lib/dataScope";
+import { isSubAdminRole } from "@/lib/roles";
+import mongoose from "mongoose";
 
 /**
- * PATCH: Update candidate referral stage, payout status, or details.
+ * GET single candidate referral details
  */
-export async function PATCH(
+export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const authResult = await requireTenantSession(["Admin", "Manager", "HR"]);
-    if (isAuthError(authResult)) return authResult;
+    const session = await getSession();
+    if (!session || !session.userId || !session.tenantId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
     const { id } = await params;
-    const { tenantObjectId, session } = authResult;
-    const body = await request.json();
-
     await connectToDatabase();
 
-    const referral = await Referral.findOne({ _id: id, tenantId: tenantObjectId });
+    const referral = await Referral.findOne({
+      _id: id,
+      tenantId: new mongoose.Types.ObjectId(session.tenantId),
+    });
+
     if (!referral) {
       return NextResponse.json({ error: "Referral not found" }, { status: 404 });
     }
 
-    const allowedFields: Record<string, boolean> = {
-      status: true, payoutStatus: true, rewardAmount: true, notes: true
-    };
-
-    const updates: Record<string, unknown> = {};
-    for (const [key, value] of Object.entries(body)) {
-      if (allowedFields[key]) {
-        updates[key] = value;
-      }
-    }
-
-    if (Object.keys(updates).length === 0) {
-      return NextResponse.json({ error: "No updatable fields provided" }, { status: 400 });
-    }
-
-    const updated = await Referral.findByIdAndUpdate(id, { $set: updates }, { new: true, tenantId: tenantObjectId });
-    return NextResponse.json({ referral: updated, message: "Referral updated successfully" });
+    return NextResponse.json({ referral });
   } catch (error: unknown) {
-    console.error("API PATCH Referral error:", error);
-    const _msg = error instanceof Error ? error.message : "Internal Server Error"; return NextResponse.json({ error: _msg }, { status: 500 });
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Internal Server Error" },
+      { status: 500 }
+    );
   }
 }
 
 /**
- * DELETE: Remove a referral record (Admin / Manager only).
+ * DELETE candidate referral profile (Admin, OPS, HR only)
  */
 export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const authResult = await requireTenantSession(["Admin", "Manager"]);
-    if (isAuthError(authResult)) return authResult;
+    const session = await getSession();
+    if (!session || !session.userId || !session.tenantId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const dataScope = await getUserDataScope(session);
+    const canDelete =
+      session.role === "Admin" ||
+      isSubAdminRole(session.role) ||
+      session.role === "HR" ||
+      dataScope.canViewFeature("manageReferrals");
+
+    if (!canDelete) {
+      return NextResponse.json(
+        { error: "Forbidden: Permission required to remove referrals" },
+        { status: 403 }
+      );
+    }
 
     const { id } = await params;
-    const { tenantObjectId } = authResult;
-
     await connectToDatabase();
 
-    const deletedReferral = await Referral.findOneAndDelete({ _id: id, tenantId: tenantObjectId });
-    if (!deletedReferral) {
+    const referral = await Referral.findOneAndDelete({
+      _id: id,
+      tenantId: new mongoose.Types.ObjectId(session.tenantId),
+    });
+
+    if (!referral) {
       return NextResponse.json({ error: "Referral not found" }, { status: 404 });
     }
 
-    return NextResponse.json({ message: "Referral record deleted successfully" });
+    return NextResponse.json({ success: true, message: "Referral deleted successfully" });
   } catch (error: unknown) {
-    console.error("API DELETE Referral error:", error);
-    const _msg = error instanceof Error ? error.message : "Internal Server Error"; return NextResponse.json({ error: _msg }, { status: 500 });
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Internal Server Error" },
+      { status: 500 }
+    );
   }
 }
