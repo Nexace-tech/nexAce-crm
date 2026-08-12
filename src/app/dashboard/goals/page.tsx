@@ -457,7 +457,7 @@ export default function GoalsPage() {
           onClick={() => setActiveTab("okrs")}
           className={cn(
             "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
-            activeTab === "okrs" ? "border-primary text-primary font-semibold" : "border-transparent text-muted-foreground hover:text-foreground"
+            activeTab === "okrs" ? "border-primary text-white bg-primary/10 rounded-t-md font-semibold" : "border-transparent text-muted-foreground hover:text-foreground"
           )}
         >
           <i className="fa-solid fa-bullseye text-xs" /> OKRs ({okrs.length})
@@ -467,7 +467,7 @@ export default function GoalsPage() {
           onClick={() => setActiveTab("surveys")}
           className={cn(
             "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
-            activeTab === "surveys" ? "border-primary text-primary font-semibold" : "border-transparent text-muted-foreground hover:text-foreground"
+            activeTab === "surveys" ? "border-primary text-white bg-primary/10 rounded-t-md font-semibold" : "border-transparent text-muted-foreground hover:text-foreground"
           )}
         >
           <i className="fa-solid fa-[#0284c7] fa-chart-simple text-xs" /> Pulse Surveys ({surveys.length})
@@ -477,7 +477,7 @@ export default function GoalsPage() {
           onClick={() => setActiveTab("one_on_ones")}
           className={cn(
             "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
-            activeTab === "one_on_ones" ? "border-primary text-primary font-semibold" : "border-transparent text-muted-foreground hover:text-foreground"
+            activeTab === "one_on_ones" ? "border-primary text-white bg-primary/10 rounded-t-md font-semibold" : "border-transparent text-muted-foreground hover:text-foreground"
           )}
         >
           <i className="fa-solid fa-user-check text-xs text-emerald-500" /> 1:1 Meetings ({meetings.length})
@@ -487,7 +487,7 @@ export default function GoalsPage() {
           onClick={() => setActiveTab("kudos")}
           className={cn(
             "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
-            activeTab === "kudos" ? "border-primary text-primary font-semibold" : "border-transparent text-muted-foreground hover:text-foreground"
+            activeTab === "kudos" ? "border-primary text-white bg-primary/10 rounded-t-md font-semibold" : "border-transparent text-muted-foreground hover:text-foreground"
           )}
         >
           <i className="fa-solid fa-wand-magic-sparkles text-xs text-amber-500" /> Kudos Wall ({kudosList.length})

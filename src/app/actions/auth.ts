@@ -217,6 +217,9 @@ export async function registerAction(state: FormState | undefined, formData: For
       newUser.role
     );
   } catch (error: any) {
+    if (error?.digest?.startsWith("NEXT_REDIRECT")) {
+      throw error;
+    }
     console.error("Registration error:", error);
     return {
       message: getDescriptiveErrorMessage(error, "An error occurred during registration. Please try again.")
@@ -309,6 +312,9 @@ export async function loginAction(state: FormState | undefined, formData: FormDa
       user.role
     );
   } catch (error: any) {
+    if (error?.digest?.startsWith("NEXT_REDIRECT")) {
+      throw error;
+    }
     console.error("Login error:", error);
     return {
       message: getDescriptiveErrorMessage(error, "An error occurred during login. Please check your network connection and database settings."),

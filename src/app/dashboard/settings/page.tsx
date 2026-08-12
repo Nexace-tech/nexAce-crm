@@ -13,15 +13,17 @@ import { useTabPersistence } from "@/hooks/useTabPersistence";
 import { UserManagementTab } from "@/components/settings/UserManagementTab";
 import { RoleDataControlTab } from "@/components/settings/RoleDataControlTab";
 import { ShiftAndStatusTab } from "@/components/settings/ShiftAndStatusTab";
+import { SelfServiceInvoiceTab } from "@/components/settings/SelfServiceInvoiceTab";
+import { AdminInvoicesTab } from "@/components/settings/AdminInvoicesTab";
 
 export default function SettingsPage() {
   const { user, loading: authLoading, refreshUser } = useAuth();
   const { can, isAdmin, isOPS } = usePermissions();
 
-  const [activeTab, setActiveTab] = useTabPersistence<"profile" | "security" | "users" | "shifts" | "subscription" | "permissions">(
+  const [activeTab, setActiveTab] = useTabPersistence<"profile" | "security" | "invoice" | "all-invoices" | "users" | "shifts" | "subscription" | "permissions">(
     "settings_active_tab_v2",
     "profile",
-    ["profile", "security", "users", "shifts", "subscription", "permissions"]
+    ["profile", "security", "invoice", "all-invoices", "users", "shifts", "subscription", "permissions"]
   );
 
   const [name, setName] = useState("");
@@ -530,7 +532,7 @@ export default function SettingsPage() {
           onClick={() => setActiveTab("profile")}
           className={cn(
             "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
-            activeTab === "profile" ? "border-primary text-primary font-semibold" : "border-transparent text-muted-foreground hover:text-foreground"
+            activeTab === "profile" ? "border-primary text-white bg-primary/10 rounded-t-md font-semibold" : "border-transparent text-muted-foreground hover:text-foreground"
           )}
         >
           <i className="fa-solid fa-user-gear text-sm text-primary" /> User Profile
@@ -540,18 +542,40 @@ export default function SettingsPage() {
           onClick={() => setActiveTab("security")}
           className={cn(
             "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
-            activeTab === "security" ? "border-primary text-primary font-semibold" : "border-transparent text-muted-foreground hover:text-foreground"
+            activeTab === "security" ? "border-primary text-white bg-primary/10 rounded-t-md font-semibold" : "border-transparent text-muted-foreground hover:text-foreground"
           )}
         >
           <i className="fa-solid fa-shield-halved text-emerald-500 text-sm" /> Password & Security
         </button>
+
+        <button
+          onClick={() => setActiveTab("invoice")}
+          className={cn(
+            "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
+            activeTab === "invoice" ? "border-primary text-white bg-primary/10 rounded-t-md font-semibold" : "border-transparent text-muted-foreground hover:text-foreground"
+          )}
+        >
+          <i className="fa-solid fa-file-invoice-dollar text-primary text-sm" /> Generate My Invoice
+        </button>
+
+        {(isAdmin || isOPS) && (
+          <button
+            onClick={() => setActiveTab("all-invoices")}
+            className={cn(
+              "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
+              activeTab === "all-invoices" ? "border-primary text-white bg-primary/10 rounded-t-md font-semibold" : "border-transparent text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <i className="fa-solid fa-file-invoice text-amber-500 text-sm" /> Master User Invoices (Admin)
+          </button>
+        )}
 
         {(can("manageUsers") || isAdmin) && (
           <button
             onClick={() => setActiveTab("users")}
             className={cn(
               "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
-              activeTab === "users" ? "border-primary text-primary font-semibold" : "border-transparent text-muted-foreground hover:text-foreground"
+              activeTab === "users" ? "border-primary text-white bg-primary/10 rounded-t-md font-semibold" : "border-transparent text-muted-foreground hover:text-foreground"
             )}
           >
             <i className="fa-solid fa-users-gear text-purple-500 text-sm" /> User Management
@@ -563,7 +587,7 @@ export default function SettingsPage() {
             onClick={() => setActiveTab("shifts")}
             className={cn(
               "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
-              activeTab === "shifts" ? "border-primary text-primary font-semibold" : "border-transparent text-muted-foreground hover:text-foreground"
+              activeTab === "shifts" ? "border-primary text-white bg-primary/10 rounded-t-md font-semibold" : "border-transparent text-muted-foreground hover:text-foreground"
             )}
           >
             <i className="fa-solid fa-clock-rotate-left text-amber-500 text-sm" /> Shifts &amp; Employment Types
@@ -575,7 +599,7 @@ export default function SettingsPage() {
             onClick={() => setActiveTab("permissions")}
             className={cn(
               "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
-              activeTab === "permissions" ? "border-primary text-primary font-semibold" : "border-transparent text-muted-foreground hover:text-foreground"
+              activeTab === "permissions" ? "border-primary text-white bg-primary/10 rounded-t-md font-semibold" : "border-transparent text-muted-foreground hover:text-foreground"
             )}
           >
             <i className="fa-solid fa-lock text-sky-500 text-sm" /> Roles & Multi-Tenant Security
@@ -587,7 +611,7 @@ export default function SettingsPage() {
             onClick={() => setActiveTab("subscription")}
             className={cn(
               "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
-              activeTab === "subscription" ? "border-primary text-primary font-semibold" : "border-transparent text-muted-foreground hover:text-foreground"
+              activeTab === "subscription" ? "border-primary text-white bg-primary/10 rounded-t-md font-semibold" : "border-transparent text-muted-foreground hover:text-foreground"
             )}
           >
             <i className="fa-solid fa-credit-card text-amber-500 text-sm" /> SaaS Billing & Seats
@@ -599,6 +623,12 @@ export default function SettingsPage() {
       <div key={activeTab} className="animate-in fade-in-50 slide-in-from-bottom-2 duration-300 ease-out transition-all">
         {/* TAB: USER MANAGEMENT */}
         {activeTab === "users" && (can("manageUsers") || isAdmin) && <UserManagementTab />}
+
+        {/* TAB: SELF-SERVICE INVOICE GENERATOR */}
+        {activeTab === "invoice" && <SelfServiceInvoiceTab showToast={showToast} />}
+
+        {/* TAB: ADMIN MASTER INVOICES */}
+        {activeTab === "all-invoices" && (isAdmin || isOPS) && <AdminInvoicesTab showToast={showToast} />}
 
         {/* TAB: SHIFTS & EMPLOYMENT TYPES */}
         {activeTab === "shifts" && (can("manageShifts") || isAdmin) && (

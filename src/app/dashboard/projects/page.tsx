@@ -559,7 +559,7 @@ export default function ProjectsPage() {
           className={cn(
             "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer",
             activeTab === "kanban"
-              ? "border-primary text-primary font-semibold"
+              ? "border-primary text-white bg-primary/10 rounded-t-md font-semibold"
               : "border-transparent text-muted-foreground hover:text-foreground"
           )}
         >
@@ -571,7 +571,7 @@ export default function ProjectsPage() {
           className={cn(
             "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer",
             activeTab === "gantt"
-              ? "border-primary text-primary font-semibold"
+              ? "border-primary text-white bg-primary/10 rounded-t-md font-semibold"
               : "border-transparent text-muted-foreground hover:text-foreground"
           )}
         >
@@ -583,7 +583,7 @@ export default function ProjectsPage() {
           className={cn(
             "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer",
             activeTab === "wiki"
-              ? "border-primary text-primary font-semibold"
+              ? "border-primary text-white bg-primary/10 rounded-t-md font-semibold"
               : "border-transparent text-muted-foreground hover:text-foreground"
           )}
         >
@@ -595,7 +595,7 @@ export default function ProjectsPage() {
           className={cn(
             "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer",
             activeTab === "drive"
-              ? "border-primary text-primary font-semibold"
+              ? "border-primary text-white bg-primary/10 rounded-t-md font-semibold"
               : "border-transparent text-muted-foreground hover:text-foreground"
           )}
         >
@@ -607,7 +607,7 @@ export default function ProjectsPage() {
           className={cn(
             "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer",
             activeTab === "history"
-              ? "border-primary text-primary font-semibold"
+              ? "border-primary text-white bg-primary/10 rounded-t-md font-semibold"
               : "border-transparent text-muted-foreground hover:text-foreground"
           )}
         >

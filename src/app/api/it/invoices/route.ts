@@ -103,7 +103,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const authResult = await requireTenantSession(["Admin", "OPS", "Sub Admin", "Manager"]);
+    const authResult = await requireTenantSession();
     if (isAuthError(authResult)) return authResult;
     const { tenantObjectId, userObjectId, session } = authResult;
 

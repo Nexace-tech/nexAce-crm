@@ -867,7 +867,7 @@ export default function CommunicationHub() {
           className={cn(
             "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer",
             activeTab === "chat"
-              ? "border-primary text-primary font-semibold"
+              ? "border-primary text-white bg-primary/10 rounded-t-md font-semibold"
               : "border-transparent text-muted-foreground hover:text-foreground"
           )}
         >
@@ -880,7 +880,7 @@ export default function CommunicationHub() {
             className={cn(
               "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer",
               activeTab === "mail"
-                ? "border-primary text-primary font-semibold"
+                ? "border-primary text-white bg-primary/10 rounded-t-md font-semibold"
                 : "border-transparent text-muted-foreground hover:text-foreground"
             )}
           >
@@ -894,7 +894,7 @@ export default function CommunicationHub() {
             className={cn(
               "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer",
               activeTab === "whatsapp"
-                ? "border-primary text-primary font-semibold"
+                ? "border-primary text-white bg-primary/10 rounded-t-md font-semibold"
                 : "border-transparent text-muted-foreground hover:text-foreground"
             )}
           >
@@ -908,7 +908,7 @@ export default function CommunicationHub() {
             className={cn(
               "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer",
               activeTab === "video"
-                ? "border-primary text-primary font-semibold"
+                ? "border-primary text-white bg-primary/10 rounded-t-md font-semibold"
                 : "border-transparent text-muted-foreground hover:text-foreground"
             )}
           >
@@ -922,7 +922,7 @@ export default function CommunicationHub() {
             className={cn(
               "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer",
               activeTab === "announcements"
-                ? "border-primary text-primary font-semibold"
+                ? "border-primary text-white bg-primary/10 rounded-t-md font-semibold"
                 : "border-transparent text-muted-foreground hover:text-foreground"
             )}
           >
@@ -935,7 +935,7 @@ export default function CommunicationHub() {
           className={cn(
             "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer",
             activeTab === "settings"
-              ? "border-primary text-primary font-semibold"
+              ? "border-primary text-white bg-primary/10 rounded-t-md font-semibold"
               : "border-transparent text-muted-foreground hover:text-foreground"
           )}
         >

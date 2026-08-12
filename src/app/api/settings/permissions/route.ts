@@ -47,7 +47,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, Record<string, boolean>> =
   },
   Employee: {
     overview: true,
-    team: false,
+    team: true,
     calendar: true,
     projects: true,
     chat: true,
@@ -162,7 +162,7 @@ export const DEFAULT_FEATURE_PERMISSIONS: Record<string, Record<string, boolean>
     // Overview
     viewKpiWidgets: true, viewShiftOverview: false, viewAnnouncements: true, createAnnouncements: false, viewRecentActivity: true,
     // Team
-    viewTeamDirectory: false, viewEmployeeProfiles: false, inviteTeamMembers: false, editEmployeeProfiles: false, deactivateEmployees: false, viewSalaryData: false, viewOrgChart: false,
+    viewTeamDirectory: true, viewEmployeeProfiles: true, inviteTeamMembers: false, editEmployeeProfiles: false, deactivateEmployees: false, viewSalaryData: false, viewOrgChart: true,
     // Calendar & Time
     logOwnTimesheet: true, editOwnTimesheet: true, viewTeamTimesheets: false, approveTimesheets: false, manageShifts: false, exportTimesheets: false, viewShiftCalendar: true, clockInOut: true,
     // Projects
@@ -230,6 +230,20 @@ export async function GET() {
             ...(doc.featurePermissions as any),
           };
         }
+      }
+    });
+
+    // Ensure viewOrgChart and team module are true for all roles by default
+    Object.keys(permissionsMap).forEach((roleKey) => {
+      if (permissionsMap[roleKey]) {
+        permissionsMap[roleKey].team = true;
+      }
+    });
+    Object.keys(featurePermissionsMap).forEach((roleKey) => {
+      if (featurePermissionsMap[roleKey]) {
+        featurePermissionsMap[roleKey].viewOrgChart = true;
+        featurePermissionsMap[roleKey].viewTeamDirectory = true;
+        featurePermissionsMap[roleKey].viewEmployeeProfiles = true;
       }
     });
 

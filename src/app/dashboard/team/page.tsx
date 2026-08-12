@@ -633,26 +633,27 @@ export default function TeamDashboardPage() {
       const node = userMap[u._id];
       const managerId = u.managerId?._id || u.managerId;
       const managerNode = managerId ? userMap[managerId] : null;
-      const managerRole = managerNode?.role || null;
 
       const isEmployeeOrHR = u.role === "HR" || u.role === "Employee";
-      const isManagerRole = u.role === "Manager";
 
       const deptManager = filteredUsers.find(
-        (m) => m.role === "Manager" && m._id !== u._id && (m.department === u.department || (m.departments && u.departments && m.departments.some((d: string) => u.departments.includes(d))))
+        (m) => (m.role === "Manager" || m.role === "OPS" || m.role === "Admin") && m._id !== u._id && (m.department === u.department || (m.departments && u.departments && m.departments.some((d: string) => u.departments.includes(d))))
       )?._id;
 
-      const fallbackManagerId = deptManager || globalFirstManager;
+      const fallbackManagerId = deptManager || globalFirstAdmin || globalFirstManager;
 
-      if (managerId && managerNode && managerId !== u._id && managerRole !== "Admin") {
+      // 1. Explicit assigned manager exists in current view
+      if (managerId && managerNode && managerId !== u._id) {
+        node.managerName = managerNode.name;
         userMap[managerId].reports.push(node);
-      } else if (isManagerRole && globalFirstAdmin && globalFirstAdmin !== u._id && userMap[globalFirstAdmin]) {
-        node.managerName = userMap[globalFirstAdmin].name;
-        userMap[globalFirstAdmin].reports.push(node);
-      } else if (isEmployeeOrHR && fallbackManagerId && fallbackManagerId !== u._id && userMap[fallbackManagerId]) {
+      }
+      // 2. Non-Admin user with no explicit manager: nest under top workspace Admin / Manager
+      else if (u.role !== "Admin" && fallbackManagerId && fallbackManagerId !== u._id && userMap[fallbackManagerId]) {
         node.managerName = userMap[fallbackManagerId].name;
         userMap[fallbackManagerId].reports.push(node);
-      } else {
+      }
+      // 3. Root Level Admin
+      else {
         rootNodes.push(node);
       }
     });
@@ -770,6 +771,14 @@ export default function TeamDashboardPage() {
               <i className="fa-solid fa-building" /> Add Department
             </Button>
             <Button
+              variant="outline"
+              size="sm"
+              onClick={() => router.push("/dashboard/clients?tab=external")}
+              className="gap-2 text-xs font-semibold cursor-pointer border-primary/30 hover:border-primary text-primary"
+            >
+              <i className="fa-solid fa-building-user" /> External Teams Panel
+            </Button>
+            <Button
               color="primary"
               size="sm"
               onClick={() => setShowAddForm(true)}
@@ -788,7 +797,7 @@ export default function TeamDashboardPage() {
           className={cn(
             "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer",
             activeTab === "directory"
-              ? "border-primary text-primary font-semibold"
+              ? "border-primary text-white bg-primary/10 rounded-t-md font-semibold"
               : "border-transparent text-muted-foreground hover:text-foreground"
           )}
         >
@@ -800,7 +809,7 @@ export default function TeamDashboardPage() {
           className={cn(
             "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer",
             activeTab === "orgchart"
-              ? "border-primary text-primary font-semibold"
+              ? "border-primary text-white bg-primary/10 rounded-t-md font-semibold"
               : "border-transparent text-muted-foreground hover:text-foreground"
           )}
         >
@@ -813,7 +822,7 @@ export default function TeamDashboardPage() {
             className={cn(
               "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer",
               activeTab === "manager"
-                ? "border-primary text-primary font-semibold"
+                ? "border-primary text-white bg-primary/10 rounded-t-md font-semibold"
                 : "border-transparent text-muted-foreground hover:text-foreground"
             )}
           >
@@ -826,7 +835,7 @@ export default function TeamDashboardPage() {
           className={cn(
             "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer",
             activeTab === "departments"
-              ? "border-primary text-primary font-semibold"
+              ? "border-primary text-white bg-primary/10 rounded-t-md font-semibold"
               : "border-transparent text-muted-foreground hover:text-foreground"
           )}
         >

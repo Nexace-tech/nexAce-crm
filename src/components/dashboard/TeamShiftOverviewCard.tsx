@@ -7,6 +7,8 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/com
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/hooks/useAuth";
+import { usePermissions } from "@/hooks/usePermissions";
 
 function parseTime(timeStr: string): { h: number; m: number } | null {
   if (!timeStr) return null;
@@ -99,6 +101,8 @@ const EMPLOYMENT_TYPE_CONFIG: Record<string, { badge: string; icon: string }> = 
 };
 
 export function TeamShiftOverviewCard() {
+  const { user: currentUser } = useAuth();
+  const { isAdmin, isOPS } = usePermissions();
   const [teamMembers, setTeamMembers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
@@ -107,19 +111,34 @@ export function TeamShiftOverviewCard() {
   const [typeFilter, setTypeFilter] = useState("All");
   const [viewMode, setViewMode] = useState<"table" | "cards">("table");
   const [now, setNow] = useState(new Date());
+  const [clocking, setClocking] = useState(false);
+
+  const fetchTeamShifts = async () => {
+    try {
+      const res = await fetch("/api/team?all=true");
+      if (res.ok) {
+        const data = await res.json();
+        let users = data.users || [];
+        // Non-admin/non-OPS users only see their own record
+        if (!isAdmin && !isOPS && currentUser?.email) {
+          users = users.filter(
+            (u: any) => u.email?.toLowerCase() === currentUser.email?.toLowerCase()
+          );
+        }
+        setTeamMembers(users);
+      }
+    } catch (err) {
+      console.error("Failed to fetch team shift times:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    async function fetchTeamShifts() {
-      try {
-        const res = await fetch("/api/team?all=true");
-        if (res.ok) { const data = await res.json(); setTeamMembers(data.users || []); }
-      } catch (err) { console.error("Failed to fetch team shift times:", err); }
-      finally { setLoading(false); }
-    }
     fetchTeamShifts();
     const tick = setInterval(() => setNow(new Date()), 60_000);
     return () => clearInterval(tick);
-  }, []);
+  }, [currentUser, isAdmin, isOPS]);
 
   const enriched = useMemo(
     () => teamMembers.map((m) => {
@@ -164,6 +183,28 @@ export function TeamShiftOverviewCard() {
   const hasFilters = !!(searchQuery || shiftFilter !== "All" || typeFilter !== "All" || statusFilter !== "All");
   const resetFilters = () => { setSearchQuery(""); setShiftFilter("All"); setTypeFilter("All"); setStatusFilter("All"); };
 
+  const myRecord = enriched.find((m) => m.email?.toLowerCase() === currentUser?.email?.toLowerCase());
+  const isCurrentlyClockedIn = Boolean(myRecord?.isClockedIn || myRecord?.status === "active");
+
+  const handleQuickClockAction = async () => {
+    setClocking(true);
+    try {
+      const action = isCurrentlyClockedIn ? "out" : "in";
+      const res = await fetch("/api/attendance", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action }),
+      });
+      if (res.ok) {
+        await fetchTeamShifts();
+      }
+    } catch (err) {
+      console.error("Clock action failed:", err);
+    } finally {
+      setClocking(false);
+    }
+  };
+
   const STAT_TABS = [
     { key: "All",      label: "Total",         value: stats.total,    icon: "fa-solid fa-users",        iconColor: "text-foreground" },
     { key: "active",   label: "Active Now",    value: stats.active,   icon: "fa-solid fa-circle-check", iconColor: "text-emerald-500" },
@@ -189,6 +230,27 @@ export function TeamShiftOverviewCard() {
             </CardDescription>
           </div>
           <div className="flex items-center gap-2 shrink-0">
+            <Button
+              size="sm"
+              onClick={handleQuickClockAction}
+              disabled={clocking}
+              className={cn(
+                "cursor-pointer text-xs font-bold gap-1.5 h-8 px-3 transition-all shadow-xs",
+                isCurrentlyClockedIn
+                  ? "bg-rose-600 hover:bg-rose-700 text-white"
+                  : "bg-emerald-600 hover:bg-emerald-700 text-white"
+              )}
+            >
+              <i className={cn("fa-solid text-xs", isCurrentlyClockedIn ? "fa-stopwatch" : "fa-fingerprint")} />
+              {clocking ? (
+                <i className="fa-solid fa-spinner fa-spin text-xs" />
+              ) : isCurrentlyClockedIn ? (
+                "Clock Out"
+              ) : (
+                "Clock In"
+              )}
+            </Button>
+
             <div className="flex items-center gap-0.5 bg-muted/60 p-0.5 rounded-lg border border-border/60">
               <button
                 onClick={() => setViewMode("table")}

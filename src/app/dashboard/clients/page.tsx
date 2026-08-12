@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -63,9 +64,26 @@ interface ResourceAllocation {
   notes?: string;
 }
 
+interface ExternalMember {
+  _id: string;
+  name: string;
+  email: string;
+  companyName: string;
+  role: string;
+  serviceCategory: string;
+  assignedProject: string;
+  hourlyRate: number;
+  currency: string;
+  status: "Active" | "On Hold" | "Contract Ended";
+  phone?: string;
+  notes?: string;
+  createdAt: string;
+}
+
 export default function OperationsPage() {
+  const searchParams = useSearchParams();
   const { isAdmin } = usePermissions();
-  const [activeTab, setActiveTab] = useState<"operations" | "sales" | "hr">("operations");
+  const [activeTab, setActiveTab] = useState<"operations" | "sales" | "hr" | "external">("operations");
   const [viewMode, setViewMode] = useState<"list" | "grid">("list");
 
   // Sales Workdesk State
@@ -107,6 +125,36 @@ export default function OperationsPage() {
     startDate: "",
     notes: "",
   });
+
+  // External Teams State
+  const [externalMembers, setExternalMembers] = useState<ExternalMember[]>([]);
+  const [externalLoading, setExternalLoading] = useState(false);
+  const [externalSearch, setExternalSearch] = useState("");
+  const [externalStatusFilter, setExternalStatusFilter] = useState("All");
+  const [externalCategoryFilter, setExternalCategoryFilter] = useState("All");
+  const [showExternalModal, setShowExternalModal] = useState(false);
+  const [editingExternalMember, setEditingExternalMember] = useState<ExternalMember | null>(null);
+  const [externalSubmitting, setExternalSubmitting] = useState(false);
+
+  const [externalFormData, setExternalFormData] = useState({
+    name: "",
+    email: "",
+    companyName: "Independent Contractor",
+    role: "External Developer",
+    serviceCategory: "Software Development",
+    assignedProject: "General Operational Support",
+    hourlyRate: 75,
+    currency: "USD",
+    status: "Active" as ExternalMember["status"],
+    phone: "",
+    notes: "",
+  });
+
+  const [showDeleteExternalModal, setShowDeleteExternalModal] = useState(false);
+  const [externalToDelete, setExternalToDelete] = useState<ExternalMember | null>(null);
+  const [isDeletingExternal, setIsDeletingExternal] = useState(false);
+
+
 
   // Persist View Mode Preference in localStorage
   useEffect(() => {
@@ -272,11 +320,38 @@ export default function OperationsPage() {
     }
   };
 
+  const fetchExternalMembers = async () => {
+    try {
+      setExternalLoading(true);
+      const res = await fetch("/api/operations/external-teams");
+      if (res.ok) {
+        const data = await res.json();
+        setExternalMembers(data.externalMembers || []);
+      }
+    } catch (err) {
+      console.error("Failed to fetch external team members:", err);
+    } finally {
+      setExternalLoading(false);
+    }
+  };
+
   useEffect(() => {
     fetchProjects();
     fetchSalesDeals();
     fetchHrAllocations();
+    fetchExternalMembers();
   }, []);
+
+  useEffect(() => {
+    const tabParam = searchParams.get("tab");
+    if (tabParam === "external" || tabParam === "external-teams") {
+      setActiveTab("external");
+    } else if (tabParam === "sales") {
+      setActiveTab("sales");
+    } else if (tabParam === "hr") {
+      setActiveTab("hr");
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -767,6 +842,20 @@ export default function OperationsPage() {
     });
   }, [hrAllocations, hrSearch, hrStatusFilter, hrDeptFilter]);
 
+  const filteredExternalMembers = useMemo(() => {
+    return externalMembers.filter((m) => {
+      const matchesSearch =
+        m.name.toLowerCase().includes(externalSearch.toLowerCase()) ||
+        m.email.toLowerCase().includes(externalSearch.toLowerCase()) ||
+        m.companyName.toLowerCase().includes(externalSearch.toLowerCase()) ||
+        m.role.toLowerCase().includes(externalSearch.toLowerCase()) ||
+        m.assignedProject.toLowerCase().includes(externalSearch.toLowerCase());
+      const matchesStatus = externalStatusFilter === "All" || m.status === externalStatusFilter;
+      const matchesCat = externalCategoryFilter === "All" || m.serviceCategory === externalCategoryFilter;
+      return matchesSearch && matchesStatus && matchesCat;
+    });
+  }, [externalMembers, externalSearch, externalStatusFilter, externalCategoryFilter]);
+
   return (
     <div className="space-y-8">
       {/* Title */}
@@ -810,6 +899,28 @@ export default function OperationsPage() {
               <i className="fa-solid fa-user-plus text-xs" /> Allocate Staff Resource
             </Button>
           )}
+
+          {activeTab === "external" && (
+            <Button color="primary" size="sm" onClick={() => {
+              setEditingExternalMember(null);
+              setExternalFormData({
+                name: "",
+                email: "",
+                companyName: "Independent Contractor",
+                role: "External Developer",
+                serviceCategory: "Software Development",
+                assignedProject: "General Operational Support",
+                hourlyRate: 75,
+                currency: "USD",
+                status: "Active",
+                phone: "",
+                notes: "",
+              });
+              setShowExternalModal(true);
+            }} className="gap-2 font-semibold h-8 cursor-pointer shadow-sm">
+              <i className="fa-solid fa-user-plus text-xs" /> Add External Member/Vendor
+            </Button>
+          )}
         </div>
       </div>
 
@@ -821,7 +932,7 @@ export default function OperationsPage() {
           className={cn(
             "px-4 py-2.5 text-sm font-semibold border-b-2 transition-all flex items-center gap-2 cursor-pointer shrink-0",
             activeTab === "operations"
-              ? "border-primary text-primary font-bold"
+              ? "border-primary text-white bg-primary/10 rounded-t-md font-bold"
               : "border-transparent text-muted-foreground hover:text-foreground"
           )}
         >
@@ -834,7 +945,7 @@ export default function OperationsPage() {
           className={cn(
             "px-4 py-2.5 text-sm font-semibold border-b-2 transition-all flex items-center gap-2 cursor-pointer shrink-0",
             activeTab === "sales"
-              ? "border-primary text-primary font-bold"
+              ? "border-primary text-white bg-primary/10 rounded-t-md font-bold"
               : "border-transparent text-muted-foreground hover:text-foreground"
           )}
         >
@@ -850,13 +961,29 @@ export default function OperationsPage() {
           className={cn(
             "px-4 py-2.5 text-sm font-semibold border-b-2 transition-all flex items-center gap-2 cursor-pointer shrink-0",
             activeTab === "hr"
-              ? "border-primary text-primary font-bold"
+              ? "border-primary text-white bg-primary/10 rounded-t-md font-bold"
               : "border-transparent text-muted-foreground hover:text-foreground"
           )}
         >
           <i className="fa-solid fa-users-gear text-sm" /> HR Workdesk
           <Badge variant="soft" color="primary" className="ml-1 text-[10px] px-1.5 py-0.2">
             {hrAllocations.length}
+          </Badge>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab("external")}
+          className={cn(
+            "px-4 py-2.5 text-sm font-semibold border-b-2 transition-all flex items-center gap-2 cursor-pointer shrink-0",
+            activeTab === "external"
+              ? "border-primary text-white bg-primary/10 rounded-t-md font-bold"
+              : "border-transparent text-muted-foreground hover:text-foreground"
+          )}
+        >
+          <i className="fa-solid fa-building-user text-sm" /> External Teams
+          <Badge variant="soft" color="primary" className="ml-1 text-[10px] px-1.5 py-0.2">
+            {externalMembers.length}
           </Badge>
         </button>
       </div>
@@ -2134,6 +2261,245 @@ export default function OperationsPage() {
         </div>
       )}
 
+      {/* External Teams Tab View */}
+      {activeTab === "external" && (
+        <div className="space-y-6 animate-in fade-in duration-300">
+          {/* External Teams Metrics Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+            <Card className="border-l-4 border-l-primary">
+              <CardContent className="p-5 flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Total External Members</p>
+                  <p className="text-2xl font-bold text-foreground">{externalMembers.length}</p>
+                </div>
+                <div className="p-3 bg-primary/10 text-primary rounded-xl">
+                  <i className="fa-solid fa-building-user text-xl" />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="border-l-4 border-l-emerald-500">
+              <CardContent className="p-5 flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Active Contractors</p>
+                  <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
+                    {externalMembers.filter((m) => m.status === "Active").length}
+                  </p>
+                </div>
+                <div className="p-3 bg-emerald-500/10 text-emerald-500 rounded-xl">
+                  <i className="fa-solid fa-user-check text-xl" />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="border-l-4 border-l-amber-500">
+              <CardContent className="p-5 flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Vendor Agencies</p>
+                  <p className="text-2xl font-bold text-amber-600 dark:text-amber-400">
+                    {new Set(externalMembers.map((m) => m.companyName)).size}
+                  </p>
+                </div>
+                <div className="p-3 bg-amber-500/10 text-amber-500 rounded-xl">
+                  <i className="fa-solid fa-briefcase text-xl" />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="border-l-4 border-l-purple-500">
+              <CardContent className="p-5 flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Avg. Hourly Rate</p>
+                  <p className="text-2xl font-bold text-purple-600 dark:text-purple-400">
+                    ${Math.round(externalMembers.reduce((acc, m) => acc + (m.hourlyRate || 0), 0) / (externalMembers.length || 1))}/hr
+                  </p>
+                </div>
+                <div className="p-3 bg-purple-500/10 text-purple-500 rounded-xl">
+                  <i className="fa-solid fa-dollar-sign text-xl" />
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* External Teams Search & Filter Toolbar */}
+          <Card className="border border-border shadow-sm p-4">
+            <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+              <div className="relative w-full md:w-80">
+                <i className="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-muted-foreground text-xs" />
+                <Input
+                  placeholder="Search name, agency, role, project..."
+                  value={externalSearch}
+                  onChange={(e) => setExternalSearch(e.target.value)}
+                  className="pl-9 h-9 text-xs"
+                />
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+                <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                  <span>Category:</span>
+                  <select
+                    value={externalCategoryFilter}
+                    onChange={(e) => setExternalCategoryFilter(e.target.value)}
+                    className="h-9 px-2.5 py-1 text-xs bg-background border border-input rounded-md text-foreground focus:outline-hidden focus:ring-1 focus:ring-primary"
+                  >
+                    <option value="All">All Categories</option>
+                    <option value="Software Development">Software Development</option>
+                    <option value="UI/UX Design">UI/UX Design</option>
+                    <option value="QA Testing">QA Testing</option>
+                    <option value="DevOps & Infrastructure">DevOps & Infrastructure</option>
+                    <option value="Marketing & Content">Marketing & Content</option>
+                    <option value="Legal & Finance">Legal & Finance</option>
+                    <option value="Consulting">Consulting</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+
+                <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                  <span>Status:</span>
+                  <select
+                    value={externalStatusFilter}
+                    onChange={(e) => setExternalStatusFilter(e.target.value)}
+                    className="h-9 px-2.5 py-1 text-xs bg-background border border-input rounded-md text-foreground focus:outline-hidden focus:ring-1 focus:ring-primary"
+                  >
+                    <option value="All">All Statuses</option>
+                    <option value="Active">Active</option>
+                    <option value="On Hold">On Hold</option>
+                    <option value="Contract Ended">Contract Ended</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </Card>
+
+          {/* External Teams Matrix Table */}
+          <Card className="border border-border shadow-sm overflow-hidden">
+            <CardHeader className="pb-3 border-b border-border bg-muted/20">
+              <CardTitle className="text-base font-bold flex items-center gap-2">
+                <i className="fa-solid fa-building-user text-primary" /> External Teams & Contractor Management Panel
+              </CardTitle>
+              <CardDescription>
+                Vendor companies, external software contractors, design agencies, and external points-of-contact.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="p-0 overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-muted/40 border-b border-border font-bold text-muted-foreground uppercase">
+                  <tr>
+                    <th className="py-3 px-4">Member Name & Email</th>
+                    <th className="py-3 px-3">Agency / Vendor</th>
+                    <th className="py-3 px-3">Role & Category</th>
+                    <th className="py-3 px-3">Assigned Project</th>
+                    <th className="py-3 px-3 text-center">Hourly Rate</th>
+                    <th className="py-3 px-3 text-center">Status</th>
+                    <th className="py-3 px-4 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {externalLoading ? (
+                    <tr>
+                      <td colSpan={7} className="py-12 text-center text-muted-foreground">
+                        <i className="fa-solid fa-spinner fa-spin mr-2" /> Loading external teams...
+                      </td>
+                    </tr>
+                  ) : filteredExternalMembers.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="py-12 text-center text-muted-foreground">
+                        No external team members found matching your filter criteria.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredExternalMembers.map((member) => (
+                      <tr key={member._id} className="hover:bg-muted/20 transition-colors">
+                        <td className="py-3 px-4">
+                          <div className="font-bold text-foreground">{member.name}</div>
+                          <div className="text-muted-foreground text-[11px] font-medium">{member.email}</div>
+                        </td>
+                        <td className="py-3 px-3 font-semibold text-foreground">
+                          <span className="inline-flex items-center gap-1.5">
+                            <i className="fa-solid fa-building text-[10px] text-muted-foreground" />
+                            {member.companyName}
+                          </span>
+                        </td>
+                        <td className="py-3 px-3">
+                          <div className="font-medium text-foreground">{member.role}</div>
+                          <Badge variant="soft" color="secondary" className="text-[10px] mt-0.5 px-1.5">
+                            {member.serviceCategory}
+                          </Badge>
+                        </td>
+                        <td className="py-3 px-3 font-medium text-foreground">{member.assignedProject}</td>
+                        <td className="py-3 px-3 text-center font-mono font-bold text-foreground">
+                          ${member.hourlyRate}/hr
+                        </td>
+                        <td className="py-3 px-3 text-center">
+                          <Badge
+                            variant="soft"
+                            color={
+                              member.status === "Active"
+                                ? "success"
+                                : member.status === "On Hold"
+                                ? "warning"
+                                : "secondary"
+                            }
+                            className="text-[10px]"
+                          >
+                            {member.status}
+                          </Badge>
+                        </td>
+                        <td className="py-3 px-4 text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setEditingExternalMember(member);
+                                setExternalFormData({
+                                  name: member.name || "",
+                                  email: member.email || "",
+                                  companyName: member.companyName || "",
+                                  role: member.role || "",
+                                  serviceCategory: member.serviceCategory as any,
+                                  assignedProject: member.assignedProject || "",
+                                  hourlyRate: member.hourlyRate || 0,
+                                  currency: member.currency || "USD",
+                                  status: member.status || "Active",
+                                  phone: member.phone || "",
+                                  notes: member.notes || "",
+                                });
+                                setShowExternalModal(true);
+                              }}
+                              className="gap-1 text-xs font-semibold h-7 px-2 cursor-pointer"
+                              title="Edit Member"
+                            >
+                              <i className="fa-solid fa-pen text-[10px] text-primary" /> Edit
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setExternalToDelete(member);
+                                setShowDeleteExternalModal(true);
+                              }}
+                              className="gap-1 text-xs font-semibold h-7 px-2 cursor-pointer text-destructive hover:text-destructive"
+                              title="Remove Member"
+                            >
+                              <i className="fa-solid fa-trash text-[10px]" />
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+
+
       {/* New Sales Deal Modal */}
       {showSalesModal && (
         <div
@@ -3017,6 +3383,302 @@ export default function OperationsPage() {
                   <i className="fa-solid fa-pen-to-square text-xs" /> Edit Project
                 </Button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add / Edit External Member Modal */}
+      {showExternalModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in"
+          onClick={() => {
+            setShowExternalModal(false);
+            setEditingExternalMember(null);
+          }}
+        >
+          <div
+            className="w-full max-w-lg bg-card border border-border rounded-xl shadow-xl p-6 space-y-4 max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between pb-3 border-b border-border">
+              <h3 className="text-base font-bold text-foreground flex items-center gap-2">
+                <i className="fa-solid fa-building-user text-primary" />
+                {editingExternalMember ? "Edit External Team Member" : "Add External Member / Vendor"}
+              </h3>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowExternalModal(false);
+                  setEditingExternalMember(null);
+                }}
+                className="text-muted-foreground hover:text-foreground cursor-pointer text-sm"
+              >
+                <i className="fa-solid fa-xmark" />
+              </button>
+            </div>
+
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                if (!externalFormData.name || !externalFormData.email) return;
+
+                setExternalSubmitting(true);
+                try {
+                  const isEdit = Boolean(editingExternalMember);
+                  const url = isEdit
+                    ? `/api/operations/external-teams/${editingExternalMember!._id}`
+                    : "/api/operations/external-teams";
+                  const method = isEdit ? "PATCH" : "POST";
+
+                  const res = await fetch(url, {
+                    method,
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(externalFormData),
+                  });
+
+                  if (res.ok) {
+                    fetchExternalMembers();
+                    setShowExternalModal(false);
+                  } else {
+                    const err = await res.json();
+                    alert(err.error || "Failed to save external team member.");
+                  }
+                } catch (err) {
+                  console.error(err);
+                  alert("Failed to save external team member.");
+                } finally {
+                  setExternalSubmitting(false);
+                }
+              }}
+              className="space-y-4 text-xs"
+            >
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="font-semibold text-foreground">Full Name *</label>
+                  <Input
+                    required
+                    placeholder="e.g. Alex Rivera"
+                    value={externalFormData.name}
+                    onChange={(e) => setExternalFormData((prev) => ({ ...prev, name: e.target.value }))}
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="font-semibold text-foreground">Email Address *</label>
+                  <Input
+                    required
+                    type="email"
+                    placeholder="alex@vendor.com"
+                    value={externalFormData.email}
+                    onChange={(e) => setExternalFormData((prev) => ({ ...prev, email: e.target.value }))}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="font-semibold text-foreground">Company / Vendor Name</label>
+                  <Input
+                    placeholder="e.g. PixelCraft Agency"
+                    value={externalFormData.companyName}
+                    onChange={(e) => setExternalFormData((prev) => ({ ...prev, companyName: e.target.value }))}
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="font-semibold text-foreground">Role Title</label>
+                  <Input
+                    placeholder="e.g. Senior Frontend Contractor"
+                    value={externalFormData.role}
+                    onChange={(e) => setExternalFormData((prev) => ({ ...prev, role: e.target.value }))}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="font-semibold text-foreground">Service Category</label>
+                  <select
+                    value={externalFormData.serviceCategory}
+                    onChange={(e) => setExternalFormData((prev) => ({ ...prev, serviceCategory: e.target.value as any }))}
+                    className="w-full h-9 px-3 py-1 bg-background border border-input rounded-md text-foreground focus:outline-hidden focus:ring-1 focus:ring-primary"
+                  >
+                    <option value="Software Development">Software Development</option>
+                    <option value="UI/UX Design">UI/UX Design</option>
+                    <option value="QA Testing">QA Testing</option>
+                    <option value="DevOps & Infrastructure">DevOps & Infrastructure</option>
+                    <option value="Marketing & Content">Marketing & Content</option>
+                    <option value="Legal & Finance">Legal & Finance</option>
+                    <option value="Consulting">Consulting</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="font-semibold text-foreground">Assigned Project</label>
+                  <Input
+                    placeholder="e.g. CRM Cloud Infrastructure"
+                    value={externalFormData.assignedProject}
+                    onChange={(e) => setExternalFormData((prev) => ({ ...prev, assignedProject: e.target.value }))}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="font-semibold text-foreground">Hourly Rate ($/hr)</label>
+                  <Input
+                    type="number"
+                    min={0}
+                    value={externalFormData.hourlyRate}
+                    onChange={(e) => setExternalFormData((prev) => ({ ...prev, hourlyRate: Number(e.target.value) }))}
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="font-semibold text-foreground">Status</label>
+                  <select
+                    value={externalFormData.status}
+                    onChange={(e) => setExternalFormData((prev) => ({ ...prev, status: e.target.value as any }))}
+                    className="w-full h-9 px-3 py-1 bg-background border border-input rounded-md text-foreground focus:outline-hidden focus:ring-1 focus:ring-primary"
+                  >
+                    <option value="Active">Active</option>
+                    <option value="On Hold">On Hold</option>
+                    <option value="Contract Ended">Contract Ended</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="font-semibold text-foreground">Contact Phone (Optional)</label>
+                <Input
+                  placeholder="+1 (555) 000-0000"
+                  value={externalFormData.phone}
+                  onChange={(e) => setExternalFormData((prev) => ({ ...prev, phone: e.target.value }))}
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="font-semibold text-foreground">Notes / SLA Details</label>
+                <textarea
+                  rows={3}
+                  placeholder="Contract terms, deliverables, or vendor notes..."
+                  value={externalFormData.notes}
+                  onChange={(e) => setExternalFormData((prev) => ({ ...prev, notes: e.target.value }))}
+                  className="w-full p-2.5 bg-background border border-input rounded-md text-foreground focus:outline-hidden focus:ring-1 focus:ring-primary"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-border">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setShowExternalModal(false);
+                    setEditingExternalMember(null);
+                  }}
+                  className="cursor-pointer"
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" color="primary" size="sm" disabled={externalSubmitting} className="cursor-pointer">
+                  {externalSubmitting ? (
+                    <>
+                      <i className="fa-solid fa-spinner fa-spin mr-1.5" /> Saving...
+                    </>
+                  ) : (
+                    <>
+                      <i className="fa-solid fa-check mr-1.5" /> {editingExternalMember ? "Update Member" : "Save External Member"}
+                    </>
+                  )}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete External Member Confirmation Modal */}
+      {showDeleteExternalModal && externalToDelete && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in"
+          onClick={() => {
+            setShowDeleteExternalModal(false);
+            setExternalToDelete(null);
+          }}
+        >
+          <div
+            className="w-full max-w-md bg-card border border-border rounded-xl shadow-xl p-6 space-y-4 text-xs"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-3 text-destructive">
+              <div className="p-3 bg-destructive/10 rounded-full">
+                <i className="fa-solid fa-triangle-exclamation text-xl" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-foreground">Remove External Member</h3>
+                <p className="text-muted-foreground text-xs">This action cannot be undone.</p>
+              </div>
+            </div>
+
+            <p className="text-muted-foreground">
+              Are you sure you want to remove <strong className="text-foreground">{externalToDelete.name}</strong> ({externalToDelete.companyName}) from external teams?
+            </p>
+
+            <div className="flex justify-end gap-2 pt-3 border-t border-border">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setShowDeleteExternalModal(false);
+                  setExternalToDelete(null);
+                }}
+                className="cursor-pointer"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                color="destructive"
+                size="sm"
+                disabled={isDeletingExternal}
+                onClick={async () => {
+                  if (!externalToDelete) return;
+                  setIsDeletingExternal(true);
+                  try {
+                    const res = await fetch(`/api/operations/external-teams/${externalToDelete._id}`, {
+                      method: "DELETE",
+                    });
+                    if (res.ok) {
+                      setExternalMembers((prev) => prev.filter((m) => m._id !== externalToDelete._id));
+                      setShowDeleteExternalModal(false);
+                      setExternalToDelete(null);
+                    } else {
+                      const err = await res.json();
+                      alert(err.error || "Failed to delete external member.");
+                    }
+                  } catch (err) {
+                    console.error(err);
+                    alert("Failed to delete external member.");
+                  } finally {
+                    setIsDeletingExternal(false);
+                  }
+                }}
+                className="cursor-pointer"
+              >
+                {isDeletingExternal ? (
+                  <>
+                    <i className="fa-solid fa-spinner fa-spin mr-1.5" /> Removing...
+                  </>
+                ) : (
+                  <>
+                    <i className="fa-solid fa-trash mr-1.5" /> Delete Member
+                  </>
+                )}
+              </Button>
             </div>
           </div>
         </div>

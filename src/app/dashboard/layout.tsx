@@ -94,7 +94,7 @@ export default async function DashboardLayout({ children }: DashboardLayoutProps
       if (role === "Manager") return mod.key !== "analytics" && mod.key !== "clients" && mod.key !== "it";
       if (role === "HR") return ["overview", "team", "calendar", "projects", "chat", "hr", "goals", "settings"].includes(mod.key);
       // Employee
-      return ["overview", "calendar", "projects", "chat", "hr", "referrals", "settings"].includes(mod.key);
+      return ["overview", "team", "calendar", "projects", "chat", "hr", "referrals", "settings"].includes(mod.key);
     });
   }
 

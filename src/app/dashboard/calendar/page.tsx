@@ -577,7 +577,7 @@ export default function CalendarPage() {
           className={cn(
             "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer",
             activeTab === "calendar"
-              ? "border-primary text-primary font-semibold"
+              ? "border-primary text-white bg-primary/10 rounded-t-md font-semibold"
               : "border-transparent text-muted-foreground hover:text-foreground"
           )}
         >
@@ -589,7 +589,7 @@ export default function CalendarPage() {
           className={cn(
             "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer",
             activeTab === "sprints"
-              ? "border-primary text-primary font-semibold"
+              ? "border-primary text-white bg-primary/10 rounded-t-md font-semibold"
               : "border-transparent text-muted-foreground hover:text-foreground"
           )}
         >
@@ -601,7 +601,7 @@ export default function CalendarPage() {
           className={cn(
             "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer",
             activeTab === "timesheets"
-              ? "border-primary text-primary font-semibold"
+              ? "border-primary text-white bg-primary/10 rounded-t-md font-semibold"
               : "border-transparent text-muted-foreground hover:text-foreground"
           )}
         >
@@ -613,7 +613,7 @@ export default function CalendarPage() {
           className={cn(
             "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer",
             activeTab === "attendance"
-              ? "border-primary text-primary font-semibold"
+              ? "border-primary text-white bg-primary/10 rounded-t-md font-semibold"
               : "border-transparent text-muted-foreground hover:text-foreground"
           )}
         >
@@ -1566,8 +1566,8 @@ export default function CalendarPage() {
             })()}
           </Card>
 
-          {/* Organization Team Shift Roster & Employee Shift Attendance Board */}
-          <TeamShiftOverviewCard />
+          {/* Organization Team Shift Roster & Employee Shift Attendance Board (Admin/OPS only) */}
+          {(isAdmin || isOPS) && <TeamShiftOverviewCard />}
         </div>
       )}
 
@@ -1742,7 +1742,24 @@ export default function CalendarPage() {
                 return String(hId) === String(empId);
               });
 
-              const totalEmpHours = empLogs.reduce((acc, h) => acc + (h.regularHours || 0), 0);
+              const formatDuration = (hrsNum: number) => {
+                const totalMins = Math.round(hrsNum * 60);
+                const h = Math.floor(totalMins / 60);
+                const m = totalMins % 60;
+                if (h === 0) return `${m} mins`;
+                if (m === 0) return `${h} ${h === 1 ? "hr" : "hrs"}`;
+                return `${h} ${h === 1 ? "hr" : "hrs"} ${m} mins`;
+              };
+
+              const totalEmpHours = empLogs.reduce((acc, h) => {
+                let hrs = h.regularHours || 0;
+                if (hrs === 0 && h.clockIn && (!h.clockOut || h.clockOut === "Active")) {
+                  const elapsedMs = Math.max(0, new Date().getTime() - new Date(h.clockIn).getTime());
+                  hrs = elapsedMs / (1000 * 60 * 60);
+                }
+                return acc + hrs;
+              }, 0);
+
               const totalEmpOvertime = empLogs.reduce((acc, h) => acc + (h.overtimeHours || 0), 0);
               const empType = empObj?.employmentType || "Permanent";
 
@@ -1782,11 +1799,11 @@ export default function CalendarPage() {
                     </div>
                     <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 space-y-0.5">
                       <span className="text-[10px] uppercase font-bold text-emerald-600 dark:text-emerald-400 tracking-wider">All-Time Worked</span>
-                      <p className="text-lg font-extrabold text-emerald-600 dark:text-emerald-400">{totalEmpHours.toFixed(1)} Hrs</p>
+                      <p className="text-lg font-extrabold text-emerald-600 dark:text-emerald-400">{formatDuration(totalEmpHours)}</p>
                     </div>
                     <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 space-y-0.5">
                       <span className="text-[10px] uppercase font-bold text-amber-600 dark:text-amber-400 tracking-wider">All-Time Overtime</span>
-                      <p className="text-lg font-extrabold text-amber-600 dark:text-amber-400">+{totalEmpOvertime.toFixed(1)} Hrs</p>
+                      <p className="text-lg font-extrabold text-amber-600 dark:text-amber-400">+{formatDuration(totalEmpOvertime)}</p>
                     </div>
                   </div>
 
@@ -1835,21 +1852,28 @@ export default function CalendarPage() {
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-border/40">
-                            {empLogs.map((h) => (
-                              <tr key={h._id} className="hover:bg-accent/20">
-                                <td className="p-2 font-medium text-foreground">
-                                  {new Date(h.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
-                                </td>
-                                <td className="p-2 font-mono text-muted-foreground">
-                                  {h.clockIn ? new Date(h.clockIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }) : "--"}
-                                </td>
-                                <td className="p-2 font-mono text-muted-foreground">
-                                  {h.clockOut ? new Date(h.clockOut).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }) : (h.clockIn ? "Active" : "--")}
-                                </td>
-                                <td className="p-2 font-mono font-bold text-foreground text-right">{h.regularHours || 0} hrs</td>
-                                <td className="p-2 font-mono font-semibold text-amber-500 text-right">{h.overtimeHours ? `+${h.overtimeHours} hrs` : "0 hrs"}</td>
-                              </tr>
-                            ))}
+                            {empLogs.map((h) => {
+                              let rowRegHrs = h.regularHours || 0;
+                              if (rowRegHrs === 0 && h.clockIn && (!h.clockOut || h.clockOut === "Active")) {
+                                const elapsedMs = Math.max(0, new Date().getTime() - new Date(h.clockIn).getTime());
+                                rowRegHrs = elapsedMs / (1000 * 60 * 60);
+                              }
+                              return (
+                                <tr key={h._id} className="hover:bg-accent/20">
+                                  <td className="p-2 font-medium text-foreground">
+                                    {new Date(h.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                                  </td>
+                                  <td className="p-2 font-mono text-muted-foreground">
+                                    {h.clockIn ? new Date(h.clockIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }) : "--"}
+                                  </td>
+                                  <td className="p-2 font-mono text-muted-foreground">
+                                    {h.clockOut ? new Date(h.clockOut).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }) : (h.clockIn ? "Active" : "--")}
+                                  </td>
+                                  <td className="p-2 font-mono font-bold text-foreground text-right">{formatDuration(rowRegHrs)}</td>
+                                  <td className="p-2 font-mono font-semibold text-amber-500 text-right">{h.overtimeHours ? `+${formatDuration(h.overtimeHours)}` : "0 mins"}</td>
+                                </tr>
+                              );
+                            })}
                           </tbody>
                         </table>
                       </div>

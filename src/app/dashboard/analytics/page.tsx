@@ -181,7 +181,7 @@ export default function AnalyticsPage() {
           onClick={() => setActiveTab("overview")}
           className={cn(
             "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
-            activeTab === "overview" ? "border-primary text-primary font-semibold" : "border-transparent text-muted-foreground hover:text-foreground"
+            activeTab === "overview" ? "border-primary text-white bg-primary/10 rounded-t-md font-semibold" : "border-transparent text-muted-foreground hover:text-foreground"
           )}
         >
           <i className="fa-solid fa-clock text-xs" /> Overview & Utilization
@@ -191,7 +191,7 @@ export default function AnalyticsPage() {
           onClick={() => setActiveTab("manager")}
           className={cn(
             "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
-            activeTab === "manager" ? "border-primary text-primary font-semibold" : "border-transparent text-muted-foreground hover:text-foreground"
+            activeTab === "manager" ? "border-primary text-white bg-primary/10 rounded-t-md font-semibold" : "border-transparent text-muted-foreground hover:text-foreground"
           )}
         >
           <i className="fa-solid fa-users text-xs text-emerald-500" /> Manager Control View
@@ -201,7 +201,7 @@ export default function AnalyticsPage() {
           onClick={() => setActiveTab("performance")}
           className={cn(
             "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
-            activeTab === "performance" ? "border-primary text-primary font-semibold" : "border-transparent text-muted-foreground hover:text-foreground"
+            activeTab === "performance" ? "border-primary text-white bg-primary/10 rounded-t-md font-semibold" : "border-transparent text-muted-foreground hover:text-foreground"
           )}
         >
           <i className="fa-solid fa-award text-xs text-amber-500" /> Performance Insights
@@ -211,7 +211,7 @@ export default function AnalyticsPage() {
           onClick={() => setActiveTab("audit")}
           className={cn(
             "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
-            activeTab === "audit" ? "border-primary text-primary font-semibold" : "border-transparent text-muted-foreground hover:text-foreground"
+            activeTab === "audit" ? "border-primary text-white bg-primary/10 rounded-t-md font-semibold" : "border-transparent text-muted-foreground hover:text-foreground"
           )}
         >
           <i className="fa-solid fa-shield-halved text-xs text-sky-500" /> Audit Log Trail ({activityLogs.length})
