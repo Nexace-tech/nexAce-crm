@@ -38,7 +38,7 @@ interface ClientData {
 }
 
 interface SalesDeal {
-  id: string;
+  _id: string;
   clientAccount: string;
   dealName: string;
   dealValue: number;
@@ -47,10 +47,11 @@ interface SalesDeal {
   owner: string;
   expectedClose: string;
   venture: string;
+  notes?: string;
 }
 
 interface ResourceAllocation {
-  id: string;
+  _id: string;
   employeeName: string;
   role: string;
   department: string;
@@ -59,6 +60,7 @@ interface ResourceAllocation {
   utilizationRate: number;
   status: "Deployed" | "Partially Allocated" | "Bench" | "On Leave";
   startDate: string;
+  notes?: string;
 }
 
 export default function OperationsPage() {
@@ -67,55 +69,13 @@ export default function OperationsPage() {
   const [viewMode, setViewMode] = useState<"list" | "grid">("list");
 
   // Sales Workdesk State
-  const [salesDeals, setSalesDeals] = useState<SalesDeal[]>([
-    {
-      id: "deal-1",
-      clientAccount: "Acme FinTech Corp",
-      dealName: "Enterprise CRM Integration Retainer",
-      dealValue: 45000,
-      stage: "Negotiation",
-      probability: 80,
-      owner: "Alex Mercer",
-      expectedClose: "2026-09-15",
-      venture: "Ace Consultancys"
-    },
-    {
-      id: "deal-2",
-      clientAccount: "Global Healthcare Inc",
-      dealName: "Patient Portal Expansion & Audit",
-      dealValue: 62000,
-      stage: "Proposal Sent",
-      probability: 60,
-      owner: "Sarah Jenkins",
-      expectedClose: "2026-09-30",
-      venture: "NexAce Tech"
-    },
-    {
-      id: "deal-3",
-      clientAccount: "Vanguard Logistics",
-      dealName: "Fleet Telematics Dashboard Sprints",
-      dealValue: 28000,
-      stage: "Closed Won",
-      probability: 100,
-      owner: "Michael Chang",
-      expectedClose: "2026-08-10",
-      venture: "Ace Consultancys"
-    },
-    {
-      id: "deal-4",
-      clientAccount: "Nexus Retail Systems",
-      dealName: "Omnichannel POS Cloud Migration",
-      dealValue: 35000,
-      stage: "Discovery",
-      probability: 40,
-      owner: "Alex Mercer",
-      expectedClose: "2026-10-15",
-      venture: "NexAce Tech"
-    }
-  ]);
+  const [salesDeals, setSalesDeals] = useState<SalesDeal[]>([]);
+  const [salesLoading, setSalesLoading] = useState(false);
   const [salesSearch, setSalesSearch] = useState("");
   const [salesStageFilter, setSalesStageFilter] = useState("All");
+  const [salesOwnerFilter, setSalesOwnerFilter] = useState("All");
   const [showSalesModal, setShowSalesModal] = useState(false);
+  const [editingSalesDeal, setEditingSalesDeal] = useState<SalesDeal | null>(null);
   const [salesFormData, setSalesFormData] = useState({
     clientAccount: "",
     dealName: "",
@@ -124,67 +84,28 @@ export default function OperationsPage() {
     probability: 50,
     owner: "",
     expectedClose: "",
-    venture: "Ace Consultancys"
+    venture: "Ace Consultancys",
+    notes: "",
   });
 
   // HR Workdesk State
-  const [hrAllocations, setHrAllocations] = useState<ResourceAllocation[]>([
-    {
-      id: "res-1",
-      employeeName: "David Kim",
-      role: "Senior Fullstack Engineer",
-      department: "Engineering",
-      assignedProject: "Acme FinTech Retainer",
-      allocatedHoursPerWeek: 40,
-      utilizationRate: 100,
-      status: "Deployed",
-      startDate: "2026-01-15"
-    },
-    {
-      id: "res-2",
-      employeeName: "Emily Vance",
-      role: "UI/UX Product Designer",
-      department: "Design",
-      assignedProject: "Global Healthcare Portal",
-      allocatedHoursPerWeek: 30,
-      utilizationRate: 75,
-      status: "Partially Allocated",
-      startDate: "2026-03-01"
-    },
-    {
-      id: "res-3",
-      employeeName: "Marcus Vance",
-      role: "DevOps Engineer",
-      department: "Infrastructure",
-      assignedProject: "Unassigned (Bench)",
-      allocatedHoursPerWeek: 0,
-      utilizationRate: 0,
-      status: "Bench",
-      startDate: "2026-07-01"
-    },
-    {
-      id: "res-4",
-      employeeName: "Elena Rostova",
-      role: "QA Automation Engineer",
-      department: "QA",
-      assignedProject: "Vanguard Telematics",
-      allocatedHoursPerWeek: 40,
-      utilizationRate: 100,
-      status: "Deployed",
-      startDate: "2026-02-10"
-    }
-  ]);
+  const [hrAllocations, setHrAllocations] = useState<ResourceAllocation[]>([]);
+  const [hrLoading, setHrLoading] = useState(false);
   const [hrSearch, setHrSearch] = useState("");
   const [hrStatusFilter, setHrStatusFilter] = useState("All");
+  const [hrDeptFilter, setHrDeptFilter] = useState("All");
   const [showHrModal, setShowHrModal] = useState(false);
+  const [editingHrAllocation, setEditingHrAllocation] = useState<ResourceAllocation | null>(null);
   const [hrFormData, setHrFormData] = useState({
     employeeName: "",
     role: "",
     department: "Engineering",
     assignedProject: "",
     allocatedHoursPerWeek: 40,
+    utilizationRate: 0,
     status: "Deployed" as ResourceAllocation["status"],
-    startDate: ""
+    startDate: "",
+    notes: "",
   });
 
   // Persist View Mode Preference in localStorage
@@ -321,8 +242,40 @@ export default function OperationsPage() {
     }
   };
 
+  const fetchSalesDeals = async () => {
+    try {
+      setSalesLoading(true);
+      const res = await fetch("/api/operations/sales-deals");
+      if (res.ok) {
+        const data = await res.json();
+        setSalesDeals(data.deals || []);
+      }
+    } catch (err) {
+      console.error("Failed to fetch sales deals:", err);
+    } finally {
+      setSalesLoading(false);
+    }
+  };
+
+  const fetchHrAllocations = async () => {
+    try {
+      setHrLoading(true);
+      const res = await fetch("/api/operations/hr-workdesk");
+      if (res.ok) {
+        const data = await res.json();
+        setHrAllocations(data.allocations || []);
+      }
+    } catch (err) {
+      console.error("Failed to fetch HR allocations:", err);
+    } finally {
+      setHrLoading(false);
+    }
+  };
+
   useEffect(() => {
     fetchProjects();
+    fetchSalesDeals();
+    fetchHrAllocations();
   }, []);
 
   useEffect(() => {
@@ -604,12 +557,18 @@ export default function OperationsPage() {
       percent: Math.round((d.count / totalHealth) * 100),
     }));
 
+    const healthGreenPct = Math.round((healthCounts.Green / totalHealth) * 100);
+    const healthAmberPct = Math.round((healthCounts.Amber / totalHealth) * 100);
+    const healthRedPct = Math.round((healthCounts.Red / totalHealth) * 100);
+
     // 2. Top 5 Projects by Est Hours for Bar Chart
     const topProjects = [...filteredProjects]
       .sort((a, b) => (b.estHours || 0) - (a.estHours || 0))
       .slice(0, 5);
 
-    return { pieData, topProjects, totalHealth };
+    const maxVal = Math.max(...topProjects.map((p) => Math.max(p.estHours || 0, p.actualHours || 0)), 50);
+
+    return { pieData, topProjects, totalHealth, maxVal, healthGreenPct, healthAmberPct, healthRedPct };
   }, [filteredProjects]);
 
   const metrics = useMemo(() => {
@@ -618,8 +577,11 @@ export default function OperationsPage() {
     const estHoursTotal = projects.reduce((acc, p) => acc + (p.estHours || 0), 0);
     const actualHoursTotal = projects.reduce((acc, p) => acc + (p.actualHours || 0), 0);
     const onHold = projects.filter((p) => p.phase === "On Hold").length;
+    const green = projects.filter((p) => p.health === "Green").length;
+    const amber = projects.filter((p) => p.health === "Amber").length;
+    const red = projects.filter((p) => p.health === "Red").length;
 
-    return { total, active, estHoursTotal, actualHoursTotal, onHold };
+    return { total, active, estHoursTotal, actualHoursTotal, onHold, green, amber, red };
   }, [projects]);
 
   // Color mappings
@@ -643,61 +605,142 @@ export default function OperationsPage() {
     Low: "bg-slate-500/10 text-slate-500 border border-slate-500/20",
   };
 
-  const handleAddSalesDeal = (e: React.FormEvent) => {
+  const [salesSubmitting, setSalesSubmitting] = useState(false);
+
+  const handleAddSalesDeal = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!salesFormData.clientAccount || !salesFormData.dealName) return;
-    const newDeal: SalesDeal = {
-      id: `deal-${Date.now()}`,
-      clientAccount: salesFormData.clientAccount,
-      dealName: salesFormData.dealName,
-      dealValue: Number(salesFormData.dealValue) || 0,
-      stage: salesFormData.stage,
-      probability: Number(salesFormData.probability) || 50,
-      owner: salesFormData.owner || "Current User",
-      expectedClose: salesFormData.expectedClose || new Date().toISOString().split("T")[0],
-      venture: salesFormData.venture
-    };
-    setSalesDeals((prev) => [newDeal, ...prev]);
-    setShowSalesModal(false);
-    setSalesFormData({
-      clientAccount: "",
-      dealName: "",
-      dealValue: "",
-      stage: "Prospecting",
-      probability: 50,
-      owner: "",
-      expectedClose: "",
-      venture: "Ace Consultancys"
-    });
+    setSalesSubmitting(true);
+    try {
+      const url = editingSalesDeal
+        ? `/api/operations/sales-deals/${editingSalesDeal._id}`
+        : "/api/operations/sales-deals";
+      const method = editingSalesDeal ? "PATCH" : "POST";
+      const res = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          clientAccount: salesFormData.clientAccount,
+          dealName: salesFormData.dealName,
+          dealValue: Number(salesFormData.dealValue) || 0,
+          stage: salesFormData.stage,
+          probability: Number(salesFormData.probability) || 50,
+          owner: salesFormData.owner || "",
+          expectedClose: salesFormData.expectedClose || "",
+          venture: salesFormData.venture,
+          notes: salesFormData.notes || "",
+        }),
+      });
+      if (res.ok) {
+        await fetchSalesDeals();
+        setShowSalesModal(false);
+        setEditingSalesDeal(null);
+        setSalesFormData({ clientAccount: "", dealName: "", dealValue: "", stage: "Prospecting", probability: 50, owner: "", expectedClose: "", venture: "Ace Consultancys", notes: "" });
+      } else {
+        const err = await res.json();
+        alert(err.error || "Failed to save deal.");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Failed to save deal.");
+    } finally {
+      setSalesSubmitting(false);
+    }
   };
 
-  const handleAddHrAllocation = (e: React.FormEvent) => {
+  const handleDeleteSalesDeal = async (dealId: string) => {
+    if (!confirm("Delete this deal?")) return;
+    try {
+      const res = await fetch(`/api/operations/sales-deals/${dealId}`, { method: "DELETE" });
+      if (res.ok) setSalesDeals((prev) => prev.filter((d) => d._id !== dealId));
+      else alert("Failed to delete deal.");
+    } catch { alert("Failed to delete deal."); }
+  };
+
+  const handleEditSalesDeal = (deal: SalesDeal) => {
+    setEditingSalesDeal(deal);
+    setSalesFormData({
+      clientAccount: deal.clientAccount,
+      dealName: deal.dealName,
+      dealValue: String(deal.dealValue),
+      stage: deal.stage,
+      probability: deal.probability,
+      owner: deal.owner,
+      expectedClose: deal.expectedClose,
+      venture: deal.venture,
+      notes: deal.notes || "",
+    });
+    setShowSalesModal(true);
+  };
+
+  const [hrSubmitting, setHrSubmitting] = useState(false);
+
+  const handleAddHrAllocation = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!hrFormData.employeeName) return;
+    setHrSubmitting(true);
     const hours = Number(hrFormData.allocatedHoursPerWeek) || 0;
-    const util = Math.min(100, Math.round((hours / 40) * 100));
-    const newAlloc: ResourceAllocation = {
-      id: `res-${Date.now()}`,
-      employeeName: hrFormData.employeeName,
-      role: hrFormData.role || "Staff Member",
-      department: hrFormData.department,
-      assignedProject: hrFormData.assignedProject || "Unassigned",
-      allocatedHoursPerWeek: hours,
-      utilizationRate: util,
-      status: hrFormData.status,
-      startDate: hrFormData.startDate || new Date().toISOString().split("T")[0]
-    };
-    setHrAllocations((prev) => [newAlloc, ...prev]);
-    setShowHrModal(false);
+    const util = hrFormData.utilizationRate || Math.min(100, Math.round((hours / 40) * 100));
+    try {
+      const url = editingHrAllocation
+        ? `/api/operations/hr-workdesk/${editingHrAllocation._id}`
+        : "/api/operations/hr-workdesk";
+      const method = editingHrAllocation ? "PATCH" : "POST";
+      const res = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          employeeName: hrFormData.employeeName,
+          role: hrFormData.role || "",
+          department: hrFormData.department,
+          assignedProject: hrFormData.assignedProject || "Unassigned",
+          allocatedHoursPerWeek: hours,
+          utilizationRate: util,
+          status: hrFormData.status,
+          startDate: hrFormData.startDate || "",
+          notes: hrFormData.notes || "",
+        }),
+      });
+      if (res.ok) {
+        await fetchHrAllocations();
+        setShowHrModal(false);
+        setEditingHrAllocation(null);
+        setHrFormData({ employeeName: "", role: "", department: "Engineering", assignedProject: "", allocatedHoursPerWeek: 40, utilizationRate: 0, status: "Deployed", startDate: "", notes: "" });
+      } else {
+        const err = await res.json();
+        alert(err.error || "Failed to save allocation.");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Failed to save allocation.");
+    } finally {
+      setHrSubmitting(false);
+    }
+  };
+
+  const handleDeleteHrAllocation = async (allocId: string) => {
+    if (!confirm("Remove this resource allocation?")) return;
+    try {
+      const res = await fetch(`/api/operations/hr-workdesk/${allocId}`, { method: "DELETE" });
+      if (res.ok) setHrAllocations((prev) => prev.filter((a) => a._id !== allocId));
+      else alert("Failed to delete allocation.");
+    } catch { alert("Failed to delete allocation."); }
+  };
+
+  const handleEditHrAllocation = (alloc: ResourceAllocation) => {
+    setEditingHrAllocation(alloc);
     setHrFormData({
-      employeeName: "",
-      role: "",
-      department: "Engineering",
-      assignedProject: "",
-      allocatedHoursPerWeek: 40,
-      status: "Deployed",
-      startDate: ""
+      employeeName: alloc.employeeName,
+      role: alloc.role,
+      department: alloc.department,
+      assignedProject: alloc.assignedProject,
+      allocatedHoursPerWeek: alloc.allocatedHoursPerWeek,
+      utilizationRate: alloc.utilizationRate,
+      status: alloc.status,
+      startDate: alloc.startDate,
+      notes: alloc.notes || "",
     });
+    setShowHrModal(true);
   };
 
   const filteredSalesDeals = useMemo(() => {
@@ -707,9 +750,10 @@ export default function OperationsPage() {
         deal.dealName.toLowerCase().includes(salesSearch.toLowerCase()) ||
         deal.owner.toLowerCase().includes(salesSearch.toLowerCase());
       const matchesStage = salesStageFilter === "All" || deal.stage === salesStageFilter;
-      return matchesSearch && matchesStage;
+      const matchesOwner = salesOwnerFilter === "All" || deal.owner === salesOwnerFilter;
+      return matchesSearch && matchesStage && matchesOwner;
     });
-  }, [salesDeals, salesSearch, salesStageFilter]);
+  }, [salesDeals, salesSearch, salesStageFilter, salesOwnerFilter]);
 
   const filteredHrAllocations = useMemo(() => {
     return hrAllocations.filter((res) => {
@@ -718,9 +762,10 @@ export default function OperationsPage() {
         res.role.toLowerCase().includes(hrSearch.toLowerCase()) ||
         res.assignedProject.toLowerCase().includes(hrSearch.toLowerCase());
       const matchesStatus = hrStatusFilter === "All" || res.status === hrStatusFilter;
-      return matchesSearch && matchesStatus;
+      const matchesDept = hrDeptFilter === "All" || res.department === hrDeptFilter;
+      return matchesSearch && matchesStatus && matchesDept;
     });
-  }, [hrAllocations, hrSearch, hrStatusFilter]);
+  }, [hrAllocations, hrSearch, hrStatusFilter, hrDeptFilter]);
 
   return (
     <div className="space-y-8">
@@ -816,484 +861,940 @@ export default function OperationsPage() {
         </button>
       </div>
 
-      {/* Metric Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-        <Card className="border-l-4 border-l-primary">
-          <CardContent className="p-5 flex items-center justify-between">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Total Projects</p>
-              <p className="text-2xl font-bold text-foreground">{metrics.total}</p>
-            </div>
-            <div className="p-3 bg-primary/10 text-primary rounded-xl">
-              <i className="fa-solid fa-diagram-project text-xl" />
-            </div>
-          </CardContent>
-        </Card>
+      {/* Operations Control Tab View */}
+      {activeTab === "operations" && (
+        <div className="space-y-8">
+          {/* Metric Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+            <Card className="border-l-4 border-l-primary">
+              <CardContent className="p-5 flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Total Projects</p>
+                  <p className="text-2xl font-bold text-foreground">{metrics.total}</p>
+                </div>
+                <div className="p-3 bg-primary/10 text-primary rounded-xl">
+                  <i className="fa-solid fa-diagram-project text-xl" />
+                </div>
+              </CardContent>
+            </Card>
 
-        <Card className="border-l-4 border-l-emerald-500">
-          <CardContent className="p-5 flex items-center justify-between">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Active in Delivery</p>
-              <p className="text-2xl font-bold text-foreground">{metrics.active}</p>
-            </div>
-            <div className="p-3 bg-emerald-500/10 text-emerald-500 rounded-xl">
-              <i className="fa-solid fa-circle-play text-xl" />
-            </div>
-          </CardContent>
-        </Card>
+            <Card className="border-l-4 border-l-emerald-500">
+              <CardContent className="p-5 flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Active in Delivery</p>
+                  <p className="text-2xl font-bold text-foreground">{metrics.active}</p>
+                </div>
+                <div className="p-3 bg-emerald-500/10 text-emerald-500 rounded-xl">
+                  <i className="fa-solid fa-circle-play text-xl" />
+                </div>
+              </CardContent>
+            </Card>
 
-        <Card className="border-l-4 border-l-amber-500">
-          <CardContent className="p-5 flex items-center justify-between">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Projects on Hold</p>
-              <p className="text-2xl font-bold text-foreground">{metrics.onHold}</p>
-            </div>
-            <div className="p-3 bg-amber-500/10 text-amber-500 rounded-xl">
-              <i className="fa-solid fa-circle-pause text-xl" />
-            </div>
-          </CardContent>
-        </Card>
+            <Card className="border-l-4 border-l-amber-500">
+              <CardContent className="p-5 flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Projects on Hold</p>
+                  <p className="text-2xl font-bold text-foreground">{metrics.onHold}</p>
+                </div>
+                <div className="p-3 bg-amber-500/10 text-amber-500 rounded-xl">
+                  <i className="fa-solid fa-circle-pause text-xl" />
+                </div>
+              </CardContent>
+            </Card>
 
-        <Card className="border-l-4 border-l-sky-500">
-          <CardContent className="p-5 flex items-center justify-between">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Staff Hours Logged</p>
-              <p className="text-2xl font-bold text-foreground">
-                {metrics.actualHoursTotal} / {metrics.estHoursTotal} hrs
-              </p>
+            <Card className="border-l-4 border-l-sky-500">
+              <CardContent className="p-5 flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Staff Hours Logged</p>
+                  <p className="text-2xl font-bold text-foreground">
+                    {metrics.actualHoursTotal} / {metrics.estHoursTotal} hrs
+                  </p>
+                </div>
+                <div className="p-3 bg-sky-500/10 text-sky-500 rounded-xl">
+                  <i className="fa-solid fa-clock text-xl" />
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Collapsible Analytics Panel */}
+          {showAnalytics && (
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 animate-in fade-in slide-in-from-top-4 duration-300">
+              {/* Bar Chart: Hours variance top 5 */}
+              <Card className="lg:col-span-2 border border-border shadow-sm p-5 flex flex-col justify-between">
+                <div>
+                  <h3 className="text-sm font-bold text-foreground flex items-center gap-1.5">
+                    <i className="fa-solid fa-chart-simple text-primary" /> Budgeted vs. Actual Hours (Top 5 Projects)
+                  </h3>
+                  <p className="text-xs text-muted-foreground mt-0.5">Est. Hours vs. Actual hours logged per project.</p>
+                </div>
+                
+                <div className="h-52 w-full mt-2 flex items-center justify-center">
+                  {chartData.topProjects.length === 0 ? (
+                    <div className="text-xs text-muted-foreground">No project data available for visualization.</div>
+                  ) : (
+                    <svg viewBox="0 0 400 210" className="w-full h-full">
+                      {/* Grid Lines */}
+                      <line x1="40" y1="30" x2="380" y2="30" stroke="currentColor" strokeOpacity="0.1" strokeDasharray="3 3" />
+                      <line x1="40" y1="80" x2="380" y2="80" stroke="currentColor" strokeOpacity="0.1" strokeDasharray="3 3" />
+                      <line x1="40" y1="130" x2="380" y2="130" stroke="currentColor" strokeOpacity="0.1" strokeDasharray="3 3" />
+                      <line x1="40" y1="180" x2="380" y2="180" stroke="currentColor" strokeOpacity="0.2" />
+
+                      {/* Legend & Bars */}
+                      {chartData.topProjects.map((p, idx) => {
+                        const barWidth = 24;
+                        const groupGap = 64;
+                        const startX = 65 + idx * groupGap;
+                        const maxVal = chartData.maxVal;
+
+                        const estHeight = Math.round((p.estHours / maxVal) * 140);
+                        const actHeight = Math.round((p.actualHours / maxVal) * 140);
+
+                        return (
+                          <g key={p._id}>
+                            {/* Est Hours Bar (Primary Color) */}
+                            <rect
+                              x={startX}
+                              y={180 - estHeight}
+                              width={barWidth}
+                              height={estHeight}
+                              rx="3"
+                              className="fill-primary/40 hover:fill-primary/60 transition-colors cursor-pointer"
+                            >
+                              <title>{`${p.projectName}: Est ${p.estHours} hrs`}</title>
+                            </rect>
+                            {/* Actual Hours Bar (Emerald Color) */}
+                            <rect
+                              x={startX + barWidth + 3}
+                              y={180 - actHeight}
+                              width={barWidth}
+                              height={actHeight}
+                              rx="3"
+                              className="fill-emerald-500 hover:fill-emerald-400 transition-colors cursor-pointer"
+                            >
+                              <title>{`${p.projectName}: Actual ${p.actualHours} hrs`}</title>
+                            </rect>
+                            {/* Project Name Label */}
+                            <text
+                              x={startX + barWidth}
+                              y="196"
+                              fontSize="9"
+                              textAnchor="middle"
+                              className="fill-muted-foreground font-medium"
+                            >
+                              {p.projectName.length > 8 ? `${p.projectName.slice(0, 7)}...` : p.projectName}
+                            </text>
+                          </g>
+                        );
+                      })}
+                    </svg>
+                  )}
+                </div>
+
+                <div className="flex items-center justify-center gap-6 pt-3 border-t border-border/50 text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="w-3 h-3 rounded-xs bg-primary/40" />
+                    <span className="text-muted-foreground font-medium">Estimated Budget (hrs)</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="w-3 h-3 rounded-xs bg-emerald-500" />
+                    <span className="text-muted-foreground font-medium">Actual Logged (hrs)</span>
+                  </div>
+                </div>
+              </Card>
+
+              {/* Pie/Donut Chart: Health Distribution */}
+              <Card className="border border-border shadow-sm p-5 flex flex-col justify-between">
+                <div>
+                  <h3 className="text-sm font-bold text-foreground flex items-center gap-1.5">
+                    <i className="fa-solid fa-chart-pie text-emerald-500" /> Project Health Status
+                  </h3>
+                  <p className="text-xs text-muted-foreground mt-0.5">Green, Amber, & Red health breakdown.</p>
+                </div>
+
+                <div className="h-48 w-full flex items-center justify-center relative my-2">
+                  <svg viewBox="0 0 100 100" className="w-36 h-36 transform -rotate-90">
+                    <circle cx="50" cy="50" r="38" stroke="currentColor" strokeWidth="14" fill="transparent" className="text-muted/20" />
+                    {/* Green Segment */}
+                    <circle
+                      cx="50"
+                      cy="50"
+                      r="38"
+                      stroke="#10b981"
+                      strokeWidth="14"
+                      fill="transparent"
+                      strokeDasharray={`${chartData.healthGreenPct * 2.38} 238`}
+                      strokeDashoffset="0"
+                      className="transition-all duration-500"
+                    />
+                    {/* Amber Segment */}
+                    <circle
+                      cx="50"
+                      cy="50"
+                      r="38"
+                      stroke="#f59e0b"
+                      strokeWidth="14"
+                      fill="transparent"
+                      strokeDasharray={`${chartData.healthAmberPct * 2.38} 238`}
+                      strokeDashoffset={`-${chartData.healthGreenPct * 2.38}`}
+                      className="transition-all duration-500"
+                    />
+                    {/* Red Segment */}
+                    <circle
+                      cx="50"
+                      cy="50"
+                      r="38"
+                      stroke="#ef4444"
+                      strokeWidth="14"
+                      fill="transparent"
+                      strokeDasharray={`${chartData.healthRedPct * 2.38} 238`}
+                      strokeDashoffset={`-${(chartData.healthGreenPct + chartData.healthAmberPct) * 2.38}`}
+                      className="transition-all duration-500"
+                    />
+                  </svg>
+                  <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                    <span className="text-xl font-bold text-foreground">{metrics.total}</span>
+                    <span className="text-[10px] text-muted-foreground font-semibold">Total</span>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5 pt-2 border-t border-border/50 text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="flex items-center gap-1.5 text-muted-foreground">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500" /> Healthy (Green)
+                    </span>
+                    <strong className="text-foreground">{metrics.green} ({chartData.healthGreenPct}%)</strong>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="flex items-center gap-1.5 text-muted-foreground">
+                      <span className="w-2 h-2 rounded-full bg-amber-500" /> At Risk (Amber)
+                    </span>
+                    <strong className="text-foreground">{metrics.amber} ({chartData.healthAmberPct}%)</strong>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="flex items-center gap-1.5 text-muted-foreground">
+                      <span className="w-2 h-2 rounded-full bg-rose-500" /> Critical (Red)
+                    </span>
+                    <strong className="text-foreground">{metrics.red} ({chartData.healthRedPct}%)</strong>
+                  </div>
+                </div>
+              </Card>
             </div>
-            <div className="p-3 bg-sky-500/10 text-sky-500 rounded-xl">
-              <i className="fa-solid fa-clock text-xl" />
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+          )}
 
-      {/* Collapsible Analytics Panel */}
-      {showAnalytics && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 animate-in fade-in slide-in-from-top-4 duration-300">
-          {/* Bar Chart: Hours variance top 5 */}
-          <Card className="lg:col-span-2 border border-border shadow-sm p-5 flex flex-col justify-between">
-            <div>
-              <h3 className="text-sm font-bold text-foreground flex items-center gap-1.5">
-                <i className="fa-solid fa-chart-simple text-primary" /> Budgeted vs. Actual Hours (Top 5 Projects)
-              </h3>
-              <p className="text-xs text-muted-foreground mt-0.5">Est. Hours vs. Actual hours logged per project.</p>
-            </div>
-            
-            <div className="h-52 w-full mt-2 flex items-center justify-center">
-              {chartData.topProjects.length === 0 ? (
-                <div className="text-xs text-muted-foreground">No project data available for visualization.</div>
-              ) : (
-                <svg viewBox="0 0 400 210" className="w-full h-full">
-                  {/* Grid Lines */}
-                  <line x1="40" y1="20" x2="380" y2="20" stroke="var(--border)" strokeWidth="0.5" strokeDasharray="3 3" />
-                  <line x1="40" y1="85" x2="380" y2="85" stroke="var(--border)" strokeWidth="0.5" strokeDasharray="3 3" />
-                  <line x1="40" y1="150" x2="380" y2="150" stroke="var(--border)" strokeWidth="1" />
-
-                  {/* Draw Bars */}
-                  {(() => {
-                    const maxVal = Math.max(...chartData.topProjects.map((p) => Math.max(p.estHours || 0, p.actualHours || 0)), 50);
-                    return chartData.topProjects.map((p, idx) => {
-                      const estH = ((p.estHours || 0) / maxVal) * 120;
-                      const actH = ((p.actualHours || 0) / maxVal) * 120;
-                      const xBase = 55 + idx * 65;
-
-                      return (
-                        <g key={p._id} className="group cursor-pointer">
-                          {/* Est Hours Bar */}
-                          <rect
-                            x={xBase}
-                            y={150 - estH}
-                            width="18"
-                            height={estH}
-                            className="fill-primary opacity-90 hover:opacity-100 transition-all duration-300"
-                            rx="2"
-                          />
-                          {/* Actual Hours Bar */}
-                          <rect
-                            x={xBase + 21}
-                            y={150 - actH}
-                            width="18"
-                            height={actH}
-                            className="fill-emerald-500 dark:fill-emerald-400 opacity-90 hover:opacity-100 transition-all duration-300"
-                            rx="2"
-                          />
-                          {/* Project Label */}
-                          <text x={xBase + 19} y="168" className="fill-muted-foreground" fontSize="9.5" textAnchor="middle" fontWeight="bold">
-                            {p.projectId}
-                          </text>
-                          <text x={xBase + 19} y="184" className="fill-foreground opacity-80" fontSize="8" textAnchor="middle">
-                            {p.projectName.length > 9 ? `${p.projectName.slice(0, 8)}...` : p.projectName}
-                          </text>
-
-                          {/* Hover Tooltip */}
-                          <title>
-                            {p.projectName}&#10;
-                            Est Hours: {p.estHours}h&#10;
-                            Actual Hours: {p.actualHours}h
-                          </title>
-                        </g>
-                      );
-                    });
-                  })()}
-                </svg>
-              )}
+          {/* Search Bar & Filters */}
+          <Card className="p-4 border border-border flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="relative w-full sm:w-80">
+              <i className="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground" />
+              <Input
+                type="text"
+                placeholder="Search venture, project, or client..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9"
+              />
             </div>
 
-            <div className="flex items-center gap-4 text-[10px] font-bold justify-center border-t border-border/50 pt-2 shrink-0">
-              <span className="flex items-center gap-1.5 text-muted-foreground">
-                <span className="w-2.5 h-2.5 bg-primary rounded-xs" /> Est. Hours
-              </span>
-              <span className="flex items-center gap-1.5 text-muted-foreground">
-                <span className="w-2.5 h-2.5 bg-emerald-500 dark:bg-emerald-400 rounded-xs" /> Actual Hours
-              </span>
+            <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
+              <select
+                value={phaseFilter}
+                onChange={(e) => setPhaseFilter(e.target.value)}
+                className="h-9 px-3 text-sm bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary w-full sm:w-auto"
+              >
+                <option value="All">All Phases</option>
+                <option value="In Delivery">In Delivery</option>
+                <option value="Closed - follow">Closed - follow</option>
+                <option value="On Hold">On Hold</option>
+                <option value="Closed - Not">Closed - Not</option>
+                <option value="Closed">Closed</option>
+              </select>
+
+              <select
+                value={healthFilter}
+                onChange={(e) => setHealthFilter(e.target.value)}
+                className="h-9 px-3 text-sm bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary w-full sm:w-auto cursor-pointer"
+              >
+                <option value="All">All Healths</option>
+                <option value="Green">Green</option>
+                <option value="Amber">Amber</option>
+                <option value="Red">Red</option>
+              </select>
+
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleExportCSV}
+                disabled={filteredProjects.length === 0}
+                className="gap-2 font-semibold h-9 shrink-0 cursor-pointer disabled:opacity-50"
+              >
+                <i className="fa-solid fa-file-csv text-xs text-primary" /> Export CSV
+              </Button>
             </div>
           </Card>
 
-          {/* Donut Pie Chart: Health Distribution */}
-          <Card className="border border-border shadow-sm p-5 flex flex-col justify-between">
-            <div>
-              <h3 className="text-sm font-bold text-foreground flex items-center gap-1.5">
-                <i className="fa-solid fa-chart-pie text-primary" /> Health Distribution
-              </h3>
-              <p className="text-xs text-muted-foreground mt-0.5">Venture health ratio inside your workspace.</p>
-            </div>
-
-            <div className="flex items-center justify-center py-4 relative">
-              {filteredProjects.length === 0 ? (
-                <div className="text-xs text-muted-foreground h-40 flex items-center">No projects to plot health.</div>
-              ) : (
-                (() => {
-                  let accumulatedLength = 0;
-                  return (
-                    <div className="relative flex items-center justify-center">
-                      <svg viewBox="0 0 140 140" className="w-36 h-36 transform -rotate-90">
-                        {chartData.pieData.map((slice) => {
-                          if (slice.count === 0) return null;
-                          const sliceLength = (slice.count / chartData.totalHealth) * circumference;
-                          const dashArray = `${sliceLength} ${circumference - sliceLength}`;
-                          const dashOffset = -accumulatedLength;
-                          accumulatedLength += sliceLength;
-
+          {/* Spreadsheet Master Grid Table */}
+          <Card className="border border-border shadow-sm overflow-hidden">
+            <CardHeader className="pb-3 border-b border-border bg-muted/20 flex flex-row items-center justify-between space-y-0">
+              <div>
+                <CardTitle className="text-base font-bold flex items-center gap-2">
+                  <i className="fa-solid fa-table-list text-primary" /> Master Project Operations Grid
+                </CardTitle>
+                <CardDescription>
+                  Master view of all client ventures, allocated hour variance, health, and status progress.
+                </CardDescription>
+              </div>
+              <div className="flex items-center gap-1 bg-background border border-border p-1 rounded-lg">
+                <button
+                  type="button"
+                  onClick={() => handleViewModeChange("list")}
+                  className={cn(
+                    "px-2.5 py-1 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer h-7",
+                    viewMode === "list"
+                      ? "bg-primary text-primary-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  <i className="fa-solid fa-list-ul text-[10px]" /> List
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleViewModeChange("grid")}
+                  className={cn(
+                    "px-2.5 py-1 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer h-7",
+                    viewMode === "grid"
+                      ? "bg-primary text-primary-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  <i className="fa-solid fa-border-all text-[10px]" /> Grid
+                </button>
+              </div>
+            </CardHeader>
+            <CardContent className="p-0">
+              {viewMode === "list" ? (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-muted/40 border-b border-border font-bold text-muted-foreground uppercase">
+                      <tr>
+                        <th className="py-3 px-4 cursor-pointer hover:bg-muted/60" onClick={() => handleSort("clientAccount")}>
+                          Client & Venture {renderSortArrow("clientAccount")}
+                        </th>
+                        <th className="py-3 px-3 cursor-pointer hover:bg-muted/60" onClick={() => handleSort("projectName")}>
+                          Project Name {renderSortArrow("projectName")}
+                        </th>
+                        <th className="py-3 px-3 cursor-pointer hover:bg-muted/60" onClick={() => handleSort("deliveryOwner")}>
+                          Owner {renderSortArrow("deliveryOwner")}
+                        </th>
+                        <th className="py-3 px-3 text-center cursor-pointer hover:bg-muted/60" onClick={() => handleSort("phase")}>
+                          Phase {renderSortArrow("phase")}
+                        </th>
+                        <th className="py-3 px-3 text-center cursor-pointer hover:bg-muted/60" onClick={() => handleSort("health")}>
+                          Health {renderSortArrow("health")}
+                        </th>
+                        <th className="py-3 px-3">Billing</th>
+                        <th className="py-3 px-3 text-center cursor-pointer hover:bg-muted/60" onClick={() => handleSort("estHours")}>
+                          Est (h) {renderSortArrow("estHours")}
+                        </th>
+                        <th className="py-3 px-3 text-center cursor-pointer hover:bg-muted/60" onClick={() => handleSort("actualHours")}>
+                          Act (h) {renderSortArrow("actualHours")}
+                        </th>
+                        <th className="py-3 px-3 text-center">Variance</th>
+                        <th className="py-3 px-3 text-center cursor-pointer hover:bg-muted/60" onClick={() => handleSort("progressPercent")}>
+                          Progress {renderSortArrow("progressPercent")}
+                        </th>
+                        <th className="py-3 px-4 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {loading ? (
+                        Array.from({ length: 5 }).map((_, idx) => (
+                          <tr key={idx} className="animate-pulse">
+                            <td colSpan={11} className="py-4 px-4 bg-muted/20" />
+                          </tr>
+                        ))
+                      ) : paginatedProjects.length === 0 ? (
+                        <tr>
+                          <td colSpan={11} className="py-12 text-center text-muted-foreground">
+                            <div className="flex flex-col items-center gap-2">
+                              <i className="fa-solid fa-folder-open text-3xl opacity-40 text-primary" />
+                              <p className="font-semibold text-foreground">No operations projects found</p>
+                              <p className="text-xs">Adjust your search filters or click "Add Project / Retainer" to create one.</p>
+                            </div>
+                          </td>
+                        </tr>
+                      ) : (
+                        paginatedProjects.map((p) => {
+                          const hoursVariance = (p.estHours || 0) - (p.actualHours || 0);
                           return (
-                            <circle
-                              key={slice.name}
-                              cx="70"
-                              cy="70"
-                              r={radius}
-                              fill="transparent"
-                              strokeWidth="15"
-                              strokeDasharray={dashArray}
-                              strokeDashoffset={dashOffset}
-                              className={cn(
-                                "transition-all duration-300 hover:stroke-[18px] cursor-pointer",
-                                slice.name === "Green" ? "stroke-emerald-500 dark:stroke-emerald-400" :
-                                slice.name === "Amber" ? "stroke-amber-500 dark:stroke-amber-400" :
-                                "stroke-rose-500 dark:stroke-rose-400"
-                              )}
-                            >
-                              <title>{slice.name} Health: {slice.count} projects ({slice.percent}%)</title>
-                            </circle>
+                            <tr key={p._id} className="hover:bg-muted/20 transition-colors">
+                              <td className="py-3 px-4">
+                                <div className="font-bold text-foreground">{p.clientAccount}</div>
+                                <div className="text-muted-foreground text-[11px] font-medium">{p.venture}</div>
+                              </td>
+                              <td className="py-3 px-3 font-semibold text-foreground">{p.projectName}</td>
+                              <td className="py-3 px-3 text-muted-foreground font-medium">{p.deliveryOwner}</td>
+                              <td className="py-3 px-3 text-center">
+                                <span className={cn("inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border whitespace-nowrap", phaseColors[p.phase])}>
+                                  {p.phase}
+                                </span>
+                              </td>
+                              <td className="py-3 px-3 text-center">
+                                <span className={cn("inline-flex items-center justify-center w-16 py-0.5 rounded-md text-[10px] font-bold whitespace-nowrap", healthColors[p.health])}>
+                                  {p.health}
+                                </span>
+                              </td>
+                              <td className="py-3 px-3 font-medium text-foreground">{p.billingType}</td>
+                              <td className="py-3 px-3 text-center font-mono">{p.estHours}</td>
+                              <td className="py-3 px-3 text-center font-mono text-foreground">{p.actualHours}</td>
+                              <td className={cn("py-3 px-3 text-center font-mono font-bold", hoursVariance < 0 ? "text-rose-500" : "text-emerald-500")}>
+                                {hoursVariance > 0 ? `+${hoursVariance}` : hoursVariance}
+                              </td>
+                              <td className="py-3 px-3">
+                                <div className="flex items-center gap-1.5 justify-center">
+                                  <div className="w-12 h-1.5 bg-muted rounded-full overflow-hidden">
+                                    <div
+                                      className={cn("h-full rounded-full", p.progressPercent === 100 ? "bg-emerald-500" : "bg-primary")}
+                                      style={{ width: `${p.progressPercent}%` }}
+                                    />
+                                  </div>
+                                  <span className="text-[10px] font-bold font-mono">{p.progressPercent}%</span>
+                                </div>
+                              </td>
+                              <td className="py-3 px-4 text-right">
+                                <div className="flex items-center justify-end gap-1.5">
+                                  <Link
+                                    href={`/dashboard/clients/${p._id}`}
+                                    className="p-1.5 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors cursor-pointer flex items-center justify-center"
+                                    title="View Project Details Page"
+                                  >
+                                    <i className="fa-solid fa-eye text-xs" />
+                                  </Link>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleExportSingleProject(p)}
+                                    className="p-1.5 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors cursor-pointer flex items-center justify-center"
+                                    title="Export Project Details CSV"
+                                  >
+                                    <i className="fa-solid fa-download text-xs" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setHistoryProject(p);
+                                      setShowHistoryModal(true);
+                                    }}
+                                    className="p-1.5 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors cursor-pointer flex items-center justify-center"
+                                    title="View Interaction History"
+                                  >
+                                    <i className="fa-solid fa-clock-rotate-left text-xs" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenModal(p)}
+                                    className="p-1.5 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors cursor-pointer flex items-center justify-center"
+                                    title="Edit Project"
+                                  >
+                                    <i className="fa-solid fa-pen-to-square text-xs" />
+                                  </button>
+                                  {isAdmin && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteProject(p._id)}
+                                      className="p-1.5 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer flex items-center justify-center"
+                                      title="Delete Project"
+                                    >
+                                      <i className="fa-solid fa-trash text-xs" />
+                                    </button>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
                           );
-                        })}
-                        {/* Donut center cut */}
-                        <circle cx="70" cy="70" r="36" className="fill-card" />
-                      </svg>
-                      {/* Inside center text */}
-                      <div className="absolute flex flex-col items-center justify-center">
-                        <span className="text-lg font-black text-foreground font-mono">{filteredProjects.length}</span>
-                        <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest">Total</span>
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 bg-muted/30 dark:bg-slate-950/60">
+                  {loading ? (
+                    Array.from({ length: 6 }).map((_, idx) => (
+                      <div key={idx} className="h-64 animate-pulse bg-muted/40 border-2 border-border rounded-xl" />
+                    ))
+                  ) : paginatedProjects.length === 0 ? (
+                    <div className="col-span-full py-12 text-center text-muted-foreground">
+                      <div className="flex flex-col items-center gap-2">
+                        <i className="fa-solid fa-folder-open text-3xl opacity-40 text-primary" />
+                        <p className="font-semibold text-foreground">No operations projects found</p>
+                        <p className="text-xs">Adjust your search filters or click "Add Project / Retainer" to create one.</p>
                       </div>
                     </div>
-                  );
-                })()
-              )}
-            </div>
+                  ) : (
+                    paginatedProjects.map((p) => {
+                      const hoursVariance = (p.estHours || 0) - (p.actualHours || 0);
+                      return (
+                        <div
+                          key={p._id}
+                          className="bg-card border-2 border-border rounded-xl p-5 shadow-xs hover:shadow-md hover:border-primary/40 transition-all flex flex-col justify-between gap-4 group"
+                        >
+                          <div className="space-y-3">
+                            <div className="flex items-start justify-between gap-2">
+                              <div>
+                                <h3 className="font-bold text-foreground text-sm group-hover:text-primary transition-colors flex items-center gap-1.5">
+                                  <i className="fa-solid fa-briefcase text-xs text-primary/70" /> {p.projectName}
+                                </h3>
+                                <p className="text-xs font-semibold text-muted-foreground mt-0.5">{p.clientAccount} &middot; {p.venture}</p>
+                              </div>
+                              <span className={cn("inline-flex items-center justify-center w-16 py-0.5 rounded-md text-[10px] font-bold whitespace-nowrap shadow-2xs", healthColors[p.health])}>
+                                {p.health}
+                              </span>
+                            </div>
 
-            {/* Legends */}
-            <div className="space-y-2 border-t border-border/50 pt-2 text-[11px] font-semibold text-foreground">
-              {chartData.pieData.map((slice) => (
-                <div key={slice.name} className="flex items-center justify-between">
-                  <span className="flex items-center gap-2 text-muted-foreground">
-                    <span className={cn("w-2.5 h-2.5 rounded-full", slice.name === "Green" ? "bg-emerald-500" : slice.name === "Amber" ? "bg-amber-500" : "bg-rose-500")} />
-                    {slice.name} Health
-                  </span>
-                  <span className="font-mono text-foreground font-bold">
-                    {slice.count} ({slice.percent}%)
-                  </span>
+                            <div className="grid grid-cols-2 gap-2 text-xs bg-muted/30 p-2.5 rounded-lg border border-border/50">
+                              <div>
+                                <span className="text-[10px] text-muted-foreground uppercase font-bold block">Delivery Owner</span>
+                                <span className="font-medium text-foreground truncate block">{p.deliveryOwner}</span>
+                              </div>
+                              <div>
+                                <span className="text-[10px] text-muted-foreground uppercase font-bold block">Phase</span>
+                                <span className={cn("inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border whitespace-nowrap", phaseColors[p.phase])}>
+                                  {p.phase}
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="space-y-1">
+                              <div className="flex justify-between text-xs">
+                                <span className="text-muted-foreground font-medium">Hours Logged:</span>
+                                <span className="font-mono font-bold text-foreground">
+                                  {p.actualHours} / {p.estHours} h ({hoursVariance > 0 ? `+${hoursVariance}` : hoursVariance}h)
+                                </span>
+                              </div>
+                              <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
+                                <div
+                                  className={cn("h-full rounded-full transition-all duration-300", p.progressPercent === 100 ? "bg-emerald-500" : "bg-primary")}
+                                  style={{ width: `${p.progressPercent}%` }}
+                                />
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="pt-3 border-t border-border flex items-center justify-between gap-2">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setHistoryProject(p);
+                                setShowHistoryModal(true);
+                              }}
+                              className="gap-1.5 text-[11px] font-bold cursor-pointer h-8 px-2.5"
+                            >
+                              <i className="fa-solid fa-clock-rotate-left text-[10px] text-primary" /> History
+                            </Button>
+                            <div className="flex items-center gap-1.5">
+                              <Link href={`/dashboard/clients/${p._id}`}>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="gap-1 text-xs font-semibold cursor-pointer h-8 px-2"
+                                  title="View Project Details Page"
+                                >
+                                  <i className="fa-solid fa-eye text-[10px]" /> View
+                                </Button>
+                              </Link>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleExportSingleProject(p)}
+                                className="gap-1 text-xs font-semibold cursor-pointer h-8 px-2"
+                                title="Export Project Details CSV"
+                              >
+                                <i className="fa-solid fa-download text-[10px] text-primary" />
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleOpenModal(p)}
+                                className="gap-1.5 text-xs font-semibold cursor-pointer h-8"
+                              >
+                                <i className="fa-solid fa-pen-to-square text-[10px]" /> Edit
+                              </Button>
+                              {isAdmin && (
+                                <Button
+                                  type="button"
+                                  color="destructive"
+                                  size="sm"
+                                  onClick={() => handleDeleteProject(p._id)}
+                                  className="gap-1.5 text-xs font-semibold cursor-pointer h-8"
+                                >
+                                  <i className="fa-solid fa-trash text-[10px]" /> Delete
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
                 </div>
-              ))}
-            </div>
+              )}
+            </CardContent>
           </Card>
+
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPageChange={setCurrentPage}
+            totalItems={filteredProjects.length}
+            itemsPerPage={itemsPerPage}
+          />
         </div>
       )}
 
-      {/* Filter Bar */}
-      <Card className="p-4 flex flex-col sm:flex-row items-center gap-4">
-        <div className="relative flex-1 w-full">
-          <i className="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground" />
-          <Input
-            type="text"
-            placeholder="Search by ID, client/account, project name, or owner..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9"
-          />
-        </div>
+      {/* Sales Workdesk Tab View */}
+      {activeTab === "sales" && (
+        <div className="space-y-6 animate-in fade-in duration-300">
+          {/* Sales Metrics Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+            <Card className="border-l-4 border-l-primary">
+              <CardContent className="p-5 flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Total Pipeline Value</p>
+                  <p className="text-2xl font-bold text-foreground">
+                    ${salesDeals.reduce((sum, d) => sum + d.dealValue, 0).toLocaleString()}
+                  </p>
+                </div>
+                <div className="p-3 bg-primary/10 text-primary rounded-xl">
+                  <i className="fa-solid fa-sack-dollar text-xl" />
+                </div>
+              </CardContent>
+            </Card>
 
-        <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
-          <select
-            value={phaseFilter}
-            onChange={(e) => setPhaseFilter(e.target.value)}
-            className="h-9 px-3 text-sm bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary w-full sm:w-auto"
-          >
-            <option value="All">All Phases</option>
-            <option value="In Delivery">In Delivery</option>
-            <option value="Closed - follow">Closed - follow</option>
-            <option value="On Hold">On Hold</option>
-            <option value="Closed - Not">Closed - Not</option>
-            <option value="Closed">Closed</option>
-          </select>
+            <Card className="border-l-4 border-l-sky-500">
+              <CardContent className="p-5 flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Active Deals</p>
+                  <p className="text-2xl font-bold text-foreground">
+                    {salesDeals.filter((d) => d.stage !== "Closed Lost" && d.stage !== "Closed Won").length}
+                  </p>
+                </div>
+                <div className="p-3 bg-sky-500/10 text-sky-500 rounded-xl">
+                  <i className="fa-solid fa-handshake text-xl" />
+                </div>
+              </CardContent>
+            </Card>
 
-          <select
-            value={healthFilter}
-            onChange={(e) => setHealthFilter(e.target.value)}
-            className="h-9 px-3 text-sm bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary w-full sm:w-auto cursor-pointer"
-          >
-            <option value="All">All Healths</option>
-            <option value="Green">Green</option>
-            <option value="Amber">Amber</option>
-            <option value="Red">Red</option>
-          </select>
+            <Card className="border-l-4 border-l-amber-500">
+              <CardContent className="p-5 flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Weighted Expected Revenue</p>
+                  <p className="text-2xl font-bold text-foreground">
+                    ${Math.round(salesDeals.reduce((sum, d) => sum + (d.dealValue * d.probability) / 100, 0)).toLocaleString()}
+                  </p>
+                </div>
+                <div className="p-3 bg-amber-500/10 text-amber-500 rounded-xl">
+                  <i className="fa-solid fa-chart-line text-xl" />
+                </div>
+              </CardContent>
+            </Card>
 
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={handleExportCSV}
-            disabled={filteredProjects.length === 0}
-            className="gap-2 font-semibold h-9 shrink-0 cursor-pointer disabled:opacity-50"
-          >
-            <i className="fa-solid fa-file-csv text-xs text-primary" /> Export CSV
-          </Button>
-        </div>
-      </Card>
-
-      {/* Spreadsheet Master Grid Table */}
-      <Card className="border border-border shadow-sm overflow-hidden">
-        <CardHeader className="pb-3 border-b border-border bg-muted/20 flex flex-row items-center justify-between space-y-0">
-          <div>
-            <CardTitle className="text-base font-bold flex items-center gap-2">
-              <i className="fa-solid fa-table-list text-primary" /> Master Project Operations Grid
-            </CardTitle>
-            <CardDescription>
-              Master view of all client ventures, allocated hour variance, health, and status progress.
-            </CardDescription>
+            <Card className="border-l-4 border-l-emerald-500">
+              <CardContent className="p-5 flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Closed Won Revenue</p>
+                  <p className="text-2xl font-bold text-foreground">
+                    ${salesDeals.filter((d) => d.stage === "Closed Won").reduce((sum, d) => sum + d.dealValue, 0).toLocaleString()}
+                  </p>
+                </div>
+                <div className="p-3 bg-emerald-500/10 text-emerald-500 rounded-xl">
+                  <i className="fa-solid fa-trophy text-xl" />
+                </div>
+              </CardContent>
+            </Card>
           </div>
-          <div className="flex items-center gap-1 bg-background border border-border p-1 rounded-lg">
-            <button
-              type="button"
-              onClick={() => handleViewModeChange("list")}
-              className={cn(
-                "px-2.5 py-1 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer h-7",
-                viewMode === "list"
-                  ? "bg-primary text-primary-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              <i className="fa-solid fa-list-ul text-[10px]" /> List
-            </button>
-            <button
-              type="button"
-              onClick={() => handleViewModeChange("grid")}
-              className={cn(
-                "px-2.5 py-1 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer h-7",
-                viewMode === "grid"
-                  ? "bg-primary text-primary-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              <i className="fa-solid fa-grip text-[10px]" /> Grid
-            </button>
+
+          {/* Charts Row */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            {/* Pipeline Funnel by Stage */}
+            <Card className="border border-border shadow-sm">
+              <CardHeader className="pb-2 border-b border-border">
+                <CardTitle className="text-sm font-bold flex items-center gap-2">
+                  <i className="fa-solid fa-filter text-primary" /> Pipeline Funnel by Stage
+                </CardTitle>
+                <CardDescription className="text-xs">Deal count and total value per stage</CardDescription>
+              </CardHeader>
+              <CardContent className="p-5">
+                {(() => {
+                  const STAGES = ["Prospecting", "Discovery", "Proposal Sent", "Negotiation", "Closed Won", "Closed Lost"] as const;
+                  const STAGE_COLORS: Record<string, string> = {
+                    "Prospecting": "hsl(220 70% 60%)",
+                    "Discovery": "hsl(200 80% 55%)",
+                    "Proposal Sent": "hsl(40 90% 55%)",
+                    "Negotiation": "hsl(270 70% 60%)",
+                    "Closed Won": "hsl(142 60% 50%)",
+                    "Closed Lost": "hsl(0 65% 55%)",
+                  };
+                  const data = STAGES.map((stage) => {
+                    const deals = salesDeals.filter((d) => d.stage === stage);
+                    return { stage, count: deals.length, value: deals.reduce((s, d) => s + d.dealValue, 0) };
+                  });
+                  const maxCount = Math.max(...data.map((d) => d.count), 1);
+                  return (
+                    <div className="space-y-2.5">
+                      {data.map(({ stage, count, value }) => (
+                        <div key={stage} className="flex items-center gap-3">
+                          <span className="text-[10px] font-semibold text-muted-foreground w-24 shrink-0 truncate">{stage}</span>
+                          <div className="flex-1 h-6 bg-muted/40 rounded-md overflow-hidden relative">
+                            <div
+                              className="h-full rounded-md flex items-center px-2 transition-all duration-500"
+                              style={{ width: `${(count / maxCount) * 100}%`, backgroundColor: STAGE_COLORS[stage] }}
+                            >
+                              {count > 0 && <span className="text-[10px] font-bold text-white">{count}</span>}
+                            </div>
+                          </div>
+                          <span className="text-[10px] font-mono font-bold text-foreground w-20 text-right shrink-0">
+                            ${value.toLocaleString()}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
+              </CardContent>
+            </Card>
+
+            {/* Deal Value by Owner */}
+            <Card className="border border-border shadow-sm">
+              <CardHeader className="pb-2 border-b border-border">
+                <CardTitle className="text-sm font-bold flex items-center gap-2">
+                  <i className="fa-solid fa-user-tie text-primary" /> Deal Value by Owner
+                </CardTitle>
+                <CardDescription className="text-xs">Top deal owners by total pipeline value</CardDescription>
+              </CardHeader>
+              <CardContent className="p-5">
+                {(() => {
+                  const ownerMap: Record<string, number> = {};
+                  salesDeals.forEach((d) => {
+                    ownerMap[d.owner] = (ownerMap[d.owner] || 0) + d.dealValue;
+                  });
+                  const sorted = Object.entries(ownerMap).sort((a, b) => b[1] - a[1]).slice(0, 6);
+                  const maxVal = Math.max(...sorted.map(([, v]) => v), 1);
+                  const OWNER_COLORS = ["hsl(220 70% 60%)", "hsl(270 70% 60%)", "hsl(40 90% 55%)", "hsl(142 60% 50%)", "hsl(200 80% 55%)", "hsl(0 65% 55%)"];
+                  return sorted.length === 0 ? (
+                    <div className="flex items-center justify-center h-32 text-muted-foreground text-xs">No data yet</div>
+                  ) : (
+                    <div className="space-y-2.5">
+                      {sorted.map(([owner, val], i) => (
+                        <div key={owner} className="flex items-center gap-3">
+                          <span className="text-[10px] font-semibold text-muted-foreground w-24 shrink-0 truncate">{owner}</span>
+                          <div className="flex-1 h-6 bg-muted/40 rounded-md overflow-hidden">
+                            <div
+                              className="h-full rounded-md flex items-center px-2 transition-all duration-500"
+                              style={{ width: `${(val / maxVal) * 100}%`, backgroundColor: OWNER_COLORS[i % OWNER_COLORS.length] }}
+                            >
+                              <span className="text-[10px] font-bold text-white hidden sm:block">
+                                ${(val / 1000).toFixed(0)}k
+                              </span>
+                            </div>
+                          </div>
+                          <span className="text-[10px] font-mono font-bold text-foreground w-20 text-right shrink-0">
+                            ${val.toLocaleString()}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
+              </CardContent>
+            </Card>
           </div>
-        </CardHeader>
-        <CardContent className="p-0">
-          {viewMode === "list" ? (
-            <div className="overflow-x-auto w-full">
-              <table className="w-full text-left text-xs min-w-[1500px]">
-                <thead className="bg-muted/40 border-b border-border text-muted-foreground font-bold text-[11px] uppercase tracking-wider whitespace-nowrap">
+
+          {/* Sales Search & Filter Bar */}
+          <Card className="p-4 border border-border">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full sm:w-auto flex-1">
+                <div className="relative w-full sm:w-72">
+                  <i className="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground" />
+                  <Input
+                    type="text"
+                    placeholder="Search deals, clients or owners..."
+                    value={salesSearch}
+                    onChange={(e) => setSalesSearch(e.target.value)}
+                    className="pl-9"
+                  />
+                </div>
+
+                <select
+                  value={salesStageFilter}
+                  onChange={(e) => setSalesStageFilter(e.target.value)}
+                  className="h-9 px-3 text-sm bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary w-full sm:w-auto cursor-pointer"
+                >
+                  <option value="All">All Stages</option>
+                  <option value="Prospecting">Prospecting</option>
+                  <option value="Discovery">Discovery</option>
+                  <option value="Proposal Sent">Proposal Sent</option>
+                  <option value="Negotiation">Negotiation</option>
+                  <option value="Closed Won">Closed Won</option>
+                  <option value="Closed Lost">Closed Lost</option>
+                </select>
+
+                <select
+                  value={salesOwnerFilter}
+                  onChange={(e) => setSalesOwnerFilter(e.target.value)}
+                  className="h-9 px-3 text-sm bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary w-full sm:w-auto cursor-pointer"
+                >
+                  <option value="All">All Owners</option>
+                  {[...new Set(salesDeals.map((d) => d.owner).filter(Boolean))].sort().map((o) => (
+                    <option key={o} value={o}>{o}</option>
+                  ))}
+                </select>
+
+                {(salesSearch || salesStageFilter !== "All" || salesOwnerFilter !== "All") && (
+                  <button
+                    onClick={() => { setSalesSearch(""); setSalesStageFilter("All"); setSalesOwnerFilter("All"); }}
+                    className="text-xs text-primary hover:underline shrink-0 flex items-center gap-1 cursor-pointer"
+                  >
+                    <i className="fa-solid fa-xmark" /> Clear
+                  </button>
+                )}
+              </div>
+
+              <Button
+                color="primary"
+                size="sm"
+                onClick={() => setShowSalesModal(true)}
+                className="gap-2 font-semibold h-9 shrink-0 cursor-pointer"
+              >
+                <i className="fa-solid fa-plus text-xs" /> New Sales Deal
+              </Button>
+            </div>
+          </Card>
+
+          {/* Sales Deals Table */}
+          <Card className="border border-border shadow-sm overflow-hidden">
+            <CardHeader className="pb-3 border-b border-border bg-muted/20">
+              <CardTitle className="text-base font-bold flex items-center gap-2">
+                <i className="fa-solid fa-handshake text-primary" /> Active Sales Deal Pipeline
+                <span className="ml-auto text-xs font-normal text-muted-foreground">
+                  {filteredSalesDeals.length} of {salesDeals.length} deals
+                </span>
+              </CardTitle>
+              <CardDescription>
+                Track client leads, negotiation stages, contract valuations, and estimated closing timelines.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="p-0 overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-muted/40 border-b border-border font-bold text-muted-foreground uppercase">
                   <tr>
-                    <th className="py-3 px-4 cursor-pointer hover:bg-muted/60 hover:text-foreground transition-all select-none" onClick={() => handleSort("projectId")}>
-                      <span className="flex items-center">Project ID {renderSortArrow("projectId")}</span>
-                    </th>
-                    <th className="py-3 px-3 cursor-pointer hover:bg-muted/60 hover:text-foreground transition-all select-none" onClick={() => handleSort("clientAccount")}>
-                      <span className="flex items-center">Client/Account {renderSortArrow("clientAccount")}</span>
-                    </th>
-                    <th className="py-3 px-3 cursor-pointer hover:bg-muted/60 hover:text-foreground transition-all select-none" onClick={() => handleSort("venture")}>
-                      <span className="flex items-center">Venture {renderSortArrow("venture")}</span>
-                    </th>
-                    <th className="py-3 px-3 cursor-pointer hover:bg-muted/60 hover:text-foreground transition-all select-none" onClick={() => handleSort("projectName")}>
-                      <span className="flex items-center">Project Name {renderSortArrow("projectName")}</span>
-                    </th>
-                    <th className="py-3 px-3 cursor-pointer hover:bg-muted/60 hover:text-foreground transition-all select-none" onClick={() => handleSort("deliveryOwner")}>
-                      <span className="flex items-center">Delivery Owner {renderSortArrow("deliveryOwner")}</span>
-                    </th>
-                    <th className="py-3 px-3 cursor-pointer hover:bg-muted/60 hover:text-foreground transition-all select-none" onClick={() => handleSort("phase")}>
-                      <span className="flex items-center">Phase {renderSortArrow("phase")}</span>
-                    </th>
-                    <th className="py-3 px-3 cursor-pointer hover:bg-muted/60 hover:text-foreground transition-all select-none" onClick={() => handleSort("priority")}>
-                      <span className="flex items-center">Priority {renderSortArrow("priority")}</span>
-                    </th>
-                    <th className="py-3 px-3 cursor-pointer hover:bg-muted/60 hover:text-foreground transition-all select-none" onClick={() => handleSort("startDate")}>
-                      <span className="flex items-center">Start Date {renderSortArrow("startDate")}</span>
-                    </th>
-                    <th className="py-3 px-3 cursor-pointer hover:bg-muted/60 hover:text-foreground transition-all select-none" onClick={() => handleSort("targetEndDate")}>
-                      <span className="flex items-center">Target End Date {renderSortArrow("targetEndDate")}</span>
-                    </th>
-                    <th className="py-3 px-3 text-center">Days Left</th>
-                    <th className="py-3 px-3 text-center cursor-pointer hover:bg-muted/60 hover:text-foreground transition-all select-none" onClick={() => handleSort("health")}>
-                      <span className="flex items-center justify-center">Health {renderSortArrow("health")}</span>
-                    </th>
-                    <th className="py-3 px-3">Billing Type</th>
-                    <th className="py-3 px-3 text-center cursor-pointer hover:bg-muted/60 hover:text-foreground transition-all select-none" onClick={() => handleSort("estHours")}>
-                      <span className="flex items-center justify-center">Est. Hours {renderSortArrow("estHours")}</span>
-                    </th>
-                    <th className="py-3 px-3 text-center cursor-pointer hover:bg-muted/60 hover:text-foreground transition-all select-none" onClick={() => handleSort("actualHours")}>
-                      <span className="flex items-center justify-center">Actual Hours {renderSortArrow("actualHours")}</span>
-                    </th>
-                    <th className="py-3 px-3 text-center">Variance</th>
-                    <th className="py-3 px-3 text-center cursor-pointer hover:bg-muted/60 hover:text-foreground transition-all select-none" onClick={() => handleSort("progressPercent")}>
-                      <span className="flex items-center justify-center">% Tasks Complete {renderSortArrow("progressPercent")}</span>
-                    </th>
+                    <th className="py-3 px-4">Client Account & Deal</th>
+                    <th className="py-3 px-3">Venture</th>
+                    <th className="py-3 px-3 text-center">Stage</th>
+                    <th className="py-3 px-3 text-right">Deal Value</th>
+                    <th className="py-3 px-3 text-center">Win Probability</th>
+                    <th className="py-3 px-3">Owner</th>
+                    <th className="py-3 px-3">Expected Close</th>
                     <th className="py-3 px-4 text-right">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-border/40 font-medium">
-                  {loading ? (
-                    Array.from({ length: 5 }).map((_, idx) => (
-                      <tr key={idx} className="animate-pulse">
-                        <td colSpan={17} className="py-4 px-4 text-center text-muted-foreground">
-                          Loading operations data...
-                        </td>
-                      </tr>
-                    ))
-                  ) : paginatedProjects.length === 0 ? (
+                <tbody className="divide-y divide-border">
+                  {salesLoading ? (
                     <tr>
-                      <td colSpan={17} className="py-12 text-center text-muted-foreground">
-                        <div className="flex flex-col items-center gap-2">
-                          <i className="fa-solid fa-diagram-project text-4xl opacity-30" />
-                          <span className="text-sm">No operations projects match your criteria.</span>
-                        </div>
+                      <td colSpan={8} className="py-12 text-center text-muted-foreground">
+                        <i className="fa-solid fa-spinner fa-spin mr-2" /> Loading sales deals...
+                      </td>
+                    </tr>
+                  ) : filteredSalesDeals.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="py-12 text-center text-muted-foreground">
+                        No sales deals found matching your filter criteria.
                       </td>
                     </tr>
                   ) : (
-                    paginatedProjects.map((p) => {
-                      const daysRemaining = p.targetEndDate
-                        ? Math.max(0, Math.ceil((new Date(p.targetEndDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
-                        : 0;
-                      const hoursVariance = (p.estHours || 0) - (p.actualHours || 0);
-
+                    filteredSalesDeals.map((deal) => {
+                      const stageColors: Record<string, string> = {
+                        "Prospecting": "bg-blue-500/10 text-blue-600 dark:text-blue-400",
+                        "Discovery": "bg-sky-500/10 text-sky-600 dark:text-sky-400",
+                        "Proposal Sent": "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+                        "Negotiation": "bg-purple-500/10 text-purple-600 dark:text-purple-400",
+                        "Closed Won": "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+                        "Closed Lost": "bg-red-500/10 text-red-600 dark:text-red-400",
+                      };
                       return (
-                        <tr key={p._id} className="hover:bg-accent/20 transition-colors">
-                          <td className="py-3 px-4 font-mono font-bold text-foreground">
-                            <Link href={`/dashboard/clients/${p._id}`} className="hover:text-primary hover:underline">
-                              {p.projectId}
-                            </Link>
+                        <tr key={deal._id} className="hover:bg-muted/20 transition-colors">
+                          <td className="py-3 px-4">
+                            <div className="font-bold text-foreground">{deal.clientAccount}</div>
+                            <div className="text-muted-foreground text-[11px] font-medium">{deal.dealName}</div>
                           </td>
-                          <td className="py-3 px-3 truncate max-w-[120px]" title={p.clientAccount}>{p.clientAccount}</td>
-                          <td className="py-3 px-3 truncate max-w-[120px]" title={p.venture}>{p.venture}</td>
-                          <td className="py-3 px-3 truncate max-w-[160px] font-semibold text-foreground" title={p.projectName}>
-                            <Link href={`/dashboard/clients/${p._id}`} className="hover:text-primary hover:underline">
-                              {p.projectName}
-                            </Link>
-                          </td>
-                          <td className="py-3 px-3 font-semibold text-primary">{p.deliveryOwner}</td>
-                          <td className="py-3 px-3">
-                            <span className={cn("inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border whitespace-nowrap", phaseColors[p.phase])}>
-                              {p.phase}
-                            </span>
-                          </td>
-                          <td className="py-3 px-3">
-                            <span className={cn("inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold whitespace-nowrap", priorityColors[p.priority])}>
-                              {p.priority}
-                            </span>
-                          </td>
-                          <td className="py-3 px-3 whitespace-nowrap text-muted-foreground">
-                            {p.startDate ? new Date(p.startDate).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" }) : "—"}
-                          </td>
-                          <td className="py-3 px-3 whitespace-nowrap text-muted-foreground">
-                            {p.targetEndDate ? new Date(p.targetEndDate).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" }) : "—"}
-                          </td>
-                          <td className="py-3 px-3 text-center font-mono font-bold text-foreground">{daysRemaining}</td>
+                          <td className="py-3 px-3 font-semibold text-foreground">{deal.venture}</td>
                           <td className="py-3 px-3 text-center">
-                            <span className={cn("inline-flex items-center justify-center w-16 py-0.5 rounded-md text-[10px] font-bold whitespace-nowrap", healthColors[p.health])}>
-                              {p.health}
+                            <span className={cn("inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-bold border", stageColors[deal.stage] || "bg-muted text-muted-foreground")}>
+                              {deal.stage}
                             </span>
                           </td>
-                          <td className="py-3 px-3 font-medium text-foreground">{p.billingType}</td>
-                          <td className="py-3 px-3 text-center font-mono">{p.estHours}</td>
-                          <td className="py-3 px-3 text-center font-mono text-foreground">{p.actualHours}</td>
-                          <td className={cn("py-3 px-3 text-center font-mono font-bold", hoursVariance < 0 ? "text-rose-500" : "text-emerald-500")}>
-                            {hoursVariance > 0 ? `+${hoursVariance}` : hoursVariance}
+                          <td className="py-3 px-3 text-right font-mono font-bold text-foreground">
+                            ${deal.dealValue.toLocaleString()}
                           </td>
                           <td className="py-3 px-3">
                             <div className="flex items-center gap-1.5 justify-center">
                               <div className="w-12 h-1.5 bg-muted rounded-full overflow-hidden">
                                 <div
-                                  className={cn("h-full rounded-full", p.progressPercent === 100 ? "bg-emerald-500" : "bg-primary")}
-                                  style={{ width: `${p.progressPercent}%` }}
+                                  className={cn("h-full rounded-full", deal.probability >= 80 ? "bg-emerald-500" : "bg-primary")}
+                                  style={{ width: `${deal.probability}%` }}
                                 />
                               </div>
-                              <span className="text-[10px] font-bold font-mono">{p.progressPercent}%</span>
+                              <span className="text-[10px] font-bold font-mono">{deal.probability}%</span>
                             </div>
                           </td>
+                          <td className="py-3 px-3 text-foreground font-medium">{deal.owner}</td>
+                          <td className="py-3 px-3 text-muted-foreground font-mono">{deal.expectedClose}</td>
                           <td className="py-3 px-4 text-right">
-                            <div className="flex items-center justify-end gap-1.5">
-                              <Link
-                                href={`/dashboard/clients/${p._id}`}
-                                className="p-1.5 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors cursor-pointer flex items-center justify-center"
-                                title="View Project Details Page"
-                              >
-                                <i className="fa-solid fa-eye text-xs" />
-                              </Link>
-                              <button
+                            <div className="flex items-center justify-end gap-1">
+                              <Button
                                 type="button"
-                                onClick={() => handleExportSingleProject(p)}
-                                className="p-1.5 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors cursor-pointer flex items-center justify-center"
-                                title="Export Project Details CSV"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleEditSalesDeal(deal)}
+                                className="gap-1 text-xs font-semibold h-7 px-2 cursor-pointer"
+                                title="Edit Deal"
                               >
-                                <i className="fa-solid fa-download text-xs" />
-                              </button>
-                              <button
+                                <i className="fa-solid fa-pen text-[10px] text-primary" /> Edit
+                              </Button>
+                              <Button
                                 type="button"
+                                variant="outline"
+                                size="sm"
                                 onClick={() => {
-                                  setHistoryProject(p);
-                                  setShowHistoryModal(true);
+                                  setFormData((prev) => ({
+                                    ...prev,
+                                    clientAccount: deal.clientAccount,
+                                    projectName: deal.dealName,
+                                    venture: deal.venture,
+                                    deliveryOwner: deal.owner
+                                  }));
+                                  setActiveTab("operations");
+                                  handleOpenModal();
                                 }}
-                                className="p-1.5 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors cursor-pointer flex items-center justify-center"
-                                title="View Interaction History"
+                                className="gap-1 text-xs font-semibold h-7 px-2 cursor-pointer"
+                                title="Convert Sales Deal to Operations Project"
                               >
-                                <i className="fa-solid fa-clock-rotate-left text-xs" />
-                              </button>
-                              <button
+                                <i className="fa-solid fa-arrows-split-up-and-left text-[10px] text-primary" /> Convert
+                              </Button>
+                              <Button
                                 type="button"
-                                onClick={() => handleOpenModal(p)}
-                                className="p-1.5 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors cursor-pointer flex items-center justify-center"
-                                title="Edit Project"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleDeleteSalesDeal(deal._id)}
+                                className="gap-1 text-xs font-semibold h-7 px-2 cursor-pointer text-destructive hover:text-destructive"
+                                title="Delete Deal"
                               >
-                                <i className="fa-solid fa-pen-to-square text-xs" />
-                              </button>
-                              {isAdmin && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteProject(p._id)}
-                                  className="p-1.5 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer flex items-center justify-center"
-                                  title="Delete Project"
-                                >
-                                  <i className="fa-solid fa-trash text-xs" />
-                                </button>
-                              )}
+                                <i className="fa-solid fa-trash text-[10px]" />
+                              </Button>
                             </div>
                           </td>
                         </tr>
@@ -1302,184 +1803,596 @@ export default function OperationsPage() {
                   )}
                 </tbody>
               </table>
-            </div>
-          ) : (
-            <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 bg-muted/30 dark:bg-slate-950/60">
-              {loading ? (
-                Array.from({ length: 6 }).map((_, idx) => (
-                  <div key={idx} className="h-64 animate-pulse bg-muted/40 border-2 border-border rounded-xl" />
-                ))
-              ) : paginatedProjects.length === 0 ? (
-                <div className="col-span-full py-12 text-center text-muted-foreground">
-                  <div className="flex flex-col items-center gap-2">
-                    <i className="fa-solid fa-diagram-project text-4xl opacity-30" />
-                    <span className="text-sm">No operations projects match your criteria.</span>
-                  </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* HR Workdesk Tab View */}
+      {activeTab === "hr" && (
+        <div className="space-y-6 animate-in fade-in duration-300">
+          {/* HR Metrics Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+            <Card className="border-l-4 border-l-primary">
+              <CardContent className="p-5 flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Total Allocated Staff</p>
+                  <p className="text-2xl font-bold text-foreground">{hrAllocations.length}</p>
                 </div>
-              ) : (
-                paginatedProjects.map((p) => {
-                  const daysRemaining = p.targetEndDate
-                    ? Math.max(0, Math.ceil((new Date(p.targetEndDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
-                    : 0;
-                  const hoursVariance = (p.estHours || 0) - (p.actualHours || 0);
+                <div className="p-3 bg-primary/10 text-primary rounded-xl">
+                  <i className="fa-solid fa-users text-xl" />
+                </div>
+              </CardContent>
+            </Card>
 
-                  return (
-                    <div
-                      key={p._id}
-                      className="border-2 border-border dark:border-slate-800 bg-background dark:bg-slate-900 shadow-md hover:shadow-xl hover:border-primary transition-all duration-300 hover:-translate-y-1 flex flex-col justify-between overflow-hidden rounded-xl"
-                    >
-                      <div className="p-4 pb-3 border-b border-border/80 dark:border-slate-800 bg-muted/40 dark:bg-slate-800/50 relative">
-                        <div className="flex justify-between items-start">
-                          <Link href={`/dashboard/clients/${p._id}`} className="text-[10px] font-mono font-bold text-foreground hover:text-primary bg-card dark:bg-slate-950 border border-border dark:border-slate-700 px-2 py-0.5 rounded shadow-2xs transition-colors">
-                            {p.projectId}
-                          </Link>
-                          <span className={cn("inline-flex items-center justify-center w-16 py-0.5 rounded-md text-[10px] font-bold whitespace-nowrap shadow-2xs", healthColors[p.health])}>
-                            {p.health}
-                          </span>
-                        </div>
-                        <h4 className="text-base font-bold text-foreground mt-2 truncate" title={p.projectName}>
-                          <Link href={`/dashboard/clients/${p._id}`} className="hover:text-primary hover:underline transition-colors">
-                            {p.projectName}
-                          </Link>
-                        </h4>
-                        <p className="text-xs font-semibold text-muted-foreground mt-0.5 flex items-center gap-1 truncate">
-                          <i className="fa-solid fa-building text-[10px]" /> {p.clientAccount} <span className="opacity-40">•</span> {p.venture}
-                        </p>
-                      </div>
+            <Card className="border-l-4 border-l-emerald-500">
+              <CardContent className="p-5 flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Deployed on Projects</p>
+                  <p className="text-2xl font-bold text-foreground">
+                    {hrAllocations.filter((r) => r.status === "Deployed").length}
+                  </p>
+                </div>
+                <div className="p-3 bg-emerald-500/10 text-emerald-500 rounded-xl">
+                  <i className="fa-solid fa-user-check text-xl" />
+                </div>
+              </CardContent>
+            </Card>
 
-                      <div className="p-4 pt-4 pb-3 space-y-4 flex-1">
-                        {/* Phase & Priority */}
-                        <div className="flex items-center gap-2">
-                          <span className={cn("inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border whitespace-nowrap", phaseColors[p.phase])}>
-                            {p.phase}
-                          </span>
-                          <span className={cn("inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold whitespace-nowrap", priorityColors[p.priority])}>
-                            {p.priority} Priority
-                          </span>
-                        </div>
+            <Card className="border-l-4 border-l-amber-500">
+              <CardContent className="p-5 flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Bench (Available Staff)</p>
+                  <p className="text-2xl font-bold text-foreground">
+                    {hrAllocations.filter((r) => r.status === "Bench").length}
+                  </p>
+                </div>
+                <div className="p-3 bg-amber-500/10 text-amber-500 rounded-xl">
+                  <i className="fa-solid fa-user-clock text-xl" />
+                </div>
+              </CardContent>
+            </Card>
 
-                        {/* Hour details */}
-                        <div className="grid grid-cols-3 gap-2 bg-muted/60 dark:bg-slate-950 p-3 rounded-lg border border-border/80 dark:border-slate-800 text-center font-mono shadow-inner">
-                          <div>
-                            <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider">Est</p>
-                            <p className="text-xs font-extrabold text-foreground mt-0.5">{p.estHours}h</p>
-                          </div>
-                          <div>
-                            <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider">Actual</p>
-                            <p className="text-xs font-extrabold text-foreground mt-0.5">{p.actualHours}h</p>
-                          </div>
-                          <div>
-                            <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider">Variance</p>
-                            <p className={cn("text-xs font-extrabold mt-0.5", hoursVariance < 0 ? "text-rose-500" : "text-emerald-500")}>
-                              {hoursVariance > 0 ? `+${hoursVariance}` : hoursVariance}h
-                            </p>
-                          </div>
-                        </div>
+            <Card className="border-l-4 border-l-sky-500">
+              <CardContent className="p-5 flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Avg Utilization Rate</p>
+                  <p className="text-2xl font-bold text-foreground">
+                    {hrAllocations.length === 0
+                      ? 0
+                      : Math.round(hrAllocations.reduce((sum, r) => sum + r.utilizationRate, 0) / hrAllocations.length)}
+                    %
+                  </p>
+                </div>
+                <div className="p-3 bg-sky-500/10 text-sky-500 rounded-xl">
+                  <i className="fa-solid fa-gauge-high text-xl" />
+                </div>
+              </CardContent>
+            </Card>
+          </div>
 
-                        {/* Progress Bar */}
-                        <div className="space-y-1">
-                          <div className="flex justify-between items-center text-[10px] font-semibold">
-                            <span className="text-muted-foreground">Task Completion</span>
-                            <span className="font-mono font-bold text-foreground">{p.progressPercent}%</span>
-                          </div>
-                          <div className="w-full h-2 bg-muted dark:bg-slate-800 rounded-full overflow-hidden border border-border/40">
+          {/* HR Charts Row */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            {/* Utilization by Department */}
+            <Card className="border border-border shadow-sm">
+              <CardHeader className="pb-2 border-b border-border">
+                <CardTitle className="text-sm font-bold flex items-center gap-2">
+                  <i className="fa-solid fa-building text-primary" /> Avg Utilization by Department
+                </CardTitle>
+                <CardDescription className="text-xs">Average utilization rate per department</CardDescription>
+              </CardHeader>
+              <CardContent className="p-5">
+                {(() => {
+                  const deptMap: Record<string, number[]> = {};
+                  hrAllocations.forEach((r) => {
+                    if (!deptMap[r.department]) deptMap[r.department] = [];
+                    deptMap[r.department].push(r.utilizationRate);
+                  });
+                  const depts = Object.entries(deptMap).map(([dept, rates]) => ({
+                    dept,
+                    avg: Math.round(rates.reduce((a, b) => a + b, 0) / rates.length),
+                    count: rates.length,
+                  })).sort((a, b) => b.avg - a.avg);
+                  const DEPT_COLORS = ["hsl(220 70% 60%)", "hsl(142 60% 50%)", "hsl(40 90% 55%)", "hsl(270 70% 60%)", "hsl(200 80% 55%)", "hsl(0 65% 55%)"];
+                  return depts.length === 0 ? (
+                    <div className="flex items-center justify-center h-32 text-muted-foreground text-xs">No data yet</div>
+                  ) : (
+                    <div className="space-y-2.5">
+                      {depts.map(({ dept, avg, count }, i) => (
+                        <div key={dept} className="flex items-center gap-3">
+                          <span className="text-[10px] font-semibold text-muted-foreground w-24 shrink-0 truncate">{dept}</span>
+                          <div className="flex-1 h-6 bg-muted/40 rounded-md overflow-hidden relative">
                             <div
-                              className={cn("h-full rounded-full transition-all duration-500", p.progressPercent === 100 ? "bg-emerald-500" : "bg-primary")}
-                              style={{ width: `${p.progressPercent}%` }}
-                            />
-                          </div>
-                        </div>
-
-                        {/* Date details & Delivery Owner */}
-                        <div className="space-y-2 pt-2 border-t border-border/60 dark:border-slate-800 text-xs">
-                          <div className="flex justify-between items-center">
-                            <span className="text-muted-foreground flex items-center gap-1">
-                              <i className="fa-solid fa-user-tie text-[10px]" /> Owner:
-                            </span>
-                            <span className="font-bold text-primary truncate max-w-[150px]">{p.deliveryOwner}</span>
-                          </div>
-                          <div className="flex justify-between items-center">
-                            <span className="text-muted-foreground flex items-center gap-1">
-                              <i className="fa-solid fa-clock text-[10px]" /> Time Left:
-                            </span>
-                            <span className="font-bold text-foreground font-mono">{daysRemaining} Days</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="p-3 pt-3 pb-3 border-t border-border/80 dark:border-slate-800 bg-muted/40 dark:bg-slate-800/60 flex items-center justify-between gap-2">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            setHistoryProject(p);
-                            setShowHistoryModal(true);
-                          }}
-                          className="gap-1.5 text-[11px] font-bold cursor-pointer h-8 px-2.5"
-                        >
-                          <i className="fa-solid fa-clock-rotate-left text-[10px] text-primary" /> History
-                        </Button>
-                        <div className="flex items-center gap-1.5">
-                          <Link href={`/dashboard/clients/${p._id}`}>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              className="gap-1 text-xs font-semibold cursor-pointer h-8 px-2"
-                              title="View Project Details Page"
+                              className="h-full rounded-md flex items-center px-2 transition-all duration-500"
+                              style={{ width: `${avg}%`, backgroundColor: DEPT_COLORS[i % DEPT_COLORS.length] }}
                             >
-                              <i className="fa-solid fa-eye text-[10px]" /> View
-                            </Button>
-                          </Link>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleExportSingleProject(p)}
-                            className="gap-1 text-xs font-semibold cursor-pointer h-8 px-2"
-                            title="Export Project Details CSV"
-                          >
-                            <i className="fa-solid fa-download text-[10px] text-primary" />
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleOpenModal(p)}
-                            className="gap-1.5 text-xs font-semibold cursor-pointer h-8"
-                          >
-                            <i className="fa-solid fa-pen-to-square text-[10px]" /> Edit
-                          </Button>
-                          {isAdmin && (
-                            <Button
-                              type="button"
-                              color="destructive"
-                              size="sm"
-                              onClick={() => handleDeleteProject(p._id)}
-                              className="gap-1.5 text-xs font-semibold cursor-pointer h-8"
-                            >
-                              <i className="fa-solid fa-trash text-[10px]" /> Delete
-                            </Button>
-                          )}
+                              {avg > 5 && <span className="text-[10px] font-bold text-white">{avg}%</span>}
+                            </div>
+                          </div>
+                          <span className="text-[10px] font-mono text-muted-foreground w-12 text-right shrink-0">{count} staff</span>
                         </div>
-                      </div>
+                      ))}
                     </div>
                   );
-                })
-              )}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                })()}
+              </CardContent>
+            </Card>
 
-      <Pagination
-        currentPage={currentPage}
-        totalPages={totalPages}
-        onPageChange={setCurrentPage}
-        totalItems={filteredProjects.length}
-        itemsPerPage={itemsPerPage}
-      />
+            {/* Status Distribution */}
+            <Card className="border border-border shadow-sm">
+              <CardHeader className="pb-2 border-b border-border">
+                <CardTitle className="text-sm font-bold flex items-center gap-2">
+                  <i className="fa-solid fa-chart-pie text-primary" /> Staff Status Distribution
+                </CardTitle>
+                <CardDescription className="text-xs">Headcount breakdown by deployment status</CardDescription>
+              </CardHeader>
+              <CardContent className="p-5">
+                {(() => {
+                  const STATUS_CFG = [
+                    { key: "Deployed", color: "hsl(142 60% 50%)", label: "Deployed" },
+                    { key: "Partially Allocated", color: "hsl(40 90% 55%)", label: "Partial" },
+                    { key: "Bench", color: "hsl(220 70% 60%)", label: "Bench" },
+                    { key: "On Leave", color: "hsl(0 65% 55%)", label: "On Leave" },
+                  ];
+                  const total = hrAllocations.length;
+                  return total === 0 ? (
+                    <div className="flex items-center justify-center h-32 text-muted-foreground text-xs">No data yet</div>
+                  ) : (
+                    <div className="space-y-3">
+                      {STATUS_CFG.map(({ key, color, label }) => {
+                        const count = hrAllocations.filter((r) => r.status === key).length;
+                        const pct = Math.round((count / total) * 100);
+                        return (
+                          <div key={key} className="flex items-center gap-3">
+                            <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: color }} />
+                            <span className="text-[10px] font-semibold text-muted-foreground w-24 shrink-0">{label}</span>
+                            <div className="flex-1 h-5 bg-muted/40 rounded-full overflow-hidden">
+                              <div
+                                className="h-full rounded-full transition-all duration-500 flex items-center px-2"
+                                style={{ width: `${pct}%`, backgroundColor: color }}
+                              >
+                                {pct > 10 && <span className="text-[10px] font-bold text-white">{pct}%</span>}
+                              </div>
+                            </div>
+                            <span className="text-[10px] font-mono font-bold text-foreground w-8 text-right shrink-0">{count}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* HR Search & Status Filter Bar */}
+          <Card className="p-4 border border-border">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full sm:w-auto flex-1">
+                <div className="relative w-full sm:w-72">
+                  <i className="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground" />
+                  <Input
+                    type="text"
+                    placeholder="Search staff, role or project..."
+                    value={hrSearch}
+                    onChange={(e) => setHrSearch(e.target.value)}
+                    className="pl-9"
+                  />
+                </div>
+
+                <select
+                  value={hrStatusFilter}
+                  onChange={(e) => setHrStatusFilter(e.target.value)}
+                  className="h-9 px-3 text-sm bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary w-full sm:w-auto cursor-pointer"
+                >
+                  <option value="All">All Statuses</option>
+                  <option value="Deployed">Deployed</option>
+                  <option value="Partially Allocated">Partially Allocated</option>
+                  <option value="Bench">Bench</option>
+                  <option value="On Leave">On Leave</option>
+                </select>
+
+                <select
+                  value={hrDeptFilter}
+                  onChange={(e) => setHrDeptFilter(e.target.value)}
+                  className="h-9 px-3 text-sm bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary w-full sm:w-auto cursor-pointer"
+                >
+                  <option value="All">All Departments</option>
+                  {[...new Set(hrAllocations.map((r) => r.department).filter(Boolean))].sort().map((d) => (
+                    <option key={d} value={d}>{d}</option>
+                  ))}
+                </select>
+
+                {(hrSearch || hrStatusFilter !== "All" || hrDeptFilter !== "All") && (
+                  <button
+                    onClick={() => { setHrSearch(""); setHrStatusFilter("All"); setHrDeptFilter("All"); }}
+                    className="text-xs text-primary hover:underline shrink-0 flex items-center gap-1 cursor-pointer"
+                  >
+                    <i className="fa-solid fa-xmark" /> Clear
+                  </button>
+                )}
+              </div>
+
+              <Button
+                color="primary"
+                size="sm"
+                onClick={() => setShowHrModal(true)}
+                className="gap-2 font-semibold h-9 shrink-0 cursor-pointer"
+              >
+                <i className="fa-solid fa-user-plus text-xs" /> Allocate Staff
+              </Button>
+            </div>
+          </Card>
+
+          {/* HR Resource Matrix Table */}
+          <Card className="border border-border shadow-sm overflow-hidden">
+            <CardHeader className="pb-3 border-b border-border bg-muted/20">
+              <CardTitle className="text-base font-bold flex items-center gap-2">
+                <i className="fa-solid fa-users-gear text-primary" /> Staff Deployment & Resource Allocation Matrix
+              </CardTitle>
+              <CardDescription>
+                Manage departmental staffing allocations, billable weekly hours, and project assignments.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="p-0 overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-muted/40 border-b border-border font-bold text-muted-foreground uppercase">
+                  <tr>
+                    <th className="py-3 px-4">Employee & Role</th>
+                    <th className="py-3 px-3">Department</th>
+                    <th className="py-3 px-3">Assigned Project</th>
+                    <th className="py-3 px-3 text-center">Allocated Hours</th>
+                    <th className="py-3 px-3 text-center">Utilization</th>
+                    <th className="py-3 px-3 text-center">Status</th>
+                    <th className="py-3 px-3">Start Date</th>
+                    <th className="py-3 px-4 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {hrLoading ? (
+                    <tr>
+                      <td colSpan={8} className="py-12 text-center text-muted-foreground">
+                        <i className="fa-solid fa-spinner fa-spin mr-2" /> Loading staff allocations...
+                      </td>
+                    </tr>
+                  ) : filteredHrAllocations.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="py-12 text-center text-muted-foreground">
+                        No resource allocations found matching your filter criteria.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredHrAllocations.map((res) => {
+                      return (
+                        <tr key={res._id} className="hover:bg-muted/20 transition-colors">
+                          <td className="py-3 px-4">
+                            <div className="font-bold text-foreground">{res.employeeName}</div>
+                            <div className="text-muted-foreground text-[11px] font-medium">{res.role}</div>
+                          </td>
+                          <td className="py-3 px-3 font-semibold text-foreground">{res.department}</td>
+                          <td className="py-3 px-3 font-medium text-foreground">{res.assignedProject}</td>
+                          <td className="py-3 px-3 text-center font-mono font-bold">{res.allocatedHoursPerWeek} hrs/wk</td>
+                          <td className="py-3 px-3">
+                            <div className="flex items-center gap-1.5 justify-center">
+                              <div className="w-12 h-1.5 bg-muted rounded-full overflow-hidden">
+                                <div
+                                  className={cn("h-full rounded-full", res.utilizationRate >= 100 ? "bg-emerald-500" : "bg-primary")}
+                                  style={{ width: `${res.utilizationRate}%` }}
+                                />
+                              </div>
+                              <span className="text-[10px] font-bold font-mono">{res.utilizationRate}%</span>
+                            </div>
+                          </td>
+                          <td className="py-3 px-3 text-center">
+                            {(() => {
+                              const hrBadgeColors: Record<string, string> = {
+                                "Deployed": "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20",
+                                "Partially Allocated": "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20",
+                                "Bench": "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20",
+                                "On Leave": "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20",
+                              };
+                              return (
+                                <span className={cn("inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-bold border", hrBadgeColors[res.status] || "bg-muted text-muted-foreground")}>
+                                  {res.status}
+                                </span>
+                              );
+                            })()}
+                          </td>
+                          <td className="py-3 px-3 text-muted-foreground font-mono">{res.startDate}</td>
+                          <td className="py-3 px-4 text-right">
+                            <div className="flex items-center justify-end gap-1">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleEditHrAllocation(res)}
+                                className="gap-1 text-xs font-semibold h-7 px-2 cursor-pointer"
+                                title="Edit Allocation"
+                              >
+                                <i className="fa-solid fa-pen text-[10px] text-primary" /> Edit
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleDeleteHrAllocation(res._id)}
+                                className="gap-1 text-xs font-semibold h-7 px-2 cursor-pointer text-destructive hover:text-destructive"
+                                title="Remove Allocation"
+                              >
+                                <i className="fa-solid fa-trash text-[10px]" />
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* New Sales Deal Modal */}
+      {showSalesModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in"
+          onClick={() => { setShowSalesModal(false); setEditingSalesDeal(null); }}
+        >
+          <div
+            className="w-full max-w-lg bg-card border border-border rounded-xl shadow-xl p-6 space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between pb-3 border-b border-border">
+              <h2 className="text-lg font-bold text-foreground flex items-center gap-2">
+                <i className="fa-solid fa-handshake text-primary" /> {editingSalesDeal ? "Edit Sales Deal" : "Create New Sales Deal"}
+              </h2>
+              <button
+                type="button"
+                onClick={() => { setShowSalesModal(false); setEditingSalesDeal(null); }}
+                className="text-muted-foreground hover:text-foreground p-1 rounded-md cursor-pointer"
+              >
+                <i className="fa-solid fa-xmark text-base" />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddSalesDeal} className="space-y-4 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="font-semibold text-foreground">Client Account Name *</label>
+                  <Input
+                    type="text"
+                    required
+                    placeholder="e.g. Acme FinTech Corp"
+                    value={salesFormData.clientAccount}
+                    onChange={(e) => setSalesFormData((prev) => ({ ...prev, clientAccount: e.target.value }))}
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-semibold text-foreground">Deal Title *</label>
+                  <Input
+                    type="text"
+                    required
+                    placeholder="e.g. Cloud Migration Retainer"
+                    value={salesFormData.dealName}
+                    onChange={(e) => setSalesFormData((prev) => ({ ...prev, dealName: e.target.value }))}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="font-semibold text-foreground">Deal Valuation ($)</label>
+                  <Input
+                    type="number"
+                    placeholder="e.g. 45000"
+                    value={salesFormData.dealValue}
+                    onChange={(e) => setSalesFormData((prev) => ({ ...prev, dealValue: e.target.value }))}
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-semibold text-foreground">Pipeline Stage</label>
+                  <select
+                    value={salesFormData.stage}
+                    onChange={(e) => setSalesFormData((prev) => ({ ...prev, stage: e.target.value as SalesDeal["stage"] }))}
+                    className="w-full h-9 px-3 text-xs bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer"
+                  >
+                    <option value="Prospecting">Prospecting</option>
+                    <option value="Discovery">Discovery</option>
+                    <option value="Proposal Sent">Proposal Sent</option>
+                    <option value="Negotiation">Negotiation</option>
+                    <option value="Closed Won">Closed Won</option>
+                    <option value="Closed Lost">Closed Lost</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="font-semibold text-foreground">Win Probability ({salesFormData.probability}%)</label>
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    step="5"
+                    value={salesFormData.probability}
+                    onChange={(e) => setSalesFormData((prev) => ({ ...prev, probability: Number(e.target.value) }))}
+                    className="w-full cursor-pointer accent-primary"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-semibold text-foreground">Deal Owner</label>
+                  <Input
+                    type="text"
+                    placeholder="e.g. Alex Mercer"
+                    value={salesFormData.owner}
+                    onChange={(e) => setSalesFormData((prev) => ({ ...prev, owner: e.target.value }))}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="font-semibold text-foreground">Expected Target Close</label>
+                  <Input
+                    type="date"
+                    value={salesFormData.expectedClose}
+                    onChange={(e) => setSalesFormData((prev) => ({ ...prev, expectedClose: e.target.value }))}
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-semibold text-foreground">Company Venture</label>
+                  <select
+                    value={salesFormData.venture}
+                    onChange={(e) => setSalesFormData((prev) => ({ ...prev, venture: e.target.value }))}
+                    className="w-full h-9 px-3 text-xs bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer"
+                  >
+                    <option value="Ace Consultancys">Ace Consultancys</option>
+                    <option value="NexAce Tech">NexAce Tech</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-border">
+                <Button type="button" variant="outline" size="sm" onClick={() => { setShowSalesModal(false); setEditingSalesDeal(null); }} className="cursor-pointer">
+                  Cancel
+                </Button>
+                <Button type="submit" color="primary" size="sm" disabled={salesSubmitting} className="cursor-pointer gap-1.5">
+                  {salesSubmitting ? <><i className="fa-solid fa-spinner fa-spin text-xs" /> Saving...</> : (editingSalesDeal ? "Save Changes" : "Create Sales Deal")}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Allocate HR Resource Modal */}
+      {showHrModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in"
+          onClick={() => { setShowHrModal(false); setEditingHrAllocation(null); }}
+        >
+          <div
+            className="w-full max-w-lg bg-card border border-border rounded-xl shadow-xl p-6 space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between pb-3 border-b border-border">
+              <h2 className="text-lg font-bold text-foreground flex items-center gap-2">
+                <i className="fa-solid fa-user-plus text-primary" /> {editingHrAllocation ? "Edit Resource Allocation" : "Allocate Staff Resource"}
+              </h2>
+              <button
+                type="button"
+                onClick={() => { setShowHrModal(false); setEditingHrAllocation(null); }}
+                className="text-muted-foreground hover:text-foreground p-1 rounded-md cursor-pointer"
+              >
+                <i className="fa-solid fa-xmark text-base" />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddHrAllocation} className="space-y-4 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="font-semibold text-foreground">Employee Name *</label>
+                  <Input
+                    type="text"
+                    required
+                    placeholder="e.g. David Kim"
+                    value={hrFormData.employeeName}
+                    onChange={(e) => setHrFormData((prev) => ({ ...prev, employeeName: e.target.value }))}
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-semibold text-foreground">Role / Designation</label>
+                  <Input
+                    type="text"
+                    placeholder="e.g. Senior Fullstack Lead"
+                    value={hrFormData.role}
+                    onChange={(e) => setHrFormData((prev) => ({ ...prev, role: e.target.value }))}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="font-semibold text-foreground">Department</label>
+                  <select
+                    value={hrFormData.department}
+                    onChange={(e) => setHrFormData((prev) => ({ ...prev, department: e.target.value }))}
+                    className="w-full h-9 px-3 text-xs bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer"
+                  >
+                    <option value="Engineering">Engineering</option>
+                    <option value="Design">Design</option>
+                    <option value="QA">QA</option>
+                    <option value="Infrastructure">Infrastructure</option>
+                    <option value="Product">Product</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-semibold text-foreground">Assigned Project</label>
+                  <Input
+                    type="text"
+                    placeholder="e.g. Acme FinTech Retainer"
+                    value={hrFormData.assignedProject}
+                    onChange={(e) => setHrFormData((prev) => ({ ...prev, assignedProject: e.target.value }))}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="font-semibold text-foreground">Weekly Allocated Hours (hrs/wk)</label>
+                  <Input
+                    type="number"
+                    min="0"
+                    max="60"
+                    value={hrFormData.allocatedHoursPerWeek}
+                    onChange={(e) => setHrFormData((prev) => ({ ...prev, allocatedHoursPerWeek: Number(e.target.value) }))}
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-semibold text-foreground">Deployment Status</label>
+                  <select
+                    value={hrFormData.status}
+                    onChange={(e) => setHrFormData((prev) => ({ ...prev, status: e.target.value as ResourceAllocation["status"] }))}
+                    className="w-full h-9 px-3 text-xs bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer"
+                  >
+                    <option value="Deployed">Deployed</option>
+                    <option value="Partially Allocated">Partially Allocated</option>
+                    <option value="Bench">Bench</option>
+                    <option value="On Leave">On Leave</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="font-semibold text-foreground">Allocation Effective Date</label>
+                <Input
+                  type="date"
+                  value={hrFormData.startDate}
+                  onChange={(e) => setHrFormData((prev) => ({ ...prev, startDate: e.target.value }))}
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-border">
+                <Button type="button" variant="outline" size="sm" onClick={() => { setShowHrModal(false); setEditingHrAllocation(null); }} className="cursor-pointer">
+                  Cancel
+                </Button>
+                <Button type="submit" color="primary" size="sm" disabled={hrSubmitting} className="cursor-pointer gap-1.5">
+                  {hrSubmitting ? <><i className="fa-solid fa-spinner fa-spin text-xs" /> Saving...</> : (editingHrAllocation ? "Save Changes" : "Allocate Resource")}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Add / Edit Operations Modal */}
       {showModal && (
