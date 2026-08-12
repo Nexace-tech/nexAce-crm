@@ -110,7 +110,7 @@ export function DashboardClientLayout({ session, menuItems, isPending = false, c
               <i className="fa-solid fa-wand-magic-sparkles text-base" />
             </div>
             {!sidebarCollapsed && (
-              <span className="bg-gradient-to-r from-primary to-blue-500 bg-clip-text text-transparent font-bold truncate">
+              <span className="bg-gradient-to-r from-teal-400 via-[#30b8bd] to-cyan-300 bg-clip-text text-transparent font-bold truncate">
                 NexAce CRM
               </span>
             )}

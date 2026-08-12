@@ -60,6 +60,36 @@ interface Device {
   status: "In Use" | "Available" | "In Repair" | "Retired";
 }
 
+interface InvoiceItem {
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  amount: number;
+}
+
+interface Invoice {
+  id: string;
+  invoiceNo: string;
+  invoiceDate: string;
+  dueDate: string;
+  customerNo: string;
+  businessName: string;
+  businessAddress: string;
+  businessEmail: string;
+  billedToName: string;
+  billedToAddress: string;
+  billedToEmail: string;
+  shipToAddress?: string;
+  items: InvoiceItem[];
+  subtotal: number;
+  taxRate: number;
+  taxAmount: number;
+  total: number;
+  currency: string;
+  status: "Draft" | "Sent" | "Pending" | "Paid" | "Overdue" | "Archived" | "Cancelled";
+  notes?: string;
+}
+
 // ─── API Helpers ─────────────────────────────────────────────────────────────
 
 /** Normalise MongoDB doc (_id → id) */
@@ -81,8 +111,14 @@ async function apiFetch(url: string, opts?: RequestInit) {
 
 // ─── Utilities ───────────────────────────────────────────────────────────────
 
-const formatCurrency = (n: number) =>
-  new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
+const formatCurrency = (n: number, currency: string = "USD") => {
+  if (currency === "INR") {
+    return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" }).format(n);
+  }
+  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
+};
+
+const getCurrencySymbol = (currency?: string) => (currency === "INR" ? "₹" : "$");
 
 const statusBadge = (status: string) => {
   const map: Record<string, string> = {
@@ -353,12 +389,13 @@ function OverviewTab({ access, subscriptions, devices, loading, onQuickAction }:
           </CardTitle>
         </CardHeader>
         <CardContent className="px-4 pb-4">
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
             {[
               { icon: "fa-solid fa-user-plus", label: "Grant Access", sub: "Add user tool access", tab: "access", color: "text-blue-500 bg-blue-500/10 border-blue-500/20 hover:bg-blue-500/15" },
               { icon: "fa-solid fa-file-circle-plus", label: "Add Drive Link", sub: "Index new resource", tab: "drive", color: "text-violet-500 bg-violet-500/10 border-violet-500/20 hover:bg-violet-500/15" },
               { icon: "fa-solid fa-laptop-medical", label: "Register Device", sub: "Add asset entry", tab: "devices", color: "text-emerald-500 bg-emerald-500/10 border-emerald-500/20 hover:bg-emerald-500/15" },
               { icon: "fa-solid fa-credit-card", label: "Add Subscription", sub: "Track new software", tab: "subscriptions", color: "text-amber-500 bg-amber-500/10 border-amber-500/20 hover:bg-amber-500/15" },
+              { icon: "fa-solid fa-file-invoice-dollar", label: "Create Invoice", sub: "Generate client invoice", tab: "invoices", color: "text-cyan-500 bg-cyan-500/10 border-cyan-500/20 hover:bg-cyan-500/15" },
             ].map((action) => (
               <button key={action.label} onClick={() => onQuickAction?.(action.tab as TabKey)} className={cn("flex flex-col items-center gap-1.5 px-3 py-3 rounded-xl border text-center transition-all duration-200 cursor-pointer", action.color)}>
                 <i className={cn(action.icon, "text-lg")} />
@@ -1035,9 +1072,454 @@ function DevicesTab({ devices, loading, onAdd, onEdit, onDelete, autoOpenAdd }: 
   );
 }
 
+// ─── Invoices Tab ─────────────────────────────────────────────────────────────
+
+const EMPTY_INVOICE: Omit<Invoice, "id"> = {
+  invoiceNo: "",
+  invoiceDate: new Date().toISOString().slice(0, 10),
+  dueDate: new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10),
+  customerNo: "32321",
+  businessName: "Hencework",
+  businessAddress: "4747, Pearl Street\nRainy Day Drive, Washington DC 42156",
+  businessEmail: "jampack_01@hencework.com",
+  billedToName: "Supernova consultant",
+  billedToAddress: "Sycamore Street\nSan Antonio Valley, CA 34668",
+  billedToEmail: "thompson_peter@super.co",
+  shipToAddress: "",
+  items: [
+    { description: "IT Infrastructure Consultancy", quantity: 1, unitPrice: 1500, amount: 1500 },
+  ],
+  subtotal: 1500,
+  taxRate: 10,
+  taxAmount: 150,
+  total: 1650,
+  currency: "USD",
+  status: "Draft",
+  notes: "Payment due upon receipt.",
+};
+
+function InvoiceModal({ initial, onSave, onClose, saving }: { initial: Omit<Invoice, "id">; onSave: (d: Omit<Invoice, "id">) => void; onClose: () => void; saving?: boolean }) {
+  const [form, setForm] = useState(initial);
+  const [items, setItems] = useState<InvoiceItem[]>(initial.items || []);
+
+  const setFormKey = (k: keyof typeof form, v: any) => setForm((p) => ({ ...p, [k]: v }));
+
+  const updateItem = (index: number, field: keyof InvoiceItem, val: any) => {
+    const updated = [...items];
+    const current = { ...updated[index], [field]: val };
+    if (field === "quantity" || field === "unitPrice") {
+      current.amount = (Number(current.quantity) || 0) * (Number(current.unitPrice) || 0);
+    }
+    updated[index] = current;
+    setItems(updated);
+    recalcTotal(updated, form.taxRate);
+  };
+
+  const addItem = () => {
+    const updated = [...items, { description: "", quantity: 1, unitPrice: 0, amount: 0 }];
+    setItems(updated);
+    recalcTotal(updated, form.taxRate);
+  };
+
+  const removeItem = (index: number) => {
+    const updated = items.filter((_, i) => i !== index);
+    setItems(updated);
+    recalcTotal(updated, form.taxRate);
+  };
+
+  const recalcTotal = (newItems: InvoiceItem[], taxRate: number) => {
+    const sub = newItems.reduce((acc, item) => acc + (Number(item.amount) || 0), 0);
+    const tax = (sub * (Number(taxRate) || 0)) / 100;
+    const tot = sub + tax;
+    setForm((p) => ({ ...p, items: newItems, subtotal: sub, taxAmount: tax, total: tot }));
+  };
+
+  const handleTaxChange = (rate: number) => {
+    setFormKey("taxRate", rate);
+    recalcTotal(items, rate);
+  };
+
+  const fieldCls = "w-full h-8 rounded-lg border border-border bg-muted/60 text-xs px-3 focus:outline-none focus:ring-1 focus:ring-primary text-foreground placeholder:text-muted-foreground";
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={!saving ? onClose : undefined} />
+      <div className="relative bg-card border border-border rounded-2xl shadow-2xl w-full max-w-4xl animate-in fade-in zoom-in-95 duration-150 overflow-hidden flex flex-col max-h-[90vh]">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border bg-muted/40">
+          <div className="flex items-center gap-2">
+            <i className="fa-solid fa-file-invoice-dollar text-primary text-base" />
+            <h3 className="text-sm font-bold text-foreground">{(initial as any)._id || (initial as any).id ? "Edit Invoice" : "Create Invoice"}</h3>
+          </div>
+          <button onClick={onClose} disabled={saving} className="text-muted-foreground hover:text-foreground cursor-pointer disabled:opacity-50"><i className="fa-solid fa-xmark text-sm" /></button>
+        </div>
+
+        <div className="p-6 space-y-6 overflow-y-auto flex-1">
+          {/* Header & Meta Row */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-muted/30 p-4 rounded-xl border border-border">
+            <div>
+              <p className="text-[10px] font-bold text-primary uppercase tracking-wide mb-2">— Your Business Information</p>
+              <div className="space-y-2">
+                <input className={fieldCls} value={form.businessName} onChange={(e) => setFormKey("businessName", e.target.value)} placeholder="Business Name (Hencework)" />
+                <textarea className={cn(fieldCls, "h-16 py-1.5 resize-none")} value={form.businessAddress} onChange={(e) => setFormKey("businessAddress", e.target.value)} placeholder="Business Address" />
+                <input className={fieldCls} value={form.businessEmail} onChange={(e) => setFormKey("businessEmail", e.target.value)} placeholder="Business Email" />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Invoice No *</label>
+                <input className={fieldCls} value={form.invoiceNo} onChange={(e) => setFormKey("invoiceNo", e.target.value)} placeholder="Auto (INV-0001)" />
+              </div>
+              <div>
+                <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Currency</label>
+                <select className={cn(fieldCls, "cursor-pointer font-semibold text-primary")} value={form.currency || "USD"} onChange={(e) => setFormKey("currency", e.target.value)}>
+                  <option value="USD">USD ($ - US Dollar)</option>
+                  <option value="INR">INR (₹ - Indian Rupee)</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Status</label>
+                <select className={cn(fieldCls, "cursor-pointer")} value={form.status} onChange={(e) => setFormKey("status", e.target.value)}>
+                  {["Draft", "Sent", "Pending", "Paid", "Overdue", "Archived", "Cancelled"].map((s) => <option key={s}>{s}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Invoice Date *</label>
+                <input type="date" className={fieldCls} value={form.invoiceDate} onChange={(e) => setFormKey("invoiceDate", e.target.value)} />
+              </div>
+              <div>
+                <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Due Date *</label>
+                <input type="date" className={fieldCls} value={form.dueDate} onChange={(e) => setFormKey("dueDate", e.target.value)} />
+              </div>
+              <div>
+                <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Customer / Account No</label>
+                <input className={fieldCls} value={form.customerNo} onChange={(e) => setFormKey("customerNo", e.target.value)} placeholder="32321" />
+              </div>
+            </div>
+          </div>
+
+          {/* Client Details */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-muted/20 p-4 rounded-xl border border-border">
+            <div>
+              <p className="text-[10px] font-bold text-foreground uppercase tracking-wide mb-2 flex items-center justify-between">
+                <span>Billed To Client *</span>
+              </p>
+              <div className="space-y-2">
+                <input className={fieldCls} value={form.billedToName} onChange={(e) => setFormKey("billedToName", e.target.value)} placeholder="Client / Company Name (Supernova consultant)" />
+                <textarea className={cn(fieldCls, "h-14 py-1.5 resize-none")} value={form.billedToAddress} onChange={(e) => setFormKey("billedToAddress", e.target.value)} placeholder="Billing Address" />
+                <input className={fieldCls} value={form.billedToEmail} onChange={(e) => setFormKey("billedToEmail", e.target.value)} placeholder="Client Email" />
+              </div>
+            </div>
+
+            <div>
+              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide mb-2">Ship To Address (Optional)</p>
+              <textarea className={cn(fieldCls, "h-28 py-1.5 resize-none")} value={form.shipToAddress || ""} onChange={(e) => setFormKey("shipToAddress", e.target.value)} placeholder="Shipping address if different from billing..." />
+            </div>
+          </div>
+
+          {/* Items Table */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide">Line Items & Services</label>
+              <button type="button" onClick={addItem} className="text-xs text-primary hover:underline flex items-center gap-1 font-semibold cursor-pointer">
+                <i className="fa-solid fa-plus text-[10px]" /> Add Item
+              </button>
+            </div>
+            <div className="border border-border rounded-xl overflow-hidden">
+              <table className="w-full text-xs">
+                <thead className="bg-muted/60 border-b border-border">
+                  <tr>
+                    <th className="px-3 py-2 text-left font-semibold text-muted-foreground text-[10px] uppercase">Description</th>
+                    <th className="px-3 py-2 text-center font-semibold text-muted-foreground text-[10px] uppercase w-20">Qty</th>
+                    <th className="px-3 py-2 text-right font-semibold text-muted-foreground text-[10px] uppercase w-28">Unit Price ({getCurrencySymbol(form.currency)})</th>
+                    <th className="px-3 py-2 text-right font-semibold text-muted-foreground text-[10px] uppercase w-28">Amount ({getCurrencySymbol(form.currency)})</th>
+                    <th className="px-2 py-2 w-8"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.map((item, idx) => (
+                    <tr key={idx} className="border-b border-border/40">
+                      <td className="p-2"><input className={fieldCls} value={item.description} onChange={(e) => updateItem(idx, "description", e.target.value)} placeholder="Service / item description" /></td>
+                      <td className="p-2"><input type="number" min="1" className={cn(fieldCls, "text-center")} value={item.quantity} onChange={(e) => updateItem(idx, "quantity", parseInt(e.target.value) || 0)} /></td>
+                      <td className="p-2"><input type="number" min="0" step="0.01" className={cn(fieldCls, "text-right")} value={item.unitPrice} onChange={(e) => updateItem(idx, "unitPrice", parseFloat(e.target.value) || 0)} /></td>
+                      <td className="p-2 text-right font-semibold text-foreground px-3 py-2">{getCurrencySymbol(form.currency)}{(Number(item.amount) || 0).toFixed(2)}</td>
+                      <td className="p-2 text-center">
+                        {items.length > 1 && (
+                          <button type="button" onClick={() => removeItem(idx)} className="text-muted-foreground hover:text-red-500 cursor-pointer"><i className="fa-solid fa-trash text-[10px]" /></button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Totals & Notes */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
+            <div>
+              <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Invoice Notes / Payment Terms</label>
+              <textarea className={cn(fieldCls, "h-20 py-2 resize-none")} value={form.notes || ""} onChange={(e) => setFormKey("notes", e.target.value)} placeholder="Payment due upon receipt. Bank details..." />
+            </div>
+
+            <div className="bg-muted/40 p-4 rounded-xl border border-border space-y-2 text-xs">
+              <div className="flex justify-between text-muted-foreground">
+                <span>Subtotal</span>
+                <span className="font-semibold text-foreground">{formatCurrency(form.subtotal || 0, form.currency)}</span>
+              </div>
+              <div className="flex items-center justify-between text-muted-foreground">
+                <span className="flex items-center gap-1.5">
+                  Tax Rate (%)
+                  <input type="number" min="0" max="100" className={cn(fieldCls, "w-14 h-6 text-center py-0 px-1")} value={form.taxRate} onChange={(e) => handleTaxChange(parseFloat(e.target.value) || 0)} />
+                </span>
+                <span className="font-semibold text-foreground">{formatCurrency(form.taxAmount || 0, form.currency)}</span>
+              </div>
+              <div className="border-t border-border pt-2 flex justify-between text-sm font-bold text-foreground">
+                <span>Total Amount</span>
+                <span className="text-primary text-base">{formatCurrency(form.total || 0, form.currency)}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex gap-2 px-6 py-4 border-t border-border bg-card">
+          <button onClick={onClose} disabled={saving} className="flex-1 h-9 rounded-lg border border-border bg-muted/60 text-xs font-semibold text-muted-foreground hover:bg-muted cursor-pointer disabled:opacity-50">Cancel</button>
+          <button onClick={() => { if (form.billedToName.trim()) onSave({ ...form, items }); }} disabled={!form.billedToName.trim() || saving} className="flex-1 h-9 rounded-lg bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 disabled:opacity-50 cursor-pointer flex items-center justify-center gap-1.5">
+            {saving ? <><i className="fa-solid fa-circle-notch fa-spin text-[10px]" />Saving…</> : "Save Invoice"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function InvoicesTab({ invoices, loading, onAdd, onEdit, onDelete, autoOpenAdd }: {
+  invoices: Invoice[]; loading: boolean;
+  onAdd: (d: Omit<Invoice, "id">) => Promise<void>;
+  onEdit: (id: string, d: Omit<Invoice, "id">) => Promise<void>;
+  onDelete: (id: string) => Promise<void>;
+  autoOpenAdd?: boolean;
+}) {
+  const [search, setSearch] = useState("");
+  const [filterStatus, setFilterStatus] = useState("All");
+  const [filterCurrency, setFilterCurrency] = useState("All");
+  const [filterDateRange, setFilterDateRange] = useState("All Time");
+  const [modal, setModal] = useState<{ mode: "add" } | { mode: "edit"; item: Invoice } | null>(null);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [previewItem, setPreviewItem] = useState<Invoice | null>(null);
+
+  useEffect(() => {
+    if (autoOpenAdd) {
+      setModal({ mode: "add" });
+    }
+  }, [autoOpenAdd]);
+
+  const filtered = useMemo(() => invoices.filter((inv) => {
+    const q = search.toLowerCase();
+    const matchesSearch = !q || inv.invoiceNo.toLowerCase().includes(q) || inv.billedToName.toLowerCase().includes(q) || inv.customerNo?.toLowerCase().includes(q);
+    const matchesStatus = filterStatus === "All" || inv.status === filterStatus;
+    const matchesCurrency = filterCurrency === "All" || inv.currency === filterCurrency;
+
+    let matchesDate = true;
+    if (filterDateRange !== "All Time" && inv.invoiceDate) {
+      const invDate = new Date(inv.invoiceDate);
+      const now = new Date();
+      if (filterDateRange === "This Month") {
+        matchesDate = invDate.getMonth() === now.getMonth() && invDate.getFullYear() === now.getFullYear();
+      } else if (filterDateRange === "Last 30 Days") {
+        const thirtyDaysAgo = new Date(now.getTime() - 30 * 86400000);
+        matchesDate = invDate >= thirtyDaysAgo;
+      } else if (filterDateRange === "This Year") {
+        matchesDate = invDate.getFullYear() === now.getFullYear();
+      }
+    }
+
+    return matchesSearch && matchesStatus && matchesCurrency && matchesDate;
+  }), [invoices, search, filterStatus, filterCurrency, filterDateRange]);
+
+  const totalRevenue = invoices.filter((inv) => inv.status === "Paid").reduce((acc, inv) => acc + (inv.total || 0), 0);
+  const pendingAmount = invoices.filter((inv) => inv.status === "Pending" || inv.status === "Sent" || inv.status === "Overdue").reduce((acc, inv) => acc + (inv.total || 0), 0);
+
+  const handleSave = async (data: Omit<Invoice, "id">) => {
+    setSaving(true);
+    try {
+      if (modal?.mode === "edit") await onEdit(modal.item.id, data);
+      else await onAdd(data);
+      setModal(null);
+    } finally { setSaving(false); }
+  };
+
+  const handleDelete = async () => {
+    if (!deleteId) return;
+    setDeleting(true);
+    try { await onDelete(deleteId); setDeleteId(null); } finally { setDeleting(false); }
+  };
+
+  return (
+    <div className="space-y-4">
+      {modal && <InvoiceModal initial={modal.mode === "edit" ? modal.item : EMPTY_INVOICE} onSave={handleSave} onClose={() => !saving && setModal(null)} saving={saving} />}
+      {deleteId && <ConfirmDialog title="Remove Invoice" message="Are you sure you want to delete this invoice? This action cannot be undone." onConfirm={handleDelete} onCancel={() => !deleting && setDeleteId(null)} loading={deleting} />}
+
+      {/* Invoice Quick Preview Drawer Modal */}
+      {previewItem && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setPreviewItem(null)} />
+          <div className="relative bg-card border border-border rounded-2xl shadow-2xl w-full max-w-2xl p-6 space-y-6 animate-in fade-in zoom-in-95 duration-150 max-h-[85vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-border pb-3">
+              <div>
+                <span className="text-xs font-mono font-bold text-primary">{previewItem.invoiceNo}</span>
+                <h3 className="text-lg font-bold text-foreground">{previewItem.billedToName}</h3>
+              </div>
+              <span className={statusBadge(previewItem.status)}>{previewItem.status}</span>
+            </div>
+            <div className="grid grid-cols-2 gap-4 text-xs">
+              <div>
+                <p className="text-muted-foreground font-semibold uppercase text-[10px]">Billed From</p>
+                <p className="font-semibold text-foreground mt-1">{previewItem.businessName}</p>
+                <p className="text-muted-foreground whitespace-pre-line">{previewItem.businessAddress}</p>
+                <p className="text-muted-foreground">{previewItem.businessEmail}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground font-semibold uppercase text-[10px]">Billed To</p>
+                <p className="font-semibold text-foreground mt-1">{previewItem.billedToName}</p>
+                <p className="text-muted-foreground whitespace-pre-line">{previewItem.billedToAddress}</p>
+                <p className="text-muted-foreground">{previewItem.billedToEmail}</p>
+              </div>
+            </div>
+            <div className="border border-border rounded-xl overflow-hidden text-xs">
+              <table className="w-full">
+                <thead className="bg-muted/60">
+                  <tr>
+                    <th className="px-3 py-2 text-left text-[10px] uppercase font-semibold text-muted-foreground">Description</th>
+                    <th className="px-3 py-2 text-center text-[10px] uppercase font-semibold text-muted-foreground">Qty</th>
+                    <th className="px-3 py-2 text-right text-[10px] uppercase font-semibold text-muted-foreground">Unit Price ({getCurrencySymbol(previewItem.currency)})</th>
+                    <th className="px-3 py-2 text-right text-[10px] uppercase font-semibold text-muted-foreground">Amount ({getCurrencySymbol(previewItem.currency)})</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {previewItem.items?.map((item, idx) => (
+                    <tr key={idx} className="border-b border-border/40">
+                      <td className="p-3 text-foreground font-medium">{item.description}</td>
+                      <td className="p-3 text-center text-muted-foreground">{item.quantity}</td>
+                      <td className="p-3 text-right text-muted-foreground">{formatCurrency(Number(item.unitPrice) || 0, previewItem.currency)}</td>
+                      <td className="p-3 text-right font-semibold text-foreground">{formatCurrency(Number(item.amount) || 0, previewItem.currency)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="flex justify-between items-end border-t border-border pt-4 text-xs">
+              <div>
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase">Dates</p>
+                <p className="text-muted-foreground mt-0.5">Issued: {previewItem.invoiceDate} | Due: {previewItem.dueDate}</p>
+              </div>
+              <div className="text-right">
+                <p className="text-xs text-muted-foreground">Subtotal: {formatCurrency(previewItem.subtotal || 0, previewItem.currency)} | Tax ({previewItem.taxRate}%): {formatCurrency(previewItem.taxAmount || 0, previewItem.currency)}</p>
+                <p className="text-lg font-bold text-primary mt-1">Total: {formatCurrency(previewItem.total || 0, previewItem.currency)}</p>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 border-t border-border pt-3">
+              <button onClick={() => setPreviewItem(null)} className="px-4 py-1.5 rounded-lg border border-border bg-muted/60 text-xs font-semibold text-muted-foreground hover:bg-muted cursor-pointer">Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* KPI Chips */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="rounded-xl border border-border bg-card p-4">
+          <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-semibold">Total Invoices</p>
+          <p className="text-xl font-bold text-foreground mt-1">{invoices.length}</p>
+        </div>
+        <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4">
+          <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-semibold">Paid Revenue</p>
+          <p className="text-xl font-bold text-emerald-500 mt-1">{formatCurrency(totalRevenue)}</p>
+        </div>
+        <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4">
+          <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-semibold">Pending / Sent</p>
+          <p className="text-xl font-bold text-amber-500 mt-1">{formatCurrency(pendingAmount)}</p>
+        </div>
+        <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-4">
+          <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-semibold">Drafts</p>
+          <p className="text-xl font-bold text-blue-500 mt-1">{invoices.filter((i) => i.status === "Draft").length}</p>
+        </div>
+      </div>
+
+      {/* Filter & Action Controls */}
+      <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between flex-wrap">
+        <div className="relative flex-1 max-w-xs">
+          <i className="fa-solid fa-magnifying-glass absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground" />
+          <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search invoice #, client, customer #…" className="pl-8 h-8 text-xs" />
+        </div>
+        <div className="flex flex-wrap gap-2 items-center">
+          <select className={SELECT_CLS} value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} title="Filter by Status">
+            <option value="All">All Statuses</option>
+            {["Draft", "Sent", "Pending", "Paid", "Overdue", "Archived", "Cancelled"].map((s) => <option key={s} value={s}>{s}</option>)}
+          </select>
+          <select className={SELECT_CLS} value={filterCurrency} onChange={(e) => setFilterCurrency(e.target.value)} title="Filter by Currency">
+            <option value="All">All Currencies</option>
+            <option value="USD">USD ($)</option>
+            <option value="INR">INR (₹)</option>
+          </select>
+          <select className={SELECT_CLS} value={filterDateRange} onChange={(e) => setFilterDateRange(e.target.value)} title="Filter by Date">
+            <option value="All Time">All Time</option>
+            <option value="This Month">This Month</option>
+            <option value="Last 30 Days">Last 30 Days</option>
+            <option value="This Year">This Year</option>
+          </select>
+          <span className="text-xs text-muted-foreground">{filtered.length} invoice{filtered.length !== 1 ? "s" : ""}</span>
+          <button onClick={() => setModal({ mode: "add" })} className="flex items-center gap-1.5 h-8 px-3 rounded-lg bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-colors cursor-pointer">
+            <i className="fa-solid fa-plus text-[10px]" /> Create Invoice
+          </button>
+        </div>
+      </div>
+
+      {/* Table */}
+      <div className="overflow-x-auto rounded-xl border border-border">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="bg-muted/60 border-b border-border">
+              {["Invoice No", "Billed To Client", "Date", "Due Date", "Customer No", "Total", "Status", "Actions"].map((h) => (
+                <th key={h} className="text-left px-3 py-2.5 font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap text-[10px]">{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? Array.from({ length: 4 }).map((_, i) => <SkeletonRow key={i} cols={8} />) :
+              filtered.length === 0 ? (
+                <tr><td colSpan={8} className="text-center py-12 text-muted-foreground"><i className="fa-solid fa-file-invoice-dollar text-2xl mb-2 block opacity-30" /><p className="text-xs">{invoices.length === 0 ? "No invoices created yet." : "No matching invoices found."}</p></td></tr>
+              ) : (
+                filtered.map((row, idx) => (
+                  <tr key={row.id} className={cn("border-b border-border/60 hover:bg-muted/30 transition-colors group", idx % 2 === 0 ? "" : "bg-muted/10")}>
+                    <td className="px-3 py-2.5 font-mono font-semibold text-primary whitespace-nowrap">{row.invoiceNo}</td>
+                    <td className="px-3 py-2.5 text-foreground whitespace-nowrap font-medium">{row.billedToName}</td>
+                    <td className="px-3 py-2.5 text-muted-foreground whitespace-nowrap">{row.invoiceDate}</td>
+                    <td className="px-3 py-2.5 text-muted-foreground whitespace-nowrap">{row.dueDate}</td>
+                    <td className="px-3 py-2.5 font-mono text-muted-foreground whitespace-nowrap">{row.customerNo || "—"}</td>
+                    <td className="px-3 py-2.5 font-bold text-foreground whitespace-nowrap">{formatCurrency(row.total || 0, row.currency)}</td>
+                    <td className="px-3 py-2.5 whitespace-nowrap"><span className={statusBadge(row.status)}>{row.status}</span></td>
+                    <td className="px-3 py-2.5 whitespace-nowrap">
+                      <div className="flex items-center gap-1.5">
+                        <button onClick={() => setPreviewItem(row)} className="px-2 py-1 rounded bg-muted hover:bg-accent text-muted-foreground hover:text-foreground text-[10px] font-semibold flex items-center gap-1 cursor-pointer transition-colors" title="Preview Invoice"><i className="fa-solid fa-eye text-[9px]" /> Preview</button>
+                        <button onClick={() => setModal({ mode: "edit", item: row })} className="w-6 h-6 rounded-md bg-muted hover:bg-accent flex items-center justify-center text-muted-foreground hover:text-foreground cursor-pointer" title="Edit"><i className="fa-solid fa-pen text-[9px]" /></button>
+                        <button onClick={() => setDeleteId(row.id)} className="w-6 h-6 rounded-md bg-muted hover:bg-red-500/10 flex items-center justify-center text-muted-foreground hover:text-red-500 cursor-pointer" title="Delete"><i className="fa-solid fa-trash text-[9px]" /></button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Page ─────────────────────────────────────────────────────────────────
 
-type TabKey = "overview" | "drive" | "access" | "subscriptions" | "devices";
+type TabKey = "overview" | "drive" | "access" | "subscriptions" | "devices" | "invoices";
 
 const TABS: { key: TabKey; label: string; icon: string }[] = [
   { key: "overview", label: "Overview", icon: "fa-solid fa-gauge-high" },
@@ -1045,10 +1527,11 @@ const TABS: { key: TabKey; label: string; icon: string }[] = [
   { key: "access", label: "Access & IDs", icon: "fa-solid fa-key" },
   { key: "subscriptions", label: "Subscriptions", icon: "fa-solid fa-credit-card" },
   { key: "devices", label: "Devices", icon: "fa-solid fa-laptop" },
+  { key: "invoices", label: "Invoices", icon: "fa-solid fa-file-invoice-dollar" },
 ];
 
 export default function ITCommandCenterPage() {
-  const [activeTab, setActiveTab] = useTabPersistence<TabKey>("it_command_center_tab", "overview", ["overview", "drive", "access", "subscriptions", "devices"]);
+  const [activeTab, setActiveTab] = useTabPersistence<TabKey>("it_command_center_tab", "overview", ["overview", "drive", "access", "subscriptions", "devices", "invoices"]);
   const [autoOpenAddTab, setAutoOpenAddTab] = useState<TabKey | null>(null);
 
   const handleQuickAction = (tab: TabKey) => {
@@ -1063,11 +1546,13 @@ export default function ITCommandCenterPage() {
   const [access, setAccess] = useState<AccessEntry[]>([]);
   const [subs, setSubs] = useState<Subscription[]>([]);
   const [devices, setDevices] = useState<Device[]>([]);
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
 
   const [loadingLinks, setLoadingLinks] = useState(true);
   const [loadingAccess, setLoadingAccess] = useState(true);
   const [loadingSubs, setLoadingSubs] = useState(true);
   const [loadingDevices, setLoadingDevices] = useState(true);
+  const [loadingInvoices, setLoadingInvoices] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" | "info" } | null>(null);
@@ -1109,12 +1594,20 @@ export default function ITCommandCenterPage() {
     finally { setLoadingDevices(false); }
   }, [showToast]);
 
-  useEffect(() => { loadLinks(); loadAccess(); loadSubs(); loadDevices(); }, [loadLinks, loadAccess, loadSubs, loadDevices]);
+  const loadInvoices = useCallback(async () => {
+    try {
+      const data = await apiFetch("/api/it/invoices");
+      setInvoices((data.invoices || []).map((d: any) => ({ ...normalise(d), id: d._id?.toString() || d.id })));
+    } catch (e: any) { showToast(e.message || "Failed to load invoices", "error"); }
+    finally { setLoadingInvoices(false); }
+  }, [showToast]);
+
+  useEffect(() => { loadLinks(); loadAccess(); loadSubs(); loadDevices(); loadInvoices(); }, [loadLinks, loadAccess, loadSubs, loadDevices, loadInvoices]);
 
   const handleRefresh = async () => {
     setRefreshing(true);
-    setLoadingLinks(true); setLoadingAccess(true); setLoadingSubs(true); setLoadingDevices(true);
-    await Promise.all([loadLinks(), loadAccess(), loadSubs(), loadDevices()]);
+    setLoadingLinks(true); setLoadingAccess(true); setLoadingSubs(true); setLoadingDevices(true); setLoadingInvoices(true);
+    await Promise.all([loadLinks(), loadAccess(), loadSubs(), loadDevices(), loadInvoices()]);
     setRefreshing(false);
     showToast("Data refreshed", "info");
   };
@@ -1220,8 +1713,29 @@ export default function ITCommandCenterPage() {
     showToast("Device removed", "info");
   };
 
-  const totalRecords = links.length + access.length + subs.length + devices.length;
-  const overallLoading = loadingLinks && loadingAccess && loadingSubs && loadingDevices;
+  // ─── Invoices CRUD ────────────────────────────────────────────────────────────
+  const addInvoice = async (data: Omit<Invoice, "id">) => {
+    const res = await apiFetch("/api/it/invoices", { method: "POST", body: JSON.stringify(data) });
+    const doc = res.invoice;
+    setInvoices((p) => [{ ...doc, id: doc._id?.toString() || doc.id }, ...p]);
+    showToast("Invoice created successfully", "success");
+  };
+
+  const editInvoice = async (id: string, data: Omit<Invoice, "id">) => {
+    const res = await apiFetch(`/api/it/invoices/${id}`, { method: "PATCH", body: JSON.stringify(data) });
+    const doc = res.invoice;
+    setInvoices((p) => p.map((i) => i.id === id ? { ...doc, id } : i));
+    showToast("Invoice updated", "success");
+  };
+
+  const deleteInvoice = async (id: string) => {
+    await apiFetch(`/api/it/invoices/${id}`, { method: "DELETE" });
+    setInvoices((p) => p.filter((i) => i.id !== id));
+    showToast("Invoice deleted", "info");
+  };
+
+  const totalRecords = links.length + access.length + subs.length + devices.length + invoices.length;
+  const overallLoading = loadingLinks && loadingAccess && loadingSubs && loadingDevices && loadingInvoices;
 
   return (
     <div className="space-y-6">
@@ -1234,8 +1748,8 @@ export default function ITCommandCenterPage() {
             <i className="fa-solid fa-terminal text-base" />
           </div>
           <div>
-            <h1 className="text-xl font-bold text-foreground tracking-tight">IT Command Center</h1>
-            <p className="text-xs text-muted-foreground">Manage access, subscriptions, assets & shared resources</p>
+            <h1 className="text-xl font-bold text-foreground tracking-tight">IT Portal</h1>
+            <p className="text-xs text-muted-foreground">Manage access, subscriptions, assets, invoices & shared resources</p>
           </div>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
@@ -1283,6 +1797,7 @@ export default function ITCommandCenterPage() {
         {activeTab === "access" && <AccessTab access={access} loading={loadingAccess} onAdd={addAccess} onEdit={editAccess} onDelete={deleteAccess} onToggleStatus={toggleAccessStatus} autoOpenAdd={autoOpenAddTab === "access"} />}
         {activeTab === "subscriptions" && <SubscriptionsTab subs={subs} loading={loadingSubs} onAdd={addSub} onEdit={editSub} onDelete={deleteSub} autoOpenAdd={autoOpenAddTab === "subscriptions"} />}
         {activeTab === "devices" && <DevicesTab devices={devices} loading={loadingDevices} onAdd={addDevice} onEdit={editDevice} onDelete={deleteDevice} autoOpenAdd={autoOpenAddTab === "devices"} />}
+        {activeTab === "invoices" && <InvoicesTab invoices={invoices} loading={loadingInvoices} onAdd={addInvoice} onEdit={editInvoice} onDelete={deleteInvoice} autoOpenAdd={autoOpenAddTab === "invoices"} />}
       </div>
     </div>
   );

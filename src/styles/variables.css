@@ -1,27 +1,27 @@
 :root {
   /* Color Palette (Cool Slate & Deep Violet Accent) */
-  --color-bg-light: #f8fafc;
-  --color-bg-dark: #09090b;
-  --color-card-light: #fcfdfe;
-  --color-card-dark: #18181b;
+  --color-bg-light: #f4f8f9;
+  --color-bg-dark: #131a1e;
+  --color-card-light: #ffffff;
+  --color-card-dark: #162025;
   
-  --color-text-light-primary: #0f172a;
-  --color-text-light-secondary: #475569;
-  --color-text-light-muted: #94a3b8;
+  --color-text-light-primary: #0f171c;
+  --color-text-light-secondary: #3b4e56;
+  --color-text-light-muted: #6b828d;
   
   --color-text-dark-primary: #f8fafc;
   --color-text-dark-secondary: #cbd5e1;
-  --color-text-dark-muted: #64748b;
+  --color-text-dark-muted: #7f99a5;
   
   /* Accents & Statuses */
-  --color-primary: #6366f1; /* Indigo */
-  --color-primary-hover: #4f46e5;
-  --color-primary-glow: rgba(99, 102, 241, 0.15);
+  --color-primary: #006970; /* Dark Teal */
+  --color-primary-hover: #00565c;
+  --color-primary-glow: rgba(0, 105, 112, 0.25);
   
   --color-success: #10b981; /* Emerald */
   --color-warning: #f59e0b; /* Amber */
   --color-danger: #ef4444;  /* Rose */
-  --color-info: #06b6d4;    /* Cyan */
+  --color-info: #22d3ee;    /* Vibrant Cyan */
   
   /* Borders */
   --border-light: 1px solid rgba(226, 232, 240, 0.8);

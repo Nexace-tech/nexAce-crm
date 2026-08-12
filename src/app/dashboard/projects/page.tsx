@@ -127,6 +127,10 @@ export default function ProjectsPage() {
 
   const columns = ["To Do", "In Progress", "Review", "Done"];
 
+  // Board Sidebar & Filter state
+  const [boardFilter, setBoardFilter] = useState<"all" | "starred">("all");
+  const [boardSidebarCollapsed, setBoardSidebarCollapsed] = useState<boolean>(false);
+
   // Drag-and-drop state
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
   const [dragOverCol, setDragOverCol] = useState<string | null>(null);
@@ -657,7 +661,99 @@ export default function ProjectsPage() {
 
       {/* Kanban Board View */}
       {activeTab === "kanban" && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+        <div className="flex flex-col lg:flex-row gap-6 items-start">
+          {/* Board Sidebar */}
+          <div
+            className={cn(
+              "relative bg-[#141b1f] border-r border-[#26343b] rounded-2xl p-4 transition-all duration-300 shrink-0 w-full lg:w-auto",
+              boardSidebarCollapsed ? "lg:w-16" : "lg:w-64"
+            )}
+          >
+            {/* Collapse Toggle Button on vertical divider */}
+            <button
+              onClick={() => setBoardSidebarCollapsed(!boardSidebarCollapsed)}
+              className="hidden lg:flex absolute -right-3 top-10 z-20 w-6 h-6 rounded-full bg-[#1c262b] border border-[#2e3e46] text-slate-300 hover:text-white items-center justify-center shadow-md cursor-pointer text-xs transition-colors"
+              title={boardSidebarCollapsed ? "Expand Board Sidebar" : "Collapse Board Sidebar"}
+            >
+              <i className={cn("fa-solid", boardSidebarCollapsed ? "fa-chevron-right" : "fa-chevron-left")} />
+            </button>
+
+            {!boardSidebarCollapsed ? (
+              <div className="space-y-4">
+                {/* Oval Pill Add New Board Button */}
+                <button
+                  onClick={() => setShowProjectForm(true)}
+                  className="w-full bg-[#006970] hover:bg-[#00575d] active:scale-[0.98] text-white font-medium text-sm py-2.5 px-6 rounded-full transition-all duration-200 shadow-md shadow-[#006970]/20 flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <span>Add New Board</span>
+                </button>
+
+                {/* Sidebar Menu Items */}
+                <div className="space-y-1.5 pt-1">
+                  {/* All Boards (Active Container) */}
+                  <button
+                    onClick={() => setBoardFilter("all")}
+                    className={cn(
+                      "w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl text-sm font-medium transition-all cursor-pointer",
+                      boardFilter === "all"
+                        ? "bg-[#0d3135] text-[#30b8bd] shadow-xs"
+                        : "text-white hover:bg-[#0e272a] hover:text-[#30b8bd]"
+                    )}
+                  >
+                    <i className="fa-solid fa-table-cells-large text-lg" />
+                    <span>All Boards</span>
+                  </button>
+
+                  {/* Stared Boards (Inactive Container) */}
+                  <button
+                    onClick={() => setBoardFilter("starred")}
+                    className={cn(
+                      "w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl text-sm font-medium transition-all cursor-pointer",
+                      boardFilter === "starred"
+                        ? "bg-[#0d3135] text-[#30b8bd] shadow-xs"
+                        : "text-white hover:bg-[#0e272a] hover:text-[#30b8bd]"
+                    )}
+                  >
+                    <i className="fa-regular fa-star text-lg" />
+                    <span>Stared Boards</span>
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center space-y-4 pt-2">
+                <button
+                  onClick={() => setShowProjectForm(true)}
+                  className="w-10 h-10 bg-[#006970] hover:bg-[#00575d] text-white rounded-full flex items-center justify-center shadow-md cursor-pointer"
+                  title="Add New Board"
+                >
+                  <i className="fa-solid fa-plus text-sm" />
+                </button>
+                <button
+                  onClick={() => setBoardFilter("all")}
+                  className={cn(
+                    "w-10 h-10 rounded-xl flex items-center justify-center cursor-pointer transition-colors",
+                    boardFilter === "all" ? "bg-[#0d3135] text-[#30b8bd]" : "text-white hover:bg-[#0e272a]"
+                  )}
+                  title="All Boards"
+                >
+                  <i className="fa-solid fa-table-cells-large text-base" />
+                </button>
+                <button
+                  onClick={() => setBoardFilter("starred")}
+                  className={cn(
+                    "w-10 h-10 rounded-xl flex items-center justify-center cursor-pointer transition-colors",
+                    boardFilter === "starred" ? "bg-[#0d3135] text-[#30b8bd]" : "text-white hover:bg-[#0e272a]"
+                  )}
+                  title="Stared Boards"
+                >
+                  <i className="fa-regular fa-star text-base" />
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Kanban Columns Grid */}
+          <div className="flex-1 min-w-0 w-full grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
           {columns.map((col) => {
             const colTasks = tasks.filter((t) => (t.status || "To Do") === col);
             const isOver = dragOverCol === col;
@@ -780,6 +876,7 @@ export default function ProjectsPage() {
               </div>
             );
           })}
+          </div>
         </div>
       )}
 

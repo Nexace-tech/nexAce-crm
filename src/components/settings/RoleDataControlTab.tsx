@@ -22,7 +22,7 @@ const MODULES: ModuleMeta[] = [
   { key: "hr", name: "HR Management Portal", description: "Leave requests, appraisals, onboarding, and case tracking", icon: "fa-solid fa-briefcase" },
   { key: "goals", name: "Goals, OKRs & Surveys", description: "Strategic goal tracking, kudos, and team pulse surveys", icon: "fa-solid fa-bullseye" },
   { key: "analytics", name: "Analytics & Audit Logs", description: "Detailed activity timeline logs and workspace analytics", icon: "fa-solid fa-chart-line" },
-  { key: "clients", name: "Operations", description: "Billable client project/retainer scope, owner, phase and health", icon: "fa-solid fa-list-check" },
+  { key: "clients", name: "Operation Portal", description: "Billable client project/retainer scope, owner, phase and health", icon: "fa-solid fa-list-check" },
   { key: "referrals", name: "Candidate Referral Pipeline", description: "Employee referral submissions and bonus tracking", icon: "fa-solid fa-link" },
   { key: "settings", name: "Settings & Administration", description: "User management, workspace branding, and security", icon: "fa-solid fa-gear" },
 ];

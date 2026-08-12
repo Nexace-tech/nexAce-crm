@@ -37,9 +37,155 @@ interface ClientData {
   createdAt: string;
 }
 
+interface SalesDeal {
+  id: string;
+  clientAccount: string;
+  dealName: string;
+  dealValue: number;
+  stage: "Prospecting" | "Discovery" | "Proposal Sent" | "Negotiation" | "Closed Won" | "Closed Lost";
+  probability: number;
+  owner: string;
+  expectedClose: string;
+  venture: string;
+}
+
+interface ResourceAllocation {
+  id: string;
+  employeeName: string;
+  role: string;
+  department: string;
+  assignedProject: string;
+  allocatedHoursPerWeek: number;
+  utilizationRate: number;
+  status: "Deployed" | "Partially Allocated" | "Bench" | "On Leave";
+  startDate: string;
+}
+
 export default function OperationsPage() {
   const { isAdmin } = usePermissions();
+  const [activeTab, setActiveTab] = useState<"operations" | "sales" | "hr">("operations");
   const [viewMode, setViewMode] = useState<"list" | "grid">("list");
+
+  // Sales Workdesk State
+  const [salesDeals, setSalesDeals] = useState<SalesDeal[]>([
+    {
+      id: "deal-1",
+      clientAccount: "Acme FinTech Corp",
+      dealName: "Enterprise CRM Integration Retainer",
+      dealValue: 45000,
+      stage: "Negotiation",
+      probability: 80,
+      owner: "Alex Mercer",
+      expectedClose: "2026-09-15",
+      venture: "Ace Consultancys"
+    },
+    {
+      id: "deal-2",
+      clientAccount: "Global Healthcare Inc",
+      dealName: "Patient Portal Expansion & Audit",
+      dealValue: 62000,
+      stage: "Proposal Sent",
+      probability: 60,
+      owner: "Sarah Jenkins",
+      expectedClose: "2026-09-30",
+      venture: "NexAce Tech"
+    },
+    {
+      id: "deal-3",
+      clientAccount: "Vanguard Logistics",
+      dealName: "Fleet Telematics Dashboard Sprints",
+      dealValue: 28000,
+      stage: "Closed Won",
+      probability: 100,
+      owner: "Michael Chang",
+      expectedClose: "2026-08-10",
+      venture: "Ace Consultancys"
+    },
+    {
+      id: "deal-4",
+      clientAccount: "Nexus Retail Systems",
+      dealName: "Omnichannel POS Cloud Migration",
+      dealValue: 35000,
+      stage: "Discovery",
+      probability: 40,
+      owner: "Alex Mercer",
+      expectedClose: "2026-10-15",
+      venture: "NexAce Tech"
+    }
+  ]);
+  const [salesSearch, setSalesSearch] = useState("");
+  const [salesStageFilter, setSalesStageFilter] = useState("All");
+  const [showSalesModal, setShowSalesModal] = useState(false);
+  const [salesFormData, setSalesFormData] = useState({
+    clientAccount: "",
+    dealName: "",
+    dealValue: "",
+    stage: "Prospecting" as SalesDeal["stage"],
+    probability: 50,
+    owner: "",
+    expectedClose: "",
+    venture: "Ace Consultancys"
+  });
+
+  // HR Workdesk State
+  const [hrAllocations, setHrAllocations] = useState<ResourceAllocation[]>([
+    {
+      id: "res-1",
+      employeeName: "David Kim",
+      role: "Senior Fullstack Engineer",
+      department: "Engineering",
+      assignedProject: "Acme FinTech Retainer",
+      allocatedHoursPerWeek: 40,
+      utilizationRate: 100,
+      status: "Deployed",
+      startDate: "2026-01-15"
+    },
+    {
+      id: "res-2",
+      employeeName: "Emily Vance",
+      role: "UI/UX Product Designer",
+      department: "Design",
+      assignedProject: "Global Healthcare Portal",
+      allocatedHoursPerWeek: 30,
+      utilizationRate: 75,
+      status: "Partially Allocated",
+      startDate: "2026-03-01"
+    },
+    {
+      id: "res-3",
+      employeeName: "Marcus Vance",
+      role: "DevOps Engineer",
+      department: "Infrastructure",
+      assignedProject: "Unassigned (Bench)",
+      allocatedHoursPerWeek: 0,
+      utilizationRate: 0,
+      status: "Bench",
+      startDate: "2026-07-01"
+    },
+    {
+      id: "res-4",
+      employeeName: "Elena Rostova",
+      role: "QA Automation Engineer",
+      department: "QA",
+      assignedProject: "Vanguard Telematics",
+      allocatedHoursPerWeek: 40,
+      utilizationRate: 100,
+      status: "Deployed",
+      startDate: "2026-02-10"
+    }
+  ]);
+  const [hrSearch, setHrSearch] = useState("");
+  const [hrStatusFilter, setHrStatusFilter] = useState("All");
+  const [showHrModal, setShowHrModal] = useState(false);
+  const [hrFormData, setHrFormData] = useState({
+    employeeName: "",
+    role: "",
+    department: "Engineering",
+    assignedProject: "",
+    allocatedHoursPerWeek: 40,
+    status: "Deployed" as ResourceAllocation["status"],
+    startDate: ""
+  });
 
   // Persist View Mode Preference in localStorage
   useEffect(() => {
@@ -497,13 +643,92 @@ export default function OperationsPage() {
     Low: "bg-slate-500/10 text-slate-500 border border-slate-500/20",
   };
 
+  const handleAddSalesDeal = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!salesFormData.clientAccount || !salesFormData.dealName) return;
+    const newDeal: SalesDeal = {
+      id: `deal-${Date.now()}`,
+      clientAccount: salesFormData.clientAccount,
+      dealName: salesFormData.dealName,
+      dealValue: Number(salesFormData.dealValue) || 0,
+      stage: salesFormData.stage,
+      probability: Number(salesFormData.probability) || 50,
+      owner: salesFormData.owner || "Current User",
+      expectedClose: salesFormData.expectedClose || new Date().toISOString().split("T")[0],
+      venture: salesFormData.venture
+    };
+    setSalesDeals((prev) => [newDeal, ...prev]);
+    setShowSalesModal(false);
+    setSalesFormData({
+      clientAccount: "",
+      dealName: "",
+      dealValue: "",
+      stage: "Prospecting",
+      probability: 50,
+      owner: "",
+      expectedClose: "",
+      venture: "Ace Consultancys"
+    });
+  };
+
+  const handleAddHrAllocation = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!hrFormData.employeeName) return;
+    const hours = Number(hrFormData.allocatedHoursPerWeek) || 0;
+    const util = Math.min(100, Math.round((hours / 40) * 100));
+    const newAlloc: ResourceAllocation = {
+      id: `res-${Date.now()}`,
+      employeeName: hrFormData.employeeName,
+      role: hrFormData.role || "Staff Member",
+      department: hrFormData.department,
+      assignedProject: hrFormData.assignedProject || "Unassigned",
+      allocatedHoursPerWeek: hours,
+      utilizationRate: util,
+      status: hrFormData.status,
+      startDate: hrFormData.startDate || new Date().toISOString().split("T")[0]
+    };
+    setHrAllocations((prev) => [newAlloc, ...prev]);
+    setShowHrModal(false);
+    setHrFormData({
+      employeeName: "",
+      role: "",
+      department: "Engineering",
+      assignedProject: "",
+      allocatedHoursPerWeek: 40,
+      status: "Deployed",
+      startDate: ""
+    });
+  };
+
+  const filteredSalesDeals = useMemo(() => {
+    return salesDeals.filter((deal) => {
+      const matchesSearch =
+        deal.clientAccount.toLowerCase().includes(salesSearch.toLowerCase()) ||
+        deal.dealName.toLowerCase().includes(salesSearch.toLowerCase()) ||
+        deal.owner.toLowerCase().includes(salesSearch.toLowerCase());
+      const matchesStage = salesStageFilter === "All" || deal.stage === salesStageFilter;
+      return matchesSearch && matchesStage;
+    });
+  }, [salesDeals, salesSearch, salesStageFilter]);
+
+  const filteredHrAllocations = useMemo(() => {
+    return hrAllocations.filter((res) => {
+      const matchesSearch =
+        res.employeeName.toLowerCase().includes(hrSearch.toLowerCase()) ||
+        res.role.toLowerCase().includes(hrSearch.toLowerCase()) ||
+        res.assignedProject.toLowerCase().includes(hrSearch.toLowerCase());
+      const matchesStatus = hrStatusFilter === "All" || res.status === hrStatusFilter;
+      return matchesSearch && matchesStatus;
+    });
+  }, [hrAllocations, hrSearch, hrStatusFilter]);
+
   return (
     <div className="space-y-8">
       {/* Title */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
-            <i className="fa-solid fa-list-check text-primary text-xl" /> Operations Center
+            <i className="fa-solid fa-list-check text-primary text-xl" /> Operation Portal
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
             Every billable client project/retainer — scope, owner, budget, phase, and health.
@@ -511,20 +736,84 @@ export default function OperationsPage() {
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => setShowAnalytics(!showAnalytics)}
-            className="gap-2 font-semibold h-8 cursor-pointer"
-          >
-            <i className="fa-solid fa-chart-pie text-xs text-primary" /> {showAnalytics ? "Hide Analytics" : "Show Analytics"}
-          </Button>
+          {activeTab === "operations" && (
+            <>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setShowAnalytics(!showAnalytics)}
+                className="gap-2 font-semibold h-8 cursor-pointer"
+              >
+                <i className="fa-solid fa-chart-pie text-xs text-primary" /> {showAnalytics ? "Hide Analytics" : "Show Analytics"}
+              </Button>
 
-          <Button color="primary" size="sm" onClick={() => handleOpenModal()} className="gap-2 font-semibold h-8 cursor-pointer">
-            <i className="fa-solid fa-plus text-xs" /> Add Project / Retainer
-          </Button>
+              <Button color="primary" size="sm" onClick={() => handleOpenModal()} className="gap-2 font-semibold h-8 cursor-pointer">
+                <i className="fa-solid fa-plus text-xs" /> Add Project / Retainer
+              </Button>
+            </>
+          )}
+
+          {activeTab === "sales" && (
+            <Button color="primary" size="sm" onClick={() => setShowSalesModal(true)} className="gap-2 font-semibold h-8 cursor-pointer">
+              <i className="fa-solid fa-plus text-xs" /> New Sales Deal
+            </Button>
+          )}
+
+          {activeTab === "hr" && (
+            <Button color="primary" size="sm" onClick={() => setShowHrModal(true)} className="gap-2 font-semibold h-8 cursor-pointer">
+              <i className="fa-solid fa-user-plus text-xs" /> Allocate Staff Resource
+            </Button>
+          )}
         </div>
+      </div>
+
+      {/* Operation Portal Sub-Navigation Tabs */}
+      <div className="flex border-b border-border space-x-2 overflow-x-auto no-scrollbar pb-1">
+        <button
+          type="button"
+          onClick={() => setActiveTab("operations")}
+          className={cn(
+            "px-4 py-2.5 text-sm font-semibold border-b-2 transition-all flex items-center gap-2 cursor-pointer shrink-0",
+            activeTab === "operations"
+              ? "border-primary text-primary font-bold"
+              : "border-transparent text-muted-foreground hover:text-foreground"
+          )}
+        >
+          <i className="fa-solid fa-list-check text-sm" /> Operations Control
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab("sales")}
+          className={cn(
+            "px-4 py-2.5 text-sm font-semibold border-b-2 transition-all flex items-center gap-2 cursor-pointer shrink-0",
+            activeTab === "sales"
+              ? "border-primary text-primary font-bold"
+              : "border-transparent text-muted-foreground hover:text-foreground"
+          )}
+        >
+          <i className="fa-solid fa-handshake text-sm" /> Sales Workdesk
+          <Badge variant="soft" color="primary" className="ml-1 text-[10px] px-1.5 py-0.2">
+            {salesDeals.length}
+          </Badge>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab("hr")}
+          className={cn(
+            "px-4 py-2.5 text-sm font-semibold border-b-2 transition-all flex items-center gap-2 cursor-pointer shrink-0",
+            activeTab === "hr"
+              ? "border-primary text-primary font-bold"
+              : "border-transparent text-muted-foreground hover:text-foreground"
+          )}
+        >
+          <i className="fa-solid fa-users-gear text-sm" /> HR Workdesk
+          <Badge variant="soft" color="primary" className="ml-1 text-[10px] px-1.5 py-0.2">
+            {hrAllocations.length}
+          </Badge>
+        </button>
       </div>
 
       {/* Metric Cards */}
