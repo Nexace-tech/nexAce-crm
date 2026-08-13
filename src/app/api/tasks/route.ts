@@ -22,6 +22,7 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const projectId = searchParams.get("projectId");
     const sprintId = searchParams.get("sprintId");
+    const assigneeId = searchParams.get("assignee");
 
     await connectToDatabase();
     const dataScope = await getUserDataScope(session);
@@ -37,6 +38,10 @@ export async function GET(request: Request) {
 
     if (sprintId) {
       query.sprintId = new mongoose.Types.ObjectId(sprintId);
+    }
+
+    if (assigneeId) {
+      query.assignee = new mongoose.Types.ObjectId(assigneeId);
     }
 
     // Role-based task scoping

@@ -94,6 +94,78 @@ export default function CalendarPage() {
   const [showAllAttendance, setShowAllAttendance] = useState(false);
   const [selectedDateFilter, setSelectedDateFilter] = useState<string>("");
 
+  // Login & Hours Summary States (Admin/OPS only)
+  const getDefaultWeekFrom = () => {
+    const d = new Date();
+    const day = d.getDay();
+    const daysBack = day === 0 ? 6 : day - 1;
+    d.setDate(d.getDate() - daysBack);
+    return d.toISOString().split("T")[0];
+  };
+  const [summaryFrom, setSummaryFrom] = useState<string>(getDefaultWeekFrom);
+  const [summaryTo, setSummaryTo] = useState<string>(new Date().toISOString().split("T")[0]);
+  const [summarySearch, setSummarySearch] = useState("");
+  const [summaryDept, setSummaryDept] = useState("All");
+  const [summaryRecords, setSummaryRecords] = useState<any[]>([]);
+  const [summaryUserStats, setSummaryUserStats] = useState<any[]>([]);
+  const [summaryLoading, setSummaryLoading] = useState(false);
+  const [summaryPage, setSummaryPage] = useState(1);
+  const [summaryView, setSummaryView] = useState<"records" | "users">("records");
+
+  const fetchLoginHoursSummary = async (from?: string, to?: string) => {
+    if (!isAdmin && !isOPS) return;
+    setSummaryLoading(true);
+    try {
+      const fromStr = from ?? summaryFrom;
+      const toStr = to ?? summaryTo;
+      const res = await fetch(`/api/attendance/summary?from=${fromStr}&to=${toStr}&limit=2000`);
+      if (res.ok) {
+        const data = await res.json();
+        setSummaryRecords(data.records || []);
+        setSummaryUserStats(data.userSummaries || []);
+      }
+    } catch (e) {
+      console.error("Failed to fetch login/hours summary:", e);
+    } finally {
+      setSummaryLoading(false);
+    }
+  };
+
+  const exportSummaryToCSV = () => {
+    const target = summaryRecords.filter((r) => {
+      const u = typeof r.userId === "object" ? r.userId : null;
+      const q = summarySearch.toLowerCase();
+      const matchSearch = !q || u?.name?.toLowerCase().includes(q) || u?.email?.toLowerCase().includes(q);
+      const matchDept = summaryDept === "All" || u?.department === summaryDept;
+      return matchSearch && matchDept;
+    });
+    if (target.length === 0) { showToast("No data to export.", "error"); return; }
+    const headers = ["Employee", "Email", "Role", "Department", "Date", "Clock In", "Clock Out", "Duration (hrs)", "Regular Hrs", "Overtime Hrs", "Status"];
+    const rows = target.map((r: any) => {
+      const u = typeof r.userId === "object" ? r.userId : null;
+      const dur = r.clockIn && r.clockOut
+        ? ((new Date(r.clockOut).getTime() - new Date(r.clockIn).getTime()) / 3600000).toFixed(2)
+        : r.regularHours ?? "Active";
+      return [
+        `"${u?.name ?? ""}"`, `"${u?.email ?? ""}"`, `"${u?.role ?? ""}"`, `"${u?.department ?? ""}"`,
+        `"${new Date(r.date).toLocaleDateString()}"`,
+        `"${r.clockIn ? new Date(r.clockIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }) : '--'}"`,
+        `"${r.clockOut ? new Date(r.clockOut).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }) : (r.clockIn ? 'Active' : '--')}"`,
+        dur, r.regularHours ?? 0, r.overtimeHours ?? 0, `"${r.status ?? 'Present'}"`
+      ].join(",");
+    });
+    const csv = [headers.join(","), ...rows].join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `Login_Hours_Summary_${summaryFrom}_to_${summaryTo}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showToast("Login & Hours Summary exported successfully!", "success");
+  };
+
   const exportAttendanceToCSV = () => {
     const targetLogs = selectedDateFilter
       ? attendanceHistory.filter((log) => new Date(log.date).toISOString().split("T")[0] === selectedDateFilter)
@@ -1565,6 +1637,351 @@ export default function CalendarPage() {
               );
             })()}
           </Card>
+
+          {/* ─── Login & Hours Summary (Admin/OPS only) ─── */}
+          {(isAdmin || isOPS) && (
+            <Card className="border border-border bg-card/60 overflow-hidden">
+              {/* Header */}
+              <CardHeader className="pb-3 border-b border-border/60">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <div className="p-2 rounded-lg bg-indigo-500/10">
+                      <i className="fa-solid fa-user-clock text-indigo-500 text-sm" />
+                    </div>
+                    <div>
+                      <CardTitle className="text-sm font-bold text-foreground">Login & Hours Summary</CardTitle>
+                      <CardDescription className="text-[11px] mt-0.5">Track employee login times, clock-in/out history and working hours by date range</CardDescription>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap shrink-0">
+                    {/* View Toggle */}
+                    <div className="flex items-center gap-0.5 bg-muted/60 p-0.5 rounded-lg border border-border/60">
+                      <button
+                        onClick={() => setSummaryView("records")}
+                        className={cn("px-2.5 py-1 rounded-md text-xs font-semibold transition-all cursor-pointer", summaryView === "records" ? "bg-background text-foreground shadow-xs" : "text-muted-foreground hover:text-foreground")}
+                      >
+                        <i className="fa-solid fa-table-list mr-1 text-[10px]" />Records
+                      </button>
+                      <button
+                        onClick={() => setSummaryView("users")}
+                        className={cn("px-2.5 py-1 rounded-md text-xs font-semibold transition-all cursor-pointer", summaryView === "users" ? "bg-background text-foreground shadow-xs" : "text-muted-foreground hover:text-foreground")}
+                      >
+                        <i className="fa-solid fa-users mr-1 text-[10px]" />Per User
+                      </button>
+                    </div>
+                    <Button
+                      size="sm"
+                      onClick={exportSummaryToCSV}
+                      className="gap-1.5 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white h-8 px-3"
+                    >
+                      <i className="fa-solid fa-file-excel text-xs" /> Export CSV
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Filters Row */}
+                <div className="flex flex-wrap items-center gap-2 mt-3">
+                  <div className="flex items-center gap-1.5">
+                    <label className="text-[11px] font-semibold text-muted-foreground whitespace-nowrap">From</label>
+                    <input
+                      type="date"
+                      value={summaryFrom}
+                      onChange={(e) => setSummaryFrom(e.target.value)}
+                      className="h-8 px-2 text-xs bg-background border border-border rounded-md text-foreground outline-none cursor-pointer"
+                    />
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <label className="text-[11px] font-semibold text-muted-foreground whitespace-nowrap">To</label>
+                    <input
+                      type="date"
+                      value={summaryTo}
+                      onChange={(e) => setSummaryTo(e.target.value)}
+                      className="h-8 px-2 text-xs bg-background border border-border rounded-md text-foreground outline-none cursor-pointer"
+                    />
+                  </div>
+                  <div className="relative flex-1 min-w-[160px]">
+                    <i className="fa-solid fa-magnifying-glass absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground pointer-events-none" />
+                    <input
+                      type="text"
+                      placeholder="Search employee..."
+                      value={summarySearch}
+                      onChange={(e) => setSummarySearch(e.target.value)}
+                      className="h-8 pl-7 pr-3 w-full text-xs bg-background border border-border rounded-md text-foreground outline-none"
+                    />
+                  </div>
+                  <select
+                    value={summaryDept}
+                    onChange={(e) => setSummaryDept(e.target.value)}
+                    className="h-8 text-xs bg-background border border-border rounded-md px-2.5 text-foreground outline-none cursor-pointer shrink-0"
+                  >
+                    <option value="All">All Departments</option>
+                    {Array.from(new Set(summaryRecords.map((r: any) => (typeof r.userId === "object" ? r.userId?.department : null)).filter(Boolean))).map((d: any) => (
+                      <option key={d} value={d}>{d}</option>
+                    ))}
+                  </select>
+                  <Button
+                    size="sm"
+                    onClick={() => { setSummaryPage(1); fetchLoginHoursSummary(); }}
+                    disabled={summaryLoading}
+                    className="h-8 px-3 text-xs font-bold gap-1.5"
+                  >
+                    {summaryLoading
+                      ? <><i className="fa-solid fa-spinner fa-spin text-xs" /> Loading...</>
+                      : <><i className="fa-solid fa-magnifying-glass text-xs" /> Search</>}
+                  </Button>
+                  {/* Quick Range Shortcuts */}
+                  {[{label:"This Week",fn:()=>{const f=getDefaultWeekFrom(),t=new Date().toISOString().split("T")[0];setSummaryFrom(f);setSummaryTo(t);setSummaryPage(1);fetchLoginHoursSummary(f,t);}},{label:"Today",fn:()=>{const t=new Date().toISOString().split("T")[0];setSummaryFrom(t);setSummaryTo(t);setSummaryPage(1);fetchLoginHoursSummary(t,t);}},{label:"This Month",fn:()=>{const now=new Date(),f=new Date(now.getFullYear(),now.getMonth(),1).toISOString().split("T")[0],t=now.toISOString().split("T")[0];setSummaryFrom(f);setSummaryTo(t);setSummaryPage(1);fetchLoginHoursSummary(f,t);}}].map(({label,fn})=>(
+                    <button key={label} onClick={fn} className="h-8 px-2.5 text-[11px] font-semibold rounded-md border border-border/60 text-muted-foreground hover:text-foreground hover:bg-accent/30 transition-colors cursor-pointer shrink-0">{label}</button>
+                  ))}
+                </div>
+              </CardHeader>
+
+              <CardContent className="pt-4 space-y-4">
+                {summaryRecords.length === 0 && !summaryLoading ? (
+                  <div className="py-12 text-center space-y-3">
+                    <i className="fa-solid fa-user-clock text-4xl text-muted-foreground/30" />
+                    <p className="text-sm text-muted-foreground">Select a date range and click <strong>Search</strong> to load login & hours data.</p>
+                  </div>
+                ) : (() => {
+                  // Filter records by search + dept
+                  const filteredRecs = summaryRecords.filter((r: any) => {
+                    const u = typeof r.userId === "object" ? r.userId : null;
+                    const q = summarySearch.toLowerCase();
+                    const matchSearch = !q || u?.name?.toLowerCase().includes(q) || u?.email?.toLowerCase().includes(q) || u?.role?.toLowerCase().includes(q);
+                    const matchDept = summaryDept === "All" || u?.department === summaryDept;
+                    return matchSearch && matchDept;
+                  });
+
+                  const filteredUsers = summaryUserStats.filter((us: any) => {
+                    const q = summarySearch.toLowerCase();
+                    const matchSearch = !q || us.name?.toLowerCase().includes(q) || us.email?.toLowerCase().includes(q);
+                    const matchDept = summaryDept === "All" || us.department === summaryDept;
+                    return matchSearch && matchDept;
+                  });
+
+                  // Aggregate totals for summary pills
+                  const totalPresent = filteredRecs.length;
+                  const totalRegHrs = filteredRecs.reduce((s: number, r: any) => s + (r.regularHours ?? 0), 0);
+                  const totalOtHrs  = filteredRecs.reduce((s: number, r: any) => s + (r.overtimeHours ?? 0), 0);
+                  const uniqueEmps  = new Set(filteredRecs.map((r: any) => r.userId?._id?.toString() ?? r.userId?.toString())).size;
+
+                  // Pagination for records view
+                  const ROWS_PER = 10;
+                  const totalRecPages = Math.ceil(filteredRecs.length / ROWS_PER) || 1;
+                  const pagedRecs = filteredRecs.slice((summaryPage - 1) * ROWS_PER, summaryPage * ROWS_PER);
+
+                  const fmtTime = (d: string | Date | null | undefined) =>
+                    d ? new Date(d).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }) : '--:--';
+                  const fmtDate = (d: string | Date) =>
+                    new Date(d).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+                  const fmtHrs = (h: number) => {
+                    const hh = Math.floor(h); const mm = Math.round((h - hh) * 60);
+                    return `${hh}h ${mm.toString().padStart(2,'0')}m`;
+                  };
+
+                  const ROLE_COLORS: Record<string, string> = {
+                    Admin: "bg-rose-500/15 text-rose-600 border-rose-500/30",
+                    OPS: "bg-emerald-500/15 text-emerald-600 border-emerald-500/30",
+                    Manager: "bg-purple-500/15 text-purple-600 border-purple-500/30",
+                    HR: "bg-pink-500/15 text-pink-600 border-pink-500/30",
+                    Employee: "bg-sky-500/15 text-sky-600 border-sky-500/30",
+                  };
+
+                  return (
+                    <>
+                      {/* Summary Stat Pills */}
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        {[
+                          { label: "Unique Employees", value: uniqueEmps, icon: "fa-solid fa-users", color: "text-indigo-500", bg: "bg-indigo-500/10 border-indigo-500/20" },
+                          { label: "Attendance Records", value: totalPresent, icon: "fa-solid fa-fingerprint", color: "text-primary", bg: "bg-primary/10 border-primary/20" },
+                          { label: "Total Regular Hrs", value: fmtHrs(totalRegHrs), icon: "fa-solid fa-clock", color: "text-emerald-500", bg: "bg-emerald-500/10 border-emerald-500/20" },
+                          { label: "Total Overtime", value: `+${fmtHrs(totalOtHrs)}`, icon: "fa-solid fa-fire", color: "text-amber-500", bg: "bg-amber-500/10 border-amber-500/20" },
+                        ].map((s) => (
+                          <div key={s.label} className={cn("p-3 rounded-xl border space-y-1", s.bg)}>
+                            <div className="flex items-center gap-1.5">
+                              <i className={cn("text-xs", s.icon, s.color)} />
+                              <span className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wide">{s.label}</span>
+                            </div>
+                            <p className={cn("text-lg font-extrabold font-mono", s.color)}>{s.value}</p>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* ─── Records Table View ─── */}
+                      {summaryView === "records" && (
+                        <>
+                          <div className="overflow-x-auto rounded-xl border border-border">
+                            <table className="w-full text-left text-xs">
+                              <thead className="bg-muted/40 border-b border-border text-muted-foreground font-semibold text-[11px] uppercase">
+                                <tr>
+                                  <th className="py-2.5 px-3 whitespace-nowrap">Employee</th>
+                                  <th className="py-2.5 px-3 whitespace-nowrap">Department</th>
+                                  <th className="py-2.5 px-3 whitespace-nowrap">Date</th>
+                                  <th className="py-2.5 px-3 whitespace-nowrap"><i className="fa-solid fa-fingerprint text-emerald-500 mr-1" />Clock In</th>
+                                  <th className="py-2.5 px-3 whitespace-nowrap"><i className="fa-solid fa-stopwatch text-rose-500 mr-1" />Clock Out</th>
+                                  <th className="py-2.5 px-3 whitespace-nowrap text-center">Duration</th>
+                                  <th className="py-2.5 px-3 whitespace-nowrap text-right">Regular Hrs</th>
+                                  <th className="py-2.5 px-3 whitespace-nowrap text-right">Overtime</th>
+                                  <th className="py-2.5 px-3 whitespace-nowrap text-right">Status</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-border/40">
+                                {summaryLoading ? (
+                                  Array.from({length:5}).map((_,i) => (
+                                    <tr key={i} className="animate-pulse">
+                                      {Array.from({length:9}).map((_,j) => (
+                                        <td key={j} className="py-3 px-3"><div className="h-3 bg-muted/60 rounded w-full" /></td>
+                                      ))}
+                                    </tr>
+                                  ))
+                                ) : pagedRecs.length === 0 ? (
+                                  <tr><td colSpan={9} className="py-8 text-center text-muted-foreground">
+                                    <i className="fa-solid fa-inbox text-2xl opacity-30 block mb-1" />No records match your filters.
+                                  </td></tr>
+                                ) : pagedRecs.map((r: any) => {
+                                  const u = typeof r.userId === "object" ? r.userId : null;
+                                  const roleColor = ROLE_COLORS[u?.role] ?? ROLE_COLORS.Employee;
+                                  const clockedOut = !!r.clockOut;
+                                  const isActive = r.clockIn && !r.clockOut;
+                                  const dur = r.clockIn && r.clockOut
+                                    ? fmtHrs((new Date(r.clockOut).getTime() - new Date(r.clockIn).getTime()) / 3600000)
+                                    : isActive ? "Active" : "—";
+                                  return (
+                                    <tr key={r._id} className="hover:bg-accent/20 transition-colors">
+                                      <td className="py-2.5 px-3">
+                                        <div className="flex items-center gap-2 min-w-[140px]">
+                                          <div className={cn("w-7 h-7 rounded-full font-bold flex items-center justify-center text-[10px] shrink-0 border", roleColor)}>
+                                            {u?.name?.[0]?.toUpperCase() ?? "U"}
+                                          </div>
+                                          <div className="min-w-0">
+                                            <p className="font-semibold text-foreground truncate leading-tight">{u?.name ?? "Employee"}</p>
+                                            <p className="text-[10px] text-muted-foreground font-mono truncate">{u?.email ?? ""}</p>
+                                          </div>
+                                        </div>
+                                      </td>
+                                      <td className="py-2.5 px-3">
+                                        <span className="text-[10px] px-1.5 py-0.5 rounded-md border border-border/50 bg-muted/40 text-muted-foreground font-semibold">{u?.department ?? "—"}</span>
+                                      </td>
+                                      <td className="py-2.5 px-3 font-medium text-foreground whitespace-nowrap">{fmtDate(r.date)}</td>
+                                      <td className="py-2.5 px-3">
+                                        <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">{fmtTime(r.clockIn)}</span>
+                                      </td>
+                                      <td className="py-2.5 px-3">
+                                        {clockedOut
+                                          ? <span className="font-mono font-bold text-rose-500">{fmtTime(r.clockOut)}</span>
+                                          : isActive
+                                          ? <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-500 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />Active</span>
+                                          : <span className="text-muted-foreground/40">—</span>}
+                                      </td>
+                                      <td className="py-2.5 px-3 text-center">
+                                        <span className={cn("font-mono font-semibold text-[11px]", isActive ? "text-emerald-500" : "text-foreground")}>{dur}</span>
+                                      </td>
+                                      <td className="py-2.5 px-3 text-right font-mono font-bold text-foreground">{fmtHrs(r.regularHours ?? 0)}</td>
+                                      <td className="py-2.5 px-3 text-right font-mono font-semibold text-amber-500">{r.overtimeHours ? `+${fmtHrs(r.overtimeHours)}` : "—"}</td>
+                                      <td className="py-2.5 px-3 text-right">
+                                        <span className={cn(
+                                          "inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full border whitespace-nowrap",
+                                          r.status === "Present"
+                                            ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20"
+                                            : "bg-amber-500/10 text-amber-600 border-amber-500/20"
+                                        )}>
+                                          <i className={cn("text-[9px]", r.status === "Present" ? "fa-solid fa-circle-check" : "fa-solid fa-circle-exclamation")} />
+                                          {r.status ?? "Present"}
+                                        </span>
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                          {/* Pagination */}
+                          {filteredRecs.length > ROWS_PER && (
+                            <div className="flex items-center justify-between pt-2 text-xs text-muted-foreground">
+                              <span>Showing <strong className="text-foreground">{Math.min((summaryPage-1)*ROWS_PER+1, filteredRecs.length)}</strong>–<strong className="text-foreground">{Math.min(summaryPage*ROWS_PER, filteredRecs.length)}</strong> of <strong className="text-foreground">{filteredRecs.length}</strong></span>
+                              <div className="flex items-center gap-1.5">
+                                <Button variant="outline" size="sm" disabled={summaryPage <= 1} onClick={() => setSummaryPage(p=>Math.max(p-1,1))} className="h-7 px-2 text-xs">Previous</Button>
+                                <span className="font-semibold text-foreground px-1">{summaryPage}/{totalRecPages}</span>
+                                <Button variant="outline" size="sm" disabled={summaryPage >= totalRecPages} onClick={() => setSummaryPage(p=>Math.min(p+1,totalRecPages))} className="h-7 px-2 text-xs">Next</Button>
+                              </div>
+                            </div>
+                          )}
+                        </>
+                      )}
+
+                      {/* ─── Per User Aggregate View ─── */}
+                      {summaryView === "users" && (
+                        <div className="overflow-x-auto rounded-xl border border-border">
+                          <table className="w-full text-left text-xs">
+                            <thead className="bg-muted/40 border-b border-border text-muted-foreground font-semibold text-[11px] uppercase">
+                              <tr>
+                                <th className="py-2.5 px-3">Employee</th>
+                                <th className="py-2.5 px-3">Department</th>
+                                <th className="py-2.5 px-3 text-center">Days Present</th>
+                                <th className="py-2.5 px-3 text-right">Total Regular</th>
+                                <th className="py-2.5 px-3 text-right">Total Overtime</th>
+                                <th className="py-2.5 px-3 whitespace-nowrap">Last Login</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-border/40">
+                              {summaryLoading ? (
+                                Array.from({length:4}).map((_,i) => (
+                                  <tr key={i} className="animate-pulse">
+                                    {Array.from({length:6}).map((_,j)=>(
+                                      <td key={j} className="py-3 px-3"><div className="h-3 bg-muted/60 rounded w-full" /></td>
+                                    ))}
+                                  </tr>
+                                ))
+                              ) : filteredUsers.length === 0 ? (
+                                <tr><td colSpan={6} className="py-8 text-center text-muted-foreground">
+                                  <i className="fa-solid fa-inbox text-2xl opacity-30 block mb-1" />No user data matches your filters.
+                                </td></tr>
+                              ) : filteredUsers.sort((a:any,b:any) => b.daysPresent-a.daysPresent).map((us: any) => {
+                                const roleColor = ROLE_COLORS[us.role] ?? ROLE_COLORS.Employee;
+                                return (
+                                  <tr key={us.userId} className="hover:bg-accent/20 transition-colors">
+                                    <td className="py-3 px-3">
+                                      <div className="flex items-center gap-2 min-w-[150px]">
+                                        <div className={cn("w-8 h-8 rounded-full font-bold flex items-center justify-center text-xs shrink-0 border", roleColor)}>
+                                          {us.name?.[0]?.toUpperCase() ?? "U"}
+                                        </div>
+                                        <div className="min-w-0">
+                                          <p className="font-semibold text-foreground truncate">{us.name}</p>
+                                          <div className="flex items-center gap-1.5 mt-0.5">
+                                            <span className={cn("text-[9px] px-1.5 py-0.5 rounded-full border font-semibold", roleColor)}>{us.role}</span>
+                                            <span className="text-[10px] text-muted-foreground font-mono truncate">{us.email}</span>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </td>
+                                    <td className="py-3 px-3">
+                                      <span className="text-[10px] px-1.5 py-0.5 rounded-md border border-border/50 bg-muted/40 text-muted-foreground font-semibold">{us.department}</span>
+                                    </td>
+                                    <td className="py-3 px-3 text-center">
+                                      <span className="inline-flex items-center gap-1 font-bold text-sm text-primary">
+                                        <i className="fa-solid fa-calendar-check text-[10px] text-primary/70" />{us.daysPresent}
+                                      </span>
+                                    </td>
+                                    <td className="py-3 px-3 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400">{fmtHrs(us.totalRegular)}</td>
+                                    <td className="py-3 px-3 text-right font-mono font-semibold text-amber-500">{us.totalOvertime > 0 ? `+${fmtHrs(us.totalOvertime)}` : "—"}</td>
+                                    <td className="py-3 px-3 whitespace-nowrap">
+                                      {us.lastLogin
+                                        ? <span className="font-mono text-[11px] text-foreground">{new Date(us.lastLogin).toLocaleDateString(undefined,{month:'short',day:'numeric'})} <span className="text-muted-foreground">{fmtTime(us.lastLogin)}</span></span>
+                                        : <span className="text-muted-foreground/40">—</span>}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
+              </CardContent>
+            </Card>
+          )}
 
           {/* Organization Team Shift Roster & Employee Shift Attendance Board (Admin/OPS only) */}
           {(isAdmin || isOPS) && <TeamShiftOverviewCard />}

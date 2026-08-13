@@ -113,6 +113,126 @@ export function TeamShiftOverviewCard() {
   const [now, setNow] = useState(new Date());
   const [clocking, setClocking] = useState(false);
 
+  // Member detail drawer
+  const [selectedMember, setSelectedMember] = useState<any | null>(null);
+  const [memberHistory, setMemberHistory] = useState<any[]>([]);
+  const [memberHistoryLoading, setMemberHistoryLoading] = useState(false);
+  const [memberTasks, setMemberTasks] = useState<any[]>([]);
+  const [memberTasksLoading, setMemberTasksLoading] = useState(false);
+
+  const fetchMemberHistory = async (userId: string) => {
+    setMemberHistoryLoading(true);
+    try {
+      const today = new Date().toISOString().split("T")[0];
+      const res = await fetch(`/api/attendance/summary?userId=${userId}&from=${today}&to=${today}&limit=5`);
+      if (res.ok) {
+        const data = await res.json();
+        setMemberHistory(data.records || []);
+      }
+    } catch (err) {
+      console.error("Failed to fetch member history:", err);
+    } finally {
+      setMemberHistoryLoading(false);
+    }
+  };
+
+  const fetchMemberTasks = async (userId: string) => {
+    setMemberTasksLoading(true);
+    try {
+      const res = await fetch(`/api/tasks?assignee=${userId}`);
+      if (res.ok) {
+        const data = await res.json();
+        // Today's tasks: tasks that are incomplete OR due today
+        const todayStr = new Date().toDateString();
+        const filteredTasks = (data.tasks || []).filter((t: any) => {
+          const isDueToday = t.dueDate && new Date(t.dueDate).toDateString() === todayStr;
+          return t.status !== "Done" || isDueToday;
+        });
+        setMemberTasks(filteredTasks);
+      }
+    } catch (err) {
+      console.error("Failed to fetch member tasks:", err);
+    } finally {
+      setMemberTasksLoading(false);
+    }
+  };
+
+  const openMemberDetail = (m: any) => {
+    setSelectedMember(m);
+    setMemberHistory([]);
+    setMemberTasks([]);
+    if (m._id) {
+      fetchMemberHistory(m._id);
+      fetchMemberTasks(m._id);
+    }
+  };
+
+  const closeMemberDetail = () => {
+    setSelectedMember(null);
+    setMemberHistory([]);
+    setMemberTasks([]);
+  };
+
+  const exportMemberData = async (m: any) => {
+    try {
+      // Fetch last 30 days of data for this user
+      const to   = new Date().toISOString().split("T")[0];
+      const from = new Date(Date.now() - 30 * 86400000).toISOString().split("T")[0];
+      const res  = await fetch(`/api/attendance/summary?userId=${m._id}&from=${from}&to=${to}&limit=200`);
+      if (!res.ok) return;
+      const data = await res.json();
+      const recs: any[] = data.records || [];
+      if (recs.length === 0) return;
+
+      const fmtTime = (d: string | Date | null | undefined) =>
+        d ? new Date(d).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: true }) : "";
+      const fmtHrs2 = (h: number) => {
+        const hh = Math.floor(h); const mm = Math.round((h - hh) * 60);
+        return `${hh}h ${mm.toString().padStart(2, "0")}m`;
+      };
+
+      const headers = ["Date", "Day", "Clock In", "Clock Out", "Duration", "Regular Hrs", "Overtime Hrs", "Status"];
+      const rows = recs.map((r: any) => {
+        const dur = r.clockIn && r.clockOut
+          ? fmtHrs2((new Date(r.clockOut).getTime() - new Date(r.clockIn).getTime()) / 3600000)
+          : r.regularHours ? fmtHrs2(r.regularHours) : "Active";
+        return [
+          `"${new Date(r.date).toLocaleDateString()}"`,
+          `"${new Date(r.date).toLocaleDateString(undefined, { weekday: "long" })}"`,
+          `"${fmtTime(r.clockIn)}"`,
+          `"${r.clockOut ? fmtTime(r.clockOut) : (r.clockIn ? "Active" : "")}"`,
+          `"${dur}"`,
+          r.regularHours ?? 0,
+          r.overtimeHours ?? 0,
+          `"${r.status ?? "Present"}"`
+        ].join(",");
+      });
+
+      const csv = [
+        `"Employee","${m.name ?? ""}"`,
+        `"Email","${m.email ?? ""}"`,
+        `"Role","${m.role ?? ""}"`,
+        `"Department","${m.department ?? ""}"`,
+        `"Period","${from} to ${to}"`,
+        "",
+        headers.join(","),
+        ...rows
+      ].join("\n");
+
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const url  = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `Attendance_${(m.name ?? "user").replace(/\s+/g, "_")}_${from}_to_${to}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("Export failed:", err);
+    }
+  };
+
   const fetchTeamShifts = async () => {
     try {
       const res = await fetch("/api/team?all=true");
@@ -145,7 +265,17 @@ export function TeamShiftOverviewCard() {
       const shiftTiming = m.shiftTime || "09:00 AM - 05:00 PM";
       const shiftName   = m.shiftName  || "Standard Day Shift";
       const empType     = m.employmentType || "Permanent";
-      const computedStatus = m.isClockedIn ? "active" : m.attendanceStatus === "Shift Ended" ? "ended" : getShiftStatus(shiftTiming);
+      // "Active" status requires the user to have explicitly started their shift timer (clockIn set, no clockOut).
+      // Time-based window alone is NOT enough — if the shift window is "active" but the user hasn't clocked in,
+      // we show "upcoming" (they're in the window but haven't punched in yet).
+      const timeStatus = getShiftStatus(shiftTiming);
+      const computedStatus = m.isClockedIn
+        ? "active"
+        : m.attendanceStatus === "Shift Ended"
+          ? "ended"
+          : timeStatus === "active"
+            ? "upcoming"  // In shift window but timer not started → show as "Starting Soon"
+            : timeStatus;
       return {
         ...m,
         shiftTiming,
@@ -214,6 +344,7 @@ export function TeamShiftOverviewCard() {
   ];
 
   return (
+    <>
     <Card className="border border-border shadow-sm">
       <CardHeader className="pb-0">
         <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
@@ -429,8 +560,13 @@ export function TeamShiftOverviewCard() {
                     const rc = ROLE_COLORS[m.role] || ROLE_COLORS.Employee;
                     const dc = getDeptColor(m.department || "Management");
                     const sc = STATUS_CONFIG[m.status as keyof typeof STATUS_CONFIG];
+                    const isSelected = selectedMember?._id === m._id;
                     return (
-                      <tr key={m._id} className="hover:bg-accent/25 transition-colors">
+                      <tr
+                        key={m._id}
+                        onClick={() => openMemberDetail(m)}
+                        className={cn("cursor-pointer transition-colors", isSelected ? "bg-primary/10 border-l-2 border-l-primary" : "hover:bg-accent/25")}
+                      >
                         <td className="py-2.5 px-3">
                           <div className="flex items-center gap-2.5">
                             <div className={cn("w-8 h-8 rounded-full font-bold flex items-center justify-center text-xs shrink-0 border", rc.avatar)}>
@@ -536,12 +672,16 @@ export function TeamShiftOverviewCard() {
                 const rc = ROLE_COLORS[m.role] || ROLE_COLORS.Employee;
                 const dc = getDeptColor(m.department || "Management");
                 const sc = STATUS_CONFIG[m.status as keyof typeof STATUS_CONFIG];
+                const isSelected = selectedMember?._id === m._id;
                 return (
                   <div
                     key={m._id}
+                    onClick={() => openMemberDetail(m)}
                     className={cn(
-                      "p-4 rounded-xl border transition-all hover:shadow-sm hover:-translate-y-px space-y-3",
-                      m.status === "active"
+                      "p-4 rounded-xl border transition-all hover:shadow-sm hover:-translate-y-px space-y-3 cursor-pointer",
+                      isSelected
+                        ? "border-primary/40 bg-primary/[0.05] ring-1 ring-primary/20"
+                        : m.status === "active"
                         ? "border-emerald-500/25 bg-emerald-500/[0.03] hover:border-emerald-500/40"
                         : m.status === "upcoming"
                         ? "border-amber-500/25 bg-amber-500/[0.03] hover:border-amber-500/40"
@@ -592,5 +732,456 @@ export function TeamShiftOverviewCard() {
         )}
       </CardContent>
     </Card>
+
+    {/* ─── Member Detail Drawer ─── */}
+    {selectedMember && (() => {
+      const m = selectedMember;
+      const rc = ROLE_COLORS[m.role] || ROLE_COLORS.Employee;
+      const sc = STATUS_CONFIG[m.status as keyof typeof STATUS_CONFIG];
+
+      const fmtTime = (d: string | Date | null | undefined) =>
+        d ? new Date(d).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: true }) : "--:--";
+
+      const fmtHrs = (h: number) => {
+        const hh = Math.floor(h);
+        const mm = Math.round((h - hh) * 60);
+        return `${hh}h ${mm.toString().padStart(2, "0")}m`;
+      };
+
+      // Live elapsed since clock-in
+      const liveMs  = m.isClockedIn && m.clockInTime ? Date.now() - new Date(m.clockInTime).getTime() : 0;
+      const liveMins = Math.floor(liveMs / 60000);
+      const liveElapsed = liveMs > 0 ? `${Math.floor(liveMins / 60)}h ${(liveMins % 60).toString().padStart(2, "0")}m` : "";
+
+      // Today's attendance record (first in list)
+      const todayRec = memberHistory[0] ?? null;
+      const todayRegH  = todayRec?.regularHours ?? 0;
+      const todayOtH   = todayRec?.overtimeHours ?? 0;
+      const todayTotalH = todayRec
+        ? todayRec.clockIn && !todayRec.clockOut
+          ? Math.max(0, (Date.now() - new Date(todayRec.clockIn).getTime()) / 3600000)
+          : todayRegH
+        : 0;
+
+      // Shift total hours for target calc
+      const [sStart, sEnd] = (m.shiftTiming || "09:00 AM - 05:00 PM").split("-").map((s: string) => s.trim());
+      const pStart = sStart ? parseTime(sStart) : null;
+      const pEnd   = sEnd   ? parseTime(sEnd)   : null;
+      const shiftTotalH = pStart && pEnd
+        ? (() => { let e = pEnd.h * 60 + pEnd.m, s = pStart.h * 60 + pStart.m; if (e < s) e += 1440; return (e - s) / 60; })()
+        : 8;
+
+      const statusIconConfig: Record<string, { icon: string; color: string; glow: string }> = {
+        active:   { icon: "fa-solid fa-circle-check",  color: "text-emerald-500", glow: "drop-shadow-[0_0_5px_rgba(16,185,129,0.9)]" },
+        upcoming: { icon: "fa-solid fa-clock",          color: "text-amber-400",   glow: "drop-shadow-[0_0_5px_rgba(251,191,36,0.8)]" },
+        ended:    { icon: "fa-solid fa-moon",           color: "text-slate-400",   glow: "" },
+        offshift: { icon: "fa-solid fa-circle-minus",  color: "text-muted-foreground", glow: "" },
+      };
+      const sic = statusIconConfig[m.status] ?? statusIconConfig.offshift;
+
+      const EMPLOYMENT_ICON: Record<string, string> = {
+        "Permanent":  "fa-solid fa-star",
+        "Freelancer": "fa-solid fa-laptop-code",
+        "Part-Time":  "fa-solid fa-clock",
+        "Contractor": "fa-solid fa-briefcase",
+        "Intern":     "fa-solid fa-user-graduate",
+      };
+
+      return (
+        <>
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 z-40 bg-black/40 backdrop-blur-[3px] animate-in fade-in"
+            onClick={closeMemberDetail}
+          />
+
+          {/* Slide-in panel — wider than before */}
+          <div className="fixed right-0 top-0 h-full z-50 w-full max-w-[380px] bg-card border-l border-border shadow-2xl flex flex-col animate-in slide-in-from-right duration-300">
+
+            {/* ── HERO HEADER ── */}
+            <div className={cn(
+              "relative shrink-0 px-5 pt-5 pb-4 border-b border-border/60 overflow-hidden",
+              "bg-gradient-to-br from-card via-card to-muted/40"
+            )}>
+              {/* Decorative blobs */}
+              <div className="absolute -top-8 -right-8 w-32 h-32 rounded-full bg-primary/8 blur-2xl pointer-events-none" />
+              <div className={cn("absolute -bottom-6 -left-6 w-24 h-24 rounded-full blur-2xl pointer-events-none",
+                m.status === "active" ? "bg-emerald-500/10" : m.status === "upcoming" ? "bg-amber-500/10" : "bg-muted/20"
+              )} />
+
+              {/* Close btn */}
+              <button
+                onClick={closeMemberDetail}
+                className="absolute top-4 right-4 w-7 h-7 rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-all cursor-pointer z-10"
+              >
+                <i className="fa-solid fa-xmark text-sm" />
+              </button>
+
+              {/* Avatar + name row */}
+              <div className="flex items-center gap-4">
+                {/* Avatar with status ring */}
+                <div className="relative shrink-0">
+                  <div className={cn(
+                    "w-16 h-16 rounded-2xl font-black flex items-center justify-center text-2xl border-2 select-none",
+                    rc.avatar
+                  )}>
+                    {m.name ? m.name.charAt(0).toUpperCase() : "U"}
+                  </div>
+                  {/* FA status icon badge */}
+                  <div className={cn(
+                    "absolute -bottom-1.5 -right-1.5 w-5 h-5 rounded-full bg-card border border-border/60 flex items-center justify-center",
+                  )}>
+                    <i className={cn("text-[11px]", sic.icon, sic.color, sic.glow,
+                      m.status === "active" ? "animate-pulse" : ""
+                    )} />
+                  </div>
+                </div>
+
+                <div className="min-w-0 flex-1">
+                  <h3 className="font-black text-base text-foreground truncate leading-tight">{m.name}</h3>
+                  <p className="text-[11px] text-muted-foreground font-mono mt-0.5 truncate">
+                    {m.username ? "@" + m.username : m.email}
+                  </p>
+                  <div className="flex items-center flex-wrap gap-1.5 mt-1.5">
+                    <span className={cn("text-[10px] px-2 py-0.5 rounded-full border font-bold", rc.badge)}>{m.role}</span>
+                    <span className={cn("inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border", sc.text, sc.bg, sc.border)}>
+                      <i className={cn("text-[9px]", sic.icon, sic.color, m.status === "active" ? "animate-pulse" : "")} />
+                      {sc.label}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Identity chips row */}
+              <div className="flex items-center flex-wrap gap-1.5 mt-3">
+                {[
+                  { icon: "fa-solid fa-building", label: m.department || "—" },
+                  { icon: EMPLOYMENT_ICON[m.empType] || "fa-solid fa-user", label: m.empType || "Permanent" },
+                  { icon: m.isNight ? "fa-solid fa-moon" : "fa-solid fa-sun", label: m.shiftName, color: m.isNight ? "text-indigo-400" : "text-amber-400" },
+                ].map((chip) => (
+                  <span key={chip.label} className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-md bg-muted/60 border border-border/50 text-muted-foreground font-semibold">
+                    <i className={cn("text-[9px]", chip.icon, chip.color)} />{chip.label}
+                  </span>
+                ))}
+                <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-md bg-muted/60 border border-border/50 text-muted-foreground font-mono font-semibold">
+                  <i className="fa-solid fa-clock text-[9px]" />{m.shiftTiming}
+                </span>
+              </div>
+            </div>
+
+            {/* ── SCROLLABLE BODY ── */}
+            <div className="flex-1 overflow-y-auto">
+
+              {/* ── 4-stat quick tiles ── */}
+              <div className="grid grid-cols-2 gap-2.5 p-4">
+                {[
+                  {
+                    icon: "fa-solid fa-fingerprint",
+                    label: "Clock In",
+                    value: m.clockInTime ? fmtTime(m.clockInTime) : "—",
+                    color: "text-emerald-600 dark:text-emerald-400",
+                    bg: "bg-emerald-500/8 border-emerald-500/20",
+                  },
+                  {
+                    icon: "fa-solid fa-stopwatch",
+                    label: "Clock Out",
+                    value: m.clockOutTime
+                      ? fmtTime(m.clockOutTime)
+                      : m.isClockedIn
+                      ? "Active"
+                      : "—",
+                    isActive: m.isClockedIn && !m.clockOutTime,
+                    color: m.isClockedIn && !m.clockOutTime ? "text-emerald-500" : "text-rose-500",
+                    bg: m.isClockedIn && !m.clockOutTime ? "bg-emerald-500/8 border-emerald-500/20" : "bg-rose-500/8 border-rose-500/20",
+                  },
+                  {
+                    icon: "fa-solid fa-hourglass-half",
+                    label: "Today Hours",
+                    value: todayTotalH > 0 ? fmtHrs(todayTotalH) : "—",
+                    color: "text-primary",
+                    bg: "bg-primary/8 border-primary/20",
+                  },
+                  {
+                    icon: "fa-solid fa-fire",
+                    label: "Overtime",
+                    value: todayOtH > 0 ? `+${fmtHrs(todayOtH)}` : "—",
+                    color: "text-amber-500",
+                    bg: "bg-amber-500/8 border-amber-500/20",
+                  },
+                ].map((tile) => (
+                  <div key={tile.label} className={cn("p-3 rounded-xl border space-y-1.5", tile.bg)}>
+                    <div className="flex items-center gap-1.5">
+                      <i className={cn("text-[11px]", tile.icon, tile.color)} />
+                      <span className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wide">{tile.label}</span>
+                      {tile.isActive && <span className="ml-auto w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />}
+                    </div>
+                    <p className={cn("text-lg font-extrabold font-mono leading-none", tile.color)}>{tile.value}</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* ── Shift Progress ── */}
+              {(m.status === "active" || m.status === "upcoming" || m.status === "ended") && (
+                <div className="mx-4 mb-4 p-3.5 rounded-xl border border-border/60 bg-muted/20 space-y-2.5">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-bold text-foreground flex items-center gap-1.5">
+                      <i className="fa-solid fa-gauge-high text-primary text-[11px]" /> Shift Progress
+                    </span>
+                    <div className="flex items-center gap-2">
+                      {liveElapsed && (
+                        <span className="font-mono text-[10px] text-muted-foreground">{liveElapsed} elapsed</span>
+                      )}
+                      <span className={cn(
+                        "font-mono font-black text-sm",
+                        m.progress >= 100 ? "text-emerald-500" : m.status === "active" ? "text-primary" : "text-muted-foreground"
+                      )}>{m.progress}%</span>
+                    </div>
+                  </div>
+
+                  {/* Segmented progress bar */}
+                  <div className="relative h-2.5 bg-muted/60 rounded-full overflow-hidden">
+                    <div
+                      className={cn(
+                        "h-full rounded-full transition-all duration-700",
+                        m.progress >= 100
+                          ? "bg-gradient-to-r from-emerald-500 to-teal-400"
+                          : m.status === "active"
+                          ? "bg-gradient-to-r from-primary via-primary to-emerald-400"
+                          : "bg-gradient-to-r from-amber-400 to-amber-500"
+                      )}
+                      style={{ width: Math.min(m.progress, 100) + "%" }}
+                    />
+                    {/* Glow tip */}
+                    {m.status === "active" && m.progress < 100 && (
+                      <div
+                        className="absolute top-0 bottom-0 w-3 bg-white/30 blur-[2px] rounded-full transition-all duration-700"
+                        style={{ left: Math.min(m.progress, 98) + "%" }}
+                      />
+                    )}
+                  </div>
+
+                  <div className="flex justify-between text-[10px] text-muted-foreground">
+                    <span className="font-mono">{sStart}</span>
+                    <span className="text-muted-foreground/60">Target: <strong className="text-foreground">{fmtHrs(shiftTotalH)}</strong></span>
+                    <span className="font-mono">{sEnd}</span>
+                  </div>
+                </div>
+              )}
+
+              {/* ── Today's Attendance Log ── */}
+              <div className="mx-4 mb-4 space-y-2">
+                <h4 className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <i className="fa-solid fa-calendar-day text-indigo-500" /> Today's Attendance Log
+                  </span>
+                  <span className="text-[10px] font-semibold text-muted-foreground/60 normal-case">
+                    {new Date().toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })}
+                  </span>
+                </h4>
+
+                {memberHistoryLoading ? (
+                  <div className="space-y-2">
+                    {[0, 1].map((i) => (
+                      <div key={i} className="h-16 rounded-xl bg-muted/50 animate-pulse" />
+                    ))}
+                  </div>
+                ) : memberHistory.length === 0 ? (
+                  <div className="py-7 text-center rounded-xl border border-dashed border-border/60 bg-muted/10 space-y-2">
+                    <i className="fa-solid fa-calendar-xmark text-2xl text-muted-foreground/25" />
+                    <p className="text-xs text-muted-foreground">No clock-in recorded yet today.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {memberHistory.map((h: any) => {
+                      const regH  = h.regularHours ?? 0;
+                      const otH   = h.overtimeHours ?? 0;
+                      const isActiveSession = h.clockIn && !h.clockOut;
+                      const sessionMs = isActiveSession
+                        ? Date.now() - new Date(h.clockIn).getTime()
+                        : h.clockOut
+                        ? new Date(h.clockOut).getTime() - new Date(h.clockIn).getTime()
+                        : 0;
+                      const sessionH = sessionMs / 3600000;
+
+                      return (
+                        <div key={h._id} className={cn(
+                          "p-3.5 rounded-xl border space-y-3 transition-all",
+                          isActiveSession
+                            ? "border-emerald-500/25 bg-emerald-500/[0.04]"
+                            : "border-border/60 bg-muted/10"
+                        )}>
+                          {/* Clock-in → Clock-out timeline */}
+                          <div className="flex items-center gap-2">
+                            {/* Clock In */}
+                            <div className="text-center shrink-0">
+                              <p className="text-[9px] text-muted-foreground uppercase font-semibold">In</p>
+                              <p className="font-mono font-black text-emerald-500 text-sm leading-none">{fmtTime(h.clockIn)}</p>
+                            </div>
+
+                            {/* Timeline bar */}
+                            <div className="flex-1 relative flex items-center">
+                              <div className="w-2 h-2 rounded-full bg-emerald-500 shrink-0 z-10" />
+                              <div className="flex-1 h-0.5 bg-gradient-to-r from-emerald-500 to-rose-400 relative">
+                                {isActiveSession && (
+                                  <span className="absolute right-0 -top-1 w-2.5 h-2.5 rounded-full bg-emerald-500 border border-card animate-ping" />
+                                )}
+                              </div>
+                              <div className={cn("w-2 h-2 rounded-full shrink-0 z-10", isActiveSession ? "bg-emerald-500 animate-pulse" : "bg-rose-400")} />
+                            </div>
+
+                            {/* Clock Out */}
+                            <div className="text-center shrink-0">
+                              <p className="text-[9px] text-muted-foreground uppercase font-semibold">Out</p>
+                              {h.clockOut
+                                ? <p className="font-mono font-black text-rose-400 text-sm leading-none">{fmtTime(h.clockOut)}</p>
+                                : <p className="text-[10px] font-bold text-emerald-500 leading-none flex items-center gap-1">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />Active
+                                  </p>}
+                            </div>
+                          </div>
+
+                          {/* Session stats pills */}
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-primary/8 border border-primary/15 text-[11px]">
+                              <i className="fa-solid fa-clock text-primary text-[9px]" />
+                              <span className="text-muted-foreground">Duration:</span>
+                              <span className="font-mono font-bold text-primary">{fmtHrs(sessionH)}</span>
+                            </div>
+                            {regH > 0 && (
+                              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/8 border border-emerald-500/15 text-[11px]">
+                                <i className="fa-solid fa-check text-emerald-500 text-[9px]" />
+                                <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">{fmtHrs(regH)} reg</span>
+                              </div>
+                            )}
+                            {otH > 0 && (
+                              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/8 border border-amber-500/15 text-[11px]">
+                                <i className="fa-solid fa-fire text-amber-500 text-[9px]" />
+                                <span className="font-mono font-bold text-amber-500">+{fmtHrs(otH)} OT</span>
+                              </div>
+                            )}
+                            <span className={cn(
+                              "ml-auto inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border",
+                              h.status === "Present"
+                                ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20"
+                                : "bg-amber-500/10 text-amber-600 border-amber-500/20"
+                            )}>
+                              <i className={cn("text-[8px]", h.status === "Present" ? "fa-solid fa-circle-check" : "fa-solid fa-circle-half-stroke")} />
+                              {h.status ?? "Present"}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* ── Today's Tasks Log ── */}
+              <div className="mx-4 mb-4 space-y-2">
+                <h4 className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <i className="fa-solid fa-list-check text-indigo-500" /> Today's Task List
+                  </span>
+                  <span className="text-[10px] font-semibold text-muted-foreground/60">
+                    {memberTasks.length} active
+                  </span>
+                </h4>
+
+                {memberTasksLoading ? (
+                  <div className="space-y-2">
+                    {[0, 1].map((i) => (
+                      <div key={i} className="h-14 rounded-xl bg-muted/50 animate-pulse" />
+                    ))}
+                  </div>
+                ) : memberTasks.length === 0 ? (
+                  <div className="py-7 text-center rounded-xl border border-dashed border-border/60 bg-muted/10 space-y-2">
+                    <i className="fa-solid fa-clipboard-check text-2xl text-muted-foreground/25" />
+                    <p className="text-xs text-muted-foreground">No tasks assigned for today.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2 max-h-56 overflow-y-auto pr-0.5">
+                    {memberTasks.map((t: any) => {
+                      const priorityColor =
+                        t.priority === "High"
+                          ? "bg-rose-500/10 text-rose-600 border-rose-500/20"
+                          : t.priority === "Medium"
+                          ? "bg-blue-500/10 text-blue-600 border-blue-500/20"
+                          : "bg-slate-500/10 text-slate-600 border-slate-500/20";
+
+                      const statusColor =
+                        t.status === "Done"
+                          ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20"
+                          : t.status === "Review"
+                          ? "bg-amber-500/10 text-amber-600 border-amber-500/20"
+                          : t.status === "In Progress"
+                          ? "bg-indigo-500/10 text-indigo-600 border-indigo-500/20"
+                          : "bg-slate-500/10 text-slate-600 border-slate-500/20";
+
+                      return (
+                        <div
+                          key={t._id}
+                          className="p-3 rounded-xl border border-border/60 bg-muted/10 hover:bg-accent/20 transition-all space-y-2"
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <span className="font-semibold text-foreground text-xs leading-snug line-clamp-2">
+                              {t.title}
+                            </span>
+                            <span className={cn("text-[9px] font-bold px-1.5 py-0.5 rounded border uppercase shrink-0", priorityColor)}>
+                              {t.priority}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center justify-between text-[10px] text-muted-foreground pt-0.5">
+                            <span className={cn("font-bold px-2 py-0.5 rounded-full border text-[9px]", statusColor)}>
+                              {t.status}
+                            </span>
+                            {t.dueDate && (
+                              <span className="flex items-center gap-1">
+                                <i className="fa-solid fa-calendar-minus text-[9px]" />
+                                {new Date(t.dueDate).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* ── Admin/OPS Export Action Bar ── */}
+              {(isAdmin || isOPS) && (
+                <div className="mx-4 mb-3">
+                  <button
+                    onClick={() => exportMemberData(m)}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-emerald-500/30 bg-emerald-500/8 hover:bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 text-xs font-bold transition-all cursor-pointer group"
+                  >
+                    <i className="fa-solid fa-file-arrow-down text-sm group-hover:scale-110 transition-transform" />
+                    Export 30-Day Attendance Report
+                    <span className="ml-auto text-[10px] font-normal opacity-60">CSV</span>
+                  </button>
+                </div>
+              )}
+
+              {/* ── Footer strip ── */}
+              <div className="mx-4 mb-4 flex items-center justify-between text-[10px] text-muted-foreground py-2.5 px-3 rounded-lg bg-muted/20 border border-border/40">
+                <span className="flex items-center gap-1.5">
+                  <i className="fa-solid fa-envelope text-[9px]" />
+                  {m.email ?? "—"}
+                </span>
+                {m.lastActiveAt && (
+                  <span className="flex items-center gap-1">
+                    <i className="fa-solid fa-signal text-[9px] text-emerald-500" />
+                    {new Date(m.lastActiveAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: true })}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        </>
+      );
+    })()}
+  </>
   );
 }
+
