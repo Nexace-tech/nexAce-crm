@@ -34,32 +34,79 @@ interface OrgChartNodeProps {
 
 export function OrgChartNode({ node, onReassign, isAdmin, onSelectMember }: OrgChartNodeProps) {
   const [isDragOver, setIsDragOver] = useState(false);
+  const dragCounter = React.useRef(0);
 
   // Drag start handler: records the employee ID being dragged
   const handleDragStart = (e: React.DragEvent) => {
-    e.dataTransfer.setData("application/nexace-employee-id", node._id);
+    try {
+      e.dataTransfer.setData("text/plain", node._id);
+      e.dataTransfer.setData("application/x-nexace-employee-id", node._id);
+    } catch {
+      // Fallback
+    }
+    // Set global fallback for guaranteed retrieval across frames & browsers
+    if (typeof window !== "undefined") {
+      (window as any).__NEXACE_DRAGGED_ID__ = node._id;
+    }
     e.dataTransfer.effectAllowed = "move";
+  };
+
+  const handleDragEnd = () => {
+    if (typeof window !== "undefined") {
+      (window as any).__NEXACE_DRAGGED_ID__ = null;
+    }
+  };
+
+  const handleDragEnter = (e: React.DragEvent) => {
+    if (!isAdmin) return;
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter.current += 1;
+    setIsDragOver(true);
   };
 
   // Drag over handler: allow drop and show highlight
   const handleDragOver = (e: React.DragEvent) => {
     if (!isAdmin) return;
     e.preventDefault();
+    e.stopPropagation();
     e.dataTransfer.dropEffect = "move";
-    setIsDragOver(true);
+    if (!isDragOver) setIsDragOver(true);
   };
 
-  const handleDragLeave = () => {
-    setIsDragOver(false);
+  const handleDragLeave = (e: React.DragEvent) => {
+    if (!isAdmin) return;
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter.current -= 1;
+    if (dragCounter.current <= 0) {
+      dragCounter.current = 0;
+      setIsDragOver(false);
+    }
   };
 
   // Drop handler: reassign the dragged employee to report to this node
   const handleDrop = async (e: React.DragEvent) => {
     if (!isAdmin) return;
     e.preventDefault();
+    e.stopPropagation();
+    dragCounter.current = 0;
     setIsDragOver(false);
     
-    const draggedId = e.dataTransfer.getData("application/nexace-employee-id");
+    let draggedId = "";
+    try {
+      draggedId =
+        e.dataTransfer.getData("application/x-nexace-employee-id") ||
+        e.dataTransfer.getData("text/plain") ||
+        e.dataTransfer.getData("text");
+    } catch {
+      // fallback
+    }
+
+    if (!draggedId && typeof window !== "undefined") {
+      draggedId = (window as any).__NEXACE_DRAGGED_ID__ || "";
+    }
+
     if (draggedId && draggedId !== node._id) {
       await onReassign(draggedId, node._id);
     }
@@ -75,6 +122,8 @@ export function OrgChartNode({ node, onReassign, isAdmin, onSelectMember }: OrgC
 
   const roleAccent = node.role === "Admin"
     ? "border-t-rose-500/60"
+    : (node.role === "OPS" || node.role?.toLowerCase().includes("sub"))
+    ? "border-t-violet-500/60"
     : node.role === "Manager"
     ? "border-t-amber-500/60"
     : node.role === "HR"
@@ -83,6 +132,8 @@ export function OrgChartNode({ node, onReassign, isAdmin, onSelectMember }: OrgC
 
   const roleBadgeClass = node.role === "Admin"
     ? "text-rose-500"
+    : (node.role === "OPS" || node.role?.toLowerCase().includes("sub"))
+    ? "text-violet-500"
     : node.role === "Manager"
     ? "text-amber-500"
     : node.role === "HR"
@@ -95,6 +146,8 @@ export function OrgChartNode({ node, onReassign, isAdmin, onSelectMember }: OrgC
       <div
         draggable={isAdmin && node.role !== "Admin"}
         onDragStart={handleDragStart}
+        onDragEnd={handleDragEnd}
+        onDragEnter={handleDragEnter}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
@@ -102,9 +155,9 @@ export function OrgChartNode({ node, onReassign, isAdmin, onSelectMember }: OrgC
         className="group relative p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/90 shadow-xs hover:shadow-md hover:border-primary/40 dark:hover:border-primary/60 transition-all duration-200 cursor-pointer w-[240px] flex flex-col gap-3"
         style={{
           borderColor: isDragOver ? "var(--color-primary)" : undefined,
-          boxShadow: isDragOver ? "0 0 20px rgba(99, 102, 241, 0.4)" : undefined,
-          transform: isDragOver ? "scale(1.04)" : undefined,
-          zIndex: 2,
+          boxShadow: isDragOver ? "0 0 24px rgba(99, 102, 241, 0.55), inset 0 0 0 2px var(--color-primary)" : undefined,
+          transform: isDragOver ? "scale(1.05)" : undefined,
+          zIndex: 10,
         }}
       >
         {/* Subtle role-coloured accent border on top */}

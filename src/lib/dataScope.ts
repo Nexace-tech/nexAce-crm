@@ -35,9 +35,12 @@ export async function getUserDataScope(session: { userId: string; role: string; 
   const roleKey = normalizeRoleKey(role);
 
   // Find RolePermission for exact role name or canonical key
+  const roleOrClauses = isSubAdminRole(role)
+    ? [{ role }, { role: roleKey }, { role: "OPS" }, { role: "Sub Admin" }]
+    : [{ role }, { role: roleKey }];
   const permDoc = await RolePermission.findOne({
     tenantId: new mongoose.Types.ObjectId(tenantId),
-    $or: [{ role }, { role: roleKey }, { role: "OPS" }, { role: "Sub Admin" }],
+    $or: roleOrClauses,
   }).lean();
 
   const modulePerms = {

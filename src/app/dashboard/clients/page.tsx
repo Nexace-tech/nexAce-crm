@@ -82,7 +82,7 @@ interface ExternalMember {
 
 export default function OperationsPage() {
   const searchParams = useSearchParams();
-  const { isAdmin } = usePermissions();
+  const { can, isAdmin, isOPS } = usePermissions();
   const tabParam = searchParams?.get("tab");
   const initialTab: "operations" | "sales" | "hr" | "external" =
     tabParam === "external" || tabParam === "external-teams"
@@ -895,13 +895,15 @@ export default function OperationsPage() {
                 <i className="fa-solid fa-chart-pie text-xs text-primary" /> {showAnalytics ? "Hide Analytics" : "Show Analytics"}
               </Button>
 
-              <Button color="primary" size="sm" onClick={() => handleOpenModal()} className="gap-2 font-semibold h-8 cursor-pointer">
-                <i className="fa-solid fa-plus text-xs" /> Add Project / Retainer
-              </Button>
+              {(isAdmin || isOPS || can("createClients")) && (
+                <Button color="primary" size="sm" onClick={() => handleOpenModal()} className="gap-2 font-semibold h-8 cursor-pointer">
+                  <i className="fa-solid fa-plus text-xs" /> Add Project / Retainer
+                </Button>
+              )}
             </>
           )}
 
-          {activeTab === "sales" && (
+          {activeTab === "sales" && (isAdmin || isOPS || can("manageDeals")) && (
             <Button color="primary" size="sm" onClick={() => setShowSalesModal(true)} className="gap-2 font-semibold h-8 cursor-pointer">
               <i className="fa-solid fa-plus text-xs" /> New Sales Deal
             </Button>

@@ -82,7 +82,7 @@ export async function POST(req: NextRequest) {
     await EmailVerification.findOneAndUpdate(
       { email: cleanEmail },
       { code, createdAt: new Date() },
-      { upsert: true, new: true }
+      { upsert: true, returnDocument: 'after' }
     );
 
     // Retrieve SMTP configs

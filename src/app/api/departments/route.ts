@@ -25,7 +25,9 @@ export async function GET() {
     await connectToDatabase();
 
     const tenantObjectId = new mongoose.Types.ObjectId(session.tenantId);
-    let departments = await Department.find({ tenantId: tenantObjectId }).sort({ name: 1 });
+    let departments = await Department.find({ tenantId: tenantObjectId })
+      .populate("managerId", "name email role photoUrl")
+      .sort({ name: 1 });
 
     if (departments.length === 0) {
       // Auto-seed default departments for tenant
@@ -34,6 +36,9 @@ export async function GET() {
         tenantId: tenantObjectId,
       }));
       departments = await Department.insertMany(defaultDocs);
+      departments = await Department.find({ tenantId: tenantObjectId })
+        .populate("managerId", "name email role photoUrl")
+        .sort({ name: 1 });
     }
 
     return NextResponse.json({ departments });
@@ -54,12 +59,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    if (session.role !== "Admin" && session.role !== "Manager") {
+    const { isSubAdminRole } = await import("@/lib/roles");
+    if (session.role !== "Admin" && session.role !== "Manager" && !isSubAdminRole(session.role)) {
       return NextResponse.json({ error: "Forbidden: Admins or Managers only" }, { status: 403 });
     }
 
     const body = await request.json();
-    const { name, description, code } = body;
+    const { name, description, code, managerId } = body;
 
     if (!name || !name.trim()) {
       return NextResponse.json({ error: "Department name is required" }, { status: 400 });
@@ -82,10 +88,13 @@ export async function POST(request: Request) {
       name: name.trim(),
       description: description ? description.trim() : "",
       code: code ? code.trim().toUpperCase() : "",
+      managerId: managerId ? new mongoose.Types.ObjectId(managerId) : undefined,
       tenantId: tenantObjectId,
     });
 
-    return NextResponse.json({ success: true, department: newDepartment }, { status: 201 });
+    const populated = await Department.findById(newDepartment._id).populate("managerId", "name email role photoUrl");
+
+    return NextResponse.json({ success: true, department: populated || newDepartment }, { status: 201 });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Internal Server Error";
     console.error("API POST Department error:", error);

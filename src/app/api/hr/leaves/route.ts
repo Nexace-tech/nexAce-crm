@@ -97,7 +97,7 @@ export async function PUT(request: Request) {
     const leave = await LeaveRequest.findOneAndUpdate(
       { _id: leaveId, tenantId: tenantObjectId },
       { status, approvedBy: userObjectId, approverName: session.userName },
-      { new: true }
+      { returnDocument: 'after' }
     );
 
     if (!leave) return NextResponse.json({ error: "Leave request not found" }, { status: 404 });

@@ -66,7 +66,7 @@ export async function PUT(request: Request) {
     const tenant = await Tenant.findByIdAndUpdate(
       session.tenantId,
       { allowedExtensions: cleanedExtensions },
-      { new: true }
+      { returnDocument: 'after' }
     );
 
     return NextResponse.json({

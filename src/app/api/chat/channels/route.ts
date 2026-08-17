@@ -119,7 +119,7 @@ export async function PUT(request: Request) {
     const channel = await Channel.findOneAndUpdate(
       { _id: channelId, tenantId: tenantObjectId },
       { $set: updateFields },
-      { new: true }
+      { returnDocument: 'after' }
     );
 
     if (!channel) {

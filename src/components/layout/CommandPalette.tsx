@@ -14,6 +14,7 @@ interface CommandItem {
   moduleKey?: string;
   featureKey?: string;
   adminOnly?: boolean;
+  keywords?: string[];
   action?: () => void;
 }
 
@@ -30,32 +31,43 @@ export function CommandPalette({
   const [selectedIndex, setSelectedIndex] = useState(0);
 
   const commandItems: CommandItem[] = [
-    // Navigation
-    { id: "nav-overview", title: "Overview Dashboard", category: "Navigation", icon: "fa-solid fa-chart-simple", href: "/dashboard", moduleKey: "overview" },
-    { id: "nav-users", title: "User Management (Admin)", category: "Navigation", icon: "fa-solid fa-users-gear", href: "/dashboard/settings?tab=users", featureKey: "manageUsers" },
-    { id: "nav-team", title: "My Team Directory", category: "Navigation", icon: "fa-solid fa-users", href: "/dashboard/team", moduleKey: "team" },
-    { id: "nav-calendar", title: "Calendar & Timesheets", category: "Navigation", icon: "fa-solid fa-calendar-days", href: "/dashboard/calendar", moduleKey: "calendar" },
-    { id: "nav-projects", title: "Projects, Sprints & Drive", category: "Navigation", icon: "fa-solid fa-folder-tree", href: "/dashboard/projects", moduleKey: "projects" },
-    { id: "nav-tasks", title: "HR Tasks & Workflows", category: "Navigation", icon: "fa-solid fa-list-check", href: "/dashboard/hr?tab=tasks", moduleKey: "hr" },
-    { id: "nav-chat", title: "Chat & Direct Messages", category: "Navigation", icon: "fa-solid fa-comments", href: "/dashboard/chat", moduleKey: "chat" },
-    { id: "nav-hr", title: "HR Portal & Appraisals", category: "Navigation", icon: "fa-solid fa-briefcase", href: "/dashboard/hr", moduleKey: "hr" },
-    { id: "nav-goals", title: "Goals, OKRs & Surveys", category: "Navigation", icon: "fa-solid fa-bullseye", href: "/dashboard/goals", moduleKey: "goals" },
-    { id: "nav-analytics", title: "Analytics & Audit Logs", category: "Navigation", icon: "fa-solid fa-chart-line", href: "/dashboard/analytics", moduleKey: "analytics" },
-    { id: "nav-crm", title: "Operations Projects", category: "Navigation", icon: "fa-solid fa-list-check", href: "/dashboard/clients", moduleKey: "clients" },
-    { id: "nav-referrals", title: "Referral Pipeline", category: "Navigation", icon: "fa-solid fa-link", href: "/dashboard/referrals", moduleKey: "referrals" },
-    { id: "nav-notifs", title: "Notification Center", category: "Navigation", icon: "fa-solid fa-bell", href: "/dashboard/notifications" },
-    { id: "nav-settings", title: "Settings & Administration", category: "Navigation", icon: "fa-solid fa-gear", href: "/dashboard/settings", moduleKey: "settings" },
+    // Navigation Modules
+    { id: "nav-overview", title: "Overview Dashboard", category: "Navigation", icon: "fa-solid fa-chart-simple", href: "/dashboard", moduleKey: "overview", keywords: ["kpi", "home", "stats", "attendance"] },
+    { id: "nav-users", title: "User Management (Admin)", category: "Navigation", icon: "fa-solid fa-users-gear", href: "/dashboard/settings?tab=users", featureKey: "manageUsers", keywords: ["staff", "accounts", "rbac", "passwords"] },
+    { id: "nav-team", title: "My Team Directory", category: "Navigation", icon: "fa-solid fa-users", href: "/dashboard/team", moduleKey: "team", keywords: ["employees", "org chart", "roster", "directory"] },
+    { id: "nav-calendar", title: "Calendar & Timesheets", category: "Navigation", icon: "fa-solid fa-calendar-days", href: "/dashboard/calendar", moduleKey: "calendar", keywords: ["shifts", "work logs", "clock in", "punch"] },
+    { id: "nav-sprints", title: "Sprints & Agile Planning", category: "Navigation", icon: "fa-solid fa-person-running", href: "/dashboard/calendar?tab=sprints", moduleKey: "projects", keywords: ["scrum", "sprints", "backlog", "cycle"] },
+    { id: "nav-projects", title: "Projects, Kanban & Tasks", category: "Navigation", icon: "fa-solid fa-folder-tree", href: "/dashboard/projects", moduleKey: "projects", keywords: ["tasks", "kanban", "wiki", "gantt", "drive"] },
+    { id: "nav-tasks", title: "HR Tasks & Workflows", category: "Navigation", icon: "fa-solid fa-list-check", href: "/dashboard/hr?tab=tasks", moduleKey: "hr", keywords: ["todos", "checklists", "workflow"] },
+    { id: "nav-chat", title: "Chat & Direct Messages", category: "Navigation", icon: "fa-solid fa-comments", href: "/dashboard/chat", moduleKey: "chat", keywords: ["messages", "channels", "inbox", "mail center", "whatsapp"] },
+    { id: "nav-huddles", title: "Virtual Video Huddles", category: "Navigation", icon: "fa-solid fa-video", href: "/dashboard/chat", featureKey: "joinVirtualHuddles", keywords: ["meeting", "call", "audio", "video"] },
+    { id: "nav-hr", title: "HR Portal & Appraisals", category: "Navigation", icon: "fa-solid fa-briefcase", href: "/dashboard/hr", moduleKey: "hr", keywords: ["leave", "onboarding", "cases", "performance", "appraisals"] },
+    { id: "nav-goals", title: "Goals & Strategic OKRs", category: "Navigation", icon: "fa-solid fa-bullseye", href: "/dashboard/goals", moduleKey: "goals", keywords: ["okrs", "targets", "kpis", "metrics"] },
+    { id: "nav-surveys", title: "Pulse Surveys & Team Feedback", category: "Navigation", icon: "fa-solid fa-clipboard-question", href: "/dashboard/goals", featureKey: "viewGoals", keywords: ["polls", "sentiment", "feedback", "surveys"] },
+    { id: "nav-analytics", title: "Analytics & Audit Logs", category: "Navigation", icon: "fa-solid fa-chart-line", href: "/dashboard/analytics", moduleKey: "analytics", keywords: ["reports", "security", "activity", "audit"] },
+    { id: "nav-crm", title: "Operations & Retainers Portal", category: "Navigation", icon: "fa-solid fa-list-check", href: "/dashboard/clients", moduleKey: "clients", keywords: ["clients", "operations", "projects", "contracts"] },
+    { id: "nav-sales", title: "Sales Deals & Pipeline", category: "Navigation", icon: "fa-solid fa-handshake", href: "/dashboard/clients?tab=sales", featureKey: "viewDeals", keywords: ["deals", "sales", "crm", "pipeline", "revenue"] },
+    { id: "nav-it", title: "IT & Infrastructure Portal", category: "Navigation", icon: "fa-solid fa-terminal", href: "/dashboard/it", moduleKey: "it", keywords: ["access keys", "hardware", "devices", "subscriptions", "it portal", "invoices"] },
+    { id: "nav-referrals", title: "Candidate Referral Pipeline", category: "Navigation", icon: "fa-solid fa-link", href: "/dashboard/referrals", moduleKey: "referrals", keywords: ["bonus", "hiring", "candidates", "referrals"] },
+    { id: "nav-notifs", title: "Notification Center", category: "Navigation", icon: "fa-solid fa-bell", href: "/dashboard/notifications", keywords: ["alerts", "broadcasts", "notifications"] },
+    { id: "nav-settings", title: "Settings & Administration", category: "Navigation", icon: "fa-solid fa-gear", href: "/dashboard/settings", moduleKey: "settings", keywords: ["rbac", "permissions", "branding", "shifts", "subscription"] },
 
     // Quick Actions
-    { id: "act-okr", title: "Create Strategic OKR", category: "Quick Actions", icon: "fa-solid fa-bullseye", href: "/dashboard/goals", featureKey: "createGoals" },
-    { id: "act-kudos", title: "Give Kudos to Colleague", category: "Quick Actions", icon: "fa-solid fa-wand-magic-sparkles", href: "/dashboard/goals", featureKey: "sendKudos" },
-    { id: "act-referral", title: "Submit Candidate Referral", category: "Quick Actions", icon: "fa-solid fa-user-plus", href: "/dashboard/referrals", featureKey: "submitReferral" },
-    { id: "act-timesheet", title: "Log Timesheet Hours", category: "Quick Actions", icon: "fa-solid fa-clock", href: "/dashboard/calendar", featureKey: "logOwnTimesheet" },
-    { id: "act-client", title: "Add Operations Project", category: "Quick Actions", icon: "fa-solid fa-list-check", href: "/dashboard/clients", featureKey: "createClients" },
-    { id: "act-drive", title: "Upload Drive Document", category: "Quick Actions", icon: "fa-solid fa-cloud-arrow-up", href: "/dashboard/projects", featureKey: "uploadDriveFiles" },
+    { id: "act-okr", title: "Create Strategic OKR", category: "Quick Actions", icon: "fa-solid fa-bullseye", href: "/dashboard/goals", featureKey: "createGoals", keywords: ["add okr", "new goal", "target"] },
+    { id: "act-kudos", title: "Give Kudos to Colleague", category: "Quick Actions", icon: "fa-solid fa-wand-magic-sparkles", href: "/dashboard/goals", featureKey: "sendKudos", keywords: ["recognition", "appreciation", "thanks"] },
+    { id: "act-survey", title: "Launch Team Pulse Survey", category: "Quick Actions", icon: "fa-solid fa-plus", href: "/dashboard/goals", featureKey: "manageSurveys", keywords: ["new survey", "poll"] },
+    { id: "act-referral", title: "Submit Candidate Referral", category: "Quick Actions", icon: "fa-solid fa-user-plus", href: "/dashboard/referrals", featureKey: "submitReferral", keywords: ["nominate", "refer candidate"] },
+    { id: "act-timesheet", title: "Log Timesheet Hours", category: "Quick Actions", icon: "fa-solid fa-clock", href: "/dashboard/calendar", featureKey: "logOwnTimesheet", keywords: ["punch", "work log", "hours"] },
+    { id: "act-client", title: "Add Operations Project", category: "Quick Actions", icon: "fa-solid fa-list-check", href: "/dashboard/clients", featureKey: "createClients", keywords: ["new client", "new retainer", "project"] },
+    { id: "act-deal", title: "Create New Sales Deal", category: "Quick Actions", icon: "fa-solid fa-handshake", href: "/dashboard/clients?tab=sales", featureKey: "manageDeals", keywords: ["new deal", "pipeline", "lead"] },
+    { id: "act-drive", title: "Upload Drive Document", category: "Quick Actions", icon: "fa-solid fa-cloud-arrow-up", href: "/dashboard/projects", featureKey: "uploadDriveFiles", keywords: ["upload file", "drive", "documents"] },
+    { id: "act-it-access", title: "Grant Tool Access / Key", category: "Quick Actions", icon: "fa-solid fa-key", href: "/dashboard/it", featureKey: "manageITAccess", keywords: ["grant access", "credential", "it key"] },
+    { id: "act-it-device", title: "Register Hardware Asset", category: "Quick Actions", icon: "fa-solid fa-laptop-medical", href: "/dashboard/it", featureKey: "manageITDevices", keywords: ["add device", "laptop", "hardware"] },
+    { id: "act-it-invoice", title: "Create IT / Client Invoice", category: "Quick Actions", icon: "fa-solid fa-file-invoice-dollar", href: "/dashboard/it", featureKey: "manageITInvoices", keywords: ["billing", "invoice", "payment"] },
+    { id: "act-broadcast", title: "Broadcast Announcement", category: "Quick Actions", icon: "fa-solid fa-bullhorn", href: "/dashboard/notifications", featureKey: "createAnnouncements", keywords: ["announcement", "broadcast", "alert"] },
 
     // System
-    { id: "sys-theme", title: "Toggle Dark / Light Theme", category: "System", icon: "fa-solid fa-circle-half-stroke", action: () => { document.documentElement.classList.toggle("dark"); } },
+    { id: "sys-theme", title: "Toggle Dark / Light Theme", category: "System", icon: "fa-solid fa-circle-half-stroke", action: () => { document.documentElement.classList.toggle("dark"); }, keywords: ["theme", "dark mode", "light mode"] },
   ];
 
   const permittedItems = commandItems.filter((item) => {
@@ -66,10 +78,14 @@ export function CommandPalette({
     return true;
   });
 
-  const filteredItems = permittedItems.filter((item) =>
-    item.title.toLowerCase().includes(query.toLowerCase()) ||
-    item.category.toLowerCase().includes(query.toLowerCase())
-  );
+  const filteredItems = permittedItems.filter((item) => {
+    const q = query.toLowerCase().trim();
+    if (!q) return true;
+    const matchTitle = item.title.toLowerCase().includes(q);
+    const matchCategory = item.category.toLowerCase().includes(q);
+    const matchKeywords = item.keywords?.some((k) => k.toLowerCase().includes(q)) ?? false;
+    return matchTitle || matchCategory || matchKeywords;
+  });
 
   useEffect(() => {
     setSelectedIndex(0);

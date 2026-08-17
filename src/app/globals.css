@@ -175,8 +175,8 @@
     --border: 200 18% 20%;
     --input: 200 18% 20%;
 
-    --primary: 184 100% 22%; /* #006970 Dark Teal */
-    --primary-foreground: 0 0% 100%;
+    --primary: 184 75% 48%; /* #26c6da Bright Readable Cyan/Teal in Dark Mode */
+    --primary-foreground: 200 24% 10%;
 
     --secondary: 184 40% 18%;
     --secondary-foreground: 0 0% 98%;

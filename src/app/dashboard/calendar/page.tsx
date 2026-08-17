@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Preloader } from "@/components/ui/Preloader";
-import { cn } from "@/lib/utils";
+import { cn, formatISTDate, formatISTTime, getISTDateString } from "@/lib/utils";
 
 import { useTabPersistence } from "@/hooks/useTabPersistence";
 import { TeamShiftOverviewCard } from "@/components/dashboard/TeamShiftOverviewCard";
@@ -100,10 +100,10 @@ export default function CalendarPage() {
     const day = d.getDay();
     const daysBack = day === 0 ? 6 : day - 1;
     d.setDate(d.getDate() - daysBack);
-    return d.toISOString().split("T")[0];
+    return getISTDateString(d);
   };
   const [summaryFrom, setSummaryFrom] = useState<string>(getDefaultWeekFrom);
-  const [summaryTo, setSummaryTo] = useState<string>(new Date().toISOString().split("T")[0]);
+  const [summaryTo, setSummaryTo] = useState<string>(() => getISTDateString());
   const [summarySearch, setSummarySearch] = useState("");
   const [summaryDept, setSummaryDept] = useState("All");
   const [summaryRecords, setSummaryRecords] = useState<any[]>([]);
@@ -140,7 +140,7 @@ export default function CalendarPage() {
       return matchSearch && matchDept;
     });
     if (target.length === 0) { showToast("No data to export.", "error"); return; }
-    const headers = ["Employee", "Email", "Role", "Department", "Date", "Clock In", "Clock Out", "Duration (hrs)", "Regular Hrs", "Overtime Hrs", "Status"];
+    const headers = ["Employee", "Email", "Role", "Department", "Date", "Clock In (IST)", "Clock Out (IST)", "Duration (hrs)", "Regular Hrs", "Overtime Hrs", "Status"];
     const rows = target.map((r: any) => {
       const u = typeof r.userId === "object" ? r.userId : null;
       const dur = r.clockIn && r.clockOut
@@ -148,9 +148,9 @@ export default function CalendarPage() {
         : r.regularHours ?? "Active";
       return [
         `"${u?.name ?? ""}"`, `"${u?.email ?? ""}"`, `"${u?.role ?? ""}"`, `"${u?.department ?? ""}"`,
-        `"${new Date(r.date).toLocaleDateString()}"`,
-        `"${r.clockIn ? new Date(r.clockIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }) : '--'}"`,
-        `"${r.clockOut ? new Date(r.clockOut).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }) : (r.clockIn ? 'Active' : '--')}"`,
+        `"${formatISTDate(r.date)}"`,
+        `"${r.clockIn ? formatISTTime(r.clockIn) : '--'}"`,
+        `"${r.clockOut ? formatISTTime(r.clockOut) : (r.clockIn ? 'Active' : '--')}"`,
         dur, r.regularHours ?? 0, r.overtimeHours ?? 0, `"${r.status ?? 'Present'}"`
       ].join(",");
     });
@@ -159,16 +159,16 @@ export default function CalendarPage() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `Login_Hours_Summary_${summaryFrom}_to_${summaryTo}.csv`;
+    link.download = `Login_Hours_Summary_${summaryFrom}_to_${summaryTo}_IST.csv`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    showToast("Login & Hours Summary exported successfully!", "success");
+    showToast("Login & Hours Summary exported successfully in IST!", "success");
   };
 
   const exportAttendanceToCSV = () => {
     const targetLogs = selectedDateFilter
-      ? attendanceHistory.filter((log) => new Date(log.date).toISOString().split("T")[0] === selectedDateFilter)
+      ? attendanceHistory.filter((log) => getISTDateString(new Date(log.date)) === selectedDateFilter)
       : attendanceHistory;
 
     if (!targetLogs || targetLogs.length === 0) {
@@ -176,7 +176,7 @@ export default function CalendarPage() {
       return;
     }
 
-    const headers = ["Employee", "Email", "Role", "Date", "Status", "Clock In", "Clock Out", "Regular Hours", "Overtime Hours"];
+    const headers = ["Employee", "Email", "Role", "Date", "Status", "Clock In (IST)", "Clock Out (IST)", "Regular Hours", "Overtime Hours"];
     const csvRows = [headers.join(",")];
 
     targetLogs.forEach((log) => {
@@ -184,10 +184,10 @@ export default function CalendarPage() {
       const empName = `"${empObj?.name || 'Employee'}"`;
       const empEmail = `"${empObj?.email || ''}"`;
       const empRole = `"${empObj?.role || 'Employee'}"`;
-      const dateStr = `"${new Date(log.date).toLocaleDateString()}"`;
+      const dateStr = `"${formatISTDate(log.date)}"`;
       const statusStr = `"${log.status || 'Present'}"`;
-      const clockInStr = `"${log.clockIn ? new Date(log.clockIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }) : '--'}"`;
-      const clockOutStr = `"${log.clockOut ? new Date(log.clockOut).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }) : (log.clockIn ? 'Active' : '--')}"`;
+      const clockInStr = `"${log.clockIn ? formatISTTime(log.clockIn) : '--'}"`;
+      const clockOutStr = `"${log.clockOut ? formatISTTime(log.clockOut) : (log.clockIn ? 'Active' : '--')}"`;
       const regHrs = log.regularHours || 0;
       const otHrs = log.overtimeHours || 0;
 
@@ -198,11 +198,11 @@ export default function CalendarPage() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
-    link.setAttribute("download", `Shift_Attendance_Log_${selectedDateFilter || new Date().toISOString().split("T")[0]}.csv`);
+    link.setAttribute("download", `Shift_Attendance_Log_${selectedDateFilter || getISTDateString()}_IST.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    showToast("Shift logs exported to Excel CSV format successfully!", "success");
+    showToast("Shift logs exported to Excel CSV format in IST successfully!", "success");
   };
 
   const [projectsList, setProjectsList] = useState<string[]>(["General Administration"]);
@@ -1549,7 +1549,15 @@ export default function CalendarPage() {
                                         </div>
                                       </div>
                                     ) : (
-                                      <span className="text-muted-foreground italic">Employee Record</span>
+                                      <div className="flex items-center gap-2 min-w-[130px]">
+                                        <div className="w-6 h-6 rounded-full bg-muted/60 text-muted-foreground font-bold flex items-center justify-center text-[10px] border border-border shrink-0">
+                                          <i className="fa-solid fa-user-slash text-[9px]" />
+                                        </div>
+                                        <div className="min-w-0">
+                                          <div className="font-semibold text-xs text-foreground/80">Former Member</div>
+                                          <div className="text-[9px] text-muted-foreground/60 font-mono">Archived Record</div>
+                                        </div>
+                                      </div>
                                     )}
                                   </td>
                                 )}

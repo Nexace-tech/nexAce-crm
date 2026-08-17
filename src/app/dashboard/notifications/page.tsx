@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { usePermissions } from "@/hooks/usePermissions";
 
 interface NotifItem {
   _id: string;
@@ -23,6 +24,7 @@ interface NotifItem {
 export default function NotificationsPage() {
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
+  const { can, isAdmin, isOPS } = usePermissions();
   const [notifications, setNotifications] = useState<NotifItem[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -233,8 +235,6 @@ export default function NotificationsPage() {
     return <Preloader label="Loading Notification Center..." />;
   }
 
-  const isAdminOrManager = user?.role === "Admin" || user?.role === "Manager";
-
   return (
     <div className="w-full space-y-6 animate-in fade-in pb-12">
       {/* Header Banner */}
@@ -257,7 +257,7 @@ export default function NotificationsPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          {isAdminOrManager && (
+          {(isAdmin || isOPS || can("createAnnouncements")) && (
             <Button
               color="warning"
               size="sm"

@@ -818,11 +818,19 @@ export default function ProjectsPage() {
                   {colTasks.length === 0 ? (
                     <div
                       className={cn(
-                        "h-28 flex items-center justify-center text-xs text-muted-foreground border-2 border-dashed rounded-lg transition-colors",
-                        isOver ? `${colAccentMap[col]} text-foreground` : "border-border"
+                        "h-32 flex flex-col items-center justify-center gap-2 p-3 text-xs text-muted-foreground border-2 border-dashed rounded-xl transition-all",
+                        isOver ? `${colAccentMap[col]} text-foreground bg-primary/5` : "border-border/60 hover:border-border hover:bg-muted/10"
                       )}
                     >
-                      {isOver ? `Drop here → ${col}` : `No tasks in ${col}`}
+                      <span>{isOver ? `Drop here → ${col}` : `No tasks in ${col}`}</span>
+                      {col === "To Do" && (
+                        <button
+                          onClick={() => setShowTaskForm(true)}
+                          className="px-3 py-1 text-[11px] font-semibold text-primary bg-primary/10 hover:bg-primary/20 rounded-md transition-colors cursor-pointer flex items-center gap-1.5"
+                        >
+                          <i className="fa-solid fa-plus text-[10px]" /> Add First Task
+                        </button>
+                      )}
                     </div>
                   ) : (
                     colTasks.map((t) => (

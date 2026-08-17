@@ -9,8 +9,10 @@ import { Preloader } from "@/components/ui/Preloader";
 import { cn } from "@/lib/utils";
 import { useTabPersistence } from "@/hooks/useTabPersistence";
 import { Pagination } from "@/components/ui/pagination";
+import { usePermissions } from "@/hooks/usePermissions";
 
 export default function AnalyticsPage() {
+  const { can, isAdmin, isOPS } = usePermissions();
   const [activeTab, setActiveTab] = useTabPersistence<"overview" | "manager" | "performance" | "audit">(
     "analytics_active_tab",
     "overview",
@@ -169,9 +171,11 @@ export default function AnalyticsPage() {
           <Button variant="outline" size="sm" onClick={fetchData} className="gap-2">
             <i className="fa-solid fa-rotate text-xs" /> Refresh
           </Button>
-          <Button color="primary" size="sm" onClick={exportCSV} className="gap-2">
-            <i className="fa-solid fa-download text-xs" /> Export CSV Report
-          </Button>
+          {(isAdmin || isOPS || can("exportReports")) && (
+            <Button color="primary" size="sm" onClick={exportCSV} className="gap-2">
+              <i className="fa-solid fa-download text-xs" /> Export CSV Report
+            </Button>
+          )}
         </div>
       </div>
 
@@ -207,15 +211,17 @@ export default function AnalyticsPage() {
           <i className="fa-solid fa-award text-xs text-amber-500" /> Performance Insights
         </button>
 
-        <button
-          onClick={() => setActiveTab("audit")}
-          className={cn(
-            "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
-            activeTab === "audit" ? "border-primary text-white bg-primary/10 rounded-t-md font-semibold" : "border-transparent text-muted-foreground hover:text-foreground"
-          )}
-        >
-          <i className="fa-solid fa-shield-halved text-xs text-sky-500" /> Audit Log Trail ({activityLogs.length})
-        </button>
+        {(isAdmin || isOPS || can("viewAuditLogs")) && (
+          <button
+            onClick={() => setActiveTab("audit")}
+            className={cn(
+              "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
+              activeTab === "audit" ? "border-primary text-white bg-primary/10 rounded-t-md font-semibold" : "border-transparent text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <i className="fa-solid fa-shield-halved text-xs text-sky-500" /> Audit Log Trail ({activityLogs.length})
+          </button>
+        )}
       </div>
 
       {/* TAB 1: OVERVIEW & TIME UTILIZATION */}

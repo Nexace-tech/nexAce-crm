@@ -64,9 +64,12 @@ export async function PUT(request: Request, { params }: RouteParams) {
 
     const isSelf = user._id.toString() === session.userId;
     const { getUserDataScope } = await import("@/lib/dataScope");
+    const { isSubAdminRole } = await import("@/lib/roles");
     const dataScope = await getUserDataScope(session);
-    const canManageUsers = session.role === "Admin" || dataScope.canViewFeature("manageUsers");
-    const canChangeRoles = session.role === "Admin" || dataScope.canViewFeature("changeUserRoles");
+    const isAdminSession = session.role === "Admin" || isSubAdminRole(session.role);
+    const canManageUsers = isAdminSession || dataScope.canViewFeature("manageUsers");
+    // Admin and OPS (SubAdmin) can always change roles; others need the explicit feature flag
+    const canChangeRoles = isAdminSession || canManageUsers || dataScope.canViewFeature("changeUserRoles");
     const canEditOthers = canManageUsers || canChangeRoles;
 
     if (!isSelf && !canEditOthers) {
@@ -95,8 +98,16 @@ export async function PUT(request: Request, { params }: RouteParams) {
       await EmailVerification.deleteOne({ _id: verification._id });
       user.email = body.email.toLowerCase();
     }
-    if (body.name) {
-      user.name = body.name;
+    if (body.name && body.name.trim() !== user.name) {
+      const existingName = await User.findOne({
+        _id: { $ne: user._id },
+        tenantId: user.tenantId,
+        name: { $regex: `^${body.name.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, $options: "i" }
+      });
+      if (existingName) {
+        return NextResponse.json({ error: `An employee named '${body.name.trim()}' already exists in this workspace.` }, { status: 400 });
+      }
+      user.name = body.name.trim();
     }
 
     // Both Self and Admin can change password (Self requires currentPassword and email verification code)
@@ -134,10 +145,18 @@ export async function PUT(request: Request, { params }: RouteParams) {
     // Admin / Permitted user updates
     if (canEditOthers) {
       if (body.role && typeof body.role === "string") {
+        // Only block role change if user is not an admin/OPS AND doesn't have the explicit changeUserRoles feature
         if (!canChangeRoles) {
           return NextResponse.json({ error: "Forbidden: You do not have permission to change user roles" }, { status: 403 });
         }
-        user.role = body.role.trim();
+        const newRole = body.role.trim();
+        user.role = newRole;
+        // If promoted to a top-level role (Admin/OPS), clear managerId so they
+        // don't appear as both a root node AND a child in the org chart (duplicate profile bug)
+        const { isSubAdminRole: isSubAdmin } = await import("@/lib/roles");
+        if (newRole === "Admin" || isSubAdmin(newRole)) {
+          user.managerId = undefined;
+        }
       }
       if (body.departments && Array.isArray(body.departments)) {
         user.departments = body.departments;
@@ -206,6 +225,22 @@ export async function PUT(request: Request, { params }: RouteParams) {
 
     await user.save();
 
+    // If user edited their own profile, refresh session cookie with the new name
+    if (isSelf && body.name) {
+      try {
+        const { createSession } = await import("@/lib/session");
+        await createSession(
+          user._id.toString(),
+          user.tenantId.toString(),
+          user.name,
+          session.tenantName,
+          user.role
+        );
+      } catch (sessErr) {
+        console.error("Failed to refresh session cookie on profile rename:", sessErr);
+      }
+    }
+
     // Never return the password hash to the client
     const { passwordHash: _ph, ...safeUser } = user.toObject();
     return NextResponse.json({ success: true, user: safeUser });
@@ -262,6 +297,18 @@ export async function DELETE(request: Request, { params }: RouteParams) {
 
     // Remove user
     await user.deleteOne();
+
+    // Record in Audit Trail / ActivityLog
+    const { ActivityLog } = await import("@/models/ActivityLog");
+    await ActivityLog.create({
+      tenantId: new mongoose.Types.ObjectId(session.tenantId),
+      userId: new mongoose.Types.ObjectId(session.userId),
+      userName: session.userName || "Admin",
+      userRole: session.role || "Admin",
+      action: "Deleted Employee Account",
+      targetName: user.name || "Employee",
+      details: `Removed user account '${user.name}' (${user.email}) [Role: ${user.role}, Dept: ${user.department || "General"}].`,
+    });
 
     return NextResponse.json({ success: true, message: "Employee removed successfully" });
   } catch (error: unknown) {

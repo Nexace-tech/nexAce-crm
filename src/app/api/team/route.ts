@@ -200,6 +200,16 @@ export async function POST(request: Request) {
           continue;
         }
 
+        // Duplicate name check (case-insensitive, within same tenant)
+        const existingName = await User.findOne({
+          tenantId: tenantObjectId,
+          name: { $regex: `^${item.name.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, $options: "i" }
+        });
+        if (existingName) {
+          errors.push(`Row ${i + 1}: An employee named '${item.name.trim()}' already exists in this workspace`);
+          continue;
+        }
+
         const depts: string[] = Array.isArray(item.departments) && item.departments.length > 0
           ? item.departments
           : (item.department ? [item.department] : ["General"]);
@@ -231,6 +241,9 @@ export async function POST(request: Request) {
 
       // Notify HR + Admin users about bulk employee addition
       if (createdUsers.length > 0) {
+        const creatorUser = await User.findById(session.userId).select("name");
+        const senderName = creatorUser?.name || session.userName || "Admin";
+
         const notifyRoles = await User.find({
           tenantId: tenantObjectId,
           role: { $in: ["Admin", "HR"] },
@@ -242,7 +255,7 @@ export async function POST(request: Request) {
           tenantId: tenantObjectId,
           recipientId: r._id,
           title: `${createdUsers.length} New Employee(s) Added`,
-          message: `${session.userName} added ${createdUsers.length} new employee(s): ${addedNames}.`,
+          message: `${senderName} added ${createdUsers.length} new employee(s): ${addedNames}.`,
           type: "system",
           linkUrl: "/dashboard/team",
           read: false,
@@ -280,6 +293,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "An employee with this email already exists" }, { status: 400 });
     }
 
+    // Duplicate name check (case-insensitive, within same tenant)
+    const existingName = await User.findOne({
+      tenantId: tenantObjectId,
+      name: { $regex: `^${name.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, $options: "i" }
+    });
+    if (existingName) {
+      return NextResponse.json({ error: `An employee named '${name.trim()}' already exists in this workspace. Please use a different name.` }, { status: 400 });
+    }
+
     const deptsList: string[] = Array.isArray(departments) && departments.length > 0
       ? departments
       : (department ? [department] : ["General"]);
@@ -304,6 +326,9 @@ export async function POST(request: Request) {
     });
 
     // Notify HR + Admin users about new employee
+    const creatorUser = await User.findById(session.userId).select("name");
+    const senderName = creatorUser?.name || session.userName || "Admin";
+
     const notifyRoles = await User.find({
       tenantId: tenantObjectId,
       role: { $in: ["Admin", "HR"] },
@@ -314,7 +339,7 @@ export async function POST(request: Request) {
       tenantId: tenantObjectId,
       recipientId: r._id,
       title: "New Employee Added",
-      message: `${session.userName} added a new employee: ${name.trim()} (${validatedRole}).`,
+      message: `${senderName} added a new employee: ${name.trim()} (${validatedRole}).`,
       type: "system",
       linkUrl: "/dashboard/team",
       read: false,

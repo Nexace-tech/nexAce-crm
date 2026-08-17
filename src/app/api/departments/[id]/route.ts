@@ -19,13 +19,14 @@ export async function PUT(request: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    if (session.role !== "Admin" && session.role !== "Manager") {
-      return NextResponse.json({ error: "Forbidden: Admins or Managers only" }, { status: 403 });
+    const { isSubAdminRole } = await import("@/lib/roles");
+    if (session.role !== "Admin" && session.role !== "Manager" && !isSubAdminRole(session.role)) {
+      return NextResponse.json({ error: "Forbidden: Admins, Managers or OPS only" }, { status: 403 });
     }
 
     const { id } = await params;
     const body = await request.json();
-    const { name, description, code } = body;
+    const { name, description, code, managerId } = body;
 
     await connectToDatabase();
 
@@ -59,10 +60,15 @@ export async function PUT(request: Request, { params }: RouteParams) {
 
     if (description !== undefined) department.description = description.trim();
     if (code !== undefined) department.code = code.trim().toUpperCase();
+    if (managerId !== undefined) {
+      department.managerId = managerId ? new mongoose.Types.ObjectId(managerId) : undefined;
+    }
 
     await department.save();
 
-    return NextResponse.json({ success: true, department });
+    const populated = await Department.findById(department._id).populate("managerId", "name email role photoUrl");
+
+    return NextResponse.json({ success: true, department: populated || department });
   } catch (error: unknown) {
     console.error("API PUT Department error:", error);
     const _msg = error instanceof Error ? error.message : "Internal Server Error"; return NextResponse.json({ error: _msg }, { status: 500 });

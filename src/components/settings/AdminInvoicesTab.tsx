@@ -585,58 +585,69 @@ export function AdminInvoicesTab({ showToast }: AdminInvoicesTabProps) {
             className="w-full max-w-xl bg-card border border-border rounded-xl shadow-xl p-6 space-y-4 max-h-[90vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between pb-3 border-b border-border">
+            <div className="flex items-center justify-between pb-3 border-b border-border dark:border-slate-800">
               <div>
                 <h2 className="text-lg font-bold text-foreground flex items-center gap-2">
                   <i className="fa-solid fa-file-invoice text-primary" /> Invoice {viewInvoice.invoiceNo}
                 </h2>
-                <p className="text-xs text-muted-foreground">Issued: {viewInvoice.invoiceDate} • Due: {viewInvoice.dueDate}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Issued: <strong className="text-foreground font-semibold">{viewInvoice.invoiceDate}</strong> • Due: <strong className="text-foreground font-semibold">{viewInvoice.dueDate}</strong></p>
               </div>
               <button
                 type="button"
                 onClick={() => setViewInvoice(null)}
-                className="text-muted-foreground hover:text-foreground p-1 rounded-md cursor-pointer"
+                className="w-8 h-8 rounded-lg bg-muted hover:bg-accent text-muted-foreground hover:text-foreground flex items-center justify-center transition-colors cursor-pointer"
+                title="Close Modal"
               >
-                <i className="fa-solid fa-xmark text-base" />
+                <i className="fa-solid fa-xmark text-sm" />
               </button>
             </div>
 
-            <div className="grid grid-cols-2 gap-4 text-xs">
-              <div className="p-3 bg-muted/30 rounded-lg border border-border space-y-1">
-                <span className="font-bold text-muted-foreground uppercase text-[10px]">From (Employee / Service Provider):</span>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+              <div className="p-4 bg-muted/40 dark:bg-slate-800/60 rounded-xl border border-border/80 dark:border-slate-700/60 space-y-1.5 shadow-2xs">
+                <span className="font-bold text-muted-foreground dark:text-slate-400 uppercase tracking-wider text-[10px]">From (Employee / Service Provider):</span>
                 <p className="font-bold text-foreground text-sm">{viewInvoice.businessName}</p>
-                <p className="text-muted-foreground">{viewInvoice.businessAddress}</p>
-                <p className="text-muted-foreground font-mono">{viewInvoice.businessEmail}</p>
+                {viewInvoice.businessAddress && <p className="text-foreground/80 dark:text-slate-300 whitespace-pre-line leading-relaxed">{viewInvoice.businessAddress}</p>}
+                {viewInvoice.businessEmail && (
+                  <p className="text-sky-600 dark:text-sky-300 font-mono font-medium text-[11px] pt-1 flex items-center gap-1.5">
+                    <i className="fa-solid fa-envelope text-[10px] opacity-75" />
+                    <span>{viewInvoice.businessEmail}</span>
+                  </p>
+                )}
               </div>
 
-              <div className="p-3 bg-muted/30 rounded-lg border border-border space-y-1">
-                <span className="font-bold text-muted-foreground uppercase text-[10px]">Billed To (Entity / Client):</span>
+              <div className="p-4 bg-muted/40 dark:bg-slate-800/60 rounded-xl border border-border/80 dark:border-slate-700/60 space-y-1.5 shadow-2xs">
+                <span className="font-bold text-muted-foreground dark:text-slate-400 uppercase tracking-wider text-[10px]">Billed To (Entity / Client):</span>
                 <p className="font-bold text-foreground text-sm">{viewInvoice.billedToName}</p>
-                <p className="text-muted-foreground">{viewInvoice.billedToAddress}</p>
-                <p className="text-muted-foreground font-mono">{viewInvoice.billedToEmail}</p>
+                {viewInvoice.billedToAddress && <p className="text-foreground/80 dark:text-slate-300 whitespace-pre-line leading-relaxed">{viewInvoice.billedToAddress}</p>}
+                {viewInvoice.billedToEmail && (
+                  <p className="text-sky-600 dark:text-sky-300 font-mono font-medium text-[11px] pt-1 flex items-center gap-1.5">
+                    <i className="fa-solid fa-envelope text-[10px] opacity-75" />
+                    <span>{viewInvoice.billedToEmail}</span>
+                  </p>
+                )}
               </div>
             </div>
 
             {/* Line Items */}
             <div className="space-y-2">
               <span className="font-bold text-foreground text-xs">Line Items</span>
-              <div className="border border-border rounded-lg overflow-hidden">
+              <div className="border border-border dark:border-slate-800 rounded-xl overflow-hidden shadow-2xs">
                 <table className="w-full text-left text-xs">
-                  <thead className="bg-muted/40 font-bold text-muted-foreground uppercase text-[10px]">
+                  <thead className="bg-muted/70 dark:bg-slate-800/80 font-bold text-muted-foreground dark:text-slate-300 uppercase text-[11px] border-b border-border dark:border-slate-800">
                     <tr>
-                      <th className="py-2 px-3">Description</th>
-                      <th className="py-2 px-3 text-center">Qty / Hours</th>
-                      <th className="py-2 px-3 text-right">Rate</th>
-                      <th className="py-2 px-3 text-right">Amount</th>
+                      <th className="py-2.5 px-4">Description</th>
+                      <th className="py-2.5 px-4 text-center">Qty / Hours</th>
+                      <th className="py-2.5 px-4 text-right">Rate</th>
+                      <th className="py-2.5 px-4 text-right">Amount</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-border">
+                  <tbody className="divide-y divide-border/60 dark:divide-slate-800">
                     {viewInvoice.items.map((item, idx) => (
-                      <tr key={idx}>
-                        <td className="py-2 px-3 font-medium">{item.description}</td>
-                        <td className="py-2 px-3 text-center font-mono">{item.quantity}</td>
-                        <td className="py-2 px-3 text-right font-mono">{formatCurrency(item.unitPrice, viewInvoice.currency)}</td>
-                        <td className="py-2 px-3 text-right font-mono font-bold">{formatCurrency(item.amount, viewInvoice.currency)}</td>
+                      <tr key={idx} className="hover:bg-muted/30 dark:hover:bg-slate-800/40 transition-colors">
+                        <td className="py-3 px-4 font-semibold text-foreground">{item.description}</td>
+                        <td className="py-3 px-4 text-center font-mono text-muted-foreground">{item.quantity}</td>
+                        <td className="py-3 px-4 text-right font-mono text-muted-foreground">{formatCurrency(item.unitPrice, viewInvoice.currency)}</td>
+                        <td className="py-3 px-4 text-right font-mono font-bold text-foreground">{formatCurrency(item.amount, viewInvoice.currency)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -645,31 +656,31 @@ export function AdminInvoicesTab({ showToast }: AdminInvoicesTabProps) {
             </div>
 
             {/* Calculation Card */}
-            <div className="p-3 bg-muted/40 rounded-lg border border-border space-y-1 text-xs">
-              <div className="flex justify-between text-muted-foreground">
+            <div className="p-4 bg-muted/40 dark:bg-slate-800/60 rounded-xl border border-border/80 dark:border-slate-700/60 space-y-1.5 text-xs">
+              <div className="flex justify-between text-muted-foreground dark:text-slate-300">
                 <span>Subtotal:</span>
-                <span className="font-mono">{formatCurrency(viewInvoice.subtotal, viewInvoice.currency)}</span>
+                <span className="font-mono font-semibold text-foreground">{formatCurrency(viewInvoice.subtotal, viewInvoice.currency)}</span>
               </div>
               {viewInvoice.taxRate > 0 && (
-                <div className="flex justify-between text-muted-foreground">
+                <div className="flex justify-between text-muted-foreground dark:text-slate-300">
                   <span>Tax ({viewInvoice.taxRate}%):</span>
-                  <span className="font-mono">{formatCurrency(viewInvoice.taxAmount, viewInvoice.currency)}</span>
+                  <span className="font-mono font-semibold text-foreground">{formatCurrency(viewInvoice.taxAmount, viewInvoice.currency)}</span>
                 </div>
               )}
-              <div className="flex justify-between items-center pt-2 border-t border-border/60 font-bold text-sm">
+              <div className="flex justify-between items-center pt-2.5 border-t border-border/60 dark:border-slate-700 font-bold text-sm">
                 <span className="text-foreground">Total Payable Amount:</span>
-                <span className="text-base font-mono text-primary">{formatCurrency(viewInvoice.total, viewInvoice.currency)}</span>
+                <span className="text-xl font-black font-mono text-emerald-500 dark:text-emerald-400">{formatCurrency(viewInvoice.total, viewInvoice.currency)}</span>
               </div>
             </div>
 
             {viewInvoice.notes && (
-              <div className="text-xs text-muted-foreground bg-muted/20 p-2.5 rounded-lg border border-border">
-                <span className="font-semibold text-foreground block mb-0.5">Notes:</span>
+              <div className="text-xs text-muted-foreground dark:text-slate-300 bg-muted/30 dark:bg-slate-800/40 p-3 rounded-xl border border-border/60 dark:border-slate-700/60">
+                <span className="font-bold text-foreground block mb-1">Notes:</span>
                 {viewInvoice.notes}
               </div>
             )}
 
-            <div className="flex items-center justify-between pt-3 border-t border-border">
+            <div className="flex items-center justify-between pt-4 border-t border-border dark:border-slate-800">
               <div>{getStatusBadge(viewInvoice.status)}</div>
               <div className="flex items-center gap-2">
                 <Button
@@ -679,7 +690,13 @@ export function AdminInvoicesTab({ showToast }: AdminInvoicesTabProps) {
                 >
                   <i className="fa-solid fa-file-pdf text-xs" /> Export PDF
                 </Button>
-                <Button type="button" variant="outline" size="sm" onClick={() => setViewInvoice(null)} className="cursor-pointer">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setViewInvoice(null)}
+                  className="h-8 text-xs cursor-pointer"
+                >
                   Close
                 </Button>
               </div>

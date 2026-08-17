@@ -11,6 +11,7 @@ import { NotificationBell } from "@/components/layout/NotificationBell";
 import { LogoutHeaderBtn } from "@/components/layout/LogoutHeaderBtn";
 import { CommandPalette } from "@/components/layout/CommandPalette";
 import { GuidedTour } from "@/components/guided-tour/GuidedTour";
+import { ProfileCompletionBanner } from "@/components/layout/ProfileCompletionBanner";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
 
@@ -280,6 +281,7 @@ export function DashboardClientLayout({ session, menuItems, isPending = false, c
         {/* Content Body */}
         <main className="flex-1 p-6 md:p-8 overflow-y-auto bg-background">
           <div className="max-w-7xl mx-auto space-y-6">
+            <ProfileCompletionBanner />
             {children}
           </div>
         </main>

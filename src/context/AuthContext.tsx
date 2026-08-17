@@ -19,6 +19,7 @@ interface UserProfile {
   skills?: string[];
   bio?: string;
   phone?: string;
+  photoUrl?: string;
   socialLinks?: {
     linkedin?: string;
     twitter?: string;

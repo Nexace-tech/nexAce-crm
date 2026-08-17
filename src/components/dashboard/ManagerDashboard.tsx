@@ -164,15 +164,19 @@ export function ManagerDashboard({ user }: { user: any }) {
                 <p className="text-xs text-muted-foreground py-4 text-center">No projects assigned.</p>
               ) : (
                 projects.slice(0, 4).map((p) => (
-                  <div key={p._id} className="flex items-center justify-between p-3.5 rounded-lg border border-border bg-card hover:bg-accent/40 transition-colors">
-                    <div className="space-y-0.5">
-                      <p className="font-semibold text-sm text-foreground">{p.name}</p>
-                      <p className="text-xs text-muted-foreground">{p.description || "No description provided."}</p>
+                  <Link
+                    key={p._id}
+                    href={`/dashboard/projects?projectId=${p._id}`}
+                    className="flex items-start justify-between gap-4 p-3.5 rounded-lg border border-border bg-card hover:bg-accent/40 hover:border-primary/40 transition-all cursor-pointer group"
+                  >
+                    <div className="space-y-1 min-w-0 flex-1">
+                      <p className="font-semibold text-sm text-foreground group-hover:text-primary transition-colors truncate">{p.name}</p>
+                      <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">{p.description || "No description provided."}</p>
                     </div>
-                    <Badge color={p.status === "Active" ? "primary" : p.status === "Completed" ? "success" : "info"}>
+                    <Badge color={p.status === "Active" ? "primary" : p.status === "Completed" ? "success" : "info"} className="shrink-0 mt-0.5">
                       {p.status || "Planning"}
                     </Badge>
-                  </div>
+                  </Link>
                 ))
               )}
             </CardContent>

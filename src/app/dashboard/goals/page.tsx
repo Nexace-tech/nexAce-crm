@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
+import { usePermissions } from "@/hooks/usePermissions";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -74,6 +75,7 @@ interface MeetingData {
 
 export default function GoalsPage() {
   const { user } = useAuth();
+  const { can, isAdmin, isOPS } = usePermissions();
   const [activeTab, setActiveTab] = useTabPersistence<"okrs" | "kudos" | "surveys" | "one_on_ones">(
     "goals_active_tab",
     "okrs",
@@ -442,12 +444,16 @@ export default function GoalsPage() {
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          <Button variant="outline" size="sm" onClick={() => setShowKudosModal(true)} className="gap-2">
-            <i className="fa-solid fa-heart text-rose-500 text-xs" /> Give Kudos
-          </Button>
-          <Button color="primary" size="sm" onClick={() => setShowOkrModal(true)} className="gap-2">
-            <i className="fa-solid fa-plus text-xs" /> Create OKR
-          </Button>
+          {(isAdmin || isOPS || can("sendKudos")) && (
+            <Button variant="outline" size="sm" onClick={() => setShowKudosModal(true)} className="gap-2">
+              <i className="fa-solid fa-heart text-rose-500 text-xs" /> Give Kudos
+            </Button>
+          )}
+          {(isAdmin || isOPS || can("createGoals")) && (
+            <Button color="primary" size="sm" onClick={() => setShowOkrModal(true)} className="gap-2">
+              <i className="fa-solid fa-plus text-xs" /> Create OKR
+            </Button>
+          )}
         </div>
       </div>
 
@@ -561,8 +567,9 @@ export default function GoalsPage() {
                               <Input
                                 type="number"
                                 defaultValue={kr.currentValue}
+                                disabled={!isAdmin && !isOPS && !can("editGoals")}
                                 onBlur={(e) => handleUpdateKRProgress(okr, idx, Number(e.target.value))}
-                                className="w-16 h-7 text-xs px-2 text-center"
+                                className="w-16 h-7 text-xs px-2 text-center disabled:opacity-60"
                               />
                             </div>
                           </div>
@@ -584,7 +591,7 @@ export default function GoalsPage() {
             <p className="text-xs text-muted-foreground">
               Anonymous weekly check-in poll for team morale, workload, and management support.
             </p>
-            {(user?.role === "Admin" || user?.role === "Manager") && (
+            {(isAdmin || isOPS || can("manageSurveys")) && (
               <Button color="primary" size="sm" onClick={() => setShowSurveyModal(true)} className="gap-1.5">
                 <i className="fa-solid fa-plus text-xs" /> Launch Survey
               </Button>

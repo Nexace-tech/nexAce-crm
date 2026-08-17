@@ -380,7 +380,7 @@ export async function forgotPasswordAction(state: FormState | undefined, formDat
     await EmailVerification.findOneAndUpdate(
       { email },
       { code, createdAt: new Date() },
-      { upsert: true, new: true }
+      { upsert: true, returnDocument: 'after' }
     );
 
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";

@@ -13,12 +13,20 @@ import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Pagination } from "@/components/ui/pagination";
 import { cn } from "@/lib/utils";
+import { isSubAdminRole } from "@/lib/roles";
 
 interface IDepartmentItem {
   _id: string;
   name: string;
   description?: string;
   code?: string;
+  managerId?: {
+    _id: string;
+    name: string;
+    email?: string;
+    role?: string;
+    photoUrl?: string;
+  } | string | null;
 }
 
 interface IBulkAddRow {
@@ -58,6 +66,7 @@ export default function TeamDashboardPage() {
   const [departmentFilter, setDepartmentFilter] = useState("All");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [selectedMember, setSelectedMember] = useState<any | null>(null);
+  const [orgZoom, setOrgZoom] = useState(1);
 
   // Bulk Member Selection
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
@@ -128,6 +137,7 @@ export default function TeamDashboardPage() {
   const [deptFormName, setDeptFormName] = useState("");
   const [deptFormDesc, setDeptFormDesc] = useState("");
   const [deptFormCode, setDeptFormCode] = useState("");
+  const [deptFormManagerId, setDeptFormManagerId] = useState("");
   const [deptFormError, setDeptFormError] = useState("");
   const [isSubmittingDept, setIsSubmittingDept] = useState(false);
 
@@ -177,6 +187,9 @@ export default function TeamDashboardPage() {
       const params = new URLSearchParams(window.location.search);
       params.set("tab", tab);
       router.replace(`/dashboard/team?${params.toString()}`, { scroll: false });
+      if (tab === "departments") {
+        fetchDepartments();
+      }
     });
   };
 
@@ -385,6 +398,17 @@ export default function TeamDashboardPage() {
     e.preventDefault();
     if (!selectedMember) return;
 
+    if (editName && editName.trim().toLowerCase() !== (selectedMember.name || "").trim().toLowerCase()) {
+      const trimmedEditName = editName.trim().toLowerCase();
+      const isDuplicate = users.some(
+        (u) => u._id !== selectedMember._id && u.name && u.name.trim().toLowerCase() === trimmedEditName
+      );
+      if (isDuplicate) {
+        showToast(`An employee named "${editName.trim()}" already exists in this workspace.`, "error");
+        return;
+      }
+    }
+
     setIsUpdating(true);
     try {
       const parsedSkills = editSkillsText
@@ -424,10 +448,16 @@ export default function TeamDashboardPage() {
       const data = await response.json();
 
       if (response.ok) {
-        setSelectedMember(null);
-        setIsEditingBio(false);
-        await fetchTeam();
+        // Optimistically update the local users list and selectedMember immediately
+        // so the role/name/dept reflects the new value without stale state
+        const updatedUser = data.user || { ...selectedMember, ...updateData };
+        setUsers((prev) =>
+          prev.map((u) => (u._id === selectedMember._id ? { ...u, ...updatedUser } : u))
+        );
+        setSelectedMember((prev: any) => (prev ? { ...prev, ...updatedUser } : prev));
         showToast("Profile updated successfully!", "success");
+        // Background re-fetch to sync with server (keeps drawer open)
+        fetchTeam();
       } else {
         showToast(data.error || "Failed to update profile.", "error");
       }
@@ -446,6 +476,15 @@ export default function TeamDashboardPage() {
 
     if (!addName || !addEmail) {
       setFormError("Name and Email are required fields.");
+      return;
+    }
+
+    const trimmedName = addName.trim().toLowerCase();
+    const isDuplicateName = users.some(
+      (u) => u.name && u.name.trim().toLowerCase() === trimmedName
+    );
+    if (isDuplicateName) {
+      setFormError(`An employee named "${addName.trim()}" already exists in this workspace.`);
       return;
     }
 
@@ -517,6 +556,7 @@ export default function TeamDashboardPage() {
           name: deptFormName,
           description: deptFormDesc,
           code: deptFormCode,
+          managerId: deptFormManagerId || null,
         }),
       });
 
@@ -532,6 +572,7 @@ export default function TeamDashboardPage() {
         setDeptFormName("");
         setDeptFormDesc("");
         setDeptFormCode("");
+        setDeptFormManagerId("");
         await fetchDepartments();
         await fetchTeam();
       } else {
@@ -603,12 +644,16 @@ export default function TeamDashboardPage() {
 
     const userMap: { [key: string]: OrgNode } = {};
     const rootNodes: OrgNode[] = [];
+    // Guard: track placed nodes to prevent any user appearing twice in the tree
+    const placedIds = new Set<string>();
 
     const roleWeight = (role: string) => {
-      if (role === "Admin") return 0;
-      if (role === "Manager") return 1;
-      if (role === "HR") return 2;
-      return 3;
+      const r = (role || "").toLowerCase().trim();
+      if (r === "admin") return 0;
+      if (r === "ops" || r === "sub admin" || r === "subadmin" || r === "sub-admin") return 1;
+      if (r === "manager") return 2;
+      if (r === "hr") return 3;
+      return 4; // Employee and others
     };
 
     filteredUsers.forEach((u) => {
@@ -634,27 +679,30 @@ export default function TeamDashboardPage() {
       const managerId = u.managerId?._id || u.managerId;
       const managerNode = managerId ? userMap[managerId] : null;
 
-      const isEmployeeOrHR = u.role === "HR" || u.role === "Employee";
-
       const deptManager = filteredUsers.find(
         (m) => (m.role === "Manager" || m.role === "OPS" || m.role === "Admin") && m._id !== u._id && (m.department === u.department || (m.departments && u.departments && m.departments.some((d: string) => u.departments.includes(d))))
       )?._id;
 
       const fallbackManagerId = deptManager || globalFirstAdmin || globalFirstManager;
 
+      const isTopLevelRole = u.role === "Admin" || u.role === "OPS" || isSubAdminRole(u.role);
+
       // 1. Explicit assigned manager exists in current view
-      if (managerId && managerNode && managerId !== u._id) {
+      if (managerId && managerNode && managerId !== u._id && !placedIds.has(u._id)) {
         node.managerName = managerNode.name;
         userMap[managerId].reports.push(node);
+        placedIds.add(u._id);
       }
-      // 2. Non-Admin user with no explicit manager: nest under top workspace Admin / Manager
-      else if (u.role !== "Admin" && fallbackManagerId && fallbackManagerId !== u._id && userMap[fallbackManagerId]) {
+      // 2. Non-top-level user with no explicit manager: nest under top workspace Admin / OPS / Manager
+      else if (!isTopLevelRole && fallbackManagerId && fallbackManagerId !== u._id && userMap[fallbackManagerId] && !placedIds.has(u._id)) {
         node.managerName = userMap[fallbackManagerId].name;
         userMap[fallbackManagerId].reports.push(node);
+        placedIds.add(u._id);
       }
-      // 3. Root Level Admin
-      else {
+      // 3. Root Level (Admin, OPS, or unassigned top-level) — only if not already placed
+      else if (!placedIds.has(u._id)) {
         rootNodes.push(node);
+        placedIds.add(u._id);
       }
     });
 
@@ -667,9 +715,9 @@ export default function TeamDashboardPage() {
     return rootNodes;
   }, [users, departmentFilter]);
 
-  const userRole = useMemo(() => (currentUser?.role || "").trim().toLowerCase(), [currentUser?.role]);
-  const isAdmin = userRole === "admin";
-  const isManagerOrAdmin = userRole === "admin" || userRole === "manager";
+  const userRole = useMemo(() => (currentUser?.role || "").trim(), [currentUser?.role]);
+  const isAdmin = Boolean(userRole && (userRole.toLowerCase() === "admin" || isSubAdminRole(userRole)));
+  const isManagerOrAdmin = Boolean(isAdmin || userRole.toLowerCase() === "manager");
 
   const directReports = useMemo(() => {
     return users.filter((u) => {
@@ -763,6 +811,7 @@ export default function TeamDashboardPage() {
                 setDeptFormName("");
                 setDeptFormDesc("");
                 setDeptFormCode("");
+                setDeptFormManagerId("");
                 setDeptFormError("");
                 setShowAddDeptModal(true);
               }}
@@ -1290,24 +1339,78 @@ export default function TeamDashboardPage() {
 
       {/* Org Chart Tab */}
       {activeTab === "orgchart" && (
-        <Card className="p-6 overflow-x-auto min-h-[500px]">
-          {loading ? (
-            <div className="py-12 text-center text-muted-foreground">Loading organization hierarchy...</div>
-          ) : orgTreeRoots.length === 0 ? (
-            <div className="py-12 text-center text-muted-foreground">No tree structure found.</div>
-          ) : (
-            <div className="flex justify-center gap-12 min-w-max">
-              {orgTreeRoots.map((root) => (
-                <OrgChartNode
-                  key={root._id}
-                  node={root}
-                  onReassign={handleReassign}
-                  isAdmin={isAdmin}
-                  onSelectMember={handleSelectMember}
-                />
-              ))}
-            </div>
-          )}
+        <Card className="relative overflow-hidden border border-border shadow-sm">
+          {/* Zoom & View Controls Bar */}
+          <div className="absolute top-4 right-4 z-20 flex items-center gap-1.5 bg-card/90 backdrop-blur-md border border-border/80 p-1.5 rounded-xl shadow-md">
+            <button
+              type="button"
+              onClick={() => setOrgZoom((prev) => Math.max(0.4, Number((prev - 0.1).toFixed(2))))}
+              title="Zoom Out (Ctrl -)"
+              className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent/60 transition-all cursor-pointer text-xs"
+            >
+              <i className="fa-solid fa-magnifying-glass-minus text-sm" />
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setOrgZoom(1)}
+              title="Reset Zoom to 100%"
+              className="px-2.5 h-8 rounded-lg flex items-center justify-center font-mono font-bold text-xs text-foreground hover:bg-accent/60 transition-all cursor-pointer border border-border/50"
+            >
+              {Math.round(orgZoom * 100)}%
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setOrgZoom((prev) => Math.min(1.8, Number((prev + 0.1).toFixed(2))))}
+              title="Zoom In (Ctrl +)"
+              className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent/60 transition-all cursor-pointer text-xs"
+            >
+              <i className="fa-solid fa-magnifying-glass-plus text-sm" />
+            </button>
+
+            <div className="w-px h-4 bg-border/60 mx-0.5" />
+
+            <button
+              type="button"
+              onClick={() => setOrgZoom(1)}
+              title="Fit to Default View"
+              className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent/60 transition-all cursor-pointer text-xs"
+            >
+              <i className="fa-solid fa-arrows-rotate text-xs" />
+            </button>
+          </div>
+
+          <div className="p-8 overflow-auto min-h-[580px] max-h-[780px]">
+            {loading ? (
+              <div className="py-20 text-center text-muted-foreground flex flex-col items-center justify-center gap-3">
+                <i className="fa-solid fa-spinner fa-spin text-2xl text-primary" />
+                <span className="text-sm">Loading organization hierarchy...</span>
+              </div>
+            ) : orgTreeRoots.length === 0 ? (
+              <div className="py-20 text-center text-muted-foreground flex flex-col items-center justify-center gap-3">
+                <i className="fa-solid fa-sitemap text-3xl opacity-30" />
+                <span className="text-sm font-medium">No organization tree structure found.</span>
+              </div>
+            ) : (
+              <div
+                className="flex justify-center gap-12 min-w-max pb-16 pt-8 transition-transform duration-200 ease-out origin-top"
+                style={{
+                  transform: `scale(${orgZoom})`,
+                }}
+              >
+                {orgTreeRoots.map((root) => (
+                  <OrgChartNode
+                    key={root._id}
+                    node={root}
+                    onReassign={handleReassign}
+                    isAdmin={isAdmin}
+                    onSelectMember={handleSelectMember}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
         </Card>
       )}
 
@@ -1529,74 +1632,132 @@ export default function TeamDashboardPage() {
             )}
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-            {departmentsList.map((dept) => {
-              const count = users.filter((u) => {
-                const depts = u.departments || [u.department];
-                return depts.includes(dept.name);
-              }).length;
+          {deptLoading ? (
+            <div className="py-20 text-center text-muted-foreground flex flex-col items-center justify-center gap-3">
+              <i className="fa-solid fa-spinner fa-spin text-2xl text-primary" />
+              <span className="text-sm">Loading workspace departments...</span>
+            </div>
+          ) : departmentsList.length === 0 ? (
+            <Card className="p-12 text-center border-dashed">
+              <div className="flex flex-col items-center justify-center gap-3 max-w-sm mx-auto">
+                <div className="w-12 h-12 rounded-2xl bg-primary/10 text-primary flex items-center justify-center">
+                  <i className="fa-solid fa-layer-group text-2xl" />
+                </div>
+                <h3 className="font-bold text-base text-foreground">No Departments Found</h3>
+                <p className="text-xs text-muted-foreground">
+                  Your workspace currently has no department categories. Click below to create your first department.
+                </p>
+                {isManagerOrAdmin && (
+                  <Button
+                    color="primary"
+                    size="sm"
+                    onClick={() => {
+                      setEditingDept(null);
+                      setDeptFormName("");
+                      setDeptFormDesc("");
+                      setDeptFormCode("");
+                      setDeptFormManagerId("");
+                      setDeptFormError("");
+                      setShowAddDeptModal(true);
+                    }}
+                    className="mt-2 gap-2"
+                  >
+                    <i className="fa-solid fa-plus" /> Create First Department
+                  </Button>
+                )}
+              </div>
+            </Card>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+              {departmentsList.map((dept) => {
+                const count = users.filter((u) => {
+                  const depts = u.departments || [u.department];
+                  return depts.includes(dept.name);
+                }).length;
 
-              return (
-                <Card key={dept._id} className="hover:shadow-md transition-all">
-                  <CardHeader className="flex flex-row items-start justify-between pb-3">
-                    <div>
-                      <CardTitle className="text-base font-bold flex items-center gap-2">
-                        {dept.name}
-                        {dept.code && (
-                          <Badge color="primary" variant="soft" rounded="sm">
-                            {dept.code}
-                          </Badge>
-                        )}
-                      </CardTitle>
-                      <CardDescription className="mt-1 line-clamp-2">{dept.description || "No description provided."}</CardDescription>
-                    </div>
-                    {isManagerOrAdmin && (
-                      <div className="flex items-center gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => {
-                            setEditingDept(dept);
-                            setDeptFormName(dept.name);
-                            setDeptFormDesc(dept.description || "");
-                            setDeptFormCode(dept.code || "");
-                            setDeptFormError("");
-                            setShowAddDeptModal(true);
-                          }}
-                          className="h-8 w-8"
-                        >
-                          <i className="fa-solid fa-pen text-muted-foreground" />
-                        </Button>
-                        {isAdmin && (
+                return (
+                  <Card key={dept._id} className="hover:shadow-md transition-all">
+                    <CardHeader className="flex flex-row items-start justify-between pb-3">
+                      <div>
+                        <CardTitle className="text-base font-bold flex items-center gap-2">
+                          {dept.name}
+                          {dept.code && (
+                            <Badge color="primary" variant="soft" rounded="sm">
+                              {dept.code}
+                            </Badge>
+                          )}
+                        </CardTitle>
+                        <CardDescription className="mt-1 line-clamp-2">{dept.description || "No description provided."}</CardDescription>
+                      </div>
+                      {isManagerOrAdmin && (
+                        <div className="flex items-center gap-1">
                           <Button
                             variant="ghost"
                             size="icon"
-                            onClick={() => setDeptToDelete(dept)}
-                            className="h-8 w-8 text-destructive"
+                            onClick={() => {
+                              setEditingDept(dept);
+                              setDeptFormName(dept.name);
+                              setDeptFormDesc(dept.description || "");
+                              setDeptFormCode(dept.code || "");
+                              const mgrId = typeof dept.managerId === "object" ? dept.managerId?._id : dept.managerId;
+                              setDeptFormManagerId(mgrId || "");
+                              setDeptFormError("");
+                              setShowAddDeptModal(true);
+                            }}
+                            className="h-8 w-8"
                           >
-                            <i className="fa-solid fa-trash" />
+                            <i className="fa-solid fa-pen text-muted-foreground" />
                           </Button>
+                          {isAdmin && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => setDeptToDelete(dept)}
+                              className="h-8 w-8 text-destructive"
+                            >
+                              <i className="fa-solid fa-trash" />
+                            </Button>
+                          )}
+                        </div>
+                      )}
+                    </CardHeader>
+                    <CardContent className="pt-2 space-y-2.5">
+                      {/* Department Head / Manager info */}
+                      <div className="flex items-center justify-between p-2.5 rounded-lg bg-muted/40 border border-border/60 text-xs">
+                        <span className="text-muted-foreground font-medium flex items-center gap-1.5">
+                          <i className="fa-solid fa-user-tie text-amber-500" /> Dept Manager:
+                        </span>
+                        {dept.managerId ? (
+                          <span className="font-semibold text-foreground flex items-center gap-1.5">
+                            {typeof dept.managerId === "object" ? dept.managerId.name : "Assigned"}
+                            {typeof dept.managerId === "object" && dept.managerId.role && (
+                              <Badge color="warning" variant="soft" rounded="full" className="text-[10px] px-1.5 py-0">
+                                {dept.managerId.role}
+                              </Badge>
+                            )}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground italic text-[11px]">Unassigned</span>
                         )}
                       </div>
-                    )}
-                  </CardHeader>
-                  <CardContent className="pt-2">
-                    <button
-                      onClick={() => setViewingDeptMembers(dept)}
-                      className="w-full flex items-center justify-between p-3 rounded-lg bg-accent/40 hover:bg-accent border border-border text-xs font-semibold text-foreground transition-colors cursor-pointer"
-                    >
-                      <span className="flex items-center gap-2">
-                        <i className="fa-solid fa-users text-primary" /> Assigned Employees
-                      </span>
-                      <span className="text-primary flex items-center gap-1">
-                        {count} Members <i className="fa-solid fa-chevron-right" />
-                      </span>
-                    </button>
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </div>
+
+                      <button
+                        onClick={() => setViewingDeptMembers(dept)}
+                        className="w-full flex items-center justify-between p-3 rounded-lg bg-accent/40 hover:bg-accent border border-border text-xs font-semibold text-foreground transition-colors cursor-pointer"
+                      >
+                        <span className="flex items-center gap-2">
+                          <i className="fa-solid fa-users text-primary" /> Assigned Employees
+                        </span>
+                        <span className="text-primary flex items-center gap-1">
+                          {count} Members <i className="fa-solid fa-chevron-right" />
+                        </span>
+                      </button>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 
@@ -1640,15 +1801,21 @@ export default function TeamDashboardPage() {
                 <p className="font-semibold text-foreground">
                   {selectedMember.createdAt
                     ? new Date(selectedMember.createdAt).toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" })
-                    : "â€”"}
+                    : "—"}
                 </p>
               </div>
               <div className="space-y-0.5">
                 <p className="text-muted-foreground font-medium">Reports To</p>
                 <p className="font-semibold text-foreground">
-                  {selectedMember.managerId
-                    ? users.find((u: any) => u._id === selectedMember.managerId)?.name || "â€”"
-                    : "CEO / Top-level"}
+                  {(() => {
+                    if (!selectedMember.managerId) return "CEO / Top-level";
+                    if (typeof selectedMember.managerId === "object" && selectedMember.managerId.name) {
+                      return selectedMember.managerId.name;
+                    }
+                    const mId = typeof selectedMember.managerId === "object" ? selectedMember.managerId._id : selectedMember.managerId;
+                    const found = users.find((u: any) => u._id === mId);
+                    return found?.name || "CEO / Top-level";
+                  })()}
                 </p>
               </div>
             </div>
@@ -1678,6 +1845,7 @@ export default function TeamDashboardPage() {
                       <option value="Employee">Employee</option>
                       <option value="Manager">Manager</option>
                       <option value="HR">HR</option>
+                      <option value="OPS">OPS (SubAdmin)</option>
                       <option value="Admin">Admin</option>
                     </select>
                   </div>
@@ -1803,6 +1971,7 @@ export default function TeamDashboardPage() {
                     <option value="Employee">Employee</option>
                     <option value="Manager">Manager</option>
                     <option value="HR">HR</option>
+                    <option value="OPS">OPS (SubAdmin)</option>
                     <option value="Admin">Admin</option>
                   </select>
                 </div>
@@ -1954,17 +2123,6 @@ export default function TeamDashboardPage() {
                 </div>
               </div>
             </form>
-
-            {/* Pagination Controls */}
-            {activeTab === "directory" && (
-              <Pagination
-                currentPage={currentPage}
-                totalPages={Math.ceil(users.length / itemsPerPage)}
-                onPageChange={setCurrentPage}
-                totalItems={users.length}
-                itemsPerPage={itemsPerPage}
-              />
-            )}
           </div>
         </div>
       )}
@@ -1993,6 +2151,35 @@ export default function TeamDashboardPage() {
               <div className="space-y-1">
                 <label className="text-xs font-semibold text-foreground">Department Code</label>
                 <Input value={deptFormCode} onChange={(e) => setDeptFormCode(e.target.value)} placeholder="e.g. ENG" />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-foreground">Department Manager / Head</label>
+                <select
+                  value={deptFormManagerId}
+                  onChange={(e) => setDeptFormManagerId(e.target.value)}
+                  className="w-full h-9 px-3 text-xs bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                >
+                  <option value="">None (Unassigned)</option>
+                  <optgroup label="Managers & Leaders">
+                    {users
+                      .filter((u) => u.role === "Manager" || u.role === "OPS" || u.role === "Admin" || u.role === "HR")
+                      .map((u) => (
+                        <option key={u._id} value={u._id}>
+                          {u.name} ({u.role})
+                        </option>
+                      ))}
+                  </optgroup>
+                  <optgroup label="Other Members">
+                    {users
+                      .filter((u) => u.role === "Employee")
+                      .map((u) => (
+                        <option key={u._id} value={u._id}>
+                          {u.name} (Employee)
+                        </option>
+                      ))}
+                  </optgroup>
+                </select>
               </div>
 
               <div className="space-y-1">

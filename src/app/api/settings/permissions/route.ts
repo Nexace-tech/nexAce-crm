@@ -16,6 +16,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, Record<string, boolean>> =
     goals: true,
     analytics: true,
     clients: true,
+    it: true,
     referrals: true,
     settings: true,
   },
@@ -29,6 +30,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, Record<string, boolean>> =
     goals: true,
     analytics: false,
     clients: false,
+    it: false,
     referrals: true,
     settings: true,
   },
@@ -42,6 +44,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, Record<string, boolean>> =
     goals: true,
     analytics: false,
     clients: false,
+    it: false,
     referrals: false,
     settings: true,
   },
@@ -55,6 +58,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, Record<string, boolean>> =
     goals: false,
     analytics: false,
     clients: false,
+    it: false,
     referrals: true,
     settings: true,
   },
@@ -87,6 +91,8 @@ export const DEFAULT_FEATURE_PERMISSIONS: Record<string, Record<string, boolean>
     viewAnalyticsDashboard: true, viewAuditLogs: true, exportReports: true, viewSecurityEvents: true,
     // CRM & Clients
     viewClients: true, createClients: true, editClients: true, deleteClients: true, viewDeals: true, manageDeals: true, exportClientData: true, manageClientContacts: true,
+    // IT & Infrastructure
+    viewITPortal: true, manageITAccess: true, manageITSubscriptions: true, manageITDevices: true, manageITInvoices: true,
     // Referrals
     submitReferral: true, viewOwnReferrals: true, viewAllReferrals: true, manageReferrals: true,
     // Admin & Users
@@ -119,6 +125,8 @@ export const DEFAULT_FEATURE_PERMISSIONS: Record<string, Record<string, boolean>
     viewAnalyticsDashboard: true, viewAuditLogs: false, exportReports: true, viewSecurityEvents: false,
     // CRM & Clients
     viewClients: false, createClients: false, editClients: false, deleteClients: false, viewDeals: false, manageDeals: false, exportClientData: false, manageClientContacts: false,
+    // IT & Infrastructure
+    viewITPortal: false, manageITAccess: false, manageITSubscriptions: false, manageITDevices: false, manageITInvoices: false,
     // Referrals
     submitReferral: true, viewOwnReferrals: true, viewAllReferrals: false, manageReferrals: false,
     // Admin & Users
@@ -151,6 +159,8 @@ export const DEFAULT_FEATURE_PERMISSIONS: Record<string, Record<string, boolean>
     viewAnalyticsDashboard: false, viewAuditLogs: false, exportReports: true, viewSecurityEvents: false,
     // CRM & Clients
     viewClients: false, createClients: false, editClients: false, deleteClients: false, viewDeals: false, manageDeals: false, exportClientData: false, manageClientContacts: false,
+    // IT & Infrastructure
+    viewITPortal: false, manageITAccess: false, manageITSubscriptions: false, manageITDevices: false, manageITInvoices: false,
     // Referrals
     submitReferral: false, viewOwnReferrals: false, viewAllReferrals: false, manageReferrals: false,
     // Admin & Users — HR cannot manage user accounts, roles, or billing
@@ -183,6 +193,8 @@ export const DEFAULT_FEATURE_PERMISSIONS: Record<string, Record<string, boolean>
     viewAnalyticsDashboard: false, viewAuditLogs: false, exportReports: false, viewSecurityEvents: false,
     // CRM & Clients
     viewClients: false, createClients: false, editClients: false, deleteClients: false, viewDeals: false, manageDeals: false, exportClientData: false, manageClientContacts: false,
+    // IT & Infrastructure
+    viewITPortal: false, manageITAccess: false, manageITSubscriptions: false, manageITDevices: false, manageITInvoices: false,
     // Referrals
     submitReferral: true, viewOwnReferrals: true, viewAllReferrals: false, manageReferrals: false,
     // Admin & Users
@@ -311,7 +323,7 @@ export async function POST(request: Request) {
       {
         $set: updatePayload,
       },
-      { upsert: true, new: true }
+      { upsert: true, returnDocument: 'after' }
     );
 
     return NextResponse.json({ success: true, permission: updatedDoc });

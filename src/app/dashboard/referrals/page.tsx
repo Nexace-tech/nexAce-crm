@@ -317,8 +317,8 @@ export default function ReferralsPage() {
           <CardContent className="p-4 flex items-center justify-between">
             <div>
               <p className="text-xs text-muted-foreground font-medium">Bonus Payouts</p>
-              <p className="text-2xl font-bold text-purple-500 mt-1">${stats.paidAmount}</p>
-              <p className="text-[10px] text-muted-foreground mt-0.5">${stats.pendingAmount} pending release</p>
+              <p className="text-2xl font-bold text-purple-500 mt-1">₹{stats.paidAmount.toLocaleString("en-IN")}</p>
+              <p className="text-[10px] text-muted-foreground mt-0.5">₹{stats.pendingAmount.toLocaleString("en-IN")} pending release</p>
             </div>
             <div className="p-3 bg-purple-500/10 rounded-xl border border-purple-500/20 text-purple-500">
               <i className="fa-solid fa-sack-dollar text-lg" />
@@ -389,13 +389,13 @@ export default function ReferralsPage() {
 
       {/* ══ VIEW MODE 1: KANBAN BOARD ══ */}
       {viewMode === "kanban" && (
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4 overflow-x-auto pb-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 w-full">
           {STAGES.map((stage) => {
             const stageConfig = STAGE_CONFIG[stage];
             const stageItems = filteredReferrals.filter((r) => r.status === stage);
 
             return (
-              <div key={stage} className="flex flex-col min-w-[240px] bg-card/40 rounded-2xl border border-border/70 p-3 space-y-3">
+              <div key={stage} className="flex flex-col w-full bg-card/40 rounded-2xl border border-border/70 p-3 space-y-3 shadow-2xs">
                 {/* Column Header */}
                 <div className="flex items-center justify-between px-1">
                   <div className="flex items-center gap-2">

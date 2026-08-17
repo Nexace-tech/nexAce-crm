@@ -66,7 +66,17 @@ export function usePermissions() {
       return Boolean(featurePermissions[featureKey]);
     }
     // Default administrative features to false for SubAdmin / OPS
-    if (["manageUsers", "changeUserRoles", "manageRolePermissions", "resetUserPasswords", "viewBillingSubscription", "manageBilling", "manageShifts"].includes(featureKey)) {
+    if ([
+      "manageUsers",
+      "changeUserRoles",
+      "manageRolePermissions",
+      "resetUserPasswords",
+      "viewBillingSubscription",
+      "manageBilling",
+      "manageShifts",
+      "manageFileRestrictions",
+      "manageIntegrations"
+    ].includes(featureKey)) {
       return false;
     }
     if (isSubAdminRole(user.role)) return true;

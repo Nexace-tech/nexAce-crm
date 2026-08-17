@@ -21,7 +21,7 @@ export async function PATCH(
     const allocation = await HRResourceAllocation.findOneAndUpdate(
       { _id: new mongoose.Types.ObjectId(id), tenantId: tenantObjectId },
       { $set: body },
-      { new: true }
+      { returnDocument: 'after' }
     );
 
     if (!allocation) return NextResponse.json({ error: "Allocation not found" }, { status: 404 });

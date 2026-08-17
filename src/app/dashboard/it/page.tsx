@@ -4,8 +4,9 @@ import React, { useState, useMemo, useCallback, useEffect } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { cn } from "@/lib/utils";
+import { cn, formatISTDate, getISTDateString } from "@/lib/utils";
 import { useTabPersistence } from "@/hooks/useTabPersistence";
+import { usePermissions } from "@/hooks/usePermissions";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -1365,63 +1366,105 @@ function InvoicesTab({ invoices, loading, onAdd, onEdit, onDelete, autoOpenAdd }
       {/* Invoice Quick Preview Drawer Modal */}
       {previewItem && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setPreviewItem(null)} />
-          <div className="relative bg-card border border-border rounded-2xl shadow-2xl w-full max-w-2xl p-6 space-y-6 animate-in fade-in zoom-in-95 duration-150 max-h-[85vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-border pb-3">
+          <div className="absolute inset-0 bg-black/75 backdrop-blur-sm animate-in fade-in duration-150" onClick={() => setPreviewItem(null)} />
+          <div className="relative bg-card dark:bg-slate-900 border border-border dark:border-slate-800 rounded-2xl shadow-2xl w-full max-w-2xl p-6 sm:p-7 space-y-6 animate-in fade-in zoom-in-95 duration-150 max-h-[88vh] overflow-y-auto">
+            {/* Header */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border dark:border-slate-800 pb-4">
               <div>
-                <span className="text-xs font-mono font-bold text-primary">{previewItem.invoiceNo}</span>
-                <h3 className="text-lg font-bold text-foreground">{previewItem.billedToName}</h3>
+                <span className="text-xs font-mono font-extrabold text-primary tracking-wide">{previewItem.invoiceNo}</span>
+                <h3 className="text-xl font-black text-foreground tracking-tight mt-0.5">{previewItem.billedToName}</h3>
               </div>
-              <span className={statusBadge(previewItem.status)}>{previewItem.status}</span>
-            </div>
-            <div className="grid grid-cols-2 gap-4 text-xs">
-              <div>
-                <p className="text-muted-foreground font-semibold uppercase text-[10px]">Billed From</p>
-                <p className="font-semibold text-foreground mt-1">{previewItem.businessName}</p>
-                <p className="text-muted-foreground whitespace-pre-line">{previewItem.businessAddress}</p>
-                <p className="text-muted-foreground">{previewItem.businessEmail}</p>
-              </div>
-              <div>
-                <p className="text-muted-foreground font-semibold uppercase text-[10px]">Billed To</p>
-                <p className="font-semibold text-foreground mt-1">{previewItem.billedToName}</p>
-                <p className="text-muted-foreground whitespace-pre-line">{previewItem.billedToAddress}</p>
-                <p className="text-muted-foreground">{previewItem.billedToEmail}</p>
+              <div className="flex items-center gap-2">
+                <span className={cn(statusBadge(previewItem.status), "px-2.5 py-1 text-xs font-bold rounded-md")}>{previewItem.status}</span>
+                <button
+                  type="button"
+                  onClick={() => setPreviewItem(null)}
+                  className="w-8 h-8 rounded-lg bg-muted hover:bg-accent text-muted-foreground hover:text-foreground flex items-center justify-center transition-colors cursor-pointer"
+                  title="Close Modal"
+                >
+                  <i className="fa-solid fa-xmark text-sm" />
+                </button>
               </div>
             </div>
-            <div className="border border-border rounded-xl overflow-hidden text-xs">
+
+            {/* Billed From / Billed To Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+              <div className="p-4 bg-muted/40 dark:bg-slate-800/60 rounded-xl border border-border/80 dark:border-slate-700/60 space-y-1.5 shadow-2xs">
+                <p className="text-muted-foreground dark:text-slate-400 font-bold uppercase tracking-wider text-[10px]">Billed From</p>
+                <p className="font-bold text-foreground text-sm">{previewItem.businessName}</p>
+                {previewItem.businessAddress && <p className="text-foreground/80 dark:text-slate-300 whitespace-pre-line leading-relaxed">{previewItem.businessAddress}</p>}
+                {previewItem.businessEmail && (
+                  <p className="text-sky-600 dark:text-sky-300 font-mono font-medium text-[11px] pt-1 flex items-center gap-1.5">
+                    <i className="fa-solid fa-envelope text-[10px] opacity-75" />
+                    <span>{previewItem.businessEmail}</span>
+                  </p>
+                )}
+              </div>
+
+              <div className="p-4 bg-muted/40 dark:bg-slate-800/60 rounded-xl border border-border/80 dark:border-slate-700/60 space-y-1.5 shadow-2xs">
+                <p className="text-muted-foreground dark:text-slate-400 font-bold uppercase tracking-wider text-[10px]">Billed To</p>
+                <p className="font-bold text-foreground text-sm">{previewItem.billedToName}</p>
+                {previewItem.billedToAddress && <p className="text-foreground/80 dark:text-slate-300 whitespace-pre-line leading-relaxed">{previewItem.billedToAddress}</p>}
+                {previewItem.billedToEmail && (
+                  <p className="text-sky-600 dark:text-sky-300 font-mono font-medium text-[11px] pt-1 flex items-center gap-1.5">
+                    <i className="fa-solid fa-envelope text-[10px] opacity-75" />
+                    <span>{previewItem.billedToEmail}</span>
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* Line Items Table */}
+            <div className="border border-border dark:border-slate-800 rounded-xl overflow-hidden text-xs shadow-2xs">
               <table className="w-full">
-                <thead className="bg-muted/60">
+                <thead className="bg-muted/70 dark:bg-slate-800/80 border-b border-border dark:border-slate-800 font-bold">
                   <tr>
-                    <th className="px-3 py-2 text-left text-[10px] uppercase font-semibold text-muted-foreground">Description</th>
-                    <th className="px-3 py-2 text-center text-[10px] uppercase font-semibold text-muted-foreground">Qty</th>
-                    <th className="px-3 py-2 text-right text-[10px] uppercase font-semibold text-muted-foreground">Unit Price ({getCurrencySymbol(previewItem.currency)})</th>
-                    <th className="px-3 py-2 text-right text-[10px] uppercase font-semibold text-muted-foreground">Amount ({getCurrencySymbol(previewItem.currency)})</th>
+                    <th className="px-4 py-2.5 text-left text-[11px] uppercase font-bold text-muted-foreground dark:text-slate-300">Description</th>
+                    <th className="px-4 py-2.5 text-center text-[11px] uppercase font-bold text-muted-foreground dark:text-slate-300">Qty / Hrs</th>
+                    <th className="px-4 py-2.5 text-right text-[11px] uppercase font-bold text-muted-foreground dark:text-slate-300">Unit Price ({getCurrencySymbol(previewItem.currency)})</th>
+                    <th className="px-4 py-2.5 text-right text-[11px] uppercase font-bold text-muted-foreground dark:text-slate-300">Amount ({getCurrencySymbol(previewItem.currency)})</th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className="divide-y divide-border/60 dark:divide-slate-800">
                   {previewItem.items?.map((item, idx) => (
-                    <tr key={idx} className="border-b border-border/40">
-                      <td className="p-3 text-foreground font-medium">{item.description}</td>
-                      <td className="p-3 text-center text-muted-foreground">{item.quantity}</td>
-                      <td className="p-3 text-right text-muted-foreground">{formatCurrency(Number(item.unitPrice) || 0, previewItem.currency)}</td>
-                      <td className="p-3 text-right font-semibold text-foreground">{formatCurrency(Number(item.amount) || 0, previewItem.currency)}</td>
+                    <tr key={idx} className="hover:bg-muted/30 dark:hover:bg-slate-800/40 transition-colors">
+                      <td className="px-4 py-3 text-foreground font-semibold">{item.description}</td>
+                      <td className="px-4 py-3 text-center text-muted-foreground font-mono font-medium">{item.quantity}</td>
+                      <td className="px-4 py-3 text-right text-muted-foreground font-mono font-medium">{formatCurrency(Number(item.unitPrice) || 0, previewItem.currency)}</td>
+                      <td className="px-4 py-3 text-right font-bold text-foreground font-mono">{formatCurrency(Number(item.amount) || 0, previewItem.currency)}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-            <div className="flex justify-between items-end border-t border-border pt-4 text-xs">
-              <div>
-                <p className="text-[10px] font-semibold text-muted-foreground uppercase">Dates</p>
-                <p className="text-muted-foreground mt-0.5">Issued: {previewItem.invoiceDate} | Due: {previewItem.dueDate}</p>
+
+            {/* Dates & Subtotal / Total Calculation Summary */}
+            <div className="flex flex-col sm:flex-row justify-between sm:items-end gap-4 border-t border-border dark:border-slate-800 pt-4 text-xs">
+              <div className="space-y-1">
+                <p className="text-[10px] font-bold text-muted-foreground dark:text-slate-400 uppercase tracking-wider">Invoice Timeline</p>
+                <p className="text-foreground dark:text-slate-200 font-medium">
+                  <span className="text-muted-foreground">Issued:</span> <strong className="font-semibold text-foreground">{previewItem.invoiceDate}</strong> • <span className="text-muted-foreground">Due:</span> <strong className="font-semibold text-foreground">{previewItem.dueDate}</strong>
+                </p>
               </div>
-              <div className="text-right">
-                <p className="text-xs text-muted-foreground">Subtotal: {formatCurrency(previewItem.subtotal || 0, previewItem.currency)} | Tax ({previewItem.taxRate}%): {formatCurrency(previewItem.taxAmount || 0, previewItem.currency)}</p>
-                <p className="text-lg font-bold text-primary mt-1">Total: {formatCurrency(previewItem.total || 0, previewItem.currency)}</p>
+
+              <div className="text-right space-y-1 bg-muted/30 dark:bg-slate-800/50 p-3 rounded-xl border border-border/60 dark:border-slate-700/60">
+                <p className="text-xs text-muted-foreground dark:text-slate-300">
+                  Subtotal: <strong className="font-mono text-foreground">{formatCurrency(previewItem.subtotal || 0, previewItem.currency)}</strong> | Tax ({previewItem.taxRate}%): <strong className="font-mono text-foreground">{formatCurrency(previewItem.taxAmount || 0, previewItem.currency)}</strong>
+                </p>
+                <p className="text-xl font-black text-emerald-500 dark:text-emerald-400 tracking-tight pt-1">
+                  Total: {formatCurrency(previewItem.total || 0, previewItem.currency)}
+                </p>
               </div>
             </div>
-            <div className="flex justify-end gap-2 border-t border-border pt-3">
-              <button onClick={() => setPreviewItem(null)} className="px-4 py-1.5 rounded-lg border border-border bg-muted/60 text-xs font-semibold text-muted-foreground hover:bg-muted cursor-pointer">Close</button>
+
+            {/* Footer Buttons */}
+            <div className="flex justify-end gap-2 border-t border-border dark:border-slate-800 pt-4">
+              <button
+                onClick={() => setPreviewItem(null)}
+                className="px-5 py-2 rounded-xl border border-border bg-muted/60 hover:bg-muted text-xs font-bold text-foreground transition-all cursor-pointer shadow-xs"
+              >
+                Close
+              </button>
             </div>
           </div>
         </div>
@@ -1531,6 +1574,7 @@ const TABS: { key: TabKey; label: string; icon: string }[] = [
 ];
 
 export default function ITCommandCenterPage() {
+  const { can, isAdmin, isOPS } = usePermissions();
   const [activeTab, setActiveTab] = useTabPersistence<TabKey>("it_command_center_tab", "overview", ["overview", "drive", "access", "subscriptions", "devices", "invoices"]);
   const [autoOpenAddTab, setAutoOpenAddTab] = useState<TabKey | null>(null);
 
@@ -1734,6 +1778,62 @@ export default function ITCommandCenterPage() {
     showToast("Invoice deleted", "info");
   };
 
+  const visibleTabs = useMemo(() => {
+    return TABS.filter((tab) => {
+      if (tab.key === "overview") return true;
+      if (tab.key === "drive") return isAdmin || isOPS || can("viewDriveFiles");
+      if (tab.key === "access") return isAdmin || isOPS || can("manageITAccess") || can("viewITPortal");
+      if (tab.key === "subscriptions") return isAdmin || isOPS || can("manageITSubscriptions") || can("viewITPortal");
+      if (tab.key === "devices") return isAdmin || isOPS || can("manageITDevices") || can("viewITPortal");
+      if (tab.key === "invoices") return isAdmin || isOPS || can("manageITInvoices") || can("viewITPortal");
+      return true;
+    });
+  }, [isAdmin, isOPS, can]);
+
+  const handleExportTabCSV = () => {
+    let headers: string[] = [];
+    let rows: string[][] = [];
+    const filename = `it_${activeTab}_${getISTDateString()}.csv`;
+
+    if (activeTab === "drive") {
+      headers = ["File / Resource Name", "Category", "Platform", "Link", "Owner", "Access Level", "Last Updated", "Notes"];
+      rows = links.map((l) => [l.name, l.category, l.platform, l.link, l.owner, l.accessLevel, l.lastUpdated, l.notes || ""]);
+    } else if (activeTab === "access") {
+      headers = ["Tool / System", "Category", "Assignee", "Role", "Access Level", "Date Granted", "Status"];
+      rows = access.map((a) => [a.tool, a.category, a.assignee, a.role, a.accessLevel, a.dateGranted, a.status]);
+    } else if (activeTab === "subscriptions") {
+      headers = ["Tool Name", "Category", "Plan", "Cost/Month", "Seats", "Renewal Date", "Owner", "Status"];
+      rows = subs.map((s) => [s.tool, s.category, s.plan, s.costPerMonth.toString(), (s.seats || 0).toString(), s.renewalDate, s.owner, s.status]);
+    } else if (activeTab === "devices") {
+      headers = ["Asset Tag", "Type", "Brand", "Model", "Assigned To", "Department", "OS", "Condition", "Status", "Last Seen"];
+      rows = devices.map((d) => [d.assetTag, d.type, d.brand, d.modelName, d.assignedTo || "", d.department || "", d.os || "", d.condition, d.status, d.lastSeen || ""]);
+    } else if (activeTab === "invoices") {
+      headers = ["Invoice No", "Billed To Client", "Date", "Due Date", "Customer No", "Subtotal", "Tax", "Total", "Currency", "Status"];
+      rows = invoices.map((i) => [i.invoiceNo, i.billedToName, i.invoiceDate, i.dueDate, i.customerNo, i.subtotal.toString(), i.taxAmount.toString(), i.total.toString(), i.currency, i.status]);
+    } else {
+      // Overview export
+      headers = ["Category", "Metric", "Value"];
+      rows = [
+        ["Access", "Active Grants", access.filter((a) => a.status === "Active").length.toString()],
+        ["Subscriptions", "Active Tools", subs.filter((s) => s.status === "Active").length.toString()],
+        ["Subscriptions", "Monthly Spend", subs.filter((s) => s.status === "Active").reduce((sum, s) => sum + s.costPerMonth, 0).toString()],
+        ["Devices", "In Use Assets", devices.filter((d) => d.status === "In Use").length.toString()],
+        ["Invoices", "Total Invoices", invoices.length.toString()],
+      ];
+    }
+
+    const csvContent = [headers.map((h) => `"${h}"`).join(","), ...rows.map((r) => r.map((c) => `"${(c || "").replace(/"/g, '""')}"`).join(","))].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", filename);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showToast(`Exported ${activeTab} CSV`, "info");
+  };
+
   const totalRecords = links.length + access.length + subs.length + devices.length + invoices.length;
   const overallLoading = loadingLinks && loadingAccess && loadingSubs && loadingDevices && loadingInvoices;
 
@@ -1749,7 +1849,7 @@ export default function ITCommandCenterPage() {
           </div>
           <div>
             <h1 className="text-xl font-bold text-foreground tracking-tight">IT Portal</h1>
-            <p className="text-xs text-muted-foreground">Manage access, subscriptions, assets, invoices & shared resources</p>
+            <p className="text-xs text-muted-foreground">Manage access, subscriptions, assets, invoices & shared resources (IST Standard)</p>
           </div>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
@@ -1763,6 +1863,10 @@ export default function ITCommandCenterPage() {
               <span className="font-medium">{totalRecords} records</span>
             </div>
           )}
+          <button onClick={handleExportTabCSV} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-muted/60 hover:bg-muted text-xs text-muted-foreground transition-colors cursor-pointer" title="Export Current Tab CSV">
+            <i className="fa-solid fa-file-csv text-[10px] text-primary" />
+            <span>Export CSV</span>
+          </button>
           <button onClick={handleRefresh} disabled={refreshing} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-muted/60 hover:bg-muted text-xs text-muted-foreground transition-colors cursor-pointer disabled:opacity-60">
             <i className={cn("fa-solid fa-rotate text-[10px]", refreshing && "fa-spin")} />
             {refreshing ? "Refreshing…" : "Refresh"}
@@ -1772,7 +1876,7 @@ export default function ITCommandCenterPage() {
 
       {/* Tab Bar */}
       <div className="flex items-center gap-1 p-1 bg-muted/60 rounded-xl border border-border overflow-x-auto no-scrollbar">
-        {TABS.map((tab) => (
+        {visibleTabs.map((tab) => (
           <button
             key={tab.key}
             id={`it-tab-${tab.key}`}
@@ -1780,7 +1884,7 @@ export default function ITCommandCenterPage() {
             className={cn(
               "flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition-all duration-200 whitespace-nowrap cursor-pointer",
               activeTab === tab.key
-                ? "bg-card text-foreground shadow-sm border border-border"
+                ? "bg-card text-foreground shadow-sm border border-border font-bold"
                 : "text-muted-foreground hover:text-foreground hover:bg-card/60"
             )}
           >

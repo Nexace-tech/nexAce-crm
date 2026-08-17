@@ -6,9 +6,15 @@ import Link from "next/link";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { cn, formatISTTime, formatISTDate, getISTDateString, APP_TIMEZONE } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
 import { usePermissions } from "@/hooks/usePermissions";
+
+function getNowInIST(): { hours: number; minutes: number } {
+  const nowStr = new Date().toLocaleTimeString("en-US", { timeZone: APP_TIMEZONE, hour12: false, hour: "2-digit", minute: "2-digit" });
+  const [h, m] = nowStr.split(":").map(Number);
+  return { hours: h || 0, minutes: m || 0 };
+}
 
 function parseTime(timeStr: string): { h: number; m: number } | null {
   if (!timeStr) return null;
@@ -28,8 +34,8 @@ function getShiftStatus(shiftTime: string): "active" | "upcoming" | "ended" | "o
   const start = parseTime(startStr);
   const end = parseTime(endStr);
   if (!start || !end) return "offshift";
-  const now = new Date();
-  const nowMins = now.getHours() * 60 + now.getMinutes();
+  const { hours, minutes } = getNowInIST();
+  const nowMins = hours * 60 + minutes;
   const startMins = start.h * 60 + start.m;
   const endMins = end.h * 60 + end.m;
   const buffer = 30;
@@ -50,8 +56,8 @@ function getShiftProgress(shiftTime: string): number {
   const start = parseTime(startStr);
   const end = parseTime(endStr);
   if (!start || !end) return 0;
-  const now = new Date();
-  const nowMins = now.getHours() * 60 + now.getMinutes();
+  const { hours, minutes } = getNowInIST();
+  const nowMins = hours * 60 + minutes;
   const startMins = start.h * 60 + start.m;
   let endMins = end.h * 60 + end.m;
   if (endMins < startMins) endMins += 1440;
@@ -69,6 +75,7 @@ const ROLE_COLORS: Record<string, { avatar: string; badge: string }> = {
   HR:       { avatar: "bg-pink-500/15 text-pink-500 border-pink-500/30",          badge: "bg-pink-500/10 text-pink-600 border-pink-500/20" },
   Employee: { avatar: "bg-sky-500/15 text-sky-500 border-sky-500/30",             badge: "bg-sky-500/10 text-sky-600 border-sky-500/20" },
 };
+
 const DEPT_COLORS = [
   "bg-blue-500/10 text-blue-600 border-blue-500/20",
   "bg-violet-500/10 text-violet-600 border-violet-500/20",
@@ -78,15 +85,19 @@ const DEPT_COLORS = [
   "bg-cyan-500/10 text-cyan-600 border-cyan-500/20",
   "bg-orange-500/10 text-orange-600 border-orange-500/20",
 ];
-const deptColorMap: Record<string, string> = {};
-let deptColorIdx = 0;
+
 function getDeptColor(dept: string) {
-  if (!deptColorMap[dept]) { deptColorMap[dept] = DEPT_COLORS[deptColorIdx % DEPT_COLORS.length]; deptColorIdx++; }
-  return deptColorMap[dept];
+  if (!dept) return DEPT_COLORS[0];
+  let hash = 0;
+  for (let i = 0; i < dept.length; i++) {
+    hash = (hash << 5) - hash + dept.charCodeAt(i);
+    hash |= 0;
+  }
+  return DEPT_COLORS[Math.abs(hash) % DEPT_COLORS.length];
 }
 
 const STATUS_CONFIG = {
-  active:   { label: "Active",        icon: "fa-solid fa-circle-check", dot: "bg-emerald-500",      text: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-500/25" },
+  active:   { label: "Active Now",    icon: "fa-solid fa-circle-check", dot: "bg-emerald-500",      text: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-500/25" },
   upcoming: { label: "Starting Soon", icon: "fa-solid fa-clock",        dot: "bg-amber-400",        text: "text-amber-600 dark:text-amber-400",     bg: "bg-amber-500/10",   border: "border-amber-500/25" },
   ended:    { label: "Shift Ended",   icon: "fa-solid fa-moon",         dot: "bg-slate-400",        text: "text-slate-500",                         bg: "bg-muted/40",       border: "border-border/40" },
   offshift: { label: "Off Shift",     icon: "fa-solid fa-circle-minus", dot: "bg-muted-foreground", text: "text-muted-foreground",                  bg: "bg-muted/20",       border: "border-border/30" },
@@ -105,7 +116,9 @@ export function TeamShiftOverviewCard() {
   const { isAdmin, isOPS } = usePermissions();
   const [teamMembers, setTeamMembers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [departmentFilter, setDepartmentFilter] = useState("All");
   const [shiftFilter, setShiftFilter] = useState("All");
   const [statusFilter, setStatusFilter] = useState("All");
   const [typeFilter, setTypeFilter] = useState("All");
@@ -123,7 +136,7 @@ export function TeamShiftOverviewCard() {
   const fetchMemberHistory = async (userId: string) => {
     setMemberHistoryLoading(true);
     try {
-      const today = new Date().toISOString().split("T")[0];
+      const today = getISTDateString();
       const res = await fetch(`/api/attendance/summary?userId=${userId}&from=${today}&to=${today}&limit=5`);
       if (res.ok) {
         const data = await res.json();
@@ -142,10 +155,9 @@ export function TeamShiftOverviewCard() {
       const res = await fetch(`/api/tasks?assignee=${userId}`);
       if (res.ok) {
         const data = await res.json();
-        // Today's tasks: tasks that are incomplete OR due today
-        const todayStr = new Date().toDateString();
+        const todayStr = getISTDateString();
         const filteredTasks = (data.tasks || []).filter((t: any) => {
-          const isDueToday = t.dueDate && new Date(t.dueDate).toDateString() === todayStr;
+          const isDueToday = t.dueDate && getISTDateString(new Date(t.dueDate)) === todayStr;
           return t.status !== "Done" || isDueToday;
         });
         setMemberTasks(filteredTasks);
@@ -175,30 +187,28 @@ export function TeamShiftOverviewCard() {
 
   const exportMemberData = async (m: any) => {
     try {
-      // Fetch last 30 days of data for this user
-      const to   = new Date().toISOString().split("T")[0];
-      const from = new Date(Date.now() - 30 * 86400000).toISOString().split("T")[0];
-      const res  = await fetch(`/api/attendance/summary?userId=${m._id}&from=${from}&to=${to}&limit=200`);
+      const to = getISTDateString();
+      const from = getISTDateString(new Date(Date.now() - 30 * 86400000));
+      const res = await fetch(`/api/attendance/summary?userId=${m._id}&from=${from}&to=${to}&limit=200`);
       if (!res.ok) return;
       const data = await res.json();
       const recs: any[] = data.records || [];
       if (recs.length === 0) return;
 
-      const fmtTime = (d: string | Date | null | undefined) =>
-        d ? new Date(d).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: true }) : "";
+      const fmtTime = (d: string | Date | null | undefined) => (d ? formatISTTime(d) : "");
       const fmtHrs2 = (h: number) => {
         const hh = Math.floor(h); const mm = Math.round((h - hh) * 60);
         return `${hh}h ${mm.toString().padStart(2, "0")}m`;
       };
 
-      const headers = ["Date", "Day", "Clock In", "Clock Out", "Duration", "Regular Hrs", "Overtime Hrs", "Status"];
+      const headers = ["Date", "Day", "Clock In (IST)", "Clock Out (IST)", "Duration", "Regular Hrs", "Overtime Hrs", "Status"];
       const rows = recs.map((r: any) => {
         const dur = r.clockIn && r.clockOut
           ? fmtHrs2((new Date(r.clockOut).getTime() - new Date(r.clockIn).getTime()) / 3600000)
           : r.regularHours ? fmtHrs2(r.regularHours) : "Active";
         return [
-          `"${new Date(r.date).toLocaleDateString()}"`,
-          `"${new Date(r.date).toLocaleDateString(undefined, { weekday: "long" })}"`,
+          `"${formatISTDate(r.date)}"`,
+          `"${formatISTDate(r.date, { weekday: "long" })}"`,
           `"${fmtTime(r.clockIn)}"`,
           `"${r.clockOut ? fmtTime(r.clockOut) : (r.clockIn ? "Active" : "")}"`,
           `"${dur}"`,
@@ -213,6 +223,7 @@ export function TeamShiftOverviewCard() {
         `"Email","${m.email ?? ""}"`,
         `"Role","${m.role ?? ""}"`,
         `"Department","${m.department ?? ""}"`,
+        `"Timezone","IST (Asia/Kolkata)"`,
         `"Period","${from} to ${to}"`,
         "",
         headers.join(","),
@@ -220,10 +231,10 @@ export function TeamShiftOverviewCard() {
       ].join("\n");
 
       const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-      const url  = URL.createObjectURL(blob);
+      const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = `Attendance_${(m.name ?? "user").replace(/\s+/g, "_")}_${from}_to_${to}.csv`;
+      link.download = `Attendance_${(m.name ?? "user").replace(/\s+/g, "_")}_${from}_to_${to}_IST.csv`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -233,13 +244,13 @@ export function TeamShiftOverviewCard() {
     }
   };
 
-  const fetchTeamShifts = async () => {
+  const fetchTeamShifts = async (isManual = false) => {
+    if (isManual) setRefreshing(true);
     try {
       const res = await fetch("/api/team?all=true");
       if (res.ok) {
         const data = await res.json();
         let users = data.users || [];
-        // Non-admin/non-OPS users only see their own record
         if (!isAdmin && !isOPS && currentUser?.email) {
           users = users.filter(
             (u: any) => u.email?.toLowerCase() === currentUser.email?.toLowerCase()
@@ -251,6 +262,7 @@ export function TeamShiftOverviewCard() {
       console.error("Failed to fetch team shift times:", err);
     } finally {
       setLoading(false);
+      if (isManual) setRefreshing(false);
     }
   };
 
@@ -260,45 +272,98 @@ export function TeamShiftOverviewCard() {
     return () => clearInterval(tick);
   }, [currentUser, isAdmin, isOPS]);
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && selectedMember) {
+        closeMemberDetail();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [selectedMember]);
+
+  const uniqueDepartments = useMemo(() => {
+    const set = new Set<string>();
+    teamMembers.forEach((m) => {
+      if (m.department) set.add(m.department);
+      if (Array.isArray(m.departments)) m.departments.forEach((d: string) => d && set.add(d));
+    });
+    return Array.from(set).sort();
+  }, [teamMembers]);
+
+  const teamMemberMap = useMemo(() => {
+    const map = new Map<string, any>();
+    teamMembers.forEach((u) => {
+      if (u._id) map.set(u._id, u);
+    });
+    return map;
+  }, [teamMembers]);
+
   const enriched = useMemo(
     () => teamMembers.map((m) => {
       const shiftTiming = m.shiftTime || "09:00 AM - 05:00 PM";
-      const shiftName   = m.shiftName  || "Standard Day Shift";
-      const empType     = m.employmentType || "Permanent";
-      // "Active" status requires the user to have explicitly started their shift timer (clockIn set, no clockOut).
-      // Time-based window alone is NOT enough — if the shift window is "active" but the user hasn't clocked in,
-      // we show "upcoming" (they're in the window but haven't punched in yet).
+      const shiftName = m.shiftName || "Standard Day Shift";
+      const empType = m.employmentType || "Permanent";
       const timeStatus = getShiftStatus(shiftTiming);
       const computedStatus = m.isClockedIn
         ? "active"
         : m.attendanceStatus === "Shift Ended"
           ? "ended"
           : timeStatus === "active"
-            ? "upcoming"  // In shift window but timer not started → show as "Starting Soon"
+            ? "upcoming"
             : timeStatus;
+
+      // Safe manager resolution using O(1) map lookup
+      let managerName = "—";
+      if (m.managerId) {
+        if (typeof m.managerId === "object" && m.managerId.name) {
+          managerName = m.managerId.name;
+        } else {
+          const mId = typeof m.managerId === "object" ? m.managerId._id : m.managerId;
+          const found = teamMemberMap.get(mId);
+          managerName = found?.name || "CEO / Top-level";
+        }
+      } else {
+        managerName = "CEO / Top-level";
+      }
+
       return {
         ...m,
         shiftTiming,
         shiftName,
         empType,
+        managerName,
         status: computedStatus,
         progress: getShiftProgress(shiftTiming),
         isNight: shiftName.toLowerCase().includes("night")
       };
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [teamMembers, now]
+    [teamMembers, teamMemberMap, now]
   );
 
   const filtered = useMemo(
     () => enriched.filter((m) => {
       const q = searchQuery.toLowerCase();
-      return (!q || m.name?.toLowerCase().includes(q) || m.username?.toLowerCase().includes(q) || m.email?.toLowerCase().includes(q) || m.department?.toLowerCase().includes(q) || m.role?.toLowerCase().includes(q))
-        && (shiftFilter === "All" || m.shiftName.toLowerCase().includes(shiftFilter.toLowerCase()))
-        && (typeFilter === "All" || m.empType === typeFilter)
-        && (statusFilter === "All" || m.status === statusFilter);
+      const matchQuery = !q || 
+        m.name?.toLowerCase().includes(q) || 
+        m.username?.toLowerCase().includes(q) || 
+        m.email?.toLowerCase().includes(q) || 
+        m.department?.toLowerCase().includes(q) || 
+        m.role?.toLowerCase().includes(q) ||
+        m.managerName?.toLowerCase().includes(q);
+
+      const matchDept = departmentFilter === "All" || 
+        m.department === departmentFilter || 
+        (Array.isArray(m.departments) && m.departments.includes(departmentFilter));
+
+      const matchShift = shiftFilter === "All" || m.shiftName.toLowerCase().includes(shiftFilter.toLowerCase());
+      const matchType = typeFilter === "All" || m.empType === typeFilter;
+      const matchStatus = statusFilter === "All" || m.status === statusFilter;
+
+      return matchQuery && matchDept && matchShift && matchType && matchStatus;
     }),
-    [enriched, searchQuery, shiftFilter, typeFilter, statusFilter]
+    [enriched, searchQuery, departmentFilter, shiftFilter, typeFilter, statusFilter]
   );
 
   const stats = useMemo(() => ({
@@ -309,9 +374,15 @@ export function TeamShiftOverviewCard() {
     offshift: enriched.filter((m) => m.status === "offshift").length,
   }), [enriched]);
 
-  const formatTime = (d: Date) => d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true });
-  const hasFilters = !!(searchQuery || shiftFilter !== "All" || typeFilter !== "All" || statusFilter !== "All");
-  const resetFilters = () => { setSearchQuery(""); setShiftFilter("All"); setTypeFilter("All"); setStatusFilter("All"); };
+  const formatTime = (d: Date) => formatISTTime(d);
+  const hasFilters = !!(searchQuery || departmentFilter !== "All" || shiftFilter !== "All" || typeFilter !== "All" || statusFilter !== "All");
+  const resetFilters = () => { 
+    setSearchQuery(""); 
+    setDepartmentFilter("All");
+    setShiftFilter("All"); 
+    setTypeFilter("All"); 
+    setStatusFilter("All"); 
+  };
 
   const myRecord = enriched.find((m) => m.email?.toLowerCase() === currentUser?.email?.toLowerCase());
   const isCurrentlyClockedIn = Boolean(myRecord?.isClockedIn || myRecord?.status === "active");
@@ -336,11 +407,11 @@ export function TeamShiftOverviewCard() {
   };
 
   const STAT_TABS = [
-    { key: "All",      label: "Total",         value: stats.total,    icon: "fa-solid fa-users",        iconColor: "text-foreground" },
-    { key: "active",   label: "Active Now",    value: stats.active,   icon: "fa-solid fa-circle-check", iconColor: "text-emerald-500" },
-    { key: "upcoming", label: "Starting Soon", value: stats.upcoming, icon: "fa-solid fa-clock",        iconColor: "text-amber-500" },
-    { key: "ended",    label: "Ended",         value: stats.ended,    icon: "fa-solid fa-moon",         iconColor: "text-slate-400" },
-    { key: "offshift", label: "Off Shift",     value: stats.offshift, icon: "fa-solid fa-circle-minus", iconColor: "text-muted-foreground" },
+    { key: "All",      label: "Total Roster",   value: stats.total,    icon: "fa-solid fa-users",        iconColor: "text-foreground" },
+    { key: "active",   label: "Active Now",     value: stats.active,   icon: "fa-solid fa-circle-check", iconColor: "text-emerald-500" },
+    { key: "upcoming", label: "Starting Soon",  value: stats.upcoming, icon: "fa-solid fa-clock",        iconColor: "text-amber-500" },
+    { key: "ended",    label: "Shift Ended",    value: stats.ended,    icon: "fa-solid fa-moon",         iconColor: "text-slate-400" },
+    { key: "offshift", label: "Off Shift",      value: stats.offshift, icon: "fa-solid fa-circle-minus", iconColor: "text-muted-foreground" },
   ];
 
   return (
@@ -352,15 +423,28 @@ export function TeamShiftOverviewCard() {
             <CardTitle className="text-base font-bold flex items-center gap-2 text-foreground">
               <i className="fa-solid fa-clock text-primary text-sm shrink-0" />
               Team Shift Overview
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary font-semibold border border-primary/20">
-                {formatTime(now)}
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary font-semibold border border-primary/20 flex items-center gap-1.5" title="Indian Standard Time (IST)">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                {formatTime(now)} <span className="opacity-70 text-[9px]">IST</span>
               </span>
             </CardTitle>
             <CardDescription className="text-xs text-muted-foreground mt-0.5">
-              Live shift assignments, working hours &amp; real-time attendance status
+              Live shift assignments, reporting structures &amp; real-time attendance status
             </CardDescription>
           </div>
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-2 shrink-0 flex-wrap sm:flex-nowrap">
+            {/* Live refresh action button */}
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => fetchTeamShifts(true)}
+              disabled={refreshing || loading}
+              title="Refresh Shift Data"
+              className="h-8 px-2.5 text-xs text-muted-foreground hover:text-foreground cursor-pointer"
+            >
+              <i className={cn("fa-solid fa-arrows-rotate text-xs", refreshing && "fa-spin text-primary")} />
+            </Button>
+
             <Button
               size="sm"
               onClick={handleQuickClockAction}
@@ -412,7 +496,7 @@ export function TeamShiftOverviewCard() {
           </div>
         </div>
 
-        <div className="grid grid-cols-5 gap-2 mt-4 mb-4">
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mt-4 mb-4">
           {STAT_TABS.map((st) => {
             const sel = statusFilter === st.key;
             return (
@@ -445,7 +529,7 @@ export function TeamShiftOverviewCard() {
             <i className="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none" />
             <Input
               type="text"
-              placeholder="Search name, role, department..."
+              placeholder="Search member, manager, role, department..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-8 pr-8 h-8 text-xs bg-background"
@@ -459,6 +543,19 @@ export function TeamShiftOverviewCard() {
               </button>
             )}
           </div>
+
+          {/* Department Filter */}
+          <select
+            value={departmentFilter}
+            onChange={(e) => setDepartmentFilter(e.target.value)}
+            className="h-8 text-xs bg-background border border-border rounded-md px-2.5 text-foreground outline-none cursor-pointer shrink-0"
+          >
+            <option value="All">All Departments</option>
+            {uniqueDepartments.map((d) => (
+              <option key={d} value={d}>{d}</option>
+            ))}
+          </select>
+
           <select
             value={shiftFilter}
             onChange={(e) => setShiftFilter(e.target.value)}
@@ -470,6 +567,7 @@ export function TeamShiftOverviewCard() {
             <option value="Evening">Evening</option>
             <option value="Night">Night</option>
           </select>
+
           <select
             value={typeFilter}
             onChange={(e) => setTypeFilter(e.target.value)}
@@ -482,6 +580,7 @@ export function TeamShiftOverviewCard() {
             <option value="Contractor">Contractor</option>
             <option value="Intern">Intern</option>
           </select>
+
           {hasFilters && (
             <button
               onClick={resetFilters}
@@ -490,6 +589,7 @@ export function TeamShiftOverviewCard() {
               <i className="fa-solid fa-rotate-left text-xs" /> Reset
             </button>
           )}
+
           {!loading && (
             <span className="text-[11px] text-muted-foreground shrink-0 self-center">
               {filtered.length}/{enriched.length}
@@ -504,6 +604,7 @@ export function TeamShiftOverviewCard() {
                 <tr>
                   <th className="py-2.5 px-3 whitespace-nowrap">Team Member</th>
                   <th className="py-2.5 px-3 whitespace-nowrap">Department</th>
+                  <th className="py-2.5 px-3 whitespace-nowrap">Reports To</th>
                   <th className="py-2.5 px-3 whitespace-nowrap">Employment Type</th>
                   <th className="py-2.5 px-3 whitespace-nowrap">Shift</th>
                   <th className="py-2.5 px-3 whitespace-nowrap">Timing</th>
@@ -524,26 +625,18 @@ export function TeamShiftOverviewCard() {
                           </div>
                         </div>
                       </td>
-                      <td className="py-3 px-3">
-                        <div className="h-4 w-20 bg-muted/60 rounded-full" />
-                      </td>
-                      <td className="py-3 px-3">
-                        <div className="h-3 w-24 bg-muted/60 rounded" />
-                      </td>
-                      <td className="py-3 px-3">
-                        <div className="h-3 w-28 bg-muted/60 rounded" />
-                      </td>
-                      <td className="py-3 px-3">
-                        <div className="h-2 w-24 bg-muted/60 rounded-full" />
-                      </td>
-                      <td className="py-3 px-3 text-right">
-                        <div className="h-5 w-20 bg-muted/60 rounded-full ml-auto" />
-                      </td>
+                      <td className="py-3 px-3"><div className="h-4 w-20 bg-muted/60 rounded-full" /></td>
+                      <td className="py-3 px-3"><div className="h-4 w-24 bg-muted/60 rounded" /></td>
+                      <td className="py-3 px-3"><div className="h-3 w-24 bg-muted/60 rounded" /></td>
+                      <td className="py-3 px-3"><div className="h-3 w-28 bg-muted/60 rounded" /></td>
+                      <td className="py-3 px-3"><div className="h-2 w-24 bg-muted/60 rounded-full" /></td>
+                      <td className="py-3 px-3"><div className="h-2 w-16 bg-muted/60 rounded-full" /></td>
+                      <td className="py-3 px-3 text-right"><div className="h-5 w-20 bg-muted/60 rounded-full ml-auto" /></td>
                     </tr>
                   ))
                 ) : filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="py-10 text-center text-muted-foreground">
+                    <td colSpan={8} className="py-10 text-center text-muted-foreground">
                       <div className="flex flex-col items-center gap-2">
                         <i className="fa-solid fa-user-clock text-3xl opacity-30" />
                         <span className="text-xs">No team members match your filters</span>
@@ -576,7 +669,7 @@ export function TeamShiftOverviewCard() {
                               <p className="font-semibold text-foreground truncate leading-tight">{m.name}</p>
                               <div className="flex items-center gap-1.5 mt-0.5">
                                 <span className={cn("text-[9px] px-1.5 py-0.5 rounded-full border font-semibold shrink-0", rc.badge)}>
-                                  {m.role || "Employee"}
+                                  {m.role === "OPS" ? "OPS (SubAdmin)" : (m.role || "Employee")}
                                 </span>
                                 <span className="text-[10px] text-muted-foreground font-mono truncate">
                                   {m.username ? "@" + m.username : m.email}
@@ -588,6 +681,12 @@ export function TeamShiftOverviewCard() {
                         <td className="py-2.5 px-3">
                           <span className={cn("inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold border", dc)}>
                             {m.department || "Management"}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3">
+                          <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground font-medium whitespace-nowrap">
+                            <i className="fa-solid fa-user-tie text-[10px] text-muted-foreground/60" />
+                            {m.managerName}
                           </span>
                         </td>
                         <td className="py-2.5 px-3">
@@ -703,14 +802,27 @@ export function TeamShiftOverviewCard() {
                         {sc.label}
                       </span>
                     </div>
+
                     <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className={cn("text-[9px] px-1.5 py-0.5 rounded-md border font-semibold", rc.badge)}>{m.role || "Employee"}</span>
+                      <span className={cn("text-[9px] px-1.5 py-0.5 rounded-md border font-semibold", rc.badge)}>
+                        {m.role === "OPS" ? "OPS (SubAdmin)" : (m.role || "Employee")}
+                      </span>
                       <span className={cn("text-[9px] px-1.5 py-0.5 rounded-md border font-semibold", dc)}>{m.department || "Management"}</span>
                       <span className="text-[9px] px-1.5 py-0.5 rounded-md border border-border/50 bg-muted/40 text-muted-foreground font-semibold flex items-center gap-1">
                         <i className={cn("text-xs shrink-0", m.isNight ? "fa-solid fa-moon text-indigo-400" : "fa-solid fa-sun text-amber-400")} />
                         {m.shiftName}
                       </span>
                     </div>
+
+                    {/* Reports To info in cards view */}
+                    <div className="text-[10px] text-muted-foreground flex items-center justify-between border-t border-border/40 pt-2">
+                      <span className="flex items-center gap-1">
+                        <i className="fa-solid fa-user-tie text-[9px] opacity-70" />
+                        <span className="opacity-75">Reports to:</span>
+                        <strong className="text-foreground font-medium">{m.managerName}</strong>
+                      </span>
+                    </div>
+
                     <div className="space-y-1.5">
                       <div className="flex items-center justify-between text-[10px]">
                         <span className="font-mono text-muted-foreground flex items-center gap-1.5">
@@ -739,8 +851,7 @@ export function TeamShiftOverviewCard() {
       const rc = ROLE_COLORS[m.role] || ROLE_COLORS.Employee;
       const sc = STATUS_CONFIG[m.status as keyof typeof STATUS_CONFIG];
 
-      const fmtTime = (d: string | Date | null | undefined) =>
-        d ? new Date(d).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: true }) : "--:--";
+      const fmtTime = (d: string | Date | null | undefined) => (d ? formatISTTime(d) : "--:--");
 
       const fmtHrs = (h: number) => {
         const hh = Math.floor(h);
@@ -749,14 +860,14 @@ export function TeamShiftOverviewCard() {
       };
 
       // Live elapsed since clock-in
-      const liveMs  = m.isClockedIn && m.clockInTime ? Date.now() - new Date(m.clockInTime).getTime() : 0;
+      const liveMs = m.isClockedIn && m.clockInTime ? Date.now() - new Date(m.clockInTime).getTime() : 0;
       const liveMins = Math.floor(liveMs / 60000);
       const liveElapsed = liveMs > 0 ? `${Math.floor(liveMins / 60)}h ${(liveMins % 60).toString().padStart(2, "0")}m` : "";
 
       // Today's attendance record (first in list)
       const todayRec = memberHistory[0] ?? null;
-      const todayRegH  = todayRec?.regularHours ?? 0;
-      const todayOtH   = todayRec?.overtimeHours ?? 0;
+      const todayRegH = todayRec?.regularHours ?? 0;
+      const todayOtH = todayRec?.overtimeHours ?? 0;
       const todayTotalH = todayRec
         ? todayRec.clockIn && !todayRec.clockOut
           ? Math.max(0, (Date.now() - new Date(todayRec.clockIn).getTime()) / 3600000)
@@ -766,16 +877,42 @@ export function TeamShiftOverviewCard() {
       // Shift total hours for target calc
       const [sStart, sEnd] = (m.shiftTiming || "09:00 AM - 05:00 PM").split("-").map((s: string) => s.trim());
       const pStart = sStart ? parseTime(sStart) : null;
-      const pEnd   = sEnd   ? parseTime(sEnd)   : null;
+      const pEnd = sEnd ? parseTime(sEnd) : null;
       const shiftTotalH = pStart && pEnd
-        ? (() => { let e = pEnd.h * 60 + pEnd.m, s = pStart.h * 60 + pStart.m; if (e < s) e += 1440; return (e - s) / 60; })()
+        ? (() => { let e = pEnd.h * 60 + pEnd.m; const s = pStart.h * 60 + pStart.m; if (e < s) e += 1440; return (e - s) / 60; })()
         : 8;
 
+      // Live shift countdown in IST
+      const shiftRemainingText = (() => {
+        if (!pStart || !pEnd) return "";
+        const { hours, minutes } = getNowInIST();
+        const nowMins = hours * 60 + minutes;
+        const startMins = pStart.h * 60 + pStart.m;
+        let endMins = pEnd.h * 60 + pEnd.m;
+        if (endMins < startMins) endMins += 1440;
+        let nowAdj = nowMins;
+        if (endMins > 1440 && nowMins < startMins) nowAdj += 1440;
+
+        if (m.status === "active") {
+          const rem = Math.max(0, endMins - nowAdj);
+          const rh = Math.floor(rem / 60);
+          const rm = rem % 60;
+          return rem > 0 ? `Ends in ${rh}h ${rm}m` : "Shift completing";
+        }
+        if (m.status === "upcoming") {
+          const until = Math.max(0, startMins - nowAdj);
+          const uh = Math.floor(until / 60);
+          const um = until % 60;
+          return uh > 0 ? `Starts in ${uh}h ${um}m` : `Starts in ${um}m`;
+        }
+        return "";
+      })();
+
       const statusIconConfig: Record<string, { icon: string; color: string; glow: string }> = {
-        active:   { icon: "fa-solid fa-circle-check",  color: "text-emerald-500", glow: "drop-shadow-[0_0_5px_rgba(16,185,129,0.9)]" },
-        upcoming: { icon: "fa-solid fa-clock",          color: "text-amber-400",   glow: "drop-shadow-[0_0_5px_rgba(251,191,36,0.8)]" },
-        ended:    { icon: "fa-solid fa-moon",           color: "text-slate-400",   glow: "" },
-        offshift: { icon: "fa-solid fa-circle-minus",  color: "text-muted-foreground", glow: "" },
+        active:   { icon: "fa-solid fa-circle-check", color: "text-emerald-500", glow: "drop-shadow-[0_0_5px_rgba(16,185,129,0.9)]" },
+        upcoming: { icon: "fa-solid fa-clock",         color: "text-amber-400",   glow: "drop-shadow-[0_0_5px_rgba(251,191,36,0.8)]" },
+        ended:    { icon: "fa-solid fa-moon",          color: "text-slate-400",   glow: "" },
+        offshift: { icon: "fa-solid fa-circle-minus", color: "text-muted-foreground", glow: "" },
       };
       const sic = statusIconConfig[m.status] ?? statusIconConfig.offshift;
 
@@ -795,8 +932,8 @@ export function TeamShiftOverviewCard() {
             onClick={closeMemberDetail}
           />
 
-          {/* Slide-in panel — wider than before */}
-          <div className="fixed right-0 top-0 h-full z-50 w-full max-w-[380px] bg-card border-l border-border shadow-2xl flex flex-col animate-in slide-in-from-right duration-300">
+          {/* Slide-in panel */}
+          <div className="fixed right-0 top-0 h-full z-50 w-full max-w-[400px] bg-card border-l border-border shadow-2xl flex flex-col animate-in slide-in-from-right duration-300">
 
             {/* ── HERO HEADER ── */}
             <div className={cn(
@@ -819,7 +956,6 @@ export function TeamShiftOverviewCard() {
 
               {/* Avatar + name row */}
               <div className="flex items-center gap-4">
-                {/* Avatar with status ring */}
                 <div className="relative shrink-0">
                   <div className={cn(
                     "w-16 h-16 rounded-2xl font-black flex items-center justify-center text-2xl border-2 select-none",
@@ -827,7 +963,6 @@ export function TeamShiftOverviewCard() {
                   )}>
                     {m.name ? m.name.charAt(0).toUpperCase() : "U"}
                   </div>
-                  {/* FA status icon badge */}
                   <div className={cn(
                     "absolute -bottom-1.5 -right-1.5 w-5 h-5 rounded-full bg-card border border-border/60 flex items-center justify-center",
                   )}>
@@ -843,7 +978,9 @@ export function TeamShiftOverviewCard() {
                     {m.username ? "@" + m.username : m.email}
                   </p>
                   <div className="flex items-center flex-wrap gap-1.5 mt-1.5">
-                    <span className={cn("text-[10px] px-2 py-0.5 rounded-full border font-bold", rc.badge)}>{m.role}</span>
+                    <span className={cn("text-[10px] px-2 py-0.5 rounded-full border font-bold", rc.badge)}>
+                      {m.role === "OPS" ? "OPS (SubAdmin)" : (m.role || "Employee")}
+                    </span>
                     <span className={cn("inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border", sc.text, sc.bg, sc.border)}>
                       <i className={cn("text-[9px]", sic.icon, sic.color, m.status === "active" ? "animate-pulse" : "")} />
                       {sc.label}
@@ -852,10 +989,44 @@ export function TeamShiftOverviewCard() {
                 </div>
               </div>
 
+              {/* Quick Communication Actions Bar */}
+              <div className="flex items-center gap-2 mt-3.5 pt-3 border-t border-border/40">
+                {m.email && (
+                  <a
+                    href={`mailto:${m.email}`}
+                    className="flex-1 inline-flex items-center justify-center gap-1.5 py-1.5 px-2.5 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary text-[11px] font-semibold transition-colors border border-primary/20"
+                  >
+                    <i className="fa-solid fa-envelope text-[10px]" /> Email
+                  </a>
+                )}
+                {m.phone && (
+                  <a
+                    href={`tel:${m.phone}`}
+                    className="inline-flex items-center justify-center gap-1.5 py-1.5 px-2.5 rounded-lg bg-muted/60 hover:bg-accent text-foreground text-[11px] font-semibold transition-colors border border-border/50"
+                  >
+                    <i className="fa-solid fa-phone text-[10px]" /> Call
+                  </a>
+                )}
+                <Link
+                  href={`/dashboard/chat?user=${m._id}`}
+                  className="inline-flex items-center justify-center gap-1.5 py-1.5 px-2.5 rounded-lg bg-muted/60 hover:bg-accent text-foreground text-[11px] font-semibold transition-colors border border-border/50"
+                >
+                  <i className="fa-solid fa-comment-dots text-[10px]" /> Chat
+                </Link>
+                <Link
+                  href={`/dashboard/team`}
+                  className="inline-flex items-center justify-center p-1.5 rounded-lg bg-muted/60 hover:bg-accent text-muted-foreground hover:text-foreground text-[11px] transition-colors border border-border/50"
+                  title="View in Team Directory"
+                >
+                  <i className="fa-solid fa-arrow-up-right-from-square text-[10px]" />
+                </Link>
+              </div>
+
               {/* Identity chips row */}
               <div className="flex items-center flex-wrap gap-1.5 mt-3">
                 {[
-                  { icon: "fa-solid fa-building", label: m.department || "—" },
+                  { icon: "fa-solid fa-building", label: m.department || "General" },
+                  { icon: "fa-solid fa-user-tie", label: `Reports: ${m.managerName}` },
                   { icon: EMPLOYMENT_ICON[m.empType] || "fa-solid fa-user", label: m.empType || "Permanent" },
                   { icon: m.isNight ? "fa-solid fa-moon" : "fa-solid fa-sun", label: m.shiftName, color: m.isNight ? "text-indigo-400" : "text-amber-400" },
                 ].map((chip) => (
@@ -928,6 +1099,17 @@ export function TeamShiftOverviewCard() {
                       <i className="fa-solid fa-gauge-high text-primary text-[11px]" /> Shift Progress
                     </span>
                     <div className="flex items-center gap-2">
+                      {shiftRemainingText && (
+                        <span className={cn(
+                          "px-2 py-0.5 rounded-full text-[10px] font-semibold border flex items-center gap-1",
+                          m.status === "active"
+                            ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
+                            : "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"
+                        )}>
+                          <i className={cn("text-[9px]", m.status === "active" ? "fa-solid fa-hourglass-half" : "fa-solid fa-clock")} />
+                          {shiftRemainingText}
+                        </span>
+                      )}
                       {liveElapsed && (
                         <span className="font-mono text-[10px] text-muted-foreground">{liveElapsed} elapsed</span>
                       )}
@@ -938,7 +1120,6 @@ export function TeamShiftOverviewCard() {
                     </div>
                   </div>
 
-                  {/* Segmented progress bar */}
                   <div className="relative h-2.5 bg-muted/60 rounded-full overflow-hidden">
                     <div
                       className={cn(
@@ -951,7 +1132,6 @@ export function TeamShiftOverviewCard() {
                       )}
                       style={{ width: Math.min(m.progress, 100) + "%" }}
                     />
-                    {/* Glow tip */}
                     {m.status === "active" && m.progress < 100 && (
                       <div
                         className="absolute top-0 bottom-0 w-3 bg-white/30 blur-[2px] rounded-full transition-all duration-700"
@@ -975,7 +1155,7 @@ export function TeamShiftOverviewCard() {
                     <i className="fa-solid fa-calendar-day text-indigo-500" /> Today's Attendance Log
                   </span>
                   <span className="text-[10px] font-semibold text-muted-foreground/60 normal-case">
-                    {new Date().toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })}
+                    {formatISTDate(new Date(), { weekday: "long", month: "short", day: "numeric" })}
                   </span>
                 </h4>
 
@@ -993,8 +1173,8 @@ export function TeamShiftOverviewCard() {
                 ) : (
                   <div className="space-y-2">
                     {memberHistory.map((h: any) => {
-                      const regH  = h.regularHours ?? 0;
-                      const otH   = h.overtimeHours ?? 0;
+                      const regH = h.regularHours ?? 0;
+                      const otH = h.overtimeHours ?? 0;
                       const isActiveSession = h.clockIn && !h.clockOut;
                       const sessionMs = isActiveSession
                         ? Date.now() - new Date(h.clockIn).getTime()
@@ -1010,15 +1190,12 @@ export function TeamShiftOverviewCard() {
                             ? "border-emerald-500/25 bg-emerald-500/[0.04]"
                             : "border-border/60 bg-muted/10"
                         )}>
-                          {/* Clock-in → Clock-out timeline */}
                           <div className="flex items-center gap-2">
-                            {/* Clock In */}
                             <div className="text-center shrink-0">
                               <p className="text-[9px] text-muted-foreground uppercase font-semibold">In</p>
                               <p className="font-mono font-black text-emerald-500 text-sm leading-none">{fmtTime(h.clockIn)}</p>
                             </div>
 
-                            {/* Timeline bar */}
                             <div className="flex-1 relative flex items-center">
                               <div className="w-2 h-2 rounded-full bg-emerald-500 shrink-0 z-10" />
                               <div className="flex-1 h-0.5 bg-gradient-to-r from-emerald-500 to-rose-400 relative">
@@ -1029,7 +1206,6 @@ export function TeamShiftOverviewCard() {
                               <div className={cn("w-2 h-2 rounded-full shrink-0 z-10", isActiveSession ? "bg-emerald-500 animate-pulse" : "bg-rose-400")} />
                             </div>
 
-                            {/* Clock Out */}
                             <div className="text-center shrink-0">
                               <p className="text-[9px] text-muted-foreground uppercase font-semibold">Out</p>
                               {h.clockOut
@@ -1040,7 +1216,6 @@ export function TeamShiftOverviewCard() {
                             </div>
                           </div>
 
-                          {/* Session stats pills */}
                           <div className="flex items-center gap-2 flex-wrap">
                             <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-primary/8 border border-primary/15 text-[11px]">
                               <i className="fa-solid fa-clock text-primary text-[9px]" />
@@ -1172,7 +1347,7 @@ export function TeamShiftOverviewCard() {
                 {m.lastActiveAt && (
                   <span className="flex items-center gap-1">
                     <i className="fa-solid fa-signal text-[9px] text-emerald-500" />
-                    {new Date(m.lastActiveAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: true })}
+                    {formatISTTime(m.lastActiveAt)}
                   </span>
                 )}
               </div>

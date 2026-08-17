@@ -28,11 +28,14 @@ export default async function DashboardLayout({ children }: DashboardLayoutProps
 
   try {
     const roleKey = isSubAdminRole(session.role) ? "OPS" : session.role;
+    const roleOrClauses = isSubAdminRole(session.role)
+      ? [{ role: session.role }, { role: "OPS" }, { role: "Sub Admin" }]
+      : [{ role: session.role }, { role: roleKey }];
     [dbUser, permDoc] = await Promise.all([
       User.findById(session.userId).select("name role tenantId status").populate("tenantId"),
       RolePermission.findOne({
         tenantId: session.tenantId,
-        $or: [{ role: session.role }, { role: roleKey }, { role: "OPS" }, { role: "Sub Admin" }],
+        $or: roleOrClauses,
       }),
     ]);
   } catch {

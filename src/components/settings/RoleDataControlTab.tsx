@@ -23,6 +23,7 @@ const MODULES: ModuleMeta[] = [
   { key: "goals", name: "Goals, OKRs & Surveys", description: "Strategic goal tracking, kudos, and team pulse surveys", icon: "fa-solid fa-bullseye" },
   { key: "analytics", name: "Analytics & Audit Logs", description: "Detailed activity timeline logs and workspace analytics", icon: "fa-solid fa-chart-line" },
   { key: "clients", name: "Operation Portal", description: "Billable client project/retainer scope, owner, phase and health", icon: "fa-solid fa-list-check" },
+  { key: "it", name: "IT & Infrastructure Portal", description: "Manage access keys, SaaS subscriptions, hardware assets & vendor invoices", icon: "fa-solid fa-terminal" },
   { key: "referrals", name: "Candidate Referral Pipeline", description: "Employee referral submissions and bonus tracking", icon: "fa-solid fa-link" },
   { key: "settings", name: "Settings & Administration", description: "User management, workspace branding, and security", icon: "fa-solid fa-gear" },
 ];
@@ -40,6 +41,7 @@ type FeatureCategory =
   | "Goals & OKRs"
   | "Analytics"
   | "CRM & Clients"
+  | "IT & Infrastructure"
   | "Referrals"
   | "Admin & Users"
   | "Settings";
@@ -163,6 +165,13 @@ const FEATURE_ACTIONS: FeatureMeta[] = [
   { key: "viewDeals", name: "View CRM Deals & Pipeline", category: "CRM & Clients", subGroup: "Sales Pipeline & Deals", description: "Access the sales pipeline and deal stage tracking", icon: "fa-solid fa-money-bill-trend-up" },
   { key: "manageDeals", name: "Create & Manage Deals", category: "CRM & Clients", subGroup: "Sales Pipeline & Deals", description: "Add deals, update stages, and attach files to opportunities", icon: "fa-solid fa-suitcase-rolling" },
 
+  // IT & Infrastructure
+  { key: "viewITPortal", name: "Access IT Portal", category: "IT & Infrastructure", subGroup: "IT Command Center", description: "Browse the IT Portal overview and hardware/software inventory", icon: "fa-solid fa-terminal" },
+  { key: "manageITAccess", name: "Manage Access Keys & Credentials", category: "IT & Infrastructure", subGroup: "Access & Security", description: "Grant, suspend, or revoke tool access records and user credentials", icon: "fa-solid fa-key" },
+  { key: "manageITSubscriptions", name: "Manage SaaS Subscriptions", category: "IT & Infrastructure", subGroup: "SaaS Subscriptions", description: "Track software subscriptions, plan renewals, and monthly costs", icon: "fa-solid fa-credit-card" },
+  { key: "manageITDevices", name: "Manage Hardware Device Assets", category: "IT & Infrastructure", subGroup: "Hardware Assets", description: "Register, assign, repair, and retire company laptops & hardware", icon: "fa-solid fa-laptop" },
+  { key: "manageITInvoices", name: "Manage IT & Vendor Invoices", category: "IT & Infrastructure", subGroup: "Invoices & Billing", description: "Create, edit, and track payment status of vendor and client invoices", icon: "fa-solid fa-file-invoice-dollar" },
+
   // Referrals
   { key: "submitReferral", name: "Submit Candidate Referrals", category: "Referrals", subGroup: "Referral Pipeline", description: "Nominate external candidates through the referral program", icon: "fa-solid fa-paper-plane" },
   { key: "viewOwnReferrals", name: "Track Own Referral Status", category: "Referrals", subGroup: "Referral Pipeline", description: "See the status and bonus payout of own referrals", icon: "fa-solid fa-list-check" },
@@ -188,43 +197,45 @@ const FEATURE_ACTIONS: FeatureMeta[] = [
 const FEATURE_CATEGORIES: FeatureCategory[] = [
   "Overview", "Team", "Calendar & Time", "Projects", "Sprints", "Drive",
   "Chat", "HR & Leave", "Appraisals", "Goals & OKRs", "Analytics",
-  "CRM & Clients", "Referrals", "Admin & Users", "Settings",
+  "CRM & Clients", "IT & Infrastructure", "Referrals", "Admin & Users", "Settings",
 ];
 
 const CATEGORY_COLORS: Record<FeatureCategory, { text: string; bg: string; border: string; badge: string }> = {
-  "Overview":        { text: "text-sky-500",     bg: "bg-sky-500/10",     border: "border-sky-500/30",     badge: "bg-sky-500/15 text-sky-600 dark:text-sky-400" },
-  "Team":            { text: "text-violet-500",  bg: "bg-violet-500/10",  border: "border-violet-500/30",  badge: "bg-violet-500/15 text-violet-600 dark:text-violet-400" },
-  "Calendar & Time": { text: "text-blue-500",    bg: "bg-blue-500/10",    border: "border-blue-500/30",    badge: "bg-blue-500/15 text-blue-600 dark:text-blue-400" },
-  "Projects":        { text: "text-amber-500",   bg: "bg-amber-500/10",   border: "border-amber-500/30",   badge: "bg-amber-500/15 text-amber-600 dark:text-amber-400" },
-  "Sprints":         { text: "text-orange-500",  bg: "bg-orange-500/10",  border: "border-orange-500/30",  badge: "bg-orange-500/15 text-orange-600 dark:text-orange-400" },
-  "Drive":           { text: "text-teal-500",    bg: "bg-teal-500/10",    border: "border-teal-500/30",    badge: "bg-teal-500/15 text-teal-600 dark:text-teal-400" },
-  "Chat":            { text: "text-green-500",   bg: "bg-green-500/10",   border: "border-green-500/30",   badge: "bg-green-500/15 text-green-600 dark:text-green-400" },
-  "HR & Leave":      { text: "text-pink-500",    bg: "bg-pink-500/10",    border: "border-pink-500/30",    badge: "bg-pink-500/15 text-pink-600 dark:text-pink-400" },
-  "Appraisals":      { text: "text-rose-500",    bg: "bg-rose-500/10",    border: "border-rose-500/30",    badge: "bg-rose-500/15 text-rose-600 dark:text-rose-400" },
-  "Goals & OKRs":    { text: "text-indigo-500",  bg: "bg-indigo-500/10",  border: "border-indigo-500/30",  badge: "bg-indigo-500/15 text-indigo-600 dark:text-indigo-400" },
-  "Analytics":       { text: "text-cyan-500",    bg: "bg-cyan-500/10",    border: "border-cyan-500/30",    badge: "bg-cyan-500/15 text-cyan-600 dark:text-cyan-400" },
-  "CRM & Clients":   { text: "text-emerald-500", bg: "bg-emerald-500/10", border: "border-emerald-500/30", badge: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400" },
-  "Referrals":       { text: "text-lime-500",    bg: "bg-lime-500/10",    border: "border-lime-500/30",    badge: "bg-lime-500/15 text-lime-600 dark:text-lime-400" },
-  "Admin & Users":   { text: "text-red-500",     bg: "bg-red-500/10",     border: "border-red-500/30",     badge: "bg-red-500/15 text-red-600 dark:text-red-400" },
-  "Settings":        { text: "text-slate-500",   bg: "bg-slate-500/10",   border: "border-slate-500/30",   badge: "bg-slate-500/15 text-slate-600 dark:text-slate-400" },
+  "Overview":          { text: "text-sky-500",     bg: "bg-sky-500/10",     border: "border-sky-500/30",     badge: "bg-sky-500/15 text-sky-600 dark:text-sky-400" },
+  "Team":              { text: "text-violet-500",  bg: "bg-violet-500/10",  border: "border-violet-500/30",  badge: "bg-violet-500/15 text-violet-600 dark:text-violet-400" },
+  "Calendar & Time":   { text: "text-blue-500",    bg: "bg-blue-500/10",    border: "border-blue-500/30",    badge: "bg-blue-500/15 text-blue-600 dark:text-blue-400" },
+  "Projects":          { text: "text-amber-500",   bg: "bg-amber-500/10",   border: "border-amber-500/30",   badge: "bg-amber-500/15 text-amber-600 dark:text-amber-400" },
+  "Sprints":           { text: "text-orange-500",  bg: "bg-orange-500/10",  border: "border-orange-500/30",  badge: "bg-orange-500/15 text-orange-600 dark:text-orange-400" },
+  "Drive":             { text: "text-teal-500",    bg: "bg-teal-500/10",    border: "border-teal-500/30",    badge: "bg-teal-500/15 text-teal-600 dark:text-teal-400" },
+  "Chat":              { text: "text-green-500",   bg: "bg-green-500/10",   border: "border-green-500/30",   badge: "bg-green-500/15 text-green-600 dark:text-green-400" },
+  "HR & Leave":        { text: "text-pink-500",    bg: "bg-pink-500/10",    border: "border-pink-500/30",    badge: "bg-pink-500/15 text-pink-600 dark:text-pink-400" },
+  "Appraisals":        { text: "text-rose-500",    bg: "bg-rose-500/10",    border: "border-rose-500/30",    badge: "bg-rose-500/15 text-rose-600 dark:text-rose-400" },
+  "Goals & OKRs":      { text: "text-indigo-500",  bg: "bg-indigo-500/10",  border: "border-indigo-500/30",  badge: "bg-indigo-500/15 text-indigo-600 dark:text-indigo-400" },
+  "Analytics":         { text: "text-cyan-500",    bg: "bg-cyan-500/10",    border: "border-cyan-500/30",    badge: "bg-cyan-500/15 text-cyan-600 dark:text-cyan-400" },
+  "CRM & Clients":     { text: "text-emerald-500", bg: "bg-emerald-500/10", border: "border-emerald-500/30", badge: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400" },
+  "IT & Infrastructure": { text: "text-purple-500", bg: "bg-purple-500/10", border: "border-purple-500/30", badge: "bg-purple-500/15 text-purple-600 dark:text-purple-400" },
+  "Referrals":         { text: "text-lime-500",    bg: "bg-lime-500/10",    border: "border-lime-500/30",    badge: "bg-lime-500/15 text-lime-600 dark:text-lime-400" },
+  "Admin & Users":     { text: "text-red-500",     bg: "bg-red-500/10",     border: "border-red-500/30",     badge: "bg-red-500/15 text-red-600 dark:text-red-400" },
+  "Settings":          { text: "text-slate-500",   bg: "bg-slate-500/10",   border: "border-slate-500/30",   badge: "bg-slate-500/15 text-slate-600 dark:text-slate-400" },
 };
 
 const CATEGORY_ICONS: Record<FeatureCategory, string> = {
-  "Overview":        "fa-solid fa-chart-simple",
-  "Team":            "fa-solid fa-users",
-  "Calendar & Time": "fa-solid fa-calendar-days",
-  "Projects":        "fa-solid fa-folder-tree",
-  "Sprints":         "fa-solid fa-person-running",
-  "Drive":           "fa-solid fa-hard-drive",
-  "Chat":            "fa-solid fa-comments",
-  "HR & Leave":      "fa-solid fa-briefcase",
-  "Appraisals":      "fa-solid fa-star",
-  "Goals & OKRs":    "fa-solid fa-bullseye",
-  "Analytics":       "fa-solid fa-chart-line",
-  "CRM & Clients":   "fa-solid fa-handshake",
-  "Referrals":       "fa-solid fa-link",
-  "Admin & Users":   "fa-solid fa-user-gear",
-  "Settings":        "fa-solid fa-gear",
+  "Overview":          "fa-solid fa-chart-simple",
+  "Team":              "fa-solid fa-users",
+  "Calendar & Time":   "fa-solid fa-calendar-days",
+  "Projects":          "fa-solid fa-folder-tree",
+  "Sprints":           "fa-solid fa-person-running",
+  "Drive":             "fa-solid fa-hard-drive",
+  "Chat":              "fa-solid fa-comments",
+  "HR & Leave":        "fa-solid fa-briefcase",
+  "Appraisals":        "fa-solid fa-star",
+  "Goals & OKRs":      "fa-solid fa-bullseye",
+  "Analytics":         "fa-solid fa-chart-line",
+  "CRM & Clients":     "fa-solid fa-handshake",
+  "IT & Infrastructure": "fa-solid fa-terminal",
+  "Referrals":         "fa-solid fa-link",
+  "Admin & Users":     "fa-solid fa-user-gear",
+  "Settings":          "fa-solid fa-gear",
 };
 
 const DEFAULT_BUILTIN_ROLES = ["OPS", "Manager", "HR", "Employee"];
@@ -417,13 +428,25 @@ export function RoleDataControlTab({ isAdmin, showToast }: RoleDataControlTabPro
   const activeRolePerms = permissionsMap[selectedRole] || {};
   const activeRoleFeaturePerms = featurePermissionsMap[selectedRole] || {};
 
-  const filteredFeatures = FEATURE_ACTIONS.filter(
-    (f) =>
+  const filteredFeatures = FEATURE_ACTIONS.filter((f) => {
+    const matchesSearch =
       !searchQuery ||
       f.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       f.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      f.category.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+      f.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (f.subGroup && f.subGroup.toLowerCase().includes(searchQuery.toLowerCase()));
+
+    const matchesCategory =
+      selectedCategoryFilter === "ALL" || f.category === selectedCategoryFilter;
+
+    const isPermitted = activeRoleFeaturePerms[f.key] ?? false;
+    const matchesStatus =
+      statusFilter === "ALL" ||
+      (statusFilter === "PERMITTED" && isPermitted) ||
+      (statusFilter === "DENIED" && !isPermitted);
+
+    return matchesSearch && matchesCategory && matchesStatus;
+  });
 
   const visibleCategories = FEATURE_CATEGORIES.filter((cat) =>
     filteredFeatures.some((f) => f.category === cat)
@@ -494,7 +517,7 @@ export function RoleDataControlTab({ isAdmin, showToast }: RoleDataControlTabPro
                 <i className="fa-solid fa-sliders text-sky-500 text-lg" /> Granular Role &amp; Feature Permission Control
               </CardTitle>
               <CardDescription className="mt-1">
-                Precisely control what each role can see and do â€” from individual UI modules to specific CRUD action capabilities.
+                Precisely control what each role can see and do — from top-level UI modules to specific CRUD action capabilities.
               </CardDescription>
             </div>
             {isAdmin && (
@@ -523,13 +546,19 @@ export function RoleDataControlTab({ isAdmin, showToast }: RoleDataControlTabPro
           </div>
           <div className="flex items-center gap-3 mt-2 flex-wrap">
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <i className="fa-solid fa-layer-group text-xs" />
+              <i className="fa-solid fa-layer-group text-xs text-primary" />
               <span><strong className="text-foreground">{enabledModules}</strong>/{totalModules} modules accessible</span>
+              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-primary/10 text-primary">
+                {Math.round((enabledModules / (totalModules || 1)) * 100)}%
+              </span>
             </div>
             <div className="w-px h-3 bg-border" />
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <i className="fa-solid fa-key text-xs" />
+              <i className="fa-solid fa-key text-xs text-emerald-500" />
               <span><strong className="text-foreground">{enabledFeatures}</strong>/{totalFeatures} feature actions permitted</span>
+              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                {Math.round((enabledFeatures / (totalFeatures || 1)) * 100)}%
+              </span>
             </div>
             {!isAdmin && (
               <>

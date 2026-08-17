@@ -33,7 +33,7 @@ export async function PATCH(
     const updated = await ITInvoice.findOneAndUpdate(
       { _id: id, tenantId: tenantObjectId },
       { $set: { ...body, updatedAt: new Date() } },
-      { new: true }
+      { returnDocument: 'after' }
     );
 
     if (!updated) {

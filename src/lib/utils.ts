@@ -5,6 +5,41 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+export const APP_TIMEZONE = "Asia/Kolkata";
+
+/**
+ * Returns formatted date string in Indian Standard Time (Asia/Kolkata).
+ */
+export function formatISTDate(
+  date: Date | string | number = new Date(),
+  options: Intl.DateTimeFormatOptions = { day: "2-digit", month: "short", year: "numeric" }
+): string {
+  const d = typeof date === "string" || typeof date === "number" ? new Date(date) : date;
+  if (isNaN(d.getTime())) return "";
+  return d.toLocaleDateString("en-IN", { timeZone: APP_TIMEZONE, ...options });
+}
+
+/**
+ * Returns formatted time string in Indian Standard Time (Asia/Kolkata).
+ */
+export function formatISTTime(
+  date: Date | string | number = new Date(),
+  options: Intl.DateTimeFormatOptions = { hour: "2-digit", minute: "2-digit", hour12: true }
+): string {
+  const d = typeof date === "string" || typeof date === "number" ? new Date(date) : date;
+  if (isNaN(d.getTime())) return "--:--";
+  return d.toLocaleTimeString("en-IN", { timeZone: APP_TIMEZONE, ...options });
+}
+
+/**
+ * Returns date in YYYY-MM-DD ISO format according to Indian Standard Time (Asia/Kolkata).
+ */
+export function getISTDateString(date: Date | string | number = new Date()): string {
+  const d = typeof date === "string" || typeof date === "number" ? new Date(date) : date;
+  if (isNaN(d.getTime())) return "";
+  return d.toLocaleDateString("en-CA", { timeZone: APP_TIMEZONE });
+}
+
 export const hexToRGB = (hex: string, alpha?: number): string => {
   const r = parseInt(hex.slice(1, 3), 16);
   const g = parseInt(hex.slice(3, 5), 16);

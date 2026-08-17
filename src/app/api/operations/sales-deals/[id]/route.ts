@@ -21,7 +21,7 @@ export async function PATCH(
     const deal = await SalesDeal.findOneAndUpdate(
       { _id: new mongoose.Types.ObjectId(id), tenantId: tenantObjectId },
       { $set: body },
-      { new: true }
+      { returnDocument: 'after' }
     );
 
     if (!deal) return NextResponse.json({ error: "Deal not found" }, { status: 404 });

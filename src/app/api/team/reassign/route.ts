@@ -2,10 +2,11 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
 import { connectToDatabase } from "@/lib/db";
 import { User } from "@/models/User";
+import { isSubAdminRole } from "@/lib/roles";
 import mongoose from "mongoose";
 
 /**
- * PUT: Updates an employee's managerId reporting line (Restricted to Admin).
+ * PUT: Updates an employee's managerId reporting line (Restricted to Admin & OPS/SubAdmin).
  * Body: { employeeId: string, managerId: string | null }
  */
 export async function PUT(request: Request) {
@@ -15,8 +16,9 @@ export async function PUT(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    if (session.role !== "Admin") {
-      return NextResponse.json({ error: "Forbidden: Admins only" }, { status: 403 });
+    const isAdmin = session.role === "Admin" || isSubAdminRole(session.role);
+    if (!isAdmin) {
+      return NextResponse.json({ error: "Forbidden: Admin or OPS access required" }, { status: 403 });
     }
 
     const body = await request.json();

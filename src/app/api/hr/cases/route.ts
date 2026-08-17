@@ -96,13 +96,13 @@ export async function PUT(request: Request) {
             },
           },
         },
-        { new: true }
+        { returnDocument: 'after' }
       );
     } else {
       hrCase = await HRCase.findOneAndUpdate(
         { _id: caseId, tenantId: tenantObjectId },
         updates,
-        { new: true }
+        { returnDocument: 'after' }
       );
     }
 
