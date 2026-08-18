@@ -38,7 +38,6 @@ export async function GET() {
 
       query.$or = [
         { members: userObjId },
-        { createdBy: userObjId },
         { assignedDepartment: userDept },
         { _id: { $in: assignedProjectIds } },
       ];
@@ -46,7 +45,6 @@ export async function GET() {
       const userObjId = new mongoose.Types.ObjectId(session.userId);
       query.$or = [
         { members: userObjId },
-        { createdBy: userObjId },
         { _id: { $in: assignedProjectIds } },
       ];
     }

@@ -75,9 +75,10 @@ export async function POST(request: Request) {
 
     const tenantObjectId = new mongoose.Types.ObjectId(session.tenantId);
 
+    const escapedName = name.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const existing = await Department.findOne({
       tenantId: tenantObjectId,
-      name: { $regex: new RegExp(`^${name.trim()}$`, "i") },
+      name: { $regex: new RegExp(`^${escapedName}$`, "i") },
     });
 
     if (existing) {

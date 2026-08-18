@@ -3,6 +3,7 @@ import nodemailer from "nodemailer";
 import { connectToDatabase } from "@/lib/db";
 import { EmailVerification } from "@/models/EmailVerification";
 import { rateLimitOtp, getClientIp } from "@/lib/rateLimiter";
+import { getSession } from "@/lib/session";
 
 import dns from "dns";
 
@@ -66,17 +67,34 @@ export async function POST(req: NextRequest) {
     const { User } = await import("@/models/User");
     const existingUser = await User.findOne({ email: cleanEmail });
     
-    if (type !== "change-email" && type !== "profile-update" && existingUser) {
+    const AUTHENTICATED_TYPES = ["change-email", "profile-update"];
+    if (AUTHENTICATED_TYPES.includes(type)) {
+      // These types send OTPs for existing accounts — require an active session
+      const session = await getSession();
+      if (!session) {
+        return NextResponse.json(
+          { error: "Authentication required for this operation." },
+          { status: 401 }
+        );
+      }
+    }
+
+    if (!AUTHENTICATED_TYPES.includes(type) && existingUser) {
       return NextResponse.json(
         { error: "An account with this email address is already registered. Please sign in or reset your password." },
         { status: 400 }
       );
     }
 
-    // Generate cryptographically secure 6-digit code
-    const arr = new Uint32Array(1);
-    crypto.getRandomValues(arr);
-    const code = String(100000 + (arr[0] % 900000));
+    // Generate cryptographically secure 6-digit code with rejection sampling to eliminate modulo bias
+    let randomVal = 0;
+    const limit = Math.floor(0x100000000 / 900000) * 900000;
+    const randArr = new Uint32Array(1);
+    do {
+      crypto.getRandomValues(randArr);
+      randomVal = randArr[0];
+    } while (randomVal >= limit);
+    const code = String(100000 + (randomVal % 900000));
 
     // Save/update code in DB
     await EmailVerification.findOneAndUpdate(

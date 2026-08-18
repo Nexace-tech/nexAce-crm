@@ -83,10 +83,11 @@ export async function GET(request: Request) {
         if (otherIdStr) {
           targetUser = await User.findById(otherIdStr).lean();
         } else if (parts.length > 0) {
+          const escapedPattern = parts.filter(Boolean).map((p: string) => p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
           targetUser = await User.findOne({
             tenantId: tenantObjectId,
             $or: [
-              { name: { $regex: new RegExp(parts.filter(Boolean).join("|"), "i") } }
+              { name: { $regex: new RegExp(escapedPattern, "i") } }
             ]
           }).lean();
         }
@@ -207,11 +208,12 @@ export async function POST(request: Request) {
       if (!targetRecipientId) {
         const raw = channelStr.replace("dm_", "");
         const parts = raw.split("_");
+        const escapedPattern = parts.filter(Boolean).map((p: string) => p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
         const foundUser = await User.findOne({
           tenantId: tenantObjectId,
           _id: { $ne: userObjectId },
           $or: [
-            { name: { $regex: new RegExp(parts.filter(Boolean).join("|"), "i") } },
+            { name: { $regex: new RegExp(escapedPattern, "i") } },
           ]
         }).select("_id").lean();
         if (foundUser) {

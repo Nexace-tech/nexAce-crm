@@ -89,11 +89,16 @@ export function generateSecurePassword(length: number = 12): string {
 
   const all = uppers + lowers + numbers + specials;
 
-  // Use crypto.getRandomValues for cryptographically secure randomness
+  // Use rejection sampling to eliminate modulo bias in secure randomness
   const randomIndex = (max: number): number => {
-    const arr = new Uint32Array(1);
-    crypto.getRandomValues(arr);
-    return arr[0] % max;
+    const limit = Math.floor(0x100000000 / max) * max;
+    let val: number;
+    do {
+      const arr = new Uint32Array(1);
+      crypto.getRandomValues(arr);
+      val = arr[0];
+    } while (val >= limit);
+    return val % max;
   };
 
   const password = [

@@ -63,7 +63,7 @@ const ClientSchema = new Schema<IClient>(
       default: "Medium",
     },
     startDate: { type: Date, required: true, default: Date.now },
-    targetEndDate: { type: Date, required: true, default: Date.now },
+    targetEndDate: { type: Date, required: true, default: () => new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) },
     health: {
       type: String,
       enum: ["Green", "Amber", "Red"],

@@ -94,9 +94,14 @@ export async function POST(request: Request) {
       .replace(/[^a-zA-Z]/g, "")
       .toUpperCase()
       .slice(0, 6) || "REF";
+    let randomVal = 0;
+    const limit = Math.floor(0x100000000 / 9000) * 9000;
     const randArr = new Uint32Array(1);
-    crypto.getRandomValues(randArr);
-    const randomNum = 1000 + (randArr[0] % 9000);
+    do {
+      crypto.getRandomValues(randArr);
+      randomVal = randArr[0];
+    } while (randomVal >= limit);
+    const randomNum = 1000 + (randomVal % 9000);
     const generatedReferralCode = `${nameSlug}-${randomNum}`;
 
     const initialStageHistory = [

@@ -304,8 +304,9 @@ export function SubAdminDashboard({ user }: { user: any }) {
             <p className="text-xs text-muted-foreground py-6 text-center">No operations projects found.</p>
           ) : clients.slice(0, 6).map((c: any) => {
             const phaseClass = PHASE_COLOR[c.phase] || "bg-muted text-muted-foreground border-border";
-            const health = c.health || "On Track";
-            const healthColor = health === "At Risk" ? "text-rose-500" : health === "Off Track" ? "text-amber-500" : "text-emerald-500";
+            const rawHealth = c.health || "Green";
+            const health = rawHealth === "Green" ? "On Track" : rawHealth === "Amber" ? "At Risk" : rawHealth === "Red" ? "Off Track" : rawHealth;
+            const healthColor = rawHealth === "Red" || rawHealth === "Off Track" || rawHealth === "At Risk" ? "text-rose-500" : rawHealth === "Amber" ? "text-amber-500" : "text-emerald-500";
             const progress = Math.round(c.progressPercent || 0);
             const billedHrs = c.actualHours || 0;
             const estHrs    = c.estHours || 0;

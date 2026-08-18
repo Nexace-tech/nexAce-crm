@@ -8,6 +8,11 @@ if (!rawSecret) {
     "SESSION_SECRET environment variable is not set. This is required for secure session management."
   );
 }
+if (process.env.NODE_ENV === "production" && rawSecret.length < 32) {
+  throw new Error(
+    "SESSION_SECRET is too short. A minimum length of 32 characters is required for HS256 JWT security in production."
+  );
+}
 const encodedKey = new TextEncoder().encode(rawSecret);
 
 export interface SessionPayload {

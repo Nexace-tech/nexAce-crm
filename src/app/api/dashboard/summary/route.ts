@@ -25,13 +25,13 @@ export async function GET() {
 
     // Parallel optimized lean() queries with Promise.allSettled to guarantee fault-tolerant response
     const results = await Promise.allSettled([
-      Project.find({ tenantId: tenantObjectId }).select("name description status priority startDate endDate").sort({ createdAt: -1 }).limit(10).lean(),
+      Project.find({ tenantId: tenantObjectId }).select("name description status priority startDate dueDate").sort({ createdAt: -1 }).limit(10).lean(),
       Client.find({ tenantId: tenantObjectId }).select("projectId clientAccount venture projectName deliveryOwner phase priority startDate targetEndDate health billingType estHours actualHours progressPercent").lean(),
-      TimeEntry.find({ tenantId: tenantObjectId }).select("date hours description status").sort({ date: -1 }).limit(10).lean(),
-      ChatMessage.find({ tenantId: tenantObjectId, channel: "general" }).select("senderName text createdAt").sort({ createdAt: -1 }).limit(20).lean(),
+      TimeEntry.find({ tenantId: tenantObjectId }).select("date hours project taskName status").sort({ date: -1 }).limit(10).lean(),
+      ChatMessage.find({ tenantId: tenantObjectId, channel: "general" }).select("senderName content createdAt").sort({ createdAt: -1 }).limit(20).lean(),
       OKR.find({ tenantId: tenantObjectId }).select("title description progress category targetDate").sort({ createdAt: -1 }).lean(),
       ActivityLog.find({ tenantId: tenantObjectId }).select("userName action details createdAt").sort({ createdAt: -1 }).limit(15).lean(),
-      CalendarEvent.find({ tenantId: tenantObjectId }).select("title start end category type").sort({ start: 1 }).limit(20).lean(),
+      CalendarEvent.find({ tenantId: tenantObjectId }).select("title startDate endDate department type").sort({ startDate: 1 }).limit(20).lean(),
       Notification.find({ recipientId: session.userId, tenantId: tenantObjectId }).select("title message type read createdAt").sort({ createdAt: -1 }).limit(15).lean(),
     ]);
 

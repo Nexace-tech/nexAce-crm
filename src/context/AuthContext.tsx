@@ -93,9 +93,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setLoading(true);
     try {
       await logoutAction();
+      // logoutAction calls redirect("/login") internally which throws NEXT_REDIRECT.
+      // The lines below are fallbacks in case the redirect does not throw (e.g. client-only env).
       setUser(null);
       router.push("/login");
-    } catch (error) {
+    } catch (error: any) {
+      // Re-throw NEXT_REDIRECT so Next.js can process the navigation
+      if (error?.digest?.startsWith("NEXT_REDIRECT")) throw error;
       console.error("Logout failed:", error);
     } finally {
       setLoading(false);

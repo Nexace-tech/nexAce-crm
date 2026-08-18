@@ -67,14 +67,34 @@ export async function POST(request: Request) {
     const mimeType = file.type || "application/octet-stream";
     const size = file.size;
 
+    // Security: Maximum upload size (25MB) to protect against memory exhaustion DoS
+    const MAX_UPLOAD_SIZE = 25 * 1024 * 1024;
+    if (size > MAX_UPLOAD_SIZE) {
+      return NextResponse.json({
+        error: `File exceeds the maximum allowed upload limit of 25MB (uploaded: ${(size / (1024 * 1024)).toFixed(1)}MB)`
+      }, { status: 400 });
+    }
+
+    // Security: Strict blacklist of executable and script extensions
+    const DANGEROUS_EXTENSIONS = new Set([
+      "exe", "bat", "cmd", "sh", "php", "phtml", "php3", "php4", "php5", "phps",
+      "html", "htm", "js", "mjs", "cjs", "vbs", "jar", "py", "cgi", "pl", "scr", "dll", "ps1"
+    ]);
+
+    const fileExt = fileName.includes(".") ? fileName.split(".").pop()?.toLowerCase() || "" : "";
+    if (DANGEROUS_EXTENSIONS.has(fileExt)) {
+      return NextResponse.json({
+        error: `Security Policy Violation: Executable or script file type ('.${fileExt}') is strictly prohibited.`
+      }, { status: 400 });
+    }
+
     // Fetch tenant allowed extensions setting
     const tenantDoc = await Tenant.findById(session.tenantId);
     const allowedExts: string[] = (tenantDoc?.allowedExtensions && tenantDoc.allowedExtensions.length > 0)
       ? tenantDoc.allowedExtensions.map((e: string) => e.toLowerCase())
       : ["png", "jpg", "jpeg", "pdf", "docx", "xlsx", "zip", "csv", "txt", "svg", "webp"];
 
-    // Check uploaded file extension
-    const fileExt = fileName.includes(".") ? fileName.split(".").pop()?.toLowerCase() || "" : "";
+    // Check uploaded file extension against tenant policy
     if (!allowedExts.includes(fileExt)) {
       return NextResponse.json({
         error: `File type '${fileExt ? `.${fileExt}` : "no extension"}' is not allowed by your Admin workspace policy. Allowed formats: ${allowedExts.map(e => `.${e}`).join(", ")}`

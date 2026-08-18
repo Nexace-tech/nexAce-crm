@@ -65,16 +65,15 @@ export async function GET(request: Request) {
           { departments: department }
         ]
       };
-      if (query.$and) {
-        query.$and.push(deptCondition);
-      } else {
-        query.$or = deptCondition.$or;
-      }
+      // Always use $and to avoid overwriting any existing $or clause
+      query.$and = query.$and || [];
+      query.$and.push(deptCondition);
     }
 
     // Filter by search query if supplied
     if (search) {
-      const searchRegex = new RegExp(search, "i");
+      const escapedSearch = search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const searchRegex = new RegExp(escapedSearch, "i");
       const searchConditions = [
         { name: searchRegex },
         { email: searchRegex },

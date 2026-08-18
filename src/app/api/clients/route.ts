@@ -109,7 +109,7 @@ export async function POST(request: Request) {
       priority: priority || "Medium",
       startDate: startDate ? new Date(startDate) : new Date(),
       targetEndDate: targetEndDate ? new Date(targetEndDate) : undefined,
-      health: health || "On Track",
+      health: health || "Green",
       billingType: billingType || "Retainer",
       estHours: Number(estHours) || 0,
       actualHours: Number(actualHours) || 0,

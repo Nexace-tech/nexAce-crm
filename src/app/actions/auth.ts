@@ -10,7 +10,7 @@ import { redirect } from "next/navigation";
 import { sendEmail } from "@/lib/mail";
 import { Notification } from "@/models/Notification";
 import { validatePasswordPattern } from "@/lib/utils";
-import { rateLimitOtp, rateLimitVerify, getClientIp } from "@/lib/rateLimiter";
+import { rateLimitOtp, rateLimitVerify, rateLimitLogin, getClientIp } from "@/lib/rateLimiter";
 
 export interface FormState {
   errors?: {
@@ -101,19 +101,31 @@ export async function registerAction(state: FormState | undefined, formData: For
     return { errors };
   }
 
+  let isPendingUser = false;
+
   try {
     await connectToDatabase();
 
-    // Verification Code Check
+    // Verification Code Check — also manually verify expiry to guard against MongoDB TTL cleanup lag
+    const TEN_MINUTES_MS = 10 * 60 * 1000;
     const verification = await EmailVerification.findOne({ email: adminEmail.toLowerCase() });
-    if (!verification || verification.code !== code) {
+    if (
+      !verification ||
+      verification.code !== code ||
+      Date.now() - new Date(verification.createdAt).getTime() > TEN_MINUTES_MS
+    ) {
       return {
         message: "Incorrect or expired email verification code. Please request a new code."
       };
     }
 
-    // 2. Check for existing User email & redirect to login if user already exists
-    const existingUser = await User.findOne({ email: adminEmail.toLowerCase() });
+    // 2. Check for existing User email within this tenant & redirect to login if user already exists
+    const existingTenant = companySlug
+      ? await Tenant.findOne({ slug: companySlug.toLowerCase() })
+      : await Tenant.findOne();
+    const existingUser = existingTenant
+      ? await User.findOne({ email: adminEmail.toLowerCase(), tenantId: existingTenant._id })
+      : null;
     if (existingUser) {
       redirect(`/login?email=${encodeURIComponent(adminEmail.toLowerCase())}&redirected=true`);
     }
@@ -126,8 +138,9 @@ export async function registerAction(state: FormState | undefined, formData: For
       };
     }
 
-    // Clear verification code after successful verification
-    await EmailVerification.deleteOne({ _id: verification._id });
+    // Clear verification code after all pre-checks pass (before User.create)
+    // Note: deletion happens here so a failed User.create doesn't permanently invalidate the OTP
+    // We keep the record until the user is created successfully below.
 
     // 3. Find or Create Default Tenant
     let tenant;
@@ -144,9 +157,10 @@ export async function registerAction(state: FormState | undefined, formData: For
       });
     }
 
-    // 5. Hash Password & Create User with status: "Pending"
+    // 5. Hash Password & Create User
     const existingUserCount = await User.countDocuments({ tenantId: tenant._id });
     const assignedRole = existingUserCount === 0 ? "Admin" : "Employee";
+    const assignedStatus = assignedRole === "Admin" ? "Active" : "Pending";
 
     const passwordHash = await bcrypt.hash(adminPassword, 10);
     const newUser = await User.create({
@@ -155,9 +169,12 @@ export async function registerAction(state: FormState | undefined, formData: For
       email: adminEmail.toLowerCase(),
       passwordHash,
       role: assignedRole,
-      status: assignedRole === "Admin" ? "Active" : "Pending",
+      status: assignedStatus,
       tenantId: tenant._id,
     });
+
+    // Delete verification record only after User.create succeeds
+    await EmailVerification.deleteOne({ _id: verification._id });
 
     // Notify existing tenant Admins AND HR users about new registration
     const tenantAdmins = await User.find({ tenantId: tenant._id, role: "Admin", status: "Active" });
@@ -208,14 +225,18 @@ export async function registerAction(state: FormState | undefined, formData: For
       }
     }
 
-    // 6. Create session immediately and redirect to dashboard (where Demo Preview Mode is rendered)
-    await createSession(
-      String(newUser._id),
-      String(tenant._id),
-      newUser.name,
-      tenant.name,
-      newUser.role
-    );
+    // 6. Only create session for Active users (Admins). Pending users must wait for approval.
+    if (assignedStatus === "Active") {
+      await createSession(
+        String(newUser._id),
+        String(tenant._id),
+        newUser.name,
+        tenant.name,
+        newUser.role
+      );
+    } else {
+      isPendingUser = true;
+    }
   } catch (error: any) {
     if (error?.digest?.startsWith("NEXT_REDIRECT")) {
       throw error;
@@ -226,6 +247,10 @@ export async function registerAction(state: FormState | undefined, formData: For
     };
   }
 
+  // Active users (first Admin) go to the dashboard; Pending users go to login with a notice
+  if (isPendingUser) {
+    redirect("/login?pending=true");
+  }
   redirect("/dashboard");
 }
 
@@ -251,11 +276,30 @@ export async function loginAction(state: FormState | undefined, formData: FormDa
   }
 
   try {
+    // 1. Rate Limiting check to prevent brute-force attacks
+    const ip = await getClientIp();
+    const limit = rateLimitLogin(email, ip);
+    if (!limit.allowed) {
+      const waitSeconds = Math.ceil(limit.retryAfterMs / 1000);
+      return {
+        message: `Too many login attempts. Please wait ${waitSeconds}s before trying again.`,
+        enteredEmail: email,
+        enteredPassword: password
+      };
+    }
+
     await connectToDatabase();
 
     // Find User and populate Tenant information
     const user = await User.findOne({ email: email.toLowerCase() }).populate("tenantId");
-    if (!user) {
+    
+    // Constant-time timing attack mitigation: if user does not exist, run a dummy bcrypt compare
+    const DUMMY_HASH = "$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy";
+    const passwordMatch = user
+      ? await bcrypt.compare(password, user.passwordHash)
+      : await bcrypt.compare(password, DUMMY_HASH).then(() => false);
+
+    if (!user || !passwordMatch) {
       return {
         message: "Invalid email or password.",
         enteredEmail: email,
@@ -263,20 +307,18 @@ export async function loginAction(state: FormState | undefined, formData: FormDa
       };
     }
 
-    // Verify Password
-    const passwordMatch = await bcrypt.compare(password, user.passwordHash);
-    if (!passwordMatch) {
-      return {
-        message: "Invalid email or password.",
-        enteredEmail: email,
-        enteredPassword: password
-      };
-    }
-
-    // Check account status
+    // Check account status — Suspended and Pending both cannot log in
     if (user.status === "Suspended") {
       return {
         message: "Your employee account has been suspended. Please contact your workspace administrator.",
+        enteredEmail: email,
+        enteredPassword: password
+      };
+    }
+
+    if (user.status === "Pending") {
+      return {
+        message: "Your account is pending approval. Please wait for your workspace administrator to activate your account.",
         enteredEmail: email,
         enteredPassword: password
       };
@@ -478,9 +520,14 @@ export async function resetPasswordAction(state: FormState | undefined, formData
   try {
     await connectToDatabase();
 
-    // Verify code in DB
+    // Verify code in DB — also manually check expiry to guard against MongoDB TTL cleanup lag
+    const TEN_MINUTES_MS = 10 * 60 * 1000;
     const verification = await EmailVerification.findOne({ email });
-    if (!verification || verification.code !== code) {
+    if (
+      !verification ||
+      verification.code !== code ||
+      Date.now() - new Date(verification.createdAt).getTime() > TEN_MINUTES_MS
+    ) {
       return {
         step: "reset",
         resetEmail: email,

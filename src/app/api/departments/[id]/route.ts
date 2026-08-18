@@ -38,11 +38,11 @@ export async function PUT(request: Request, { params }: RouteParams) {
     const oldName = department.name;
 
     if (name && name.trim() !== oldName) {
-      // Check for duplicate name
+      const escapedName = name.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       const existing = await Department.findOne({
         tenantId: new mongoose.Types.ObjectId(session.tenantId),
         _id: { $ne: department._id },
-        name: { $regex: new RegExp(`^${name.trim()}$`, "i") },
+        name: { $regex: new RegExp(`^${escapedName}$`, "i") },
       });
 
       if (existing) {

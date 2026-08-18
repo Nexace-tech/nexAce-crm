@@ -54,10 +54,14 @@ export function normalizeRoleKey(role?: string | null): string {
 
 /**
  * Returns true when the acting `actorRole` is allowed to set `targetRole`.
- * Only Admin / OPS can assign Admin or OPS; any Manager can assign the rest.
+ * Only Admin / OPS can assign Admin or OPS.
+ * Managers can assign HR or Employee only (not Manager).
  */
 export function canAssignRole(actorRole: string, targetRole: string): boolean {
   if (actorRole === "Admin" || isSubAdminRole(actorRole)) return true;
-  if (isSubAdminRole(targetRole) || targetRole === "Admin") return false;
-  return true;
+  // Prevent assigning privileged roles to anyone else
+  if (isSubAdminRole(targetRole) || targetRole === "Admin" || targetRole === "Manager") return false;
+  // Managers may assign HR and Employee only
+  if (actorRole === "Manager") return MANAGER_ASSIGNABLE_ROLES.includes(targetRole as Role);
+  return false;
 }

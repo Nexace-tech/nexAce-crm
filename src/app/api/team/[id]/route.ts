@@ -35,8 +35,9 @@ export async function GET(request: Request, { params }: RouteParams) {
 
     return NextResponse.json({ user });
   } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Internal Server Error";
     console.error("API GET Single Team error:", error);
-    const _msg = error instanceof Error ? error.message : "Internal Server Error"; return NextResponse.json({ error: _msg }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
@@ -88,10 +89,14 @@ export async function PUT(request: Request, { params }: RouteParams) {
         return NextResponse.json({ error: "Incorrect or expired verification code. Please request a new code." }, { status: 400 });
       }
 
-      // 2. Duplicate checking on new email
-      const existingUser = await User.findOne({ email: body.email.toLowerCase() });
+      // 2. Duplicate checking on new email within this tenant
+      const existingUser = await User.findOne({
+        _id: { $ne: user._id },
+        tenantId: user.tenantId,
+        email: body.email.toLowerCase(),
+      });
       if (existingUser) {
-        return NextResponse.json({ error: "Email address is already in use by another user." }, { status: 400 });
+        return NextResponse.json({ error: "Email address is already in use by another user in this workspace." }, { status: 400 });
       }
 
       // 3. Clear code and update email
@@ -245,8 +250,9 @@ export async function PUT(request: Request, { params }: RouteParams) {
     const { passwordHash: _ph, ...safeUser } = user.toObject();
     return NextResponse.json({ success: true, user: safeUser });
   } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Internal Server Error";
     console.error("API PUT Single Team error:", error);
-    const _msg = error instanceof Error ? error.message : "Internal Server Error"; return NextResponse.json({ error: _msg }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
@@ -312,7 +318,8 @@ export async function DELETE(request: Request, { params }: RouteParams) {
 
     return NextResponse.json({ success: true, message: "Employee removed successfully" });
   } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Internal Server Error";
     console.error("API DELETE Single Team error:", error);
-    const _msg = error instanceof Error ? error.message : "Internal Server Error"; return NextResponse.json({ error: _msg }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

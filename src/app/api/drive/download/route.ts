@@ -43,12 +43,16 @@ export async function GET(request: Request) {
     }
 
     const stat = fs.statSync(resolvedPath);
-    const isImage =
-      (file.mimeType || "").startsWith("image/") ||
-      /\.(png|jpe?g|gif|webp|svg)$/i.test(file.name);
-    const disposition = isImage
-      ? `inline; filename="${encodeURIComponent(file.name)}"`
-      : `attachment; filename="${encodeURIComponent(file.name)}"`;
+    // Security: Only allow raster images (PNG, JPEG, GIF, WEBP) inline; force attachment for SVGs/PDFs/HTML to eliminate Stored XSS vectors
+    const isSafeRasterImage =
+      (file.mimeType || "").startsWith("image/") &&
+      !file.mimeType?.includes("svg") &&
+      /\.(png|jpe?g|gif|webp)$/i.test(file.name);
+
+    const safeFileName = file.name.replace(/[\r\n"']/g, "_");
+    const disposition = isSafeRasterImage
+      ? `inline; filename="${encodeURIComponent(safeFileName)}"`
+      : `attachment; filename="${encodeURIComponent(safeFileName)}"`;
 
     // Fix #12: Stream the file instead of loading entire content into memory
     const nodeStream = fs.createReadStream(resolvedPath);
@@ -69,6 +73,8 @@ export async function GET(request: Request) {
         "Content-Disposition": disposition,
         "Content-Length": stat.size.toString(),
         "Cache-Control": "private, max-age=3600",
+        "X-Content-Type-Options": "nosniff",
+        "Content-Security-Policy": "default-src 'none'; sandbox",
       },
     });
   } catch (error: unknown) {

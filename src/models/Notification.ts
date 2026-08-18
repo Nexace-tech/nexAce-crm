@@ -32,9 +32,6 @@ const NotificationSchema = new Schema<INotification>(
 // Performance index for unread notification badge lookups
 NotificationSchema.index({ tenantId: 1, recipientId: 1, read: 1, createdAt: -1 });
 
-if (mongoose.models.Notification) {
-  delete (mongoose.models as any).Notification;
-}
-
 export const Notification: Model<INotification> =
+  mongoose.models.Notification ||
   mongoose.model<INotification>("Notification", NotificationSchema);

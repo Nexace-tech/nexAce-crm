@@ -10,6 +10,20 @@ const VERIFY_MAX_PER_IP = 20;    // max verification attempts per IP per window
 
 const store = new Map<string, WindowState>();
 
+/**
+ * SERVERLESS WARNING: This in-memory store is NOT shared across Node.js instances.
+ * In multi-instance deployments (e.g. Vercel serverless) rate-limit state is per-instance,
+ * meaning an attacker can bypass limits by triggering different instances.
+ * Replace with a shared store (e.g. Upstash Redis) for production-grade enforcement.
+ */
+if (process.env.NODE_ENV === "production") {
+  console.warn(
+    "[rateLimiter] WARNING: Using in-memory rate limiter in production. " +
+    "This is NOT effective across serverless instances. Configure UPSTASH_REDIS_REST_URL " +
+    "and replace this store with a shared Redis-backed implementation."
+  );
+}
+
 /** Increment the counter for `id`, starting a fresh window if expired. */
 function take(prefix: string, id: string, windowMs: number): WindowState {
   const key = `${prefix}:${id}`;
@@ -80,6 +94,16 @@ export function rateLimitOtp(email: string, ip: string | undefined): RateLimitRe
  */
 export function rateLimitVerify(email: string, ip: string | undefined): RateLimitResult {
   return check("verify", email, ip, VERIFY_MAX_PER_EMAIL, VERIFY_MAX_PER_IP, WINDOW_MS);
+}
+
+const LOGIN_MAX_PER_EMAIL = 5;   // max login attempts per email per window
+const LOGIN_MAX_PER_IP = 15;      // max login attempts per IP per window
+
+/**
+ * Rate limit login attempts to prevent brute-force and password guessing attacks.
+ */
+export function rateLimitLogin(email: string, ip: string | undefined): RateLimitResult {
+  return check("login", email, ip, LOGIN_MAX_PER_EMAIL, LOGIN_MAX_PER_IP, WINDOW_MS);
 }
 
 export async function getClientIp(): Promise<string | undefined> {

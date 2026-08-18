@@ -4,7 +4,7 @@ import { connectToDatabase } from "@/lib/db";
 import { User } from "@/models/User";
 import "@/models/Tenant";
 import { DashboardClientLayout } from "@/components/layout/DashboardClientLayout";
-
+import mongoose from "mongoose";
 import { isSubAdminRole } from "@/lib/roles";
 
 interface DashboardLayoutProps {
@@ -34,7 +34,7 @@ export default async function DashboardLayout({ children }: DashboardLayoutProps
     [dbUser, permDoc] = await Promise.all([
       User.findById(session.userId).select("name role tenantId status").populate("tenantId"),
       RolePermission.findOne({
-        tenantId: session.tenantId,
+        tenantId: new mongoose.Types.ObjectId(session.tenantId),
         $or: roleOrClauses,
       }),
     ]);

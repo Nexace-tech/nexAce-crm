@@ -49,10 +49,7 @@ export async function GET(request: Request) {
       // Find projects where the user is an assigned member
       const userProjects = await Project.find({
         tenantId: new mongoose.Types.ObjectId(session.tenantId),
-        $or: [
-          { members: userObjId },
-          { createdBy: userObjId },
-        ],
+        members: userObjId,
       }).select("_id");
       const userProjectIds = userProjects.map((p) => p._id);
 
@@ -86,7 +83,6 @@ export async function GET(request: Request) {
         tenantId: new mongoose.Types.ObjectId(session.tenantId),
         $or: [
           { members: userObjId },
-          { createdBy: userObjId },
           { assignedDepartment: userDept },
           { _id: { $in: assignedProjectIds } },
         ],
@@ -120,7 +116,7 @@ export async function GET(request: Request) {
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Internal Server Error";
     console.error("API GET Tasks error:", error);
-    const _msg = error instanceof Error ? error.message : "Internal Server Error"; return NextResponse.json({ error: _msg }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
@@ -161,7 +157,7 @@ export async function POST(request: Request) {
       const project = await Project.findOne({
         _id: new mongoose.Types.ObjectId(projectId),
         tenantId: new mongoose.Types.ObjectId(session.tenantId),
-        $or: [{ members: userObjId }, { createdBy: userObjId }],
+        members: userObjId,
       });
       if (!project) {
         return NextResponse.json({ error: "Forbidden: you are not a member of this project" }, { status: 403 });
@@ -200,7 +196,7 @@ export async function POST(request: Request) {
         title: "New Task Assigned",
         message: `${session.userName} assigned you task: '${title}'`,
         type: "task",
-        linkUrl: "/dashboard/hr?tab=tasks",
+        linkUrl: "/dashboard/projects",
       });
     }
 
@@ -209,14 +205,14 @@ export async function POST(request: Request) {
       title: "Task Created",
       message: `${session.userName} created task: '${title}' (${status || "To Do"})`,
       type: "task",
-      linkUrl: "/dashboard/hr?tab=tasks",
+      linkUrl: "/dashboard/projects",
     });
 
     return NextResponse.json({ success: true, task: newTask }, { status: 201 });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Internal Server Error";
     console.error("API POST Tasks error:", error);
-    const _msg = error instanceof Error ? error.message : "Internal Server Error"; return NextResponse.json({ error: _msg }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
@@ -385,7 +381,7 @@ export async function PUT(request: Request) {
         title: notifTitle,
         message: notifMessage,
         type: "task",
-        linkUrl: "/dashboard/hr?tab=tasks",
+        linkUrl: "/dashboard/projects",
       });
     }
 
@@ -404,7 +400,7 @@ export async function PUT(request: Request) {
         title: "Task Updated",
         message: `${session.userName} ${updateSummary} for task: '${task.title}'`,
         type: "task",
-        linkUrl: "/dashboard/hr?tab=tasks",
+        linkUrl: "/dashboard/projects",
       },
       ["Admin"],
       session.userId
@@ -417,7 +413,7 @@ export async function PUT(request: Request) {
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Internal Server Error";
     console.error("API PUT Tasks error:", error);
-    const _msg = error instanceof Error ? error.message : "Internal Server Error"; return NextResponse.json({ error: _msg }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
@@ -460,14 +456,14 @@ export async function DELETE(request: Request) {
       title: "Task Deleted",
       message: `${session.userName} deleted task: '${task.title}'`,
       type: "task",
-      linkUrl: "/dashboard/hr?tab=tasks",
+      linkUrl: "/dashboard/projects",
     });
 
     return NextResponse.json({ success: true, message: "Task deleted successfully" });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Internal Server Error";
     console.error("API DELETE Tasks error:", error);
-    const _msg = error instanceof Error ? error.message : "Internal Server Error"; return NextResponse.json({ error: _msg }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 

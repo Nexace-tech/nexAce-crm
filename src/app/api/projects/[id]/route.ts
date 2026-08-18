@@ -45,7 +45,7 @@ export async function PUT(
 
     if (name) project.name = name;
     if (description !== undefined) project.description = description;
-    if (status && ["Planning", "In Progress", "On Hold", "Completed"].includes(status)) {
+    if (status && ["Planning", "In Progress", "In Review", "On Hold", "Completed"].includes(status)) {
       project.status = status;
     }
     if (members && Array.isArray(members)) {
@@ -71,8 +71,9 @@ export async function PUT(
 
     return NextResponse.json({ success: true, project: updatedProject });
   } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Internal Server Error";
     console.error("API PUT Project error:", error);
-    const _msg = error instanceof Error ? error.message : "Internal Server Error"; return NextResponse.json({ error: _msg }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
@@ -114,7 +115,8 @@ export async function DELETE(
 
     return NextResponse.json({ success: true, message: "Project deleted successfully" });
   } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Internal Server Error";
     console.error("API DELETE Project error:", error);
-    const _msg = error instanceof Error ? error.message : "Internal Server Error"; return NextResponse.json({ error: _msg }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

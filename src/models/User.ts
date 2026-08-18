@@ -36,7 +36,8 @@ export interface IUser extends Document {
 const UserSchema: Schema = new Schema({
   name: { type: String, required: true, trim: true },
   username: { type: String, unique: true, sparse: true, lowercase: true, trim: true },
-  email: { type: String, required: true, unique: true, lowercase: true, trim: true },
+  // NOTE: uniqueness is enforced per-tenant via compound index below (not globally unique)
+  email: { type: String, required: true, lowercase: true, trim: true },
   passwordHash: { type: String, required: true },
   role: { type: String, default: "Employee", trim: true },
   tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true, index: true },
@@ -65,6 +66,9 @@ const UserSchema: Schema = new Schema({
    createdAt: { type: Date, default: Date.now }
 });
 
+// Compound unique index — same email may exist in different tenants but not within the same one.
+// MIGRATION NOTE: drop the old global email_1 index if upgrading: db.users.dropIndex("email_1")
+UserSchema.index({ email: 1, tenantId: 1 }, { unique: true });
 // Compound index for tenant user listing & role filtering
 UserSchema.index({ tenantId: 1, role: 1 });
 

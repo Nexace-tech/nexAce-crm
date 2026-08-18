@@ -90,7 +90,8 @@ export function usePermissions() {
       return Boolean(modulePermissions[moduleKey]);
     }
     if (isSubAdminRole(user.role)) return true;
-    return true;
+    // Fail-closed: deny access to any module not explicitly granted
+    return false;
   };
 
   return {

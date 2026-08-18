@@ -29,8 +29,8 @@ export async function proxy(request: NextRequest) {
     }
   }
 
-  // Redirect authenticated users away from login/register pages
-  if (pathname === "/login" || pathname === "/register") {
+  // Redirect authenticated users away from login/register/forgot-password pages
+  if (pathname === "/login" || pathname === "/register" || pathname === "/forgot-password") {
     const sessionCookie = request.cookies.get("session")?.value;
     if (sessionCookie) {
       const session = await decrypt(sessionCookie);
@@ -45,5 +45,5 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   // Match all dashboard routes and auth pages
-  matcher: ["/dashboard/:path*", "/login", "/register"],
+  matcher: ["/dashboard/:path*", "/login", "/register", "/forgot-password"],
 };
