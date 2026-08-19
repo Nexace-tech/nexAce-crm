@@ -30,12 +30,21 @@ export interface InputProps
     VariantProps<typeof inputVariants> {}
 
 const Input = React.forwardRef<HTMLInputElement, InputProps>(
-  ({ className, type, size, color, ...props }, ref) => {
+  ({ className, type, size, color, onWheel, ...props }, ref) => {
+    const handleWheel = (e: React.WheelEvent<HTMLInputElement>) => {
+      // Prevent mouse wheel from inadvertently changing date numbers or number inputs when focused
+      if (type === "date" || type === "number" || type === "time" || type === "datetime-local") {
+        (e.target as HTMLElement).blur();
+      }
+      if (onWheel) onWheel(e);
+    };
+
     return (
       <input
         type={type}
         className={cn(inputVariants({ color, size }), className)}
         ref={ref}
+        onWheel={handleWheel}
         {...props}
       />
     );

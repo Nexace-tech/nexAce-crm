@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, startTransition } from "react";
+import React, { useState, useEffect, useRef, startTransition } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { usePermissions } from "@/hooks/usePermissions";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
@@ -43,6 +43,7 @@ export default function CalendarPage() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [showEventModal, setShowEventModal] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<any | null>(null);
+  const [selectedDay, setSelectedDay] = useState<Date | null>(null);
 
   const [filterType, setFilterType] = useState<string>("All");
   const [filterDept, setFilterDept] = useState<string>("All");
@@ -647,9 +648,9 @@ export default function CalendarPage() {
         <button
           onClick={() => setActiveTab("calendar")}
           className={cn(
-            "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer",
+            "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
             activeTab === "calendar"
-              ? "border-primary text-white bg-primary/10 rounded-t-md font-semibold"
+              ? "border-primary text-primary bg-primary/10 rounded-t-md font-semibold -mb-px"
               : "border-transparent text-muted-foreground hover:text-foreground"
           )}
         >
@@ -659,9 +660,9 @@ export default function CalendarPage() {
         <button
           onClick={() => setActiveTab("sprints")}
           className={cn(
-            "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer",
+            "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
             activeTab === "sprints"
-              ? "border-primary text-white bg-primary/10 rounded-t-md font-semibold"
+              ? "border-primary text-primary bg-primary/10 rounded-t-md font-semibold -mb-px"
               : "border-transparent text-muted-foreground hover:text-foreground"
           )}
         >
@@ -671,9 +672,9 @@ export default function CalendarPage() {
         <button
           onClick={() => setActiveTab("timesheets")}
           className={cn(
-            "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer",
+            "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
             activeTab === "timesheets"
-              ? "border-primary text-white bg-primary/10 rounded-t-md font-semibold"
+              ? "border-primary text-primary bg-primary/10 rounded-t-md font-semibold -mb-px"
               : "border-transparent text-muted-foreground hover:text-foreground"
           )}
         >
@@ -683,9 +684,9 @@ export default function CalendarPage() {
         <button
           onClick={() => setActiveTab("attendance")}
           className={cn(
-            "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer",
+            "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
             activeTab === "attendance"
-              ? "border-primary text-white bg-primary/10 rounded-t-md font-semibold"
+              ? "border-primary text-primary bg-primary/10 rounded-t-md font-semibold -mb-px"
               : "border-transparent text-muted-foreground hover:text-foreground"
           )}
         >
@@ -696,45 +697,126 @@ export default function CalendarPage() {
       {/* Tab 1: Calendar */}
       {activeTab === "calendar" && (
         <Card className="p-6 space-y-6">
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pb-4 border-b border-border">
-            <div className="flex items-center gap-3">
-              <Button variant="outline" size="icon" onClick={handlePrevMonth} className="h-8 w-8">
-                <i className="fa-solid fa-chevron-left text-xs" />
-              </Button>
-              <h2 className="text-lg font-bold text-foreground">
-                {monthsNames[currentDate.getMonth()]} {currentDate.getFullYear()}
-              </h2>
-              <Button variant="outline" size="icon" onClick={handleNextMonth} className="h-8 w-8">
-                <i className="fa-solid fa-chevron-right text-xs" />
-              </Button>
+          {/* Calendar Header: Month Strip + Controls */}
+          <div className="space-y-3 pb-4 border-b border-border">
+            {/* Top row: prev/next + month title banner + filters */}
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="icon" onClick={handlePrevMonth} className="h-8 w-8 shrink-0">
+                  <i className="fa-solid fa-chevron-left text-xs" />
+                </Button>
+
+                {/* Month title display */}
+                <div className="px-4 py-1.5 rounded-lg bg-primary/10 dark:bg-primary/15 border border-primary/40 shadow-xs">
+                  <h2 className="text-base font-bold text-foreground text-center whitespace-nowrap">
+                    <span className="text-primary font-extrabold">{monthsNames[currentDate.getMonth()]}</span>{" "}
+                    <span className="text-foreground">{currentDate.getFullYear()}</span>
+                  </h2>
+                </div>
+
+                <Button variant="outline" size="icon" onClick={handleNextMonth} className="h-8 w-8 shrink-0">
+                  <i className="fa-solid fa-chevron-right text-xs" />
+                </Button>
+
+                {/* Today button */}
+                {(currentDate.getMonth() !== new Date().getMonth() || currentDate.getFullYear() !== new Date().getFullYear()) && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentDate(new Date())}
+                    className="h-8 text-xs gap-1.5 font-bold text-primary border-primary/50 bg-primary/5 hover:bg-primary/15 shadow-xs"
+                  >
+                    <i className="fa-regular fa-circle-dot text-xs" /> Today
+                  </Button>
+                )}
+              </div>
+
+              <div className="flex items-center gap-3">
+                <select
+                  value={filterType}
+                  onChange={(e) => setFilterType(e.target.value)}
+                  className="h-8 px-2.5 text-xs bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary font-medium"
+                >
+                  <option value="All">All Event Types</option>
+                  <option value="Meeting">Meetings</option>
+                  <option value="Holiday">Holidays</option>
+                  <option value="Birthday">Birthdays</option>
+                  <option value="Deadline">Deadlines</option>
+                  <option value="Personal">Personal</option>
+                </select>
+
+                <select
+                  value={filterDept}
+                  onChange={(e) => setFilterDept(e.target.value)}
+                  className="h-8 px-2.5 text-xs bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary font-medium"
+                >
+                  <option value="All">All Departments</option>
+                  <option value="Management">Management</option>
+                  <option value="Engineering">Engineering</option>
+                  <option value="Design">Design</option>
+                  <option value="Marketing">Marketing</option>
+                </select>
+              </div>
             </div>
 
-            <div className="flex items-center gap-3">
-              <select
-                value={filterType}
-                onChange={(e) => setFilterType(e.target.value)}
-                className="h-8 px-2.5 text-xs bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-              >
-                <option value="All">All Event Types</option>
-                <option value="Meeting">Meetings</option>
-                <option value="Holiday">Holidays</option>
-                <option value="Birthday">Birthdays</option>
-                <option value="Deadline">Deadlines</option>
-                <option value="Personal">Personal</option>
-              </select>
+            {/* Month Strip: all 12 months, active and current month highlighted with primary styling */}
+            {(() => {
+              const now = new Date();
+              const realMonth = now.getMonth();
+              const realYear = now.getFullYear();
+              const activeMonth = currentDate.getMonth();
+              const activeYear = currentDate.getFullYear();
 
-              <select
-                value={filterDept}
-                onChange={(e) => setFilterDept(e.target.value)}
-                className="h-8 px-2.5 text-xs bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-              >
-                <option value="All">All Departments</option>
-                <option value="Management">Management</option>
-                <option value="Engineering">Engineering</option>
-                <option value="Design">Design</option>
-                <option value="Marketing">Marketing</option>
-              </select>
-            </div>
+              return (
+                <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1">
+                  {monthsNames.map((name, idx) => {
+                    const isViewedMonth = idx === activeMonth;
+                    const isActualCurrentMonth = idx === realMonth && activeYear === realYear;
+
+                    return (
+                      <button
+                        key={name}
+                        onClick={() => setCurrentDate(new Date(activeYear, idx, 1))}
+                        className={cn(
+                          "flex-shrink-0 px-3.5 py-1.5 rounded-full text-xs font-bold transition-all duration-200 cursor-pointer whitespace-nowrap flex items-center gap-1.5",
+                          // Current Month is always highlighted with solid primary color
+                          isActualCurrentMonth
+                            ? "bg-primary text-primary-foreground shadow-md shadow-primary/30 font-extrabold ring-2 ring-primary/40 scale-105"
+                            : isViewedMonth
+                            ? "bg-primary/20 text-primary border-2 border-primary/60 font-extrabold"
+                            : "text-muted-foreground hover:text-foreground hover:bg-muted/70 border border-transparent"
+                        )}
+                        title={isActualCurrentMonth ? `Current Month (${name})` : name}
+                      >
+                        <span>{name.slice(0, 3)}</span>
+                        {isActualCurrentMonth && (
+                          <span className="w-1.5 h-1.5 rounded-full bg-primary-foreground inline-block align-middle" />
+                        )}
+                      </button>
+                    );
+                  })}
+
+                  {/* Year navigation */}
+                  <div className="flex items-center gap-1 ml-2 pl-2 border-l border-border shrink-0">
+                    <button
+                      onClick={() => setCurrentDate(new Date(activeYear - 1, activeMonth, 1))}
+                      className="w-6 h-6 flex items-center justify-center rounded-full hover:bg-muted text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                      title="Previous year"
+                    >
+                      <i className="fa-solid fa-chevron-left text-[10px]" />
+                    </button>
+                    <span className="text-xs font-bold text-foreground px-1 min-w-[38px] text-center">{activeYear}</span>
+                    <button
+                      onClick={() => setCurrentDate(new Date(activeYear + 1, activeMonth, 1))}
+                      className="w-6 h-6 flex items-center justify-center rounded-full hover:bg-muted text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                      title="Next year"
+                    >
+                      <i className="fa-solid fa-chevron-right text-[10px]" />
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
 
           {/* Enhanced Calendar Month Grid */}
@@ -758,12 +840,28 @@ export default function CalendarPage() {
             return (
               <div className="overflow-x-auto">
                 <div className="min-w-[700px] space-y-2">
+                  {/* Weekday headers — highlight today's column */}
                   <div className="grid grid-cols-7 gap-2">
-                    {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
-                      <div key={day} className="bg-muted/80 dark:bg-slate-800/90 py-2 px-1 text-center text-xs font-bold text-foreground uppercase rounded-lg border border-border/80 dark:border-slate-700/80 shadow-xs">
-                        {day}
-                      </div>
-                    ))}
+                    {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day, colIdx) => {
+                      const todayColIdx = new Date().getDay(); // 0=Sun … 6=Sat
+                      const isTodayCol = colIdx === todayColIdx &&
+                        currentDate.getMonth() === new Date().getMonth() &&
+                        currentDate.getFullYear() === new Date().getFullYear();
+                      return (
+                        <div
+                          key={day}
+                          className={cn(
+                            "py-2 px-1 text-center text-xs font-bold uppercase rounded-lg border shadow-xs",
+                            isTodayCol
+                              ? "bg-primary/20 border-primary/50 text-primary dark:text-primary"
+                              : "bg-muted/80 dark:bg-slate-800/90 border-border/80 dark:border-slate-700/80 text-foreground"
+                          )}
+                        >
+                          {day}
+                          {isTodayCol && <span className="block w-1 h-1 rounded-full bg-primary mx-auto mt-0.5" />}
+                        </div>
+                      );
+                    })}
                   </div>
 
                   <div className="grid grid-cols-7 gap-2">
@@ -787,14 +885,18 @@ export default function CalendarPage() {
                       });
 
                       const hasEvents = dayEvents.length > 0;
+                      const isSelected = selectedDay?.toDateString() === day.toDateString();
 
                       return (
                         <div
                           key={idx}
+                          onClick={() => setSelectedDay(isSelected ? null : day)}
                           className={cn(
-                            "relative p-2.5 min-h-[120px] max-h-[140px] rounded-xl border flex flex-col justify-start gap-1.5 transition-all duration-200 group shadow-xs overflow-hidden",
+                            "relative p-2.5 min-h-[120px] max-h-[140px] rounded-xl border flex flex-col justify-start gap-1.5 transition-all duration-200 group shadow-xs overflow-hidden cursor-pointer",
                             isToday
-                              ? "bg-primary/10 border-2 border-primary ring-2 ring-primary/30 shadow-md shadow-primary/10"
+                              ? "bg-primary/15 border-2 border-primary ring-2 ring-primary/40 shadow-lg shadow-primary/15"
+                              : isSelected
+                              ? "bg-primary/10 border-2 border-primary/70 ring-1 ring-primary/30 shadow-md"
                               : hasEvents
                               ? "bg-card dark:bg-slate-900/95 border-primary/40 dark:border-primary/30 shadow-xs hover:border-primary/70 hover:shadow-md hover:bg-accent/40"
                               : "bg-card/90 dark:bg-slate-900/60 border-border dark:border-slate-800/90 hover:border-primary/50 hover:bg-accent/30"
@@ -803,9 +905,11 @@ export default function CalendarPage() {
                           <div className="flex items-center justify-between shrink-0">
                             <span
                               className={cn(
-                                "text-xs font-bold w-6 h-6 flex items-center justify-center rounded-full transition-transform group-hover:scale-105",
+                                "text-xs font-bold w-7 h-7 flex items-center justify-center rounded-full transition-all",
                                 isToday
-                                  ? "bg-primary text-primary-foreground font-extrabold shadow-xs"
+                                  ? "bg-primary text-primary-foreground font-extrabold shadow-md text-sm scale-110"
+                                  : isSelected
+                                  ? "bg-primary/20 text-primary font-extrabold ring-1 ring-primary/50"
                                   : hasEvents
                                   ? "bg-primary/15 text-primary font-bold"
                                   : "text-muted-foreground group-hover:text-foreground font-semibold"

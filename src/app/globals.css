@@ -231,13 +231,16 @@
   }
 }
 
-/* Fix native browser datepicker calendar popup in dark mode */
+/* Fix native browser datepicker calendar popup */
 ::-webkit-calendar-picker-indicator {
   cursor: pointer;
+  opacity: 1;
+  filter: invert(0.4); /* makes icon dark/visible on light backgrounds */
 }
 
 .dark ::-webkit-calendar-picker-indicator {
-  filter: invert(0.8) hue-rotate(180deg);
+  filter: invert(1) brightness(1.5); /* flips icon to white on dark backgrounds */
+  opacity: 1;
 }
 
 /* Chrome/Brave/Edge internal date picker popup text alignment & line-height fix */
@@ -260,9 +263,12 @@
   color: inherit;
 }
 
-/* Prevent datepicker calendar grid overlapping numbers */
-input[type="date"] {
-  color-scheme: light dark;
+/* Scope color-scheme: always light so Chrome always renders icon dark.
+   Dark mode then inverts it to white via filter below. */
+input[type="date"],
+input[type="datetime-local"],
+input[type="time"] {
+  color-scheme: light;
 }
 
 /* ========================================================================= */

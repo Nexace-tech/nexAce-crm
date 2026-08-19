@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Preloader } from "@/components/ui/Preloader";
-import { cn } from "@/lib/utils";
+import { cn, getISTDateString } from "@/lib/utils";
 
 import { useTabPersistence } from "@/hooks/useTabPersistence";
 
@@ -68,6 +68,21 @@ export default function ProjectsPage() {
   const [newProjRequirementFile, setNewProjRequirementFile] = useState<File | null>(null);
   const [newProjStatus, setNewProjStatus] = useState("Planning");
   const [departments, setDepartments] = useState<any[]>([]);
+
+  // Edit project state
+  const [showEditProjectForm, setShowEditProjectForm] = useState(false);
+  const [editProjName, setEditProjName] = useState("");
+  const [editProjDesc, setEditProjDesc] = useState("");
+  const [editProjStatus, setEditProjStatus] = useState("Planning");
+  const [editProjAssignType, setEditProjAssignType] = useState<"Member" | "Department">("Member");
+  const [editProjAssignDept, setEditProjAssignDept] = useState("");
+  const [editProjMembers, setEditProjMembers] = useState<string[]>([]);
+  const [editProjStartDate, setEditProjStartDate] = useState("");
+  const [editProjDueDate, setEditProjDueDate] = useState("");
+  const [editProjCost, setEditProjCost] = useState("");
+  const [editProjIsInternal, setEditProjIsInternal] = useState(true);
+  const [editProjRequirements, setEditProjRequirements] = useState("");
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
 
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [newTaskDesc, setNewTaskDesc] = useState("");
@@ -365,6 +380,63 @@ export default function ProjectsPage() {
     }
   }, [selectedProjectId, activeTab, mounted]);
 
+  const handleOpenEditProject = () => {
+    if (!selectedProjectId || selectedProjectId === "all") return;
+    const proj = projects.find((p) => p._id === selectedProjectId);
+    if (!proj) return;
+    setEditProjName(proj.name || "");
+    setEditProjDesc(proj.description || "");
+    setEditProjStatus(proj.status || "Planning");
+    setEditProjAssignType(proj.assignType || "Member");
+    setEditProjAssignDept(proj.assignedDepartment || "");
+    setEditProjMembers(proj.members?.map((m: any) => m._id || m) || []);
+    setEditProjStartDate(proj.startDate ? getISTDateString(proj.startDate) : "");
+    setEditProjDueDate(proj.dueDate ? getISTDateString(proj.dueDate) : "");
+    setEditProjCost(proj.cost !== undefined && proj.cost !== null ? String(proj.cost) : "");
+    setEditProjIsInternal(proj.isInternal ?? true);
+    setEditProjRequirements(proj.requirements || "");
+    setShowEditProjectForm(true);
+  };
+
+  const handleEditProject = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedProjectId || selectedProjectId === "all" || !editProjName) return;
+    setIsSavingEdit(true);
+    try {
+      const res = await fetch(`/api/projects/${selectedProjectId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: editProjName,
+          description: editProjDesc,
+          status: editProjStatus,
+          assignType: editProjAssignType,
+          assignedDepartment: editProjAssignType === "Department" ? editProjAssignDept : undefined,
+          members: editProjAssignType === "Member" ? editProjMembers : undefined,
+          startDate: editProjStartDate || undefined,
+          dueDate: editProjDueDate || undefined,
+          cost: editProjCost !== "" ? Number(editProjCost) : 0,
+          isInternal: editProjIsInternal,
+          requirements: editProjRequirements,
+        }),
+      });
+      if (res.ok) {
+        showToast("Project updated successfully!", "success");
+        setShowEditProjectForm(false);
+        await fetchProjects();
+        fetchActivityLogs();
+      } else {
+        const err = await res.json();
+        showToast(err.error || "Failed to update project.", "error");
+      }
+    } catch (e) {
+      console.error(e);
+      showToast("Failed to update project.", "error");
+    } finally {
+      setIsSavingEdit(false);
+    }
+  };
+
   const handleCreateProject = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newProjName) return;
@@ -557,9 +629,9 @@ export default function ProjectsPage() {
         <button
           onClick={() => setActiveTab("kanban")}
           className={cn(
-            "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer",
+            "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
             activeTab === "kanban"
-              ? "border-primary text-white bg-primary/10 rounded-t-md font-semibold"
+              ? "border-primary text-primary bg-primary/10 rounded-t-md font-semibold -mb-px"
               : "border-transparent text-muted-foreground hover:text-foreground"
           )}
         >
@@ -569,9 +641,9 @@ export default function ProjectsPage() {
         <button
           onClick={() => setActiveTab("gantt")}
           className={cn(
-            "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer",
+            "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
             activeTab === "gantt"
-              ? "border-primary text-white bg-primary/10 rounded-t-md font-semibold"
+              ? "border-primary text-primary bg-primary/10 rounded-t-md font-semibold -mb-px"
               : "border-transparent text-muted-foreground hover:text-foreground"
           )}
         >
@@ -581,9 +653,9 @@ export default function ProjectsPage() {
         <button
           onClick={() => setActiveTab("wiki")}
           className={cn(
-            "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer",
+            "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
             activeTab === "wiki"
-              ? "border-primary text-white bg-primary/10 rounded-t-md font-semibold"
+              ? "border-primary text-primary bg-primary/10 rounded-t-md font-semibold -mb-px"
               : "border-transparent text-muted-foreground hover:text-foreground"
           )}
         >
@@ -593,9 +665,9 @@ export default function ProjectsPage() {
         <button
           onClick={() => setActiveTab("drive")}
           className={cn(
-            "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer",
+            "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
             activeTab === "drive"
-              ? "border-primary text-white bg-primary/10 rounded-t-md font-semibold"
+              ? "border-primary text-primary bg-primary/10 rounded-t-md font-semibold -mb-px"
               : "border-transparent text-muted-foreground hover:text-foreground"
           )}
         >
@@ -605,9 +677,9 @@ export default function ProjectsPage() {
         <button
           onClick={() => setActiveTab("history")}
           className={cn(
-            "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer",
+            "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
             activeTab === "history"
-              ? "border-primary text-white bg-primary/10 rounded-t-md font-semibold"
+              ? "border-primary text-primary bg-primary/10 rounded-t-md font-semibold -mb-px"
               : "border-transparent text-muted-foreground hover:text-foreground"
           )}
         >
@@ -652,6 +724,16 @@ export default function ProjectsPage() {
         </div>
 
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          {selectedProjectId && selectedProjectId !== "all" && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleOpenEditProject}
+              className="gap-2 font-semibold text-xs h-8 border-primary/40 text-primary hover:bg-primary/10"
+            >
+              <i className="fa-solid fa-pen-to-square text-xs" /> Edit Details
+            </Button>
+          )}
           <Badge color="primary" variant="soft" className="gap-1.5 px-2.5 py-1 text-xs font-semibold">
             <i className="fa-solid fa-list-check text-[11px]" />
             Total Tasks: <strong className="text-primary-foreground">{tasks.length}</strong>
@@ -665,7 +747,7 @@ export default function ProjectsPage() {
           {/* Board Sidebar */}
           <div
             className={cn(
-              "relative bg-[#141b1f] border-r border-[#26343b] rounded-2xl p-4 transition-all duration-300 shrink-0 w-full lg:w-auto",
+              "relative bg-[#141b1f] border-r border-[#26343b] rounded-2xl p-4 transition-all duration-300 shrink-0 w-full lg:w-auto overflow-visible",
               boardSidebarCollapsed ? "lg:w-16" : "lg:w-64"
             )}
           >
@@ -1709,7 +1791,7 @@ export default function ProjectsPage() {
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="font-semibold text-foreground">Budget / Cost ($)</label>
+                  <label className="font-semibold text-foreground">Budget / Cost (₹)</label>
                   <Input
                     type="number"
                     min="0"
@@ -1767,6 +1849,220 @@ export default function ProjectsPage() {
                 </Button>
                 <Button color="primary" size="sm" type="submit" className="font-semibold gap-1.5">
                   <i className="fa-solid fa-rocket text-xs" /> Launch Project
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Project Modal */}
+      {showEditProjectForm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in" onClick={() => setShowEditProjectForm(false)}>
+          <div className="w-full max-w-xl bg-card border border-border rounded-xl p-6 shadow-2xl space-y-4 animate-in zoom-in-95 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-center border-b border-border/60 pb-3">
+              <h3 className="text-base font-bold text-foreground flex items-center gap-2">
+                <i className="fa-solid fa-pen-to-square text-primary" /> Edit Project Details
+              </h3>
+              <Button variant="ghost" size="sm" onClick={() => setShowEditProjectForm(false)}>
+                <i className="fa-solid fa-xmark text-sm" />
+              </Button>
+            </div>
+
+            <form onSubmit={handleEditProject} className="space-y-4 text-xs">
+              {/* Project Name & Status */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="sm:col-span-2 space-y-1.5">
+                  <label className="font-semibold text-foreground flex items-center gap-1">
+                    Project Name <span className="text-rose-500">*</span>
+                  </label>
+                  <Input
+                    value={editProjName}
+                    onChange={(e) => setEditProjName(e.target.value)}
+                    placeholder="e.g. Q3 Enterprise CRM Redesign"
+                    required
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="font-semibold text-foreground">Project Status</label>
+                  <select
+                    value={editProjStatus}
+                    onChange={(e) => setEditProjStatus(e.target.value)}
+                    className="w-full h-9 rounded-md border border-input bg-background px-3 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring cursor-pointer"
+                  >
+                    <option value="Planning">Planning</option>
+                    <option value="In Progress">In Progress</option>
+                    <option value="In Review">In Review</option>
+                    <option value="On Hold">On Hold</option>
+                    <option value="Completed">Completed</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Description */}
+              <div className="space-y-1.5">
+                <label className="font-semibold text-foreground">Description &amp; Scope</label>
+                <textarea
+                  value={editProjDesc}
+                  onChange={(e) => setEditProjDesc(e.target.value)}
+                  rows={3}
+                  className="w-full rounded-md border border-input bg-background p-3 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                  placeholder="Describe key deliverables, scope, and objectives..."
+                />
+              </div>
+
+              {/* Assign Project */}
+              <div className="p-3.5 rounded-lg border border-border/80 bg-muted/20 space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="font-bold text-foreground flex items-center gap-1.5">
+                    <i className="fa-solid fa-users-gear text-primary" /> Assign Project
+                  </label>
+                  <div className="flex items-center gap-3">
+                    <label className="flex items-center gap-1.5 cursor-pointer font-medium text-foreground">
+                      <input
+                        type="radio"
+                        name="editAssignType"
+                        checked={editProjAssignType === "Member"}
+                        onChange={() => setEditProjAssignType("Member")}
+                        className="text-primary focus:ring-primary"
+                      />
+                      Team Members
+                    </label>
+                    <label className="flex items-center gap-1.5 cursor-pointer font-medium text-foreground">
+                      <input
+                        type="radio"
+                        name="editAssignType"
+                        checked={editProjAssignType === "Department"}
+                        onChange={() => setEditProjAssignType("Department")}
+                        className="text-primary focus:ring-primary"
+                      />
+                      Department
+                    </label>
+                  </div>
+                </div>
+
+                {editProjAssignType === "Member" ? (
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] text-muted-foreground">Select Team Members</label>
+                    <div className="max-h-28 overflow-y-auto p-2 rounded-md border border-input bg-background space-y-1">
+                      {teamMembers.map((m) => (
+                        <label key={m._id} className="flex items-center gap-2 p-1 hover:bg-accent/40 rounded cursor-pointer text-xs">
+                          <input
+                            type="checkbox"
+                            checked={editProjMembers.includes(m._id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setEditProjMembers([...editProjMembers, m._id]);
+                              } else {
+                                setEditProjMembers(editProjMembers.filter((id) => id !== m._id));
+                              }
+                            }}
+                            className="rounded text-primary focus:ring-primary"
+                          />
+                          <span className="font-medium text-foreground">{m.name || m.email}</span>
+                          <span className="text-[10px] text-muted-foreground">({m.role || "Member"})</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] text-muted-foreground">Select Department</label>
+                    <select
+                      value={editProjAssignDept}
+                      onChange={(e) => setEditProjAssignDept(e.target.value)}
+                      className="w-full h-9 rounded-md border border-input bg-background px-3 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring cursor-pointer"
+                    >
+                      <option value="">Select Target Department...</option>
+                      {departments.length === 0 ? (
+                        <>
+                          <option value="Engineering">Engineering</option>
+                          <option value="Marketing">Marketing</option>
+                          <option value="Sales">Sales</option>
+                          <option value="Product">Product</option>
+                          <option value="Design">Design</option>
+                          <option value="Support">Support</option>
+                        </>
+                      ) : (
+                        departments.map((d) => (
+                          <option key={d._id} value={d.name}>{d.name}</option>
+                        ))
+                      )}
+                    </select>
+                  </div>
+                )}
+              </div>
+
+              {/* Start Date, End Date & Cost */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="space-y-1.5">
+                  <label className="font-semibold text-foreground">Start Date</label>
+                  <Input
+                    type="date"
+                    value={editProjStartDate}
+                    onChange={(e) => setEditProjStartDate(e.target.value)}
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="font-semibold text-foreground">End Date</label>
+                  <Input
+                    type="date"
+                    min={editProjStartDate || undefined}
+                    value={editProjDueDate}
+                    onChange={(e) => setEditProjDueDate(e.target.value)}
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="font-semibold text-foreground">Budget / Cost (₹)</label>
+                  <Input
+                    type="number"
+                    min="0"
+                    placeholder="e.g. 15000"
+                    value={editProjCost}
+                    onChange={(e) => setEditProjCost(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              {/* Internal Tag */}
+              <div className="flex items-center gap-2 p-3 rounded-lg border border-border/60 bg-muted/10">
+                <input
+                  type="checkbox"
+                  id="editInternalTag"
+                  checked={editProjIsInternal}
+                  onChange={(e) => setEditProjIsInternal(e.target.checked)}
+                  className="w-4 h-4 rounded text-primary focus:ring-primary cursor-pointer"
+                />
+                <label htmlFor="editInternalTag" className="font-semibold text-foreground cursor-pointer flex items-center gap-1.5">
+                  <i className="fa-solid fa-tag text-indigo-500 text-xs" /> Tag as Internal Project
+                </label>
+                <span className="text-[11px] text-muted-foreground ml-auto">(Non-billable / Internal tool)</span>
+              </div>
+
+              {/* Requirements */}
+              <div className="space-y-2 p-3.5 rounded-lg border border-border/80 bg-muted/20">
+                <label className="font-bold text-foreground flex items-center gap-1.5">
+                  <i className="fa-solid fa-paperclip text-primary" /> Project Requirements &amp; Notes
+                </label>
+                <textarea
+                  value={editProjRequirements}
+                  onChange={(e) => setEditProjRequirements(e.target.value)}
+                  rows={2}
+                  className="w-full rounded-md border border-input bg-background p-2.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                  placeholder="Key functional requirements, specs, or guidelines..."
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-border">
+                <Button variant="outline" size="sm" type="button" onClick={() => setShowEditProjectForm(false)} disabled={isSavingEdit}>
+                  Cancel
+                </Button>
+                <Button color="primary" size="sm" type="submit" className="font-semibold gap-1.5" disabled={isSavingEdit}>
+                  <i className="fa-solid fa-floppy-disk text-xs" />
+                  {isSavingEdit ? "Saving..." : "Save Changes"}
                 </Button>
               </div>
             </form>

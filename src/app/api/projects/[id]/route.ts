@@ -39,7 +39,20 @@ export async function PUT(
     }
 
     const body = await request.json();
-    const { name, description, status, members } = body;
+    const {
+      name,
+      description,
+      status,
+      members,
+      startDate,
+      dueDate,
+      cost,
+      isInternal,
+      requirements,
+      assignType,
+      assignedDepartment,
+      priority,
+    } = body;
 
     const oldStatus = project.status;
 
@@ -51,6 +64,14 @@ export async function PUT(
     if (members && Array.isArray(members)) {
       project.members = members.map((m: string) => new mongoose.Types.ObjectId(m));
     }
+    if (startDate !== undefined) project.startDate = startDate ? new Date(startDate) : undefined;
+    if (dueDate !== undefined) project.dueDate = dueDate ? new Date(dueDate) : undefined;
+    if (cost !== undefined) project.cost = cost !== "" ? Number(cost) : 0;
+    if (isInternal !== undefined) project.isInternal = Boolean(isInternal);
+    if (requirements !== undefined) project.requirements = requirements;
+    if (assignType !== undefined) project.assignType = assignType;
+    if (assignedDepartment !== undefined) project.assignedDepartment = assignedDepartment;
+    if (priority !== undefined) project.priority = priority;
 
     await project.save();
 
@@ -66,6 +87,17 @@ export async function PUT(
         details: `Updated project '${project.name}' status from '${oldStatus}' to '${status}'`,
       });
     }
+
+    await ActivityLog.create({
+      tenantId: new mongoose.Types.ObjectId(session.tenantId),
+      projectId: project._id,
+      userId: new mongoose.Types.ObjectId(session.userId),
+      userName: session.userName,
+      userRole: session.role,
+      action: "Project Edited",
+      targetName: project.name,
+      details: `Project details updated for '${project.name}'`,
+    });
 
     const updatedProject = await Project.findById(id).populate("members", "name role photoUrl");
 
