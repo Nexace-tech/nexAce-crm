@@ -12,7 +12,7 @@ import { LogoutHeaderBtn } from "@/components/layout/LogoutHeaderBtn";
 import { CommandPalette } from "@/components/layout/CommandPalette";
 import { GuidedTour } from "@/components/guided-tour/GuidedTour";
 import { ProfileCompletionBanner } from "@/components/layout/ProfileCompletionBanner";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
 
 interface MenuItem {
@@ -193,19 +193,32 @@ export function DashboardClientLayout({ session, menuItems, isPending = false, c
 
         {/* User Footer Profile Card */}
         <div className={cn("border-t border-border bg-card/50", sidebarCollapsed ? "p-2" : "p-4")}>
-          <div className={cn("flex items-center rounded-lg bg-accent/50 border border-border/50", sidebarCollapsed ? "justify-center p-2" : "gap-3 p-2")}>
-            <Avatar className="h-9 w-9 shrink-0 border border-primary/20">
+          <Link
+            href="/dashboard/settings"
+            className={cn(
+              "flex items-center rounded-xl bg-accent/50 hover:bg-accent/80 border border-border/50 transition-all duration-200 group relative cursor-pointer",
+              sidebarCollapsed ? "justify-center p-2" : "gap-3 p-2.5"
+            )}
+            title={sidebarCollapsed ? `${userName} (${role}) - Manage Profile` : "Manage Profile & Settings"}
+          >
+            <Avatar className="h-9 w-9 shrink-0 ring-2 ring-primary/20 group-hover:ring-primary/40 transition-all">
+              {user?.photoUrl ? (
+                <AvatarImage src={user.photoUrl} alt={userName} />
+              ) : null}
               <AvatarFallback className="bg-primary/10 text-primary font-bold text-xs">
                 {userName ? userName.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2) : "U"}
               </AvatarFallback>
             </Avatar>
             {!sidebarCollapsed && (
               <div className="flex flex-col min-w-0 flex-1">
-                <p className="text-xs font-bold text-foreground truncate">{userName}</p>
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-bold text-foreground truncate group-hover:text-primary transition-colors">{userName}</p>
+                  <i className="fa-solid fa-gear text-[10px] text-muted-foreground group-hover:text-primary transition-colors ml-1 opacity-0 group-hover:opacity-100" />
+                </div>
                 <span className="text-[10px] text-muted-foreground font-medium truncate">{role} • {tenantName}</span>
               </div>
             )}
-          </div>
+          </Link>
         </div>
       </aside>
 

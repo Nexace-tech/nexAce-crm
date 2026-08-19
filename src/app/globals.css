@@ -269,6 +269,7 @@ input[type="date"],
 input[type="datetime-local"],
 input[type="time"] {
   color-scheme: light;
+  accent-color: hsl(var(--primary));
 }
 
 /* ========================================================================= */

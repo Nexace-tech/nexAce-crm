@@ -23,9 +23,9 @@ export default function ProjectsPage() {
   const [loading, setLoading] = useState(true);
   const [mounted, setMounted] = useState(false);
 
-  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: "success" | "error" | "info" } | null>(null);
 
-  const showToast = (message: string, type: "success" | "error" = "success") => {
+  const showToast = (message: string, type: "success" | "error" | "info" = "success") => {
     setToast({ message, type });
     setTimeout(() => {
       setToast(null);
@@ -51,7 +51,6 @@ export default function ProjectsPage() {
   const [sprints, setSprints] = useState<any[]>([]);
   const [activityLogs, setActivityLogs] = useState<any[]>([]);
 
-  const [selectedTask, setSelectedTask] = useState<any | null>(null);
   const [showTaskForm, setShowTaskForm] = useState(false);
   const [showProjectForm, setShowProjectForm] = useState(false);
 
@@ -140,11 +139,68 @@ export default function ProjectsPage() {
   const [historyRowsPerPage, setHistoryRowsPerPage] = useState<number>(5);
   const [historyShowAll, setHistoryShowAll] = useState<boolean>(false);
 
+  // Kanban multi-filter and task preview state
+  const [taskSearchQuery, setTaskSearchQuery] = useState<string>("");
+  const [taskPriorityFilter, setTaskPriorityFilter] = useState<"all" | "High" | "Medium" | "Low">("all");
+  const [taskAssigneeFilter, setTaskAssigneeFilter] = useState<string>("all");
+  const [taskDueSoonOnly, setTaskDueSoonOnly] = useState<boolean>(false);
+  const [selectedTask, setSelectedTask] = useState<any | null>(null);
+  const [isDeletingTask, setIsDeletingTask] = useState<boolean>(false);
+
   const columns = ["To Do", "In Progress", "Review", "Done"];
 
   // Board Sidebar & Filter state
   const [boardFilter, setBoardFilter] = useState<"all" | "starred">("all");
   const [boardSidebarCollapsed, setBoardSidebarCollapsed] = useState<boolean>(false);
+  const [starredProjectIds, setStarredProjectIds] = useState<string[]>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const saved = localStorage.getItem("starred_project_ids");
+        return saved ? JSON.parse(saved) : [];
+      } catch (e) {
+        return [];
+      }
+    }
+    return [];
+  });
+
+  const toggleStarProject = async (projectId: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const isCurrentlyStarred = starredProjectIds.includes(projectId);
+    const nextStarred = isCurrentlyStarred
+      ? starredProjectIds.filter((id) => id !== projectId)
+      : [...starredProjectIds, projectId];
+
+    setStarredProjectIds(nextStarred);
+    try {
+      localStorage.setItem("starred_project_ids", JSON.stringify(nextStarred));
+    } catch (err) {}
+
+    const targetProject = projects.find((p) => p._id === projectId);
+    const projName = targetProject?.name || "Project";
+    const actionName = isCurrentlyStarred ? "Project Unstarred" : "Project Starred";
+    const detailsText = isCurrentlyStarred
+      ? `Removed project "${projName}" from Starred Boards`
+      : `Pinned project "${projName}" to Starred Boards`;
+
+    showToast(detailsText, "success");
+
+    try {
+      await fetch("/api/activity-logs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectId,
+          action: actionName,
+          targetName: projName,
+          details: detailsText,
+        }),
+      });
+      fetchActivityLogs(selectedProjectId || "all");
+    } catch (err) {
+      console.error("Failed to log star activity:", err);
+    }
+  };
 
   // Drag-and-drop state
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
@@ -582,6 +638,94 @@ export default function ProjectsPage() {
     }
   };
 
+  const handleDeleteTask = async (taskId: string) => {
+    if (!confirm("Are you sure you want to delete this task?")) return;
+    setIsDeletingTask(true);
+    try {
+      const res = await fetch(`/api/tasks?taskId=${taskId}`, { method: "DELETE" });
+      if (res.ok) {
+        showToast("Task deleted successfully", "success");
+        setSelectedTask(null);
+        await fetchTasks();
+        await fetchActivityLogs();
+      } else {
+        showToast("Failed to delete task", "error");
+      }
+    } catch (e) {
+      console.error(e);
+      showToast("Error deleting task", "error");
+    } finally {
+      setIsDeletingTask(false);
+    }
+  };
+
+  const handleQuickStatusChange = async (taskId: string, targetStatus: string) => {
+    await handleMoveTaskStatus(taskId, targetStatus);
+    if (selectedTask && selectedTask._id === taskId) {
+      setSelectedTask((prev: any) => prev ? { ...prev, status: targetStatus } : null);
+    }
+  };
+
+  const handleExportTasksCSV = () => {
+    if (tasks.length === 0) {
+      showToast("No tasks available to export", "info");
+      return;
+    }
+    const headers = ["Task ID", "Title", "Status", "Priority", "Project", "Assignee", "Due Date", "Created At"];
+    const rows = tasks.map((t) => [
+      t._id,
+      t.title || "",
+      t.status || "To Do",
+      t.priority || "Medium",
+      t.projectId?.name || "General",
+      t.assignee?.name || "Unassigned",
+      t.dueDate ? new Date(t.dueDate).toLocaleDateString() : "No date",
+      t.createdAt ? new Date(t.createdAt).toLocaleString() : "",
+    ]);
+    const csvContent = [
+      headers.map((h) => `"${h}"`).join(","),
+      ...rows.map((r) => r.map((c) => `"${(c || "").toString().replace(/"/g, '""')}"`).join(",")),
+    ].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `tasks_${new Date().toISOString().split("T")[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showToast("Exported tasks CSV successfully", "success");
+  };
+
+  const handleExportHistoryCSV = () => {
+    if (activityLogs.length === 0) {
+      showToast("No history logs available to export", "info");
+      return;
+    }
+    const headers = ["Timestamp", "User", "Role", "Action", "Target", "Details"];
+    const rows = activityLogs.map((l) => [
+      new Date(l.createdAt).toLocaleString(),
+      l.userName || "System",
+      l.userRole || "Member",
+      l.action || "",
+      l.targetName || "",
+      l.details || "",
+    ]);
+    const csvContent = [
+      headers.map((h) => `"${h}"`).join(","),
+      ...rows.map((r) => r.map((c) => `"${(c || "").toString().replace(/"/g, '""')}"`).join(",")),
+    ].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `project_history_${new Date().toISOString().split("T")[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showToast("Exported project history CSV successfully", "success");
+  };
+
   if (!mounted || authLoading) {
     return <Preloader label="Loading Projects Workspace..." />;
   }
@@ -595,10 +739,21 @@ export default function ProjectsPage() {
             "fixed top-4 right-4 z-50 px-4 py-3 rounded-lg shadow-lg border text-sm font-medium flex items-center gap-2 animate-in fade-in slide-in-from-top-2",
             toast.type === "success"
               ? "bg-emerald-500/90 text-white border-emerald-600"
+              : toast.type === "info"
+              ? "bg-sky-600/90 text-white border-sky-700"
               : "bg-destructive/90 text-white border-destructive"
           )}
         >
-          <i className={cn("fa-solid text-sm", toast.type === "success" ? "fa-circle-check" : "fa-circle-exclamation")} />
+          <i
+            className={cn(
+              "fa-solid text-sm",
+              toast.type === "success"
+                ? "fa-circle-check"
+                : toast.type === "info"
+                ? "fa-circle-info"
+                : "fa-circle-exclamation"
+            )}
+          />
           {toast.message}
         </div>
       )}
@@ -699,15 +854,38 @@ export default function ProjectsPage() {
                 setSelectedProjectId(val);
                 fetchTasks(val);
               }}
-              className="h-9 px-3 text-sm bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary w-64 cursor-pointer"
+              className="h-9 px-3 text-sm bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary w-64 cursor-pointer font-medium"
             >
               <option value="all">⚡ All Projects (Combined Workspace View)</option>
-              {projects.map((p) => (
-                <option key={p._id} value={p._id}>
-                  📁 {p.name}
-                </option>
-              ))}
+              {(boardFilter === "starred"
+                ? projects.filter((p) => starredProjectIds.includes(p._id))
+                : projects
+              ).map((p) => {
+                const isStarred = starredProjectIds.includes(p._id);
+                return (
+                  <option key={p._id} value={p._id}>
+                    {isStarred ? "⭐" : "📁"} {p.name}
+                  </option>
+                );
+              })}
             </select>
+
+            {/* Quick Star Toggle Button for selected project */}
+            {selectedProjectId && selectedProjectId !== "all" && (
+              <button
+                type="button"
+                onClick={(e) => toggleStarProject(selectedProjectId, e)}
+                className={cn(
+                  "h-9 w-9 rounded-md border flex items-center justify-center transition-all cursor-pointer",
+                  starredProjectIds.includes(selectedProjectId)
+                    ? "bg-amber-500/15 border-amber-500/50 text-amber-500 hover:bg-amber-500/25"
+                    : "border-border hover:bg-accent text-muted-foreground hover:text-amber-500"
+                )}
+                title={starredProjectIds.includes(selectedProjectId) ? "Remove from Starred Boards" : "Add to Starred Boards"}
+              >
+                <i className={cn("text-sm", starredProjectIds.includes(selectedProjectId) ? "fa-solid fa-star text-amber-500" : "fa-regular fa-star")} />
+              </button>
+            )}
           </div>
 
           <div className="flex items-center gap-2 text-xs">
@@ -720,6 +898,13 @@ export default function ProjectsPage() {
               <i className="fa-solid fa-circle-play text-emerald-500 text-[11px]" />
               Active Projects: <strong className="text-emerald-500">{projects.filter((p) => p.status === "In Progress" || p.status === "Planning" || !p.status).length}</strong>
             </Badge>
+
+            {starredProjectIds.length > 0 && (
+              <Badge variant="outline" className="gap-1.5 px-2.5 py-1 text-xs bg-amber-500/10 text-amber-500 border-amber-500/30">
+                <i className="fa-solid fa-star text-amber-500 text-[11px]" />
+                Starred: <strong className="text-amber-500">{starredProjectIds.length}</strong>
+              </Badge>
+            )}
           </div>
         </div>
 
@@ -747,14 +932,14 @@ export default function ProjectsPage() {
           {/* Board Sidebar */}
           <div
             className={cn(
-              "relative bg-[#141b1f] border-r border-[#26343b] rounded-2xl p-4 transition-all duration-300 shrink-0 w-full lg:w-auto overflow-visible",
+              "relative bg-card border border-border dark:bg-[#141b1f] dark:border-[#26343b] shadow-sm rounded-2xl p-4 transition-all duration-300 shrink-0 w-full lg:w-auto overflow-visible",
               boardSidebarCollapsed ? "lg:w-16" : "lg:w-64"
             )}
           >
             {/* Collapse Toggle Button on vertical divider */}
             <button
               onClick={() => setBoardSidebarCollapsed(!boardSidebarCollapsed)}
-              className="hidden lg:flex absolute -right-3 top-10 z-20 w-6 h-6 rounded-full bg-[#1c262b] border border-[#2e3e46] text-slate-300 hover:text-white items-center justify-center shadow-md cursor-pointer text-xs transition-colors"
+              className="hidden lg:flex absolute -right-3 top-10 z-20 w-6 h-6 rounded-full bg-card border border-border text-muted-foreground hover:text-foreground dark:bg-[#1c262b] dark:border-[#2e3e46] dark:text-slate-300 dark:hover:text-white items-center justify-center shadow-md cursor-pointer text-xs transition-colors"
               title={boardSidebarCollapsed ? "Expand Board Sidebar" : "Collapse Board Sidebar"}
             >
               <i className={cn("fa-solid", boardSidebarCollapsed ? "fa-chevron-right" : "fa-chevron-left")} />
@@ -765,47 +950,115 @@ export default function ProjectsPage() {
                 {/* Oval Pill Add New Board Button */}
                 <button
                   onClick={() => setShowProjectForm(true)}
-                  className="w-full bg-[#006970] hover:bg-[#00575d] active:scale-[0.98] text-white font-medium text-sm py-2.5 px-6 rounded-full transition-all duration-200 shadow-md shadow-[#006970]/20 flex items-center justify-center gap-2 cursor-pointer"
+                  className="w-full bg-primary hover:bg-primary/90 active:scale-[0.98] text-primary-foreground font-medium text-sm py-2.5 px-6 rounded-full transition-all duration-200 shadow-md shadow-primary/20 flex items-center justify-center gap-2 cursor-pointer"
                 >
                   <span>Add New Board</span>
                 </button>
 
                 {/* Sidebar Menu Items */}
                 <div className="space-y-1.5 pt-1">
-                  {/* All Boards (Active Container) */}
+                  {/* All Boards */}
                   <button
-                    onClick={() => setBoardFilter("all")}
+                    onClick={() => {
+                      setBoardFilter("all");
+                    }}
                     className={cn(
-                      "w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl text-sm font-medium transition-all cursor-pointer",
+                      "w-full flex items-center justify-between px-4 py-3 rounded-2xl text-sm font-medium transition-all cursor-pointer",
                       boardFilter === "all"
-                        ? "bg-[#0d3135] text-[#30b8bd] shadow-xs"
-                        : "text-white hover:bg-[#0e272a] hover:text-[#30b8bd]"
+                        ? "bg-primary/10 text-primary font-semibold border border-primary/25 dark:bg-[#0d3135] dark:text-[#30b8bd] dark:border-transparent shadow-xs"
+                        : "text-muted-foreground hover:bg-accent/60 hover:text-foreground dark:text-slate-200 dark:hover:bg-[#0e272a] dark:hover:text-[#30b8bd]"
                     )}
                   >
-                    <i className="fa-solid fa-table-cells-large text-lg" />
-                    <span>All Boards</span>
+                    <div className="flex items-center gap-3.5">
+                      <i className="fa-solid fa-table-cells-large text-lg" />
+                      <span>All Boards</span>
+                    </div>
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground dark:bg-slate-800/60 dark:text-slate-400 font-mono font-medium">
+                      {projects.length}
+                    </span>
                   </button>
 
-                  {/* Stared Boards (Inactive Container) */}
+                  {/* Starred Boards */}
                   <button
-                    onClick={() => setBoardFilter("starred")}
+                    onClick={() => {
+                      setBoardFilter("starred");
+                      const firstStarred = projects.find((p) => starredProjectIds.includes(p._id));
+                      if (firstStarred && selectedProjectId === "all") {
+                        setSelectedProjectId(firstStarred._id);
+                        fetchTasks(firstStarred._id);
+                      }
+                    }}
                     className={cn(
-                      "w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl text-sm font-medium transition-all cursor-pointer",
+                      "w-full flex items-center justify-between px-4 py-3 rounded-2xl text-sm font-medium transition-all cursor-pointer",
                       boardFilter === "starred"
-                        ? "bg-[#0d3135] text-[#30b8bd] shadow-xs"
-                        : "text-white hover:bg-[#0e272a] hover:text-[#30b8bd]"
+                        ? "bg-primary/10 text-primary font-semibold border border-primary/25 dark:bg-[#0d3135] dark:text-[#30b8bd] dark:border-transparent shadow-xs"
+                        : "text-muted-foreground hover:bg-accent/60 hover:text-foreground dark:text-slate-200 dark:hover:bg-[#0e272a] dark:hover:text-[#30b8bd]"
                     )}
                   >
-                    <i className="fa-regular fa-star text-lg" />
-                    <span>Stared Boards</span>
+                    <div className="flex items-center gap-3.5">
+                      <i className={cn("text-lg", starredProjectIds.length > 0 ? "fa-solid fa-star text-amber-500" : "fa-regular fa-star")} />
+                      <span>Starred Boards</span>
+                    </div>
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground dark:bg-slate-800/60 dark:text-slate-400 font-mono font-medium">
+                      {starredProjectIds.length}
+                    </span>
                   </button>
                 </div>
+
+                {/* Sublist of Starred Projects when Starred Boards filter is active */}
+                {boardFilter === "starred" && (
+                  <div className="pt-2 border-t border-border dark:border-[#26343b] space-y-1">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground dark:text-slate-400 px-2 pb-1">
+                      Starred Projects
+                    </p>
+                    {projects.filter((p) => starredProjectIds.includes(p._id)).length === 0 ? (
+                      <div className="p-3 text-center text-xs text-muted-foreground bg-muted/30 dark:bg-[#0d3135]/40 rounded-xl border border-dashed border-border dark:border-[#26343b]">
+                        <i className="fa-regular fa-star text-amber-500 mb-1.5 text-base block" />
+                        No starred boards yet. Click the star icon next to any project to pin it here.
+                      </div>
+                    ) : (
+                      projects
+                        .filter((p) => starredProjectIds.includes(p._id))
+                        .map((p) => {
+                          const isSelected = selectedProjectId === p._id;
+                          return (
+                            <div
+                              key={p._id}
+                              onClick={() => {
+                                setSelectedProjectId(p._id);
+                                fetchTasks(p._id);
+                              }}
+                              className={cn(
+                                "flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium cursor-pointer transition-all group",
+                                isSelected
+                                  ? "bg-primary/15 text-primary border border-primary/40 font-semibold dark:bg-[#006970]/50 dark:text-white dark:border-[#006970]"
+                                  : "text-foreground hover:bg-muted/70 dark:text-slate-300 dark:hover:bg-[#0e272a] dark:hover:text-white"
+                              )}
+                            >
+                              <span className="truncate flex items-center gap-2">
+                                <i className="fa-solid fa-folder text-amber-500 text-[11px]" />
+                                {p.name}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={(e) => toggleStarProject(p._id, e)}
+                                className="opacity-60 group-hover:opacity-100 text-amber-500 hover:scale-110 transition-all p-1 cursor-pointer"
+                                title="Unstar project"
+                              >
+                                <i className="fa-solid fa-star text-[11px]" />
+                              </button>
+                            </div>
+                          );
+                        })
+                    )}
+                  </div>
+                )}
               </div>
             ) : (
               <div className="flex flex-col items-center space-y-4 pt-2">
                 <button
                   onClick={() => setShowProjectForm(true)}
-                  className="w-10 h-10 bg-[#006970] hover:bg-[#00575d] text-white rounded-full flex items-center justify-center shadow-md cursor-pointer"
+                  className="w-10 h-10 bg-primary hover:bg-primary/90 text-primary-foreground rounded-full flex items-center justify-center shadow-md cursor-pointer"
                   title="Add New Board"
                 >
                   <i className="fa-solid fa-plus text-sm" />
@@ -814,7 +1067,9 @@ export default function ProjectsPage() {
                   onClick={() => setBoardFilter("all")}
                   className={cn(
                     "w-10 h-10 rounded-xl flex items-center justify-center cursor-pointer transition-colors",
-                    boardFilter === "all" ? "bg-[#0d3135] text-[#30b8bd]" : "text-white hover:bg-[#0e272a]"
+                    boardFilter === "all"
+                      ? "bg-primary/10 text-primary dark:bg-[#0d3135] dark:text-[#30b8bd]"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground dark:text-white dark:hover:bg-[#0e272a]"
                   )}
                   title="All Boards"
                 >
@@ -824,148 +1079,284 @@ export default function ProjectsPage() {
                   onClick={() => setBoardFilter("starred")}
                   className={cn(
                     "w-10 h-10 rounded-xl flex items-center justify-center cursor-pointer transition-colors",
-                    boardFilter === "starred" ? "bg-[#0d3135] text-[#30b8bd]" : "text-white hover:bg-[#0e272a]"
+                    boardFilter === "starred"
+                      ? "bg-primary/10 text-primary dark:bg-[#0d3135] dark:text-[#30b8bd]"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground dark:text-white dark:hover:bg-[#0e272a]"
                   )}
-                  title="Stared Boards"
+                  title="Starred Boards"
                 >
-                  <i className="fa-regular fa-star text-base" />
+                  <i className={cn("text-base", starredProjectIds.length > 0 ? "fa-solid fa-star text-amber-500" : "fa-regular fa-star")} />
                 </button>
               </div>
             )}
           </div>
 
-          {/* Kanban Columns Grid */}
-          <div className="flex-1 min-w-0 w-full grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
-          {columns.map((col) => {
-            const colTasks = tasks.filter((t) => (t.status || "To Do") === col);
-            const isOver = dragOverCol === col;
-
-            const colAccentMap: Record<string, string> = {
-              "To Do": "border-sky-400",
-              "In Progress": "border-indigo-500",
-              "Review": "border-amber-500",
-              "Done": "border-emerald-500",
-            };
-            const colBorderMap: Record<string, string> = {
-              "To Do": "border-sky-500/40 dark:border-sky-500/50 hover:border-sky-500/80 shadow-sky-500/5",
-              "In Progress": "border-indigo-500/40 dark:border-indigo-500/50 hover:border-indigo-500/80 shadow-indigo-500/5",
-              "Review": "border-amber-500/40 dark:border-amber-500/50 hover:border-amber-500/80 shadow-amber-500/5",
-              "Done": "border-emerald-500/40 dark:border-emerald-500/50 hover:border-emerald-500/80 shadow-emerald-500/5",
-            };
-            const colDotMap: Record<string, string> = {
-              "To Do": "bg-sky-400",
-              "In Progress": "bg-indigo-500",
-              "Review": "bg-amber-500",
-              "Done": "bg-emerald-500",
-            };
-
-            return (
-              <div
-                key={col}
-                onDragOver={(e) => { e.preventDefault(); setDragOverCol(col); }}
-                onDragLeave={(e) => {
-                  // Only clear if leaving the column container itself (not a child)
-                  if (!e.currentTarget.contains(e.relatedTarget as Node)) {
-                    setDragOverCol(null);
-                  }
-                }}
-                onDrop={async (e) => {
-                  e.preventDefault();
-                  setDragOverCol(null);
-                  const id = e.dataTransfer.getData("nexace/task-id");
-                  if (id && id !== col) {
-                    // Optimistic UI update
-                    setTasks((prev: any[]) =>
-                      prev.map((t) => t._id === id ? { ...t, status: col } : t)
-                    );
-                    await handleMoveTaskStatus(id, col);
-                  }
-                }}
-                className={cn(
-                  "flex flex-col rounded-xl border-2 bg-card/90 dark:bg-slate-900/90 p-4 space-y-3 transition-all duration-200 shadow-md",
-                  colBorderMap[col],
-                  isOver && `${colAccentMap[col]} bg-primary/10 scale-[1.02] shadow-xl border-4`
-                )}
-              >
-                <div className="flex items-center justify-between pb-2 border-b border-border">
-                  <h3 className="font-bold text-sm text-foreground flex items-center gap-2">
-                    <span className={cn("w-2 h-2 rounded-full", colDotMap[col])} /> {col}
-                  </h3>
-                  <Badge color="primary" variant="soft" rounded="full">
-                    {colTasks.length}
-                  </Badge>
-                </div>
-
-                <div className="space-y-3 min-h-[300px]">
-                  {colTasks.length === 0 ? (
-                    <div
-                      className={cn(
-                        "h-32 flex flex-col items-center justify-center gap-2 p-3 text-xs text-muted-foreground border-2 border-dashed rounded-xl transition-all",
-                        isOver ? `${colAccentMap[col]} text-foreground bg-primary/5` : "border-border/60 hover:border-border hover:bg-muted/10"
-                      )}
+          {/* Kanban Multi-Filter Bar & Quick Actions Toolbar */}
+          <div className="flex-1 min-w-0 w-full space-y-4">
+            <div className="bg-card border border-border rounded-xl p-3 shadow-xs flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 flex-wrap">
+              {/* Search & Priority Filters */}
+              <div className="flex items-center gap-2 flex-1 min-w-[240px] max-w-lg">
+                <div className="relative flex-1">
+                  <i className="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground" />
+                  <input
+                    type="text"
+                    value={taskSearchQuery}
+                    onChange={(e) => setTaskSearchQuery(e.target.value)}
+                    placeholder="Search tasks by title, desc or assignee..."
+                    className="w-full pl-8 pr-7 py-1.5 text-xs rounded-lg border border-input bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                  />
+                  {taskSearchQuery && (
+                    <button
+                      onClick={() => setTaskSearchQuery("")}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground text-xs"
                     >
-                      <span>{isOver ? `Drop here → ${col}` : `No tasks in ${col}`}</span>
-                      {col === "To Do" && (
-                        <button
-                          onClick={() => setShowTaskForm(true)}
-                          className="px-3 py-1 text-[11px] font-semibold text-primary bg-primary/10 hover:bg-primary/20 rounded-md transition-colors cursor-pointer flex items-center gap-1.5"
-                        >
-                          <i className="fa-solid fa-plus text-[10px]" /> Add First Task
-                        </button>
-                      )}
-                    </div>
-                  ) : (
-                    colTasks.map((t) => (
-                      <Card
-                        key={t._id}
-                        draggable
-                        onDragStart={(e) => {
-                          e.dataTransfer.setData("nexace/task-id", t._id);
-                          e.dataTransfer.effectAllowed = "move";
-                          setDraggedTaskId(t._id);
-                        }}
-                        onDragEnd={() => {
-                          setDraggedTaskId(null);
-                          setDragOverCol(null);
-                        }}
-                        onClick={() => setSelectedTask(t)}
-                        className={cn(
-                          "cursor-grab active:cursor-grabbing hover:shadow-md transition-all p-3.5 space-y-2.5 border-l-4 bg-card dark:bg-slate-800 border border-border/80 shadow-sm opacity-100",
-                          colAccentMap[col]
-                        )}
-                      >
-                        <div className="flex items-start justify-between gap-2">
-                          <p className="font-bold text-xs text-foreground leading-snug line-clamp-2">{t.title}</p>
-                          <Badge
-                            color={t.priority === "High" ? "destructive" : t.priority === "Medium" ? "warning" : "info"}
-                            className="text-[10px] px-1.5 py-0 shrink-0 font-semibold"
-                          >
-                            {t.priority}
-                          </Badge>
-                        </div>
-                        {selectedProjectId === "all" && t.projectId?.name && (
-                          <div className="flex items-center gap-1 text-[10px] text-primary font-semibold">
-                            <i className="fa-solid fa-folder text-[9px]" /> {t.projectId.name}
-                          </div>
-                        )}
-                        {t.description && <p className="text-[11px] text-foreground/80 leading-relaxed line-clamp-2">{t.description}</p>}
-                        <div className="flex items-center justify-between text-[10px] text-foreground/70 font-medium pt-1.5 border-t border-border/40">
-                          <span className="flex items-center gap-1">
-                            <i className="fa-solid fa-user text-[9px] text-primary" /> {t.assignee?.name || "Unassigned"}
-                          </span>
-                          {t.dueDate && (
-                            <span className="flex items-center gap-1 font-mono">
-                              <i className="fa-solid fa-calendar-day text-[9px] text-muted-foreground" /> Due: {new Date(t.dueDate).toLocaleDateString()}
-                            </span>
-                          )}
-                        </div>
-                      </Card>
-                    ))
+                      <i className="fa-solid fa-xmark" />
+                    </button>
                   )}
                 </div>
+
+                {/* Priority Selector */}
+                <select
+                  value={taskPriorityFilter}
+                  onChange={(e) => setTaskPriorityFilter(e.target.value as any)}
+                  className="h-8 rounded-lg border border-input bg-background px-2.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary font-medium"
+                >
+                  <option value="all">All Priorities</option>
+                  <option value="High">🔴 High Priority</option>
+                  <option value="Medium">🟡 Medium</option>
+                  <option value="Low">🔵 Low</option>
+                </select>
               </div>
-            );
-          })}
+
+              {/* Assignee & Due Soon Filters & Action Buttons */}
+              <div className="flex items-center gap-2 flex-wrap justify-end">
+                {/* Assignee Filter */}
+                <select
+                  value={taskAssigneeFilter}
+                  onChange={(e) => setTaskAssigneeFilter(e.target.value)}
+                  className="h-8 rounded-lg border border-input bg-background px-2.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary font-medium max-w-[150px]"
+                >
+                  <option value="all">All Assignees</option>
+                  {teamMembers.map((m) => (
+                    <option key={m._id} value={m._id}>{m.name || m.email}</option>
+                  ))}
+                </select>
+
+                {/* Due Soon / Overdue Toggle */}
+                <button
+                  type="button"
+                  onClick={() => setTaskDueSoonOnly(!taskDueSoonOnly)}
+                  className={cn(
+                    "h-8 px-2.5 rounded-lg border text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer",
+                    taskDueSoonOnly
+                      ? "bg-amber-500/15 border-amber-500/50 text-amber-600 dark:text-amber-400"
+                      : "border-border text-muted-foreground hover:text-foreground hover:bg-muted/60"
+                  )}
+                  title="Show tasks due in next 7 days or overdue"
+                >
+                  <i className="fa-solid fa-clock text-[11px]" />
+                  <span>Due Soon</span>
+                </button>
+
+                {/* Clear Active Filters */}
+                {(taskSearchQuery || taskPriorityFilter !== "all" || taskAssigneeFilter !== "all" || taskDueSoonOnly) && (
+                  <button
+                    onClick={() => {
+                      setTaskSearchQuery("");
+                      setTaskPriorityFilter("all");
+                      setTaskAssigneeFilter("all");
+                      setTaskDueSoonOnly(false);
+                    }}
+                    className="h-8 px-2.5 text-xs text-rose-500 hover:bg-rose-500/10 rounded-lg transition-colors font-medium flex items-center gap-1 cursor-pointer"
+                    title="Reset all filters"
+                  >
+                    <i className="fa-solid fa-filter-circle-xmark text-[11px]" />
+                    <span>Clear</span>
+                  </button>
+                )}
+
+                {/* Export CSV Button */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleExportTasksCSV}
+                  className="h-8 gap-1.5 text-xs font-semibold border-border hover:bg-muted/60"
+                  title="Export tasks to CSV"
+                >
+                  <i className="fa-solid fa-file-csv text-primary text-xs" />
+                  <span className="hidden sm:inline">Export CSV</span>
+                </Button>
+
+                {/* Add Task Button */}
+                <Button
+                  color="primary"
+                  size="sm"
+                  onClick={() => setShowTaskForm(true)}
+                  className="h-8 gap-1.5 text-xs font-semibold shadow-xs"
+                >
+                  <i className="fa-solid fa-plus text-[11px]" />
+                  <span>New Task</span>
+                </Button>
+              </div>
+            </div>
+
+            {/* Kanban Columns Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+              {columns.map((col) => {
+                const filteredTasks = tasks.filter((t) => {
+                  if ((t.status || "To Do") !== col) return false;
+                  if (taskSearchQuery.trim()) {
+                    const q = taskSearchQuery.toLowerCase().trim();
+                    const matchTitle = t.title?.toLowerCase().includes(q);
+                    const matchDesc = t.description?.toLowerCase().includes(q);
+                    const matchAssignee = t.assignee?.name?.toLowerCase().includes(q);
+                    if (!matchTitle && !matchDesc && !matchAssignee) return false;
+                  }
+                  if (taskPriorityFilter !== "all" && t.priority !== taskPriorityFilter) return false;
+                  if (taskAssigneeFilter !== "all") {
+                    const aId = t.assignee?._id || t.assignee;
+                    if (aId !== taskAssigneeFilter) return false;
+                  }
+                  if (taskDueSoonOnly) {
+                    if (!t.dueDate) return false;
+                    const dueTime = new Date(t.dueDate).getTime();
+                    const now = Date.now();
+                    const sevenDays = 7 * 24 * 60 * 60 * 1000;
+                    if (dueTime - now > sevenDays && t.status !== "Done") return false;
+                  }
+                  return true;
+                });
+
+                const colTasks = filteredTasks;
+                const isOver = dragOverCol === col;
+
+                const colAccentMap: Record<string, string> = {
+                  "To Do": "border-sky-400",
+                  "In Progress": "border-indigo-500",
+                  "Review": "border-amber-500",
+                  "Done": "border-emerald-500",
+                };
+                const colBorderMap: Record<string, string> = {
+                  "To Do": "border-sky-500/40 dark:border-sky-500/50 hover:border-sky-500/80 shadow-sky-500/5",
+                  "In Progress": "border-indigo-500/40 dark:border-indigo-500/50 hover:border-indigo-500/80 shadow-indigo-500/5",
+                  "Review": "border-amber-500/40 dark:border-amber-500/50 hover:border-amber-500/80 shadow-amber-500/5",
+                  "Done": "border-emerald-500/40 dark:border-emerald-500/50 hover:border-emerald-500/80 shadow-emerald-500/5",
+                };
+                const colDotMap: Record<string, string> = {
+                  "To Do": "bg-sky-400",
+                  "In Progress": "bg-indigo-500",
+                  "Review": "bg-amber-500",
+                  "Done": "bg-emerald-500",
+                };
+
+                return (
+                  <div
+                    key={col}
+                    onDragOver={(e) => { e.preventDefault(); setDragOverCol(col); }}
+                    onDragLeave={(e) => {
+                      if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                        setDragOverCol(null);
+                      }
+                    }}
+                    onDrop={async (e) => {
+                      e.preventDefault();
+                      setDragOverCol(null);
+                      const id = e.dataTransfer.getData("nexace/task-id");
+                      if (id && id !== col) {
+                        setTasks((prev: any[]) =>
+                          prev.map((t) => t._id === id ? { ...t, status: col } : t)
+                        );
+                        await handleMoveTaskStatus(id, col);
+                      }
+                    }}
+                    className={cn(
+                      "flex flex-col rounded-xl border-2 bg-card/90 dark:bg-slate-900/90 p-4 space-y-3 transition-all duration-200 shadow-md",
+                      colBorderMap[col],
+                      isOver && `${colAccentMap[col]} bg-primary/10 scale-[1.02] shadow-xl border-4`
+                    )}
+                  >
+                    <div className="flex items-center justify-between pb-2 border-b border-border">
+                      <h3 className="font-bold text-sm text-foreground flex items-center gap-2">
+                        <span className={cn("w-2 h-2 rounded-full", colDotMap[col])} /> {col}
+                      </h3>
+                      <Badge color="primary" variant="soft" rounded="full">
+                        {colTasks.length}
+                      </Badge>
+                    </div>
+
+                    <div className="space-y-3 min-h-[300px]">
+                      {colTasks.length === 0 ? (
+                        <div
+                          className={cn(
+                            "h-32 flex flex-col items-center justify-center gap-2 p-3 text-xs text-muted-foreground border-2 border-dashed rounded-xl transition-all",
+                            isOver ? `${colAccentMap[col]} text-foreground bg-primary/5` : "border-border/60 hover:border-border hover:bg-muted/10"
+                          )}
+                        >
+                          <span>{isOver ? `Drop here → ${col}` : `No tasks in ${col}`}</span>
+                          {col === "To Do" && (
+                            <button
+                              onClick={() => setShowTaskForm(true)}
+                              className="px-3 py-1 text-[11px] font-semibold text-primary bg-primary/10 hover:bg-primary/20 rounded-md transition-colors cursor-pointer flex items-center gap-1.5"
+                            >
+                              <i className="fa-solid fa-plus text-[10px]" /> Add Task
+                            </button>
+                          )}
+                        </div>
+                      ) : (
+                        colTasks.map((t) => (
+                          <Card
+                            key={t._id}
+                            draggable
+                            onDragStart={(e) => {
+                              e.dataTransfer.setData("nexace/task-id", t._id);
+                              e.dataTransfer.effectAllowed = "move";
+                              setDraggedTaskId(t._id);
+                            }}
+                            onDragEnd={() => {
+                              setDraggedTaskId(null);
+                              setDragOverCol(null);
+                            }}
+                            onClick={() => setSelectedTask(t)}
+                            className={cn(
+                              "cursor-grab active:cursor-grabbing hover:shadow-md transition-all p-3.5 space-y-2.5 border-l-4 bg-card dark:bg-slate-800 border border-border/80 shadow-sm opacity-100 group/card",
+                              colAccentMap[col]
+                            )}
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <p className="font-bold text-xs text-foreground leading-snug line-clamp-2 group-hover/card:text-primary transition-colors">
+                                {t.title}
+                              </p>
+                              <Badge
+                                color={t.priority === "High" ? "destructive" : t.priority === "Medium" ? "warning" : "info"}
+                                className="text-[10px] px-1.5 py-0 shrink-0 font-semibold"
+                              >
+                                {t.priority}
+                              </Badge>
+                            </div>
+                            {selectedProjectId === "all" && t.projectId?.name && (
+                              <div className="flex items-center gap-1 text-[10px] text-primary font-semibold">
+                                <i className="fa-solid fa-folder text-[9px]" /> {t.projectId.name}
+                              </div>
+                            )}
+                            {t.description && <p className="text-[11px] text-foreground/80 leading-relaxed line-clamp-2">{t.description}</p>}
+                            <div className="flex items-center justify-between text-[10px] text-foreground/70 font-medium pt-1.5 border-t border-border/40">
+                              <span className="flex items-center gap-1">
+                                <i className="fa-solid fa-user text-[9px] text-primary" /> {t.assignee?.name || "Unassigned"}
+                              </span>
+                              {t.dueDate && (
+                                <span className="flex items-center gap-1 font-mono">
+                                  <i className="fa-solid fa-calendar-day text-[9px] text-muted-foreground" /> Due: {new Date(t.dueDate).toLocaleDateString()}
+                                </span>
+                              )}
+                            </div>
+                          </Card>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
       )}
@@ -1387,6 +1778,17 @@ export default function ProjectsPage() {
             </div>
 
             <div className="flex items-center gap-3 flex-wrap">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleExportHistoryCSV}
+                className="gap-2 font-semibold text-xs h-8 border-border hover:bg-muted/60"
+                title="Download history audit trail in CSV format"
+              >
+                <i className="fa-solid fa-file-csv text-primary text-xs" />
+                <span>Export History CSV</span>
+              </Button>
+
               <div className="flex items-center gap-2 text-xs">
                 <span className="text-muted-foreground font-medium">Rows:</span>
                 <select
@@ -1438,31 +1840,97 @@ export default function ProjectsPage() {
                   ) : (
                     <>
                       <div className="space-y-4 relative before:absolute before:inset-0 before:left-3.5 before:w-0.5 before:bg-border">
-                        {paginatedLogs.map((log) => (
-                          <div key={log._id} className="relative flex items-start gap-4 pl-8 group">
-                            <div className="absolute left-1.5 top-1.5 w-4 h-4 rounded-full bg-primary/20 border-2 border-primary group-hover:scale-110 transition-transform" />
-                            <div className="p-3.5 rounded-lg border border-border bg-card hover:bg-accent/20 transition-colors shadow-xs flex-1 space-y-1">
-                              <div className="flex items-center justify-between">
-                                <span className="font-bold text-xs text-foreground flex items-center gap-1.5">
-                                  <i className="fa-solid fa-user-circle text-primary text-xs" /> {log.userName} ({log.userRole || "Member"})
-                                </span>
-                                <span className="text-[10px] text-muted-foreground font-mono">
-                                  {new Date(log.createdAt).toLocaleString("en-US", {
-                                    month: "2-digit",
-                                    day: "2-digit",
-                                    year: "numeric",
-                                    hour: "2-digit",
-                                    minute: "2-digit",
-                                    second: "2-digit",
-                                    hour12: true,
-                                  })}
-                                </span>
+                        {paginatedLogs.map((log) => {
+                          const getActionStyle = (action: string) => {
+                            switch (action) {
+                              case "Project Starred":
+                                return {
+                                  dot: "bg-amber-500/20 border-amber-500",
+                                  badge: "bg-amber-500/10 text-amber-500 border-amber-500/30",
+                                  icon: "fa-solid fa-star text-amber-500",
+                                };
+                              case "Project Unstarred":
+                                return {
+                                  dot: "bg-slate-500/20 border-slate-500",
+                                  badge: "bg-muted text-muted-foreground border-border",
+                                  icon: "fa-regular fa-star text-muted-foreground",
+                                };
+                              case "Project Created":
+                                return {
+                                  dot: "bg-emerald-500/20 border-emerald-500",
+                                  badge: "bg-emerald-500/10 text-emerald-500 border-emerald-500/30",
+                                  icon: "fa-solid fa-folder-plus text-emerald-500",
+                                };
+                              case "Project Edited":
+                                return {
+                                  dot: "bg-sky-500/20 border-sky-500",
+                                  badge: "bg-sky-500/10 text-sky-500 border-sky-500/30",
+                                  icon: "fa-solid fa-pen-to-square text-sky-500",
+                                };
+                              case "PROJECT_STATUS_CHANGED":
+                                return {
+                                  dot: "bg-indigo-500/20 border-indigo-500",
+                                  badge: "bg-indigo-500/10 text-indigo-500 border-indigo-500/30",
+                                  icon: "fa-solid fa-arrows-rotate text-indigo-500",
+                                };
+                              case "Task Created":
+                                return {
+                                  dot: "bg-teal-500/20 border-teal-500",
+                                  badge: "bg-teal-500/10 text-teal-500 border-teal-500/30",
+                                  icon: "fa-solid fa-square-plus text-teal-500",
+                                };
+                              case "Task Status Moved":
+                                return {
+                                  dot: "bg-cyan-500/20 border-cyan-500",
+                                  badge: "bg-cyan-500/10 text-cyan-500 border-cyan-500/30",
+                                  icon: "fa-solid fa-arrow-right-arrow-left text-cyan-500",
+                                };
+                              default:
+                                return {
+                                  dot: "bg-primary/20 border-primary",
+                                  badge: "bg-primary/10 text-primary border-primary/30",
+                                  icon: "fa-solid fa-clock-rotate-left text-primary",
+                                };
+                            }
+                          };
+
+                          const style = getActionStyle(log.action);
+
+                          return (
+                            <div key={log._id} className="relative flex items-start gap-4 pl-8 group">
+                              <div className={cn("absolute left-1.5 top-2.5 w-4 h-4 rounded-full border-2 group-hover:scale-110 transition-transform", style.dot)} />
+                              <div className="p-3.5 rounded-lg border border-border bg-card hover:bg-accent/20 transition-colors shadow-xs flex-1 space-y-1.5">
+                                <div className="flex items-center justify-between flex-wrap gap-2">
+                                  <div className="flex items-center gap-2">
+                                    <Badge variant="outline" className={cn("gap-1 text-[11px] font-semibold py-0.5 px-2", style.badge)}>
+                                      <i className={cn(style.icon, "text-[10px]")} />
+                                      {log.action}
+                                    </Badge>
+                                    <span className="font-bold text-xs text-foreground">
+                                      {log.targetName}
+                                    </span>
+                                  </div>
+                                  <span className="text-[10px] text-muted-foreground font-mono">
+                                    {new Date(log.createdAt).toLocaleString("en-US", {
+                                      month: "2-digit",
+                                      day: "2-digit",
+                                      year: "numeric",
+                                      hour: "2-digit",
+                                      minute: "2-digit",
+                                      second: "2-digit",
+                                      hour12: true,
+                                    })}
+                                  </span>
+                                </div>
+                                {log.details && <p className="text-xs text-muted-foreground">{log.details}</p>}
+                                <div className="text-[10px] text-muted-foreground flex items-center gap-1.5 pt-0.5 border-t border-border/40">
+                                  <i className="fa-solid fa-user-circle text-primary text-xs" />
+                                  <span>By <strong className="text-foreground">{log.userName}</strong> ({log.userRole || "Member"})</span>
+                                </div>
                               </div>
-                              <p className="text-xs font-semibold text-primary">{log.action}: {log.targetName}</p>
-                              {log.details && <p className="text-xs text-muted-foreground">{log.details}</p>}
                             </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
 
                       {/* Pagination Footer */}
@@ -1774,9 +2242,19 @@ export default function ProjectsPage() {
                   <label className="font-semibold text-foreground">Start Date</label>
                   <Input
                     type="date"
-                    min={new Date().toISOString().split("T")[0]}
                     value={newProjStartDate}
                     onChange={(e) => setNewProjStartDate(e.target.value)}
+                    onClick={(e) => {
+                      try {
+                        (e.target as any).showPicker?.();
+                      } catch {}
+                    }}
+                    onFocus={(e) => {
+                      try {
+                        (e.target as any).showPicker?.();
+                      } catch {}
+                    }}
+                    className="cursor-pointer"
                   />
                 </div>
 
@@ -1784,9 +2262,20 @@ export default function ProjectsPage() {
                   <label className="font-semibold text-foreground">End Date</label>
                   <Input
                     type="date"
-                    min={newProjStartDate || new Date().toISOString().split("T")[0]}
+                    min={newProjStartDate || undefined}
                     value={newProjDueDate}
                     onChange={(e) => setNewProjDueDate(e.target.value)}
+                    onClick={(e) => {
+                      try {
+                        (e.target as any).showPicker?.();
+                      } catch {}
+                    }}
+                    onFocus={(e) => {
+                      try {
+                        (e.target as any).showPicker?.();
+                      } catch {}
+                    }}
+                    className="cursor-pointer"
                   />
                 </div>
 
@@ -2002,6 +2491,17 @@ export default function ProjectsPage() {
                     type="date"
                     value={editProjStartDate}
                     onChange={(e) => setEditProjStartDate(e.target.value)}
+                    onClick={(e) => {
+                      try {
+                        (e.target as any).showPicker?.();
+                      } catch {}
+                    }}
+                    onFocus={(e) => {
+                      try {
+                        (e.target as any).showPicker?.();
+                      } catch {}
+                    }}
+                    className="cursor-pointer"
                   />
                 </div>
 
@@ -2012,6 +2512,17 @@ export default function ProjectsPage() {
                     min={editProjStartDate || undefined}
                     value={editProjDueDate}
                     onChange={(e) => setEditProjDueDate(e.target.value)}
+                    onClick={(e) => {
+                      try {
+                        (e.target as any).showPicker?.();
+                      } catch {}
+                    }}
+                    onFocus={(e) => {
+                      try {
+                        (e.target as any).showPicker?.();
+                      } catch {}
+                    }}
+                    className="cursor-pointer"
                   />
                 </div>
 
@@ -2303,6 +2814,106 @@ export default function ProjectsPage() {
               <span>File Format: <strong className="text-foreground">{previewFile.mimeType || "Binary/Document"}</strong></span>
               <Button variant="outline" size="sm" onClick={() => setPreviewFile(null)}>
                 Close Preview
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Task Quick Preview & Status Switcher Modal */}
+      {selectedTask && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in" onClick={() => setSelectedTask(null)}>
+          <div className="w-full max-w-lg bg-card border border-border rounded-2xl p-6 shadow-2xl space-y-5 animate-in zoom-in-95" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-start border-b border-border/60 pb-3 gap-3">
+              <div className="space-y-1 min-w-0 flex-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Badge
+                    color={selectedTask.priority === "High" ? "destructive" : selectedTask.priority === "Medium" ? "warning" : "info"}
+                    className="text-[10px] px-2 py-0.5 font-bold uppercase tracking-wider"
+                  >
+                    {selectedTask.priority} Priority
+                  </Badge>
+                  {selectedTask.projectId?.name && (
+                    <Badge variant="outline" className="text-[10px] px-2 py-0.5 bg-primary/10 text-primary border-primary/30 font-semibold">
+                      <i className="fa-solid fa-folder text-[9px] mr-1" />
+                      {selectedTask.projectId.name}
+                    </Badge>
+                  )}
+                </div>
+                <h3 className="text-base font-bold text-foreground leading-snug pt-1">{selectedTask.title}</h3>
+              </div>
+              <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground" onClick={() => setSelectedTask(null)}>
+                <i className="fa-solid fa-xmark text-base" />
+              </Button>
+            </div>
+
+            {/* Status Switcher Toolbar */}
+            <div className="space-y-2">
+              <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Workflow Stage</label>
+              <div className="grid grid-cols-4 gap-1.5 p-1 bg-muted/60 rounded-xl border border-border">
+                {columns.map((col) => {
+                  const isActive = (selectedTask.status || "To Do") === col;
+                  return (
+                    <button
+                      key={col}
+                      type="button"
+                      onClick={() => handleQuickStatusChange(selectedTask._id, col)}
+                      className={cn(
+                        "py-1.5 px-2 rounded-lg text-xs font-semibold transition-all cursor-pointer text-center truncate",
+                        isActive
+                          ? "bg-primary text-primary-foreground shadow-xs font-bold"
+                          : "text-muted-foreground hover:text-foreground hover:bg-background/60"
+                      )}
+                    >
+                      {col}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Task Info Grid */}
+            <div className="grid grid-cols-2 gap-3 p-3.5 bg-muted/30 rounded-xl border border-border/80 text-xs">
+              <div className="space-y-1">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground block">Assigned Member</span>
+                <p className="font-semibold text-foreground flex items-center gap-1.5 truncate">
+                  <i className="fa-solid fa-user text-primary text-xs" />
+                  {selectedTask.assignee?.name || "Unassigned"}
+                </p>
+              </div>
+
+              <div className="space-y-1">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground block">Deadline / Due Date</span>
+                <p className="font-semibold text-foreground flex items-center gap-1.5 font-mono">
+                  <i className="fa-solid fa-calendar-day text-amber-500 text-xs" />
+                  {selectedTask.dueDate ? new Date(selectedTask.dueDate).toLocaleDateString() : "No deadline"}
+                </p>
+              </div>
+            </div>
+
+            {/* Task Description */}
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Description & Acceptance Criteria</label>
+              <div className="p-3 bg-muted/20 rounded-xl border border-border/60 text-xs text-foreground/90 whitespace-pre-wrap leading-relaxed max-h-48 overflow-y-auto">
+                {selectedTask.description || "No additional notes or description provided for this sprint task."}
+              </div>
+            </div>
+
+            {/* Modal Actions Footer */}
+            <div className="flex items-center justify-between pt-3 border-t border-border gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={isDeletingTask}
+                onClick={() => handleDeleteTask(selectedTask._id)}
+                className="gap-1.5 text-xs text-rose-500 border-rose-500/30 hover:bg-rose-500/10 hover:text-rose-600"
+              >
+                <i className="fa-solid fa-trash-can text-xs" />
+                {isDeletingTask ? "Deleting..." : "Delete Task"}
+              </Button>
+
+              <Button color="primary" size="sm" onClick={() => setSelectedTask(null)} className="font-semibold text-xs px-4">
+                Done
               </Button>
             </div>
           </div>

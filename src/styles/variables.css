@@ -68,19 +68,18 @@
 }
 
 /* Base Dark Mode variables */
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg-app: var(--color-bg-dark);
-    --bg-card: var(--color-card-dark);
-    --border-color: rgba(39, 39, 42, 0.8);
-    --text-primary: var(--color-text-dark-primary);
-    --text-secondary: var(--color-text-dark-secondary);
-    --text-muted: var(--color-text-dark-muted);
-    --shadow-card: 0 4px 20px rgba(0, 0, 0, 0.3);
-    
-    /* Glassmorphism */
-    --glass-bg: rgba(15, 15, 20, 0.7);
-    --glass-border: rgba(255, 255, 255, 0.05);
-    --glass-blur: 16px;
-  }
+:root.dark,
+.dark {
+  --bg-app: var(--color-bg-dark);
+  --bg-card: var(--color-card-dark);
+  --border-color: rgba(39, 39, 42, 0.8);
+  --text-primary: var(--color-text-dark-primary);
+  --text-secondary: var(--color-text-dark-secondary);
+  --text-muted: var(--color-text-dark-muted);
+  --shadow-card: 0 4px 20px rgba(0, 0, 0, 0.3);
+  
+  /* Glassmorphism */
+  --glass-bg: rgba(15, 15, 20, 0.7);
+  --glass-border: rgba(255, 255, 255, 0.05);
+  --glass-blur: 16px;
 }

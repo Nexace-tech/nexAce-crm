@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { usePermissions } from "@/hooks/usePermissions";
 import { cn } from "@/lib/utils";
@@ -8,7 +8,8 @@ import { cn } from "@/lib/utils";
 interface CommandItem {
   id: string;
   title: string;
-  category: "Navigation" | "Quick Actions" | "System";
+  subtitle?: string;
+  category: "Projects & Boards" | "Team Directory" | "Quick Actions" | "Navigation" | "System";
   icon: string;
   href?: string;
   moduleKey?: string;
@@ -29,48 +30,103 @@ export function CommandPalette({
   const { can, canAccessModule, isAdmin, isOPS } = usePermissions();
   const [query, setQuery] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [liveProjects, setLiveProjects] = useState<CommandItem[]>([]);
+  const [liveUsers, setLiveUsers] = useState<CommandItem[]>([]);
+  const [loadingLive, setLoadingLive] = useState(false);
+  const listRef = useRef<HTMLDivElement>(null);
 
-  const commandItems: CommandItem[] = [
+  // Fetch live workspace data (Projects & Team) when palette is open
+  useEffect(() => {
+    if (!open) return;
+
+    let isSubscribed = true;
+    setLoadingLive(true);
+
+    Promise.all([
+      fetch("/api/projects").then((res) => (res.ok ? res.json() : { projects: [] })).catch(() => ({ projects: [] })),
+      fetch("/api/users").then((res) => (res.ok ? res.json() : { users: [] })).catch(() => ({ users: [] })),
+    ]).then(([projData, userData]) => {
+      if (!isSubscribed) return;
+
+      const projs: CommandItem[] = (projData.projects || []).map((p: any) => ({
+        id: `proj-${p._id}`,
+        title: p.name,
+        subtitle: `Project Board • ${p.status || "In Progress"}`,
+        category: "Projects & Boards" as const,
+        icon: "fa-solid fa-folder-open text-amber-500",
+        href: `/dashboard/projects?projectId=${p._id}`,
+        keywords: [p.name, p.status, "project", "kanban", "board", p.category || ""],
+      }));
+
+      const users: CommandItem[] = (userData.users || []).map((u: any) => ({
+        id: `user-${u._id}`,
+        title: u.name,
+        subtitle: `${u.role || "Member"} • ${u.department || "General"} • ${u.email}`,
+        category: "Team Directory" as const,
+        icon: "fa-solid fa-user text-sky-500",
+        href: `/dashboard/team?search=${encodeURIComponent(u.name)}`,
+        keywords: [u.name, u.email, u.role, u.department, "member", "staff"],
+      }));
+
+      setLiveProjects(projs);
+      setLiveUsers(users);
+      setLoadingLive(false);
+    });
+
+    return () => {
+      isSubscribed = false;
+    };
+  }, [open]);
+
+  const staticCommandItems: CommandItem[] = [
     // Navigation Modules
-    { id: "nav-overview", title: "Overview Dashboard", category: "Navigation", icon: "fa-solid fa-chart-simple", href: "/dashboard", moduleKey: "overview", keywords: ["kpi", "home", "stats", "attendance"] },
-    { id: "nav-users", title: "User Management (Admin)", category: "Navigation", icon: "fa-solid fa-users-gear", href: "/dashboard/settings?tab=users", featureKey: "manageUsers", keywords: ["staff", "accounts", "rbac", "passwords"] },
-    { id: "nav-team", title: "My Team Directory", category: "Navigation", icon: "fa-solid fa-users", href: "/dashboard/team", moduleKey: "team", keywords: ["employees", "org chart", "roster", "directory"] },
-    { id: "nav-calendar", title: "Calendar & Timesheets", category: "Navigation", icon: "fa-solid fa-calendar-days", href: "/dashboard/calendar", moduleKey: "calendar", keywords: ["shifts", "work logs", "clock in", "punch"] },
-    { id: "nav-sprints", title: "Sprints & Agile Planning", category: "Navigation", icon: "fa-solid fa-person-running", href: "/dashboard/calendar?tab=sprints", moduleKey: "projects", keywords: ["scrum", "sprints", "backlog", "cycle"] },
-    { id: "nav-projects", title: "Projects, Kanban & Tasks", category: "Navigation", icon: "fa-solid fa-folder-tree", href: "/dashboard/projects", moduleKey: "projects", keywords: ["tasks", "kanban", "wiki", "gantt", "drive"] },
-    { id: "nav-tasks", title: "HR Tasks & Workflows", category: "Navigation", icon: "fa-solid fa-list-check", href: "/dashboard/hr?tab=tasks", moduleKey: "hr", keywords: ["todos", "checklists", "workflow"] },
-    { id: "nav-chat", title: "Chat & Direct Messages", category: "Navigation", icon: "fa-solid fa-comments", href: "/dashboard/chat", moduleKey: "chat", keywords: ["messages", "channels", "inbox", "mail center", "whatsapp"] },
-    { id: "nav-huddles", title: "Virtual Video Huddles", category: "Navigation", icon: "fa-solid fa-video", href: "/dashboard/chat", featureKey: "joinVirtualHuddles", keywords: ["meeting", "call", "audio", "video"] },
-    { id: "nav-hr", title: "HR Portal & Appraisals", category: "Navigation", icon: "fa-solid fa-briefcase", href: "/dashboard/hr", moduleKey: "hr", keywords: ["leave", "onboarding", "cases", "performance", "appraisals"] },
-    { id: "nav-goals", title: "Goals & Strategic OKRs", category: "Navigation", icon: "fa-solid fa-bullseye", href: "/dashboard/goals", moduleKey: "goals", keywords: ["okrs", "targets", "kpis", "metrics"] },
-    { id: "nav-surveys", title: "Pulse Surveys & Team Feedback", category: "Navigation", icon: "fa-solid fa-clipboard-question", href: "/dashboard/goals", featureKey: "viewGoals", keywords: ["polls", "sentiment", "feedback", "surveys"] },
-    { id: "nav-analytics", title: "Analytics & Audit Logs", category: "Navigation", icon: "fa-solid fa-chart-line", href: "/dashboard/analytics", moduleKey: "analytics", keywords: ["reports", "security", "activity", "audit"] },
-    { id: "nav-crm", title: "Operations & Retainers Portal", category: "Navigation", icon: "fa-solid fa-list-check", href: "/dashboard/clients", moduleKey: "clients", keywords: ["clients", "operations", "projects", "contracts"] },
-    { id: "nav-sales", title: "Sales Deals & Pipeline", category: "Navigation", icon: "fa-solid fa-handshake", href: "/dashboard/clients?tab=sales", featureKey: "viewDeals", keywords: ["deals", "sales", "crm", "pipeline", "revenue"] },
-    { id: "nav-it", title: "IT & Infrastructure Portal", category: "Navigation", icon: "fa-solid fa-terminal", href: "/dashboard/it", moduleKey: "it", keywords: ["access keys", "hardware", "devices", "subscriptions", "it portal", "invoices"] },
-    { id: "nav-referrals", title: "Candidate Referral Pipeline", category: "Navigation", icon: "fa-solid fa-link", href: "/dashboard/referrals", moduleKey: "referrals", keywords: ["bonus", "hiring", "candidates", "referrals"] },
-    { id: "nav-notifs", title: "Notification Center", category: "Navigation", icon: "fa-solid fa-bell", href: "/dashboard/notifications", keywords: ["alerts", "broadcasts", "notifications"] },
-    { id: "nav-settings", title: "Settings & Administration", category: "Navigation", icon: "fa-solid fa-gear", href: "/dashboard/settings", moduleKey: "settings", keywords: ["rbac", "permissions", "branding", "shifts", "subscription"] },
+    { id: "nav-overview", title: "Overview Dashboard", subtitle: "Real-time KPIs, attendance summary & statistics", category: "Navigation", icon: "fa-solid fa-chart-simple", href: "/dashboard", moduleKey: "overview", keywords: ["kpi", "home", "stats", "attendance"] },
+    { id: "nav-users", title: "User Management (Admin)", subtitle: "Manage workspace accounts, roles & credentials", category: "Navigation", icon: "fa-solid fa-users-gear", href: "/dashboard/settings?tab=users", featureKey: "manageUsers", keywords: ["staff", "accounts", "rbac", "passwords"] },
+    { id: "nav-team", title: "My Team Directory", subtitle: "Org hierarchy chart, roster & department breakdown", category: "Navigation", icon: "fa-solid fa-users", href: "/dashboard/team", moduleKey: "team", keywords: ["employees", "org chart", "roster", "directory"] },
+    { id: "nav-calendar", title: "Calendar & Timesheets", subtitle: "Shift scheduling, daily punch timesheets & leaves", category: "Navigation", icon: "fa-solid fa-calendar-days", href: "/dashboard/calendar", moduleKey: "calendar", keywords: ["shifts", "work logs", "clock in", "punch"] },
+    { id: "nav-projects", title: "Projects & Kanban Boards", subtitle: "Agile sprints, Kanban tasks, SOP Wiki & Drive space", category: "Navigation", icon: "fa-solid fa-folder-tree", href: "/dashboard/projects", moduleKey: "projects", keywords: ["tasks", "kanban", "wiki", "gantt", "drive"] },
+    { id: "nav-chat", title: "Communication Hub", subtitle: "Workspace channels, direct messaging, mail & video huddles", category: "Navigation", icon: "fa-solid fa-comments", href: "/dashboard/chat", moduleKey: "chat", keywords: ["messages", "channels", "inbox", "mail center", "whatsapp"] },
+    { id: "nav-hr", title: "HR Portal & Appraisals", subtitle: "Employee lifecycle, onboarding, attendance & appraisals", category: "Navigation", icon: "fa-solid fa-briefcase", href: "/dashboard/hr", moduleKey: "hr", keywords: ["leave", "onboarding", "cases", "performance", "appraisals"] },
+    { id: "nav-goals", title: "Goals & Strategic OKRs", subtitle: "Company objectives, team pulse surveys & kudos wall", category: "Navigation", icon: "fa-solid fa-bullseye", href: "/dashboard/goals", moduleKey: "goals", keywords: ["okrs", "targets", "kpis", "metrics"] },
+    { id: "nav-analytics", title: "Analytics & Audit Logs", subtitle: "Performance metrics, time utilization & security trail", category: "Navigation", icon: "fa-solid fa-chart-line", href: "/dashboard/analytics", moduleKey: "analytics", keywords: ["reports", "security", "activity", "audit"] },
+    { id: "nav-crm", title: "Operations & Retainers Portal", subtitle: "Client retainers, sales pipeline & operations desk", category: "Navigation", icon: "fa-solid fa-list-check", href: "/dashboard/clients", moduleKey: "clients", keywords: ["clients", "operations", "projects", "contracts"] },
+    { id: "nav-it", title: "IT & Infrastructure Portal", subtitle: "Hardware assets, software subscriptions & access keys", category: "Navigation", icon: "fa-solid fa-terminal", href: "/dashboard/it", moduleKey: "it", keywords: ["access keys", "hardware", "devices", "subscriptions", "it portal", "invoices"] },
+    { id: "nav-referrals", title: "Candidate Referral Pipeline", subtitle: "Referral links, commission tracking & candidate bonus", category: "Navigation", icon: "fa-solid fa-link", href: "/dashboard/referrals", moduleKey: "referrals", keywords: ["bonus", "hiring", "candidates", "referrals"] },
+    { id: "nav-settings", title: "Settings & Security", subtitle: "Profile, multi-tenant RBAC, shifts & billing subscription", category: "Navigation", icon: "fa-solid fa-gear", href: "/dashboard/settings", moduleKey: "settings", keywords: ["rbac", "permissions", "branding", "shifts", "subscription"] },
 
     // Quick Actions
-    { id: "act-okr", title: "Create Strategic OKR", category: "Quick Actions", icon: "fa-solid fa-bullseye", href: "/dashboard/goals", featureKey: "createGoals", keywords: ["add okr", "new goal", "target"] },
-    { id: "act-kudos", title: "Give Kudos to Colleague", category: "Quick Actions", icon: "fa-solid fa-wand-magic-sparkles", href: "/dashboard/goals", featureKey: "sendKudos", keywords: ["recognition", "appreciation", "thanks"] },
-    { id: "act-survey", title: "Launch Team Pulse Survey", category: "Quick Actions", icon: "fa-solid fa-plus", href: "/dashboard/goals", featureKey: "manageSurveys", keywords: ["new survey", "poll"] },
-    { id: "act-referral", title: "Submit Candidate Referral", category: "Quick Actions", icon: "fa-solid fa-user-plus", href: "/dashboard/referrals", featureKey: "submitReferral", keywords: ["nominate", "refer candidate"] },
-    { id: "act-timesheet", title: "Log Timesheet Hours", category: "Quick Actions", icon: "fa-solid fa-clock", href: "/dashboard/calendar", featureKey: "logOwnTimesheet", keywords: ["punch", "work log", "hours"] },
-    { id: "act-client", title: "Add Operations Project", category: "Quick Actions", icon: "fa-solid fa-list-check", href: "/dashboard/clients", featureKey: "createClients", keywords: ["new client", "new retainer", "project"] },
-    { id: "act-deal", title: "Create New Sales Deal", category: "Quick Actions", icon: "fa-solid fa-handshake", href: "/dashboard/clients?tab=sales", featureKey: "manageDeals", keywords: ["new deal", "pipeline", "lead"] },
-    { id: "act-drive", title: "Upload Drive Document", category: "Quick Actions", icon: "fa-solid fa-cloud-arrow-up", href: "/dashboard/projects", featureKey: "uploadDriveFiles", keywords: ["upload file", "drive", "documents"] },
-    { id: "act-it-access", title: "Grant Tool Access / Key", category: "Quick Actions", icon: "fa-solid fa-key", href: "/dashboard/it", featureKey: "manageITAccess", keywords: ["grant access", "credential", "it key"] },
-    { id: "act-it-device", title: "Register Hardware Asset", category: "Quick Actions", icon: "fa-solid fa-laptop-medical", href: "/dashboard/it", featureKey: "manageITDevices", keywords: ["add device", "laptop", "hardware"] },
-    { id: "act-it-invoice", title: "Create IT / Client Invoice", category: "Quick Actions", icon: "fa-solid fa-file-invoice-dollar", href: "/dashboard/it", featureKey: "manageITInvoices", keywords: ["billing", "invoice", "payment"] },
-    { id: "act-broadcast", title: "Broadcast Announcement", category: "Quick Actions", icon: "fa-solid fa-bullhorn", href: "/dashboard/notifications", featureKey: "createAnnouncements", keywords: ["announcement", "broadcast", "alert"] },
+    { id: "act-new-project", title: "Create New Project Board", subtitle: "Add a new agile sprint or team project", category: "Quick Actions", icon: "fa-solid fa-folder-plus", href: "/dashboard/projects", keywords: ["new project", "add board", "create project"] },
+    { id: "act-okr", title: "Create Strategic OKR Target", subtitle: "Set company-wide or team objectives", category: "Quick Actions", icon: "fa-solid fa-bullseye", href: "/dashboard/goals", featureKey: "createGoals", keywords: ["add okr", "new goal", "target"] },
+    { id: "act-kudos", title: "Give Kudos to Colleague", subtitle: "Appreciate team member on public wall", category: "Quick Actions", icon: "fa-solid fa-wand-magic-sparkles", href: "/dashboard/goals", featureKey: "sendKudos", keywords: ["recognition", "appreciation", "thanks"] },
+    { id: "act-timesheet", title: "Log Daily Timesheet Hours", subtitle: "Record working hours against projects", category: "Quick Actions", icon: "fa-solid fa-clock", href: "/dashboard/calendar", featureKey: "logOwnTimesheet", keywords: ["punch", "work log", "hours"] },
+    { id: "act-client", title: "Add Operations Project", subtitle: "Create new client workflow or retainer", category: "Quick Actions", icon: "fa-solid fa-list-check", href: "/dashboard/clients", featureKey: "createClients", keywords: ["new client", "new retainer", "project"] },
+    { id: "act-deal", title: "Create New Sales Deal", subtitle: "Add lead to CRM pipeline workdesk", category: "Quick Actions", icon: "fa-solid fa-handshake", href: "/dashboard/clients?tab=sales", featureKey: "manageDeals", keywords: ["new deal", "pipeline", "lead"] },
+    { id: "act-it-device", title: "Register Hardware Device", subtitle: "Log company laptop, monitor, or asset", category: "Quick Actions", icon: "fa-solid fa-laptop-medical", href: "/dashboard/it", featureKey: "manageITDevices", keywords: ["add device", "laptop", "hardware"] },
+    { id: "act-it-invoice", title: "Generate Invoice", subtitle: "Create self-service or IT billing invoice", category: "Quick Actions", icon: "fa-solid fa-file-invoice-dollar", href: "/dashboard/settings?tab=invoice", keywords: ["billing", "invoice", "payment"] },
 
     // System
-    { id: "sys-theme", title: "Toggle Dark / Light Theme", category: "System", icon: "fa-solid fa-circle-half-stroke", action: () => { document.documentElement.classList.toggle("dark"); }, keywords: ["theme", "dark mode", "light mode"] },
+    {
+      id: "sys-theme",
+      title: "Toggle Light / Dark Mode",
+      subtitle: "Switch theme appearance instantly",
+      category: "System",
+      icon: "fa-solid fa-circle-half-stroke",
+      action: () => {
+        const root = document.documentElement;
+        const isDark = root.classList.contains("dark");
+        if (isDark) {
+          root.classList.remove("dark");
+          localStorage.setItem("theme", "light");
+        } else {
+          root.classList.add("dark");
+          localStorage.setItem("theme", "dark");
+        }
+      },
+      keywords: ["theme", "dark mode", "light mode"],
+    },
   ];
 
-  const permittedItems = commandItems.filter((item) => {
+  const permittedStaticItems = staticCommandItems.filter((item) => {
     if (isAdmin || isOPS) return true;
     if (item.adminOnly) return false;
     if (item.moduleKey && !canAccessModule(item.moduleKey)) return false;
@@ -78,13 +134,16 @@ export function CommandPalette({
     return true;
   });
 
-  const filteredItems = permittedItems.filter((item) => {
+  const allItems = [...liveProjects, ...liveUsers, ...permittedStaticItems];
+
+  const filteredItems = allItems.filter((item) => {
     const q = query.toLowerCase().trim();
     if (!q) return true;
     const matchTitle = item.title.toLowerCase().includes(q);
+    const matchSubtitle = item.subtitle?.toLowerCase().includes(q) ?? false;
     const matchCategory = item.category.toLowerCase().includes(q);
     const matchKeywords = item.keywords?.some((k) => k.toLowerCase().includes(q)) ?? false;
-    return matchTitle || matchCategory || matchKeywords;
+    return matchTitle || matchSubtitle || matchCategory || matchKeywords;
   });
 
   useEffect(() => {
@@ -116,17 +175,6 @@ export function CommandPalette({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [open, selectedIndex, filteredItems]);
 
-  // Prefetch routes for instant zero-latency navigation
-  useEffect(() => {
-    commandItems.forEach((item) => {
-      if (item.href) {
-        try {
-          router.prefetch(item.href);
-        } catch {}
-      }
-    });
-  }, [router]);
-
   const executeCommand = (item: CommandItem) => {
     onClose();
     if (item.action) {
@@ -140,33 +188,57 @@ export function CommandPalette({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center pt-20 p-4 bg-black/60 backdrop-blur-xs animate-in fade-in"
+      className="fixed inset-0 z-50 flex items-start justify-center pt-16 sm:pt-20 p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-xl bg-card border border-border rounded-xl shadow-2xl overflow-hidden animate-in zoom-in-95"
+        className="w-full max-w-2xl bg-card border border-border rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150 flex flex-col max-h-[80vh]"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Search Header */}
-        <div className="flex items-center px-4 border-b border-border bg-muted/30">
-          <i className="fa-solid fa-magnifying-glass text-muted-foreground text-sm mr-3" />
+        {/* Search Input Header */}
+        <div className="flex items-center px-4 py-3.5 border-b border-border bg-muted/30 gap-3">
+          <i className="fa-solid fa-magnifying-glass text-primary text-base" />
           <input
             type="text"
             autoFocus
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Type a command or search workspace... (e.g. OKRs, Referrals, Timesheets)"
-            className="w-full py-3 text-sm bg-transparent text-foreground placeholder:text-muted-foreground focus:outline-none"
+            placeholder="Search projects, team members, actions or modules... (Ctrl + K)"
+            className="w-full text-sm font-medium bg-transparent text-foreground placeholder:text-muted-foreground focus:outline-none"
           />
-          <kbd className="hidden sm:inline-block px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground bg-muted border border-border rounded">
+          {loadingLive && (
+            <i className="fa-solid fa-circle-notch fa-spin text-xs text-primary shrink-0" title="Loading live data..." />
+          )}
+          <kbd className="hidden sm:inline-block px-2 py-0.5 text-[10px] font-mono text-muted-foreground bg-muted border border-border rounded shadow-2xs">
             ESC
           </kbd>
         </div>
 
+        {/* Category Filter Pills (When search query is empty) */}
+        {!query && (
+          <div className="flex items-center gap-1.5 px-4 py-2 border-b border-border/60 bg-muted/10 text-[11px] overflow-x-auto no-scrollbar">
+            <span className="text-muted-foreground font-semibold shrink-0">Quick jump:</span>
+            {["Projects & Boards", "Team Directory", "Quick Actions", "Navigation"].map((cat) => (
+              <button
+                key={cat}
+                type="button"
+                onClick={() => setQuery(cat === "Projects & Boards" ? "project" : cat === "Team Directory" ? "team" : cat === "Quick Actions" ? "create" : "")}
+                className="px-2 py-0.5 rounded-md bg-muted/60 hover:bg-muted text-muted-foreground hover:text-foreground font-medium transition-colors cursor-pointer shrink-0"
+              >
+                {cat}
+              </button>
+            ))}
+          </div>
+        )}
+
         {/* Results List */}
-        <div className="max-h-80 overflow-y-auto p-2 space-y-1">
+        <div ref={listRef} className="flex-1 overflow-y-auto p-2 space-y-1">
           {filteredItems.length === 0 ? (
-            <p className="text-xs text-muted-foreground text-center py-8">No matching commands found.</p>
+            <div className="py-12 text-center text-muted-foreground space-y-2">
+              <i className="fa-solid fa-magnifying-glass text-2xl opacity-40 block" />
+              <p className="text-sm font-semibold">No results found for &ldquo;{query}&rdquo;</p>
+              <p className="text-xs">Try searching for a project name, colleague, or CRM action.</p>
+            </div>
           ) : (
             filteredItems.map((item, idx) => {
               const isSelected = idx === selectedIndex;
@@ -174,22 +246,42 @@ export function CommandPalette({
                 <button
                   key={item.id}
                   onClick={() => executeCommand(item)}
-                  onMouseEnter={() => {
-                    setSelectedIndex(idx);
-                    if (item.href) router.prefetch(item.href);
-                  }}
+                  onMouseEnter={() => setSelectedIndex(idx)}
                   className={cn(
-                    "w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs font-medium transition-all text-left cursor-pointer",
+                    "w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-medium transition-all text-left cursor-pointer group",
                     isSelected
                       ? "bg-primary text-primary-foreground font-semibold shadow-xs"
                       : "text-foreground hover:bg-accent/60"
                   )}
                 >
-                  <div className="flex items-center gap-3">
-                    <i className={cn(item.icon, "text-sm", isSelected ? "text-primary-foreground" : "text-primary")} />
-                    <span>{item.title}</span>
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                    <div
+                      className={cn(
+                        "w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-transform group-hover:scale-105",
+                        isSelected
+                          ? "bg-primary-foreground/20 text-primary-foreground"
+                          : "bg-primary/10 text-primary"
+                      )}
+                    >
+                      <i className={cn(item.icon, "text-xs")} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-semibold text-xs">{item.title}</p>
+                      {item.subtitle && (
+                        <p className={cn("truncate text-[10px]", isSelected ? "text-primary-foreground/80" : "text-muted-foreground")}>
+                          {item.subtitle}
+                        </p>
+                      )}
+                    </div>
                   </div>
-                  <span className={cn("text-[10px] font-mono", isSelected ? "text-primary-foreground/80" : "text-muted-foreground")}>
+                  <span
+                    className={cn(
+                      "text-[10px] font-mono shrink-0 ml-3 px-2 py-0.5 rounded-md",
+                      isSelected
+                        ? "bg-primary-foreground/20 text-primary-foreground"
+                        : "bg-muted text-muted-foreground"
+                    )}
+                  >
                     {item.category}
                   </span>
                 </button>
@@ -198,15 +290,23 @@ export function CommandPalette({
           )}
         </div>
 
-        {/* Footer info */}
-        <div className="px-4 py-2 border-t border-border bg-muted/40 text-[10px] text-muted-foreground flex items-center justify-between">
+        {/* Footer */}
+        <div className="px-4 py-2.5 border-t border-border bg-muted/40 text-[11px] text-muted-foreground flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <span><kbd className="font-mono bg-muted border px-1 rounded">↑↓</kbd> Navigate</span>
-            <span><kbd className="font-mono bg-muted border px-1 rounded">↵</kbd> Select</span>
+            <span>
+              <kbd className="font-mono bg-background border px-1.5 py-0.5 rounded text-[10px] shadow-2xs">↑↓</kbd> Navigate
+            </span>
+            <span>
+              <kbd className="font-mono bg-background border px-1.5 py-0.5 rounded text-[10px] shadow-2xs">↵</kbd> Open
+            </span>
+            <span>
+              <kbd className="font-mono bg-background border px-1.5 py-0.5 rounded text-[10px] shadow-2xs">ESC</kbd> Close
+            </span>
           </div>
-          <span>NexAce Quick Command Palette</span>
+          <span className="font-medium">{filteredItems.length} results</span>
         </div>
       </div>
     </div>
   );
 }
+

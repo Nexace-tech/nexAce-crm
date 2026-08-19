@@ -8,6 +8,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn, generateSecurePassword } from "@/lib/utils";
 import { useTabPersistence } from "@/hooks/useTabPersistence";
 import { UserManagementTab } from "@/components/settings/UserManagementTab";
@@ -31,6 +32,9 @@ export default function SettingsPage() {
   const [phone, setPhone] = useState("");
   const [bio, setBio] = useState("");
   const [skills, setSkills] = useState("");
+
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const fileInputRef = React.useRef<HTMLInputElement | null>(null);
 
   const [linkedin, setLinkedin] = useState("");
   const [twitter, setTwitter] = useState("");
@@ -266,6 +270,85 @@ export default function SettingsPage() {
       setEmailCodeError("Network error resending verification code.");
     } finally {
       setUpdatingProfile(false);
+    }
+  };
+
+  const handleUploadPhoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !user) return;
+
+    if (!file.type.startsWith("image/")) {
+      showToast("Please select an image file (PNG, JPG, WebP, GIF).", "error");
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      showToast("Profile image must be smaller than 5MB.", "error");
+      return;
+    }
+
+    setUploadingPhoto(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const uploadRes = await fetch("/api/team/upload-photo", {
+        method: "POST",
+        body: formData,
+      });
+
+      const uploadData = await uploadRes.json();
+      if (!uploadRes.ok || !uploadData.photoUrl) {
+        throw new Error(uploadData.error || "Failed to upload photo");
+      }
+
+      // Save photoUrl to user profile
+      const updateRes = await fetch(`/api/team/${user._id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ photoUrl: uploadData.photoUrl }),
+      });
+
+      if (!updateRes.ok) {
+        const updateData = await updateRes.json();
+        throw new Error(updateData.error || "Failed to update profile picture");
+      }
+
+      await refreshUser();
+      showToast("Profile picture updated successfully!", "success");
+    } catch (err: any) {
+      console.error(err);
+      showToast(err.message || "Failed to upload profile photo", "error");
+    } finally {
+      setUploadingPhoto(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const handleRemovePhoto = async () => {
+    if (!user || !user.photoUrl) return;
+    if (!confirm("Are you sure you want to remove your profile photo?")) return;
+
+    setUploadingPhoto(true);
+    try {
+      const updateRes = await fetch(`/api/team/${user._id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ photoUrl: "" }),
+      });
+
+      if (!updateRes.ok) {
+        const updateData = await updateRes.json();
+        throw new Error(updateData.error || "Failed to remove profile picture");
+      }
+
+      await refreshUser();
+      showToast("Profile photo removed.", "success");
+    } catch (err: any) {
+      console.error(err);
+      showToast(err.message || "Failed to remove profile photo", "error");
+    } finally {
+      setUploadingPhoto(false);
     }
   };
 
@@ -532,7 +615,7 @@ export default function SettingsPage() {
           onClick={() => setActiveTab("profile")}
           className={cn(
             "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
-            activeTab === "profile" ? "border-primary text-white bg-primary/10 rounded-t-md font-semibold" : "border-transparent text-muted-foreground hover:text-foreground"
+            activeTab === "profile" ? "border-primary text-primary bg-primary/10 rounded-t-md font-semibold -mb-px" : "border-transparent text-muted-foreground hover:text-foreground"
           )}
         >
           <i className="fa-solid fa-user-gear text-sm text-primary" /> User Profile
@@ -542,7 +625,7 @@ export default function SettingsPage() {
           onClick={() => setActiveTab("security")}
           className={cn(
             "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
-            activeTab === "security" ? "border-primary text-white bg-primary/10 rounded-t-md font-semibold" : "border-transparent text-muted-foreground hover:text-foreground"
+            activeTab === "security" ? "border-primary text-primary bg-primary/10 rounded-t-md font-semibold -mb-px" : "border-transparent text-muted-foreground hover:text-foreground"
           )}
         >
           <i className="fa-solid fa-shield-halved text-emerald-500 text-sm" /> Password & Security
@@ -552,7 +635,7 @@ export default function SettingsPage() {
           onClick={() => setActiveTab("invoice")}
           className={cn(
             "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
-            activeTab === "invoice" ? "border-primary text-white bg-primary/10 rounded-t-md font-semibold" : "border-transparent text-muted-foreground hover:text-foreground"
+            activeTab === "invoice" ? "border-primary text-primary bg-primary/10 rounded-t-md font-semibold -mb-px" : "border-transparent text-muted-foreground hover:text-foreground"
           )}
         >
           <i className="fa-solid fa-file-invoice-dollar text-primary text-sm" /> Generate My Invoice
@@ -563,7 +646,7 @@ export default function SettingsPage() {
             onClick={() => setActiveTab("all-invoices")}
             className={cn(
               "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
-              activeTab === "all-invoices" ? "border-primary text-white bg-primary/10 rounded-t-md font-semibold" : "border-transparent text-muted-foreground hover:text-foreground"
+              activeTab === "all-invoices" ? "border-primary text-primary bg-primary/10 rounded-t-md font-semibold -mb-px" : "border-transparent text-muted-foreground hover:text-foreground"
             )}
           >
             <i className="fa-solid fa-file-invoice text-amber-500 text-sm" /> Master User Invoices (Admin)
@@ -575,7 +658,7 @@ export default function SettingsPage() {
             onClick={() => setActiveTab("users")}
             className={cn(
               "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
-              activeTab === "users" ? "border-primary text-white bg-primary/10 rounded-t-md font-semibold" : "border-transparent text-muted-foreground hover:text-foreground"
+              activeTab === "users" ? "border-primary text-primary bg-primary/10 rounded-t-md font-semibold -mb-px" : "border-transparent text-muted-foreground hover:text-foreground"
             )}
           >
             <i className="fa-solid fa-users-gear text-purple-500 text-sm" /> User Management
@@ -587,7 +670,7 @@ export default function SettingsPage() {
             onClick={() => setActiveTab("shifts")}
             className={cn(
               "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
-              activeTab === "shifts" ? "border-primary text-white bg-primary/10 rounded-t-md font-semibold" : "border-transparent text-muted-foreground hover:text-foreground"
+              activeTab === "shifts" ? "border-primary text-primary bg-primary/10 rounded-t-md font-semibold -mb-px" : "border-transparent text-muted-foreground hover:text-foreground"
             )}
           >
             <i className="fa-solid fa-clock-rotate-left text-amber-500 text-sm" /> Shifts &amp; Employment Types
@@ -599,7 +682,7 @@ export default function SettingsPage() {
             onClick={() => setActiveTab("permissions")}
             className={cn(
               "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
-              activeTab === "permissions" ? "border-primary text-white bg-primary/10 rounded-t-md font-semibold" : "border-transparent text-muted-foreground hover:text-foreground"
+              activeTab === "permissions" ? "border-primary text-primary bg-primary/10 rounded-t-md font-semibold -mb-px" : "border-transparent text-muted-foreground hover:text-foreground"
             )}
           >
             <i className="fa-solid fa-lock text-sky-500 text-sm" /> Roles & Multi-Tenant Security
@@ -611,7 +694,7 @@ export default function SettingsPage() {
             onClick={() => setActiveTab("subscription")}
             className={cn(
               "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
-              activeTab === "subscription" ? "border-primary text-white bg-primary/10 rounded-t-md font-semibold" : "border-transparent text-muted-foreground hover:text-foreground"
+              activeTab === "subscription" ? "border-primary text-primary bg-primary/10 rounded-t-md font-semibold -mb-px" : "border-transparent text-muted-foreground hover:text-foreground"
             )}
           >
             <i className="fa-solid fa-credit-card text-amber-500 text-sm" /> SaaS Billing & Seats
@@ -706,7 +789,85 @@ export default function SettingsPage() {
               </CardTitle>
               <CardDescription>Update your personal information and tenant display details</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-6">
+              {/* Profile Avatar Upload Section */}
+              <div className="flex flex-col sm:flex-row items-center sm:items-start gap-5 p-4 rounded-xl bg-muted/30 border border-border/80">
+                <div
+                  className="relative group/avatar cursor-pointer shrink-0"
+                  onClick={() => !uploadingPhoto && fileInputRef.current?.click()}
+                  title="Click to upload/change photo"
+                >
+                  <Avatar className="h-20 w-20 ring-4 ring-primary/20 shadow-md">
+                    {user?.photoUrl ? (
+                      <AvatarImage src={user.photoUrl} alt={user.name} />
+                    ) : (
+                      <AvatarFallback className="text-xl font-bold bg-primary text-primary-foreground">
+                        {user?.name ? user.name.substring(0, 2).toUpperCase() : "U"}
+                      </AvatarFallback>
+                    )}
+                  </Avatar>
+
+                  <div className="absolute inset-0 rounded-full bg-black/55 opacity-0 group-hover/avatar:opacity-100 transition-opacity flex flex-col items-center justify-center text-white text-[10px] font-semibold gap-1 backdrop-blur-2xs">
+                    <i className="fa-solid fa-camera text-sm" />
+                    <span>Change</span>
+                  </div>
+
+                  {uploadingPhoto && (
+                    <div className="absolute inset-0 rounded-full bg-black/65 flex items-center justify-center text-white">
+                      <i className="fa-solid fa-spinner fa-spin text-lg text-primary-foreground" />
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex-1 text-center sm:text-left space-y-2">
+                  <div>
+                    <h4 className="text-sm font-bold text-foreground flex items-center justify-center sm:justify-start gap-2">
+                      Profile Picture
+                      <Badge variant="outline" className="text-[10px] bg-primary/10 text-primary border-primary/30 font-medium">
+                        {user?.role || "Member"}
+                      </Badge>
+                    </h4>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Upload a portrait or avatar photo. Supported: PNG, JPG, WebP, GIF (max 5MB).
+                    </p>
+                  </div>
+
+                  <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 pt-1">
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/png, image/jpeg, image/webp, image/gif"
+                      onChange={handleUploadPhoto}
+                      className="hidden"
+                    />
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={uploadingPhoto}
+                      onClick={() => fileInputRef.current?.click()}
+                      className="gap-2 text-xs font-semibold bg-primary hover:bg-primary/90 text-primary-foreground shadow-xs cursor-pointer"
+                    >
+                      <i className={cn("text-xs", uploadingPhoto ? "fa-solid fa-spinner fa-spin" : "fa-solid fa-cloud-arrow-up")} />
+                      {uploadingPhoto ? "Uploading Photo..." : "Upload New Photo"}
+                    </Button>
+
+                    {user?.photoUrl && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={uploadingPhoto}
+                        onClick={handleRemovePhoto}
+                        className="gap-1.5 text-xs text-rose-500 border-rose-500/30 hover:bg-rose-500/10 hover:text-rose-600 cursor-pointer"
+                      >
+                        <i className="fa-solid fa-trash-can text-xs" />
+                        Remove
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-foreground">Full Name</label>

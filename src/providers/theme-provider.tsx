@@ -39,6 +39,28 @@ export function ThemeProvider({
   useEffect(() => {
     const root = window.document.documentElement;
 
+    const disableTransitions = () => {
+      const css = document.createElement("style");
+      css.appendChild(
+        document.createTextNode(
+          `*,*::before,*::after{-webkit-transition:none!important;-moz-transition:none!important;-o-transition:none!important;-ms-transition:none!important;transition:none!important}`
+        )
+      );
+      document.head.appendChild(css);
+
+      return () => {
+        // Force reflow
+        (() => window.getComputedStyle(document.body))();
+
+        // Remove style tag in next tick
+        setTimeout(() => {
+          if (document.head.contains(css)) {
+            document.head.removeChild(css);
+          }
+        }, 1);
+      };
+    };
+
     const updateTheme = () => {
       let activeTheme: "dark" | "light" = "light";
 
@@ -51,11 +73,15 @@ export function ThemeProvider({
 
       setResolvedTheme(activeTheme);
 
+      const enableTransitions = disableTransitions();
+
       if (activeTheme === "dark") {
         root.classList.add("dark");
       } else {
         root.classList.remove("dark");
       }
+
+      enableTransitions();
     };
 
     updateTheme();

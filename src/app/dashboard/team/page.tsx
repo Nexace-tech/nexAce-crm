@@ -54,7 +54,7 @@ const generateDeptCode = (name: string): string => {
 export default function TeamDashboardPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { user: currentUser, loading: authLoading } = useAuth();
+  const { user: currentUser, loading: authLoading, refreshUser } = useAuth();
   const { canAccessModule, loading: permLoading } = usePermissions();
   const [users, setUsers] = useState<any[]>([]);
   const [departmentsList, setDepartmentsList] = useState<IDepartmentItem[]>([]);
@@ -99,6 +99,7 @@ export default function TeamDashboardPage() {
   const [editSkillsText, setEditSkillsText] = useState("");
   const [editPhotoUrl, setEditPhotoUrl] = useState("");
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const memberFileInputRef = React.useRef<HTMLInputElement | null>(null);
   const [editName, setEditName] = useState("");
   const [editEmail, setEditEmail] = useState("");
   const [editPhone, setEditPhone] = useState("");
@@ -466,6 +467,61 @@ export default function TeamDashboardPage() {
       showToast("Failed to update profile.", "error");
     } finally {
       setIsUpdating(false);
+    }
+  };
+
+  const handleUploadMemberPhoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !selectedMember) return;
+
+    if (!file.type.startsWith("image/")) {
+      showToast("Please select an image file (PNG, JPG, WebP, GIF).", "error");
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      showToast("Profile image must be smaller than 5MB.", "error");
+      return;
+    }
+
+    setUploadingPhoto(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const uploadRes = await fetch("/api/team/upload-photo", {
+        method: "POST",
+        body: formData,
+      });
+
+      const uploadData = await uploadRes.json();
+      if (!uploadRes.ok || !uploadData.photoUrl) {
+        throw new Error(uploadData.error || "Failed to upload photo");
+      }
+
+      setEditPhotoUrl(uploadData.photoUrl);
+      setSelectedMember((prev: any) => prev ? { ...prev, photoUrl: uploadData.photoUrl } : null);
+
+      // Save directly to user profile
+      const updateRes = await fetch(`/api/team/${selectedMember._id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ photoUrl: uploadData.photoUrl }),
+      });
+
+      if (updateRes.ok) {
+        await fetchTeam();
+        if (currentUser?._id === selectedMember._id) {
+          await refreshUser();
+        }
+        showToast("Profile photo updated successfully!", "success");
+      }
+    } catch (err: any) {
+      console.error(err);
+      showToast(err.message || "Failed to upload photo", "error");
+    } finally {
+      setUploadingPhoto(false);
+      if (memberFileInputRef.current) memberFileInputRef.current.value = "";
     }
   };
 
@@ -844,9 +900,9 @@ export default function TeamDashboardPage() {
         <button
           onClick={() => handleTabChange("directory")}
           className={cn(
-            "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer",
+            "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
             activeTab === "directory"
-              ? "border-primary text-white bg-primary/10 rounded-t-md font-semibold"
+              ? "border-primary text-primary bg-primary/10 rounded-t-md font-semibold -mb-px"
               : "border-transparent text-muted-foreground hover:text-foreground"
           )}
         >
@@ -856,9 +912,9 @@ export default function TeamDashboardPage() {
         <button
           onClick={() => handleTabChange("orgchart")}
           className={cn(
-            "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer",
+            "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
             activeTab === "orgchart"
-              ? "border-primary text-white bg-primary/10 rounded-t-md font-semibold"
+              ? "border-primary text-primary bg-primary/10 rounded-t-md font-semibold -mb-px"
               : "border-transparent text-muted-foreground hover:text-foreground"
           )}
         >
@@ -869,9 +925,9 @@ export default function TeamDashboardPage() {
           <button
             onClick={() => handleTabChange("manager")}
             className={cn(
-              "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer",
+            "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
               activeTab === "manager"
-                ? "border-primary text-white bg-primary/10 rounded-t-md font-semibold"
+                ? "border-primary text-primary bg-primary/10 rounded-t-md font-semibold -mb-px"
                 : "border-transparent text-muted-foreground hover:text-foreground"
             )}
           >
@@ -882,9 +938,9 @@ export default function TeamDashboardPage() {
         <button
           onClick={() => handleTabChange("departments")}
           className={cn(
-            "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer",
+            "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
             activeTab === "departments"
-              ? "border-primary text-white bg-primary/10 rounded-t-md font-semibold"
+              ? "border-primary text-primary bg-primary/10 rounded-t-md font-semibold -mb-px"
               : "border-transparent text-muted-foreground hover:text-foreground"
           )}
         >
@@ -1767,13 +1823,41 @@ export default function TeamDashboardPage() {
           <div className="w-full max-w-xl bg-card border border-border rounded-xl p-6 shadow-2xl space-y-5 animate-in zoom-in-95 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between border-b border-border pb-4">
               <div className="flex items-center gap-3">
-                <Avatar size="md">
-                  {selectedMember.photoUrl ? (
-                    <AvatarImage src={selectedMember.photoUrl} alt={selectedMember.name} />
-                  ) : (
-                    <AvatarFallback>{selectedMember.name.substring(0, 2).toUpperCase()}</AvatarFallback>
+                <div
+                  className="relative group/avatar cursor-pointer shrink-0"
+                  onClick={() => !uploadingPhoto && memberFileInputRef.current?.click()}
+                  title="Click to upload/change photo"
+                >
+                  <Avatar size="lg" className="ring-2 ring-primary/30 shadow-xs">
+                    {selectedMember.photoUrl ? (
+                      <AvatarImage src={selectedMember.photoUrl} alt={selectedMember.name} />
+                    ) : (
+                      <AvatarFallback className="bg-primary text-primary-foreground font-bold text-base">
+                        {selectedMember.name ? selectedMember.name.substring(0, 2).toUpperCase() : "U"}
+                      </AvatarFallback>
+                    )}
+                  </Avatar>
+
+                  <div className="absolute inset-0 rounded-full bg-black/55 opacity-0 group-hover/avatar:opacity-100 transition-opacity flex flex-col items-center justify-center text-white text-[9px] font-semibold gap-0.5 backdrop-blur-2xs">
+                    <i className="fa-solid fa-camera text-xs" />
+                    <span>Upload</span>
+                  </div>
+
+                  {uploadingPhoto && (
+                    <div className="absolute inset-0 rounded-full bg-black/65 flex items-center justify-center text-white">
+                      <i className="fa-solid fa-spinner fa-spin text-sm text-primary-foreground" />
+                    </div>
                   )}
-                </Avatar>
+
+                  <input
+                    ref={memberFileInputRef}
+                    type="file"
+                    accept="image/png, image/jpeg, image/webp, image/gif"
+                    onChange={handleUploadMemberPhoto}
+                    className="hidden"
+                  />
+                </div>
+
                 <div>
                   <h3 className="font-bold text-lg text-foreground">{selectedMember.name}</h3>
                   <p className="text-xs text-muted-foreground">{selectedMember.email}</p>

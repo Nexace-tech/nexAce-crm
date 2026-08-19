@@ -865,9 +865,9 @@ export default function CommunicationHub() {
         <button
           onClick={() => setActiveTab("chat")}
           className={cn(
-            "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer",
+            "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
             activeTab === "chat"
-              ? "border-primary text-white bg-primary/10 rounded-t-md font-semibold"
+              ? "border-primary text-primary bg-primary/10 rounded-t-md font-semibold -mb-px"
               : "border-transparent text-muted-foreground hover:text-foreground"
           )}
         >
@@ -878,9 +878,9 @@ export default function CommunicationHub() {
           <button
             onClick={() => setActiveTab("mail")}
             className={cn(
-              "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer",
+              "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
               activeTab === "mail"
-                ? "border-primary text-white bg-primary/10 rounded-t-md font-semibold"
+                ? "border-primary text-primary bg-primary/10 rounded-t-md font-semibold -mb-px"
                 : "border-transparent text-muted-foreground hover:text-foreground"
             )}
           >
@@ -892,9 +892,9 @@ export default function CommunicationHub() {
           <button
             onClick={() => setActiveTab("whatsapp")}
             className={cn(
-              "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer",
+              "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
               activeTab === "whatsapp"
-                ? "border-primary text-white bg-primary/10 rounded-t-md font-semibold"
+                ? "border-primary text-primary bg-primary/10 rounded-t-md font-semibold -mb-px"
                 : "border-transparent text-muted-foreground hover:text-foreground"
             )}
           >
@@ -906,9 +906,9 @@ export default function CommunicationHub() {
           <button
             onClick={() => setActiveTab("video")}
             className={cn(
-              "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer",
+              "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
               activeTab === "video"
-                ? "border-primary text-white bg-primary/10 rounded-t-md font-semibold"
+                ? "border-primary text-primary bg-primary/10 rounded-t-md font-semibold -mb-px"
                 : "border-transparent text-muted-foreground hover:text-foreground"
             )}
           >
@@ -920,9 +920,9 @@ export default function CommunicationHub() {
           <button
             onClick={() => setActiveTab("announcements")}
             className={cn(
-              "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer",
+              "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
               activeTab === "announcements"
-                ? "border-primary text-white bg-primary/10 rounded-t-md font-semibold"
+                ? "border-primary text-primary bg-primary/10 rounded-t-md font-semibold -mb-px"
                 : "border-transparent text-muted-foreground hover:text-foreground"
             )}
           >
@@ -933,9 +933,9 @@ export default function CommunicationHub() {
         <button
           onClick={() => setActiveTab("settings")}
           className={cn(
-            "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer",
+            "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
             activeTab === "settings"
-              ? "border-primary text-white bg-primary/10 rounded-t-md font-semibold"
+              ? "border-primary text-primary bg-primary/10 rounded-t-md font-semibold -mb-px"
               : "border-transparent text-muted-foreground hover:text-foreground"
           )}
         >

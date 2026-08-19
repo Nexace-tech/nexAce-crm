@@ -940,14 +940,14 @@ export default function OperationsPage() {
       </div>
 
       {/* Operation Portal Sub-Navigation Tabs */}
-      <div className="flex border-b border-border space-x-2 overflow-x-auto no-scrollbar pb-1">
+      <div className="flex border-b border-border space-x-2 overflow-x-auto no-scrollbar">
         <button
           type="button"
           onClick={() => setActiveTab("operations")}
           className={cn(
-            "px-4 py-2.5 text-sm font-semibold border-b-2 transition-all flex items-center gap-2 cursor-pointer shrink-0",
+            "px-4 py-2.5 text-sm font-semibold border-b-2 transition-all flex items-center gap-2 cursor-pointer shrink-0 whitespace-nowrap",
             activeTab === "operations"
-              ? "border-primary text-white bg-primary/10 rounded-t-md font-bold"
+              ? "border-primary text-primary bg-primary/10 rounded-t-md font-bold -mb-px"
               : "border-transparent text-muted-foreground hover:text-foreground"
           )}
         >
@@ -958,9 +958,9 @@ export default function OperationsPage() {
           type="button"
           onClick={() => setActiveTab("sales")}
           className={cn(
-            "px-4 py-2.5 text-sm font-semibold border-b-2 transition-all flex items-center gap-2 cursor-pointer shrink-0",
+            "px-4 py-2.5 text-sm font-semibold border-b-2 transition-all flex items-center gap-2 cursor-pointer shrink-0 whitespace-nowrap",
             activeTab === "sales"
-              ? "border-primary text-white bg-primary/10 rounded-t-md font-bold"
+              ? "border-primary text-primary bg-primary/10 rounded-t-md font-bold -mb-px"
               : "border-transparent text-muted-foreground hover:text-foreground"
           )}
         >
@@ -974,9 +974,9 @@ export default function OperationsPage() {
           type="button"
           onClick={() => setActiveTab("hr")}
           className={cn(
-            "px-4 py-2.5 text-sm font-semibold border-b-2 transition-all flex items-center gap-2 cursor-pointer shrink-0",
+            "px-4 py-2.5 text-sm font-semibold border-b-2 transition-all flex items-center gap-2 cursor-pointer shrink-0 whitespace-nowrap",
             activeTab === "hr"
-              ? "border-primary text-white bg-primary/10 rounded-t-md font-bold"
+              ? "border-primary text-primary bg-primary/10 rounded-t-md font-bold -mb-px"
               : "border-transparent text-muted-foreground hover:text-foreground"
           )}
         >
@@ -990,9 +990,9 @@ export default function OperationsPage() {
           type="button"
           onClick={() => setActiveTab("external")}
           className={cn(
-            "px-4 py-2.5 text-sm font-semibold border-b-2 transition-all flex items-center gap-2 cursor-pointer shrink-0",
+            "px-4 py-2.5 text-sm font-semibold border-b-2 transition-all flex items-center gap-2 cursor-pointer shrink-0 whitespace-nowrap",
             activeTab === "external"
-              ? "border-primary text-white bg-primary/10 rounded-t-md font-bold"
+              ? "border-primary text-primary bg-primary/10 rounded-t-md font-bold -mb-px"
               : "border-transparent text-muted-foreground hover:text-foreground"
           )}
         >

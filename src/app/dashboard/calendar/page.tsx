@@ -377,6 +377,36 @@ export default function CalendarPage() {
     }
   }, [attendanceToday, mounted]);
 
+  const handleOpenScheduleEventModal = (defaultDate?: Date) => {
+    const baseDate = defaultDate ? new Date(defaultDate) : new Date();
+    // Default start to next 30-min block
+    const mins = baseDate.getMinutes();
+    const roundedMins = mins < 30 ? 30 : 60;
+    baseDate.setMinutes(roundedMins, 0, 0);
+
+    const endDate = new Date(baseDate.getTime() + 60 * 60 * 1000); // 1 hour later
+
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const formatISO = (d: Date) =>
+      `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+
+    setNewEvtStart(formatISO(baseDate));
+    setNewEvtEnd(formatISO(endDate));
+    setShowEventModal(true);
+  };
+
+  const handleStartDateTimeChange = (val: string) => {
+    setNewEvtStart(val);
+    if (val) {
+      const s = new Date(val);
+      if (!isNaN(s.getTime())) {
+        const e = new Date(s.getTime() + 60 * 60 * 1000);
+        const pad = (n: number) => String(n).padStart(2, "0");
+        setNewEvtEnd(`${e.getFullYear()}-${pad(e.getMonth() + 1)}-${pad(e.getDate())}T${pad(e.getHours())}:${pad(e.getMinutes())}`);
+      }
+    }
+  };
+
   const handleCreateEvent = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newEvtTitle || !newEvtStart || !newEvtEnd) {
@@ -630,7 +660,7 @@ export default function CalendarPage() {
 
         <div className="flex items-center gap-2">
           {activeTab === "calendar" && (
-            <Button color="primary" size="sm" onClick={() => setShowEventModal(true)} className="gap-2 font-semibold">
+            <Button color="primary" size="sm" onClick={() => handleOpenScheduleEventModal()} className="gap-2 font-semibold">
               <i className="fa-solid fa-plus text-xs" /> Schedule Event
             </Button>
           )}
@@ -2103,21 +2133,47 @@ export default function CalendarPage() {
       {/* Schedule Event Modal */}
       {showEventModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in" onClick={() => setShowEventModal(false)}>
-          <div className="w-full max-w-lg bg-card border border-border rounded-xl p-6 shadow-2xl space-y-4 animate-in zoom-in-95" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-lg font-bold text-foreground">Schedule New Event</h3>
-            <form onSubmit={handleCreateEvent} className="space-y-3">
+          <div className="w-full max-w-lg bg-card border border-border rounded-2xl p-6 shadow-2xl space-y-4 animate-in zoom-in-95" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-center border-b border-border/70 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-primary/10 text-primary flex items-center justify-center border border-primary/20 shadow-xs">
+                  <i className="fa-solid fa-calendar-plus text-base" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-foreground">Schedule New Event</h3>
+                  <p className="text-[11px] text-muted-foreground">Add meetings, deadlines, holidays or milestones</p>
+                </div>
+              </div>
+              <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground" onClick={() => setShowEventModal(false)}>
+                <i className="fa-solid fa-xmark text-sm" />
+              </Button>
+            </div>
+
+            <form onSubmit={handleCreateEvent} className="space-y-3.5">
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-foreground">Event Title *</label>
-                <Input value={newEvtTitle} onChange={(e) => setNewEvtTitle(e.target.value)} placeholder="e.g. Q3 Roadmap Review" required />
+                <label className="text-xs font-semibold text-foreground flex items-center gap-1">
+                  <span>Event Title</span>
+                  <span className="text-primary font-bold">*</span>
+                </label>
+                <Input
+                  value={newEvtTitle}
+                  onChange={(e) => setNewEvtTitle(e.target.value)}
+                  placeholder="e.g. Q3 Roadmap Review"
+                  className="hover:border-primary/50 focus:border-primary focus:ring-2 focus:ring-primary/20 transition-colors font-medium"
+                  required
+                />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <label className="text-xs font-semibold text-foreground">Type</label>
+                  <label className="text-xs font-semibold text-foreground flex items-center gap-1">
+                    <i className="fa-solid fa-tag text-primary text-[10px]" />
+                    <span>Event Type</span>
+                  </label>
                   <select
                     value={newEvtType}
                     onChange={(e: any) => setNewEvtType(e.target.value)}
-                    className="w-full h-9 px-3 text-sm bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                    className="w-full h-9 px-3 text-xs bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary hover:border-primary/50 font-medium transition-colors"
                   >
                     <option value="Meeting">Meeting</option>
                     <option value="Holiday">Holiday</option>
@@ -2128,11 +2184,14 @@ export default function CalendarPage() {
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-xs font-semibold text-foreground">Department</label>
+                  <label className="text-xs font-semibold text-foreground flex items-center gap-1">
+                    <i className="fa-solid fa-users text-primary text-[10px]" />
+                    <span>Department</span>
+                  </label>
                   <select
                     value={newEvtDept}
                     onChange={(e) => setNewEvtDept(e.target.value)}
-                    className="w-full h-9 px-3 text-sm bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                    className="w-full h-9 px-3 text-xs bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary hover:border-primary/50 font-medium transition-colors"
                   >
                     <option value="All">All Departments</option>
                     <option value="Management">Management</option>
@@ -2145,22 +2204,65 @@ export default function CalendarPage() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <label className="text-xs font-semibold text-foreground">Start Date & Time *</label>
-                  <Input type="datetime-local" value={newEvtStart} onChange={(e) => setNewEvtStart(e.target.value)} required />
+                  <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                    <i className="fa-regular fa-calendar-days text-primary text-xs" />
+                    <span>Start Date & Time</span>
+                    <span className="text-primary font-bold">*</span>
+                  </label>
+                  <Input
+                    type="datetime-local"
+                    value={newEvtStart}
+                    onChange={(e) => handleStartDateTimeChange(e.target.value)}
+                    onClick={(e) => {
+                      try {
+                        (e.target as any).showPicker?.();
+                      } catch {}
+                    }}
+                    onFocus={(e) => {
+                      try {
+                        (e.target as any).showPicker?.();
+                      } catch {}
+                    }}
+                    className="cursor-pointer bg-primary/5 border-primary/40 text-foreground font-semibold hover:border-primary focus:border-primary focus:ring-2 focus:ring-primary/25 transition-all shadow-2xs"
+                    required
+                  />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-xs font-semibold text-foreground">End Date & Time *</label>
-                  <Input type="datetime-local" value={newEvtEnd} onChange={(e) => setNewEvtEnd(e.target.value)} required />
+                  <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                    <i className="fa-regular fa-clock text-primary text-xs" />
+                    <span>End Date & Time</span>
+                    <span className="text-primary font-bold">*</span>
+                  </label>
+                  <Input
+                    type="datetime-local"
+                    value={newEvtEnd}
+                    onChange={(e) => setNewEvtEnd(e.target.value)}
+                    onClick={(e) => {
+                      try {
+                        (e.target as any).showPicker?.();
+                      } catch {}
+                    }}
+                    onFocus={(e) => {
+                      try {
+                        (e.target as any).showPicker?.();
+                      } catch {}
+                    }}
+                    className="cursor-pointer bg-primary/5 border-primary/40 text-foreground font-semibold hover:border-primary focus:border-primary focus:ring-2 focus:ring-primary/25 transition-all shadow-2xs"
+                    required
+                  />
                 </div>
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-foreground">Description</label>
+                <label className="text-xs font-semibold text-foreground flex items-center gap-1">
+                  <i className="fa-solid fa-align-left text-primary text-[10px]" />
+                  <span>Description</span>
+                </label>
                 <textarea
                   value={newEvtDesc}
                   onChange={(e) => setNewEvtDesc(e.target.value)}
                   rows={3}
-                  className="w-full px-3 py-2 text-sm bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary resize-y"
+                  className="w-full px-3 py-2 text-xs bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary hover:border-primary/50 resize-y transition-colors"
                   placeholder="Agenda details, video call links..."
                 />
               </div>
@@ -2169,7 +2271,7 @@ export default function CalendarPage() {
                 <Button variant="outline" size="sm" type="button" onClick={() => setShowEventModal(false)}>
                   Cancel
                 </Button>
-                <Button color="primary" size="sm" type="submit">
+                <Button color="primary" size="sm" type="submit" className="font-semibold px-4 shadow-xs">
                   Save Event
                 </Button>
               </div>
@@ -2181,32 +2283,98 @@ export default function CalendarPage() {
       {/* Plan Sprint Modal */}
       {showSprintModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in" onClick={() => setShowSprintModal(false)}>
-          <div className="w-full max-w-lg bg-card border border-border rounded-xl p-6 shadow-2xl space-y-4 animate-in zoom-in-95" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-lg font-bold text-foreground">Plan New Sprint</h3>
-            <form onSubmit={handleCreateSprint} className="space-y-3">
+          <div className="w-full max-w-lg bg-card border border-border rounded-2xl p-6 shadow-2xl space-y-4 animate-in zoom-in-95" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-center border-b border-border/70 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-primary/10 text-primary flex items-center justify-center border border-primary/20 shadow-xs">
+                  <i className="fa-solid fa-rocket text-base" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-foreground">Plan New Sprint</h3>
+                  <p className="text-[11px] text-muted-foreground">Define sprint targets, timeline and milestones</p>
+                </div>
+              </div>
+              <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground" onClick={() => setShowSprintModal(false)}>
+                <i className="fa-solid fa-xmark text-sm" />
+              </Button>
+            </div>
+
+            <form onSubmit={handleCreateSprint} className="space-y-3.5">
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-foreground">Sprint Name *</label>
-                <Input value={newSprintName} onChange={(e) => setNewSprintName(e.target.value)} placeholder="e.g. Sprint 4 - Core API" required />
+                <label className="text-xs font-semibold text-foreground flex items-center gap-1">
+                  <span>Sprint Name</span>
+                  <span className="text-primary font-bold">*</span>
+                </label>
+                <Input
+                  value={newSprintName}
+                  onChange={(e) => setNewSprintName(e.target.value)}
+                  placeholder="e.g. Sprint 4 - Core API"
+                  className="hover:border-primary/50 focus:border-primary focus:ring-2 focus:ring-primary/20 transition-colors font-medium"
+                  required
+                />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <label className="text-xs font-semibold text-foreground">Start Date *</label>
-                  <Input type="date" value={newSprintStart} onChange={(e) => setNewSprintStart(e.target.value)} required />
+                  <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                    <i className="fa-regular fa-calendar text-primary text-xs" />
+                    <span>Start Date</span>
+                    <span className="text-primary font-bold">*</span>
+                  </label>
+                  <Input
+                    type="date"
+                    value={newSprintStart}
+                    onChange={(e) => setNewSprintStart(e.target.value)}
+                    onClick={(e) => {
+                      try {
+                        (e.target as any).showPicker?.();
+                      } catch {}
+                    }}
+                    onFocus={(e) => {
+                      try {
+                        (e.target as any).showPicker?.();
+                      } catch {}
+                    }}
+                    className="cursor-pointer bg-primary/5 border-primary/40 text-foreground font-semibold hover:border-primary focus:border-primary focus:ring-2 focus:ring-primary/25 transition-all shadow-2xs"
+                    required
+                  />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-xs font-semibold text-foreground">End Date *</label>
-                  <Input type="date" value={newSprintEnd} onChange={(e) => setNewSprintEnd(e.target.value)} required />
+                  <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                    <i className="fa-regular fa-calendar-check text-primary text-xs" />
+                    <span>End Date</span>
+                    <span className="text-primary font-bold">*</span>
+                  </label>
+                  <Input
+                    type="date"
+                    value={newSprintEnd}
+                    onChange={(e) => setNewSprintEnd(e.target.value)}
+                    onClick={(e) => {
+                      try {
+                        (e.target as any).showPicker?.();
+                      } catch {}
+                    }}
+                    onFocus={(e) => {
+                      try {
+                        (e.target as any).showPicker?.();
+                      } catch {}
+                    }}
+                    className="cursor-pointer bg-primary/5 border-primary/40 text-foreground font-semibold hover:border-primary focus:border-primary focus:ring-2 focus:ring-primary/25 transition-all shadow-2xs"
+                    required
+                  />
                 </div>
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-foreground">Sprint Goal</label>
+                <label className="text-xs font-semibold text-foreground flex items-center gap-1">
+                  <i className="fa-solid fa-bullseye text-primary text-[10px]" />
+                  <span>Sprint Goal & Deliverables</span>
+                </label>
                 <textarea
                   value={newSprintGoal}
                   onChange={(e) => setNewSprintGoal(e.target.value)}
                   rows={3}
-                  className="w-full px-3 py-2 text-sm bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary resize-y"
+                  className="w-full px-3 py-2 text-xs bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary hover:border-primary/50 resize-y transition-colors"
                   placeholder="Primary sprint objectives and deliverables..."
                 />
               </div>
@@ -2215,7 +2383,7 @@ export default function CalendarPage() {
                 <Button variant="outline" size="sm" type="button" onClick={() => setShowSprintModal(false)}>
                   Cancel
                 </Button>
-                <Button color="primary" size="sm" type="submit">
+                <Button color="primary" size="sm" type="submit" className="font-semibold px-4 shadow-xs">
                   Launch Sprint Plan
                 </Button>
               </div>
