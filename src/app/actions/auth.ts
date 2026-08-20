@@ -457,6 +457,7 @@ export async function forgotPasswordAction(state: FormState | undefined, formDat
       success: true,
       step: "reset",
       resetEmail: email,
+      devCode: mailResult.isDev ? code : undefined,
       previewUrl: mailResult.isDev ? mailResult.previewUrl : undefined,
       message: `A 6-digit verification code has been sent to ${email}.`,
     };

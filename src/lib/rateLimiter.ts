@@ -3,7 +3,7 @@ import { headers } from "next/headers";
 type WindowState = { count: number; resetAt: number };
 
 const WINDOW_MS = 5 * 60 * 1000; // 5 minute rolling window
-const OTP_MAX_PER_EMAIL = 3;     // max OTP sends per address per window
+const OTP_MAX_PER_EMAIL = 5;     // max OTP sends per address per window
 const OTP_MAX_PER_IP = 10;       // max OTP sends per IP per window (anti-enumeration)
 const VERIFY_MAX_PER_EMAIL = 10; // max verification attempts per email per window (allows typos)
 const VERIFY_MAX_PER_IP = 20;    // max verification attempts per IP per window
