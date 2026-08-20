@@ -31,11 +31,11 @@ export function LogoutHeaderBtn() {
         variant="ghost"
         size="sm"
         onClick={() => setShowConfirm(true)}
-        className="text-muted-foreground hover:text-destructive hover:bg-destructive/10 gap-2 transition-colors"
+        className="bg-destructive/10 text-destructive hover:bg-destructive/20 active:bg-destructive/30 border border-destructive/25 rounded-lg h-9 px-2.5 gap-2 transition-all shadow-2xs cursor-pointer flex items-center justify-center shrink-0"
         title="Log Out"
       >
-        <i className="fa-solid fa-right-from-bracket text-sm" />
-        <span className="hidden sm:inline font-medium">Log Out</span>
+        <i className="fa-solid fa-right-from-bracket text-sm text-destructive" />
+        <span className="hidden sm:inline font-semibold text-xs text-destructive">Log Out</span>
       </Button>
 
       {/* Sleek Logout Confirmation Modal Rendered via React Portal */}

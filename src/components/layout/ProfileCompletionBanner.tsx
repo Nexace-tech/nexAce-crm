@@ -199,39 +199,39 @@ export function ProfileCompletionBanner() {
         <div className="relative overflow-hidden rounded-2xl border border-amber-500/30 bg-gradient-to-r from-amber-500/10 via-primary/10 to-indigo-500/10 p-4 shadow-sm backdrop-blur-md transition-all">
           <div className="absolute -right-12 -top-12 h-32 w-32 rounded-full bg-amber-500/15 blur-2xl pointer-events-none" />
 
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-            <div className="flex items-start sm:items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0 border border-amber-500/30 shadow-xs">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
+            <div className="flex items-start gap-3 min-w-0">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0 border border-amber-500/30 shadow-xs mt-0.5 sm:mt-0">
                 <i className="fa-solid fa-id-card text-lg" />
               </div>
-              <div className="space-y-0.5">
-                <div className="flex items-center gap-2">
+              <div className="space-y-1 min-w-0 flex-1">
+                <div className="flex items-center gap-2 flex-wrap">
                   <span className="font-bold text-sm text-foreground">
                     Complete Your Profile ({percent}%)
                   </span>
-                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-300">
+                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-300 shrink-0 border border-amber-500/30">
                     {missingFields.length} item{missingFields.length === 1 ? "" : "s"} missing
                   </span>
                 </div>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-xs text-muted-foreground leading-relaxed">
                   Add your <span className="font-medium text-foreground">{missingFields.slice(0, 2).join(", ")}{missingFields.length > 2 ? ` and ${missingFields.length - 2} more` : ""}</span> to help your team connect with you.
                 </p>
               </div>
             </div>
 
-            <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+            <div className="flex items-center gap-2 w-full sm:w-auto justify-end pt-1 sm:pt-0 shrink-0">
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => setDismissed(true)}
-                className="h-8 px-3 text-xs text-muted-foreground hover:text-foreground"
+                className="flex-1 sm:flex-initial h-8 px-3 text-xs text-muted-foreground hover:text-foreground cursor-pointer"
               >
                 Remind Later
               </Button>
               <Button
                 color="primary"
                 size="sm"
-                className="h-8 px-3.5 text-xs font-semibold gap-1.5 shadow-sm cursor-pointer"
+                className="flex-1 sm:flex-initial h-8 px-3.5 text-xs font-semibold gap-1.5 shadow-sm cursor-pointer"
                 asChild
               >
                 <Link

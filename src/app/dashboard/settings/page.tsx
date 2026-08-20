@@ -612,21 +612,26 @@ function SettingsPageContent() {
       )}
 
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
-          <i className="fa-solid fa-user-gear text-2xl text-primary" /> Settings & Platform Administration
-        </h1>
-        <p className="text-sm text-muted-foreground mt-0.5">
-          Manage user profile details, multi-tenant role permissions, multi-tenant isolation, and billing subscription tiers.
-        </p>
+      <div className="flex items-start gap-3">
+        <div className="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0 border border-primary/20 mt-0.5">
+          <i className="fa-solid fa-user-gear text-lg" />
+        </div>
+        <div>
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">
+            Settings & Platform Administration
+          </h1>
+          <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
+            Manage user profile details, multi-tenant role permissions, multi-tenant isolation, and billing subscription tiers.
+          </p>
+        </div>
       </div>
 
       {/* Settings Navigation Tabs */}
-      <div className="flex border-b border-border space-x-1 overflow-x-auto">
+      <div className="flex border-b border-border space-x-1.5 overflow-x-auto no-scrollbar scroll-smooth pb-0.5 -mx-4 px-4 sm:mx-0 sm:px-0">
         <button
           onClick={() => setActiveTab("profile")}
           className={cn(
-            "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
+            "px-3.5 py-2 sm:px-4 sm:py-2.5 text-xs sm:text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap shrink-0",
             activeTab === "profile" ? "border-primary text-primary bg-primary/10 rounded-t-md font-semibold -mb-px" : "border-transparent text-muted-foreground hover:text-foreground"
           )}
         >
@@ -636,7 +641,7 @@ function SettingsPageContent() {
         <button
           onClick={() => setActiveTab("security")}
           className={cn(
-            "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
+            "px-3.5 py-2 sm:px-4 sm:py-2.5 text-xs sm:text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap shrink-0",
             activeTab === "security" ? "border-primary text-primary bg-primary/10 rounded-t-md font-semibold -mb-px" : "border-transparent text-muted-foreground hover:text-foreground"
           )}
         >
@@ -646,7 +651,7 @@ function SettingsPageContent() {
         <button
           onClick={() => setActiveTab("invoice")}
           className={cn(
-            "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
+            "px-3.5 py-2 sm:px-4 sm:py-2.5 text-xs sm:text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap shrink-0",
             activeTab === "invoice" ? "border-primary text-primary bg-primary/10 rounded-t-md font-semibold -mb-px" : "border-transparent text-muted-foreground hover:text-foreground"
           )}
         >
@@ -657,7 +662,7 @@ function SettingsPageContent() {
           <button
             onClick={() => setActiveTab("all-invoices")}
             className={cn(
-              "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
+              "px-3.5 py-2 sm:px-4 sm:py-2.5 text-xs sm:text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap shrink-0",
               activeTab === "all-invoices" ? "border-primary text-primary bg-primary/10 rounded-t-md font-semibold -mb-px" : "border-transparent text-muted-foreground hover:text-foreground"
             )}
           >
@@ -669,7 +674,7 @@ function SettingsPageContent() {
           <button
             onClick={() => setActiveTab("users")}
             className={cn(
-              "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
+              "px-3.5 py-2 sm:px-4 sm:py-2.5 text-xs sm:text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap shrink-0",
               activeTab === "users" ? "border-primary text-primary bg-primary/10 rounded-t-md font-semibold -mb-px" : "border-transparent text-muted-foreground hover:text-foreground"
             )}
           >
@@ -681,7 +686,7 @@ function SettingsPageContent() {
           <button
             onClick={() => setActiveTab("shifts")}
             className={cn(
-              "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
+              "px-3.5 py-2 sm:px-4 sm:py-2.5 text-xs sm:text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap shrink-0",
               activeTab === "shifts" ? "border-primary text-primary bg-primary/10 rounded-t-md font-semibold -mb-px" : "border-transparent text-muted-foreground hover:text-foreground"
             )}
           >
@@ -693,7 +698,7 @@ function SettingsPageContent() {
           <button
             onClick={() => setActiveTab("permissions")}
             className={cn(
-              "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
+              "px-3.5 py-2 sm:px-4 sm:py-2.5 text-xs sm:text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap shrink-0",
               activeTab === "permissions" ? "border-primary text-primary bg-primary/10 rounded-t-md font-semibold -mb-px" : "border-transparent text-muted-foreground hover:text-foreground"
             )}
           >
@@ -705,7 +710,7 @@ function SettingsPageContent() {
           <button
             onClick={() => setActiveTab("subscription")}
             className={cn(
-              "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
+              "px-3.5 py-2 sm:px-4 sm:py-2.5 text-xs sm:text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap shrink-0",
               activeTab === "subscription" ? "border-primary text-primary bg-primary/10 rounded-t-md font-semibold -mb-px" : "border-transparent text-muted-foreground hover:text-foreground"
             )}
           >
@@ -767,25 +772,28 @@ function SettingsPageContent() {
                   </div>
                 </div>
 
-                <div className="flex flex-wrap items-center justify-between gap-4 pt-2">
-                  <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                    <span className="flex items-center gap-1.5 font-medium">
-                      <i className="fa-solid fa-users text-primary" /> Active Accounts:{" "}
-                      <strong className="text-foreground font-semibold">{totalCompanyUsers ?? "..."}</strong>
-                    </span>
-                    <span className="flex items-center gap-1.5 font-medium">
-                      <i className="fa-solid fa-shield-halved text-emerald-500" /> Isolation Mode:{" "}
-                      <strong className="text-foreground font-semibold">Tenant ID Strict</strong>
-                    </span>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-border/60">
+                  <div className="flex flex-col xs:flex-row sm:flex-row items-stretch sm:items-center gap-2 text-xs">
+                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-muted/40 border border-border/70 text-muted-foreground">
+                      <i className="fa-solid fa-users text-primary text-sm shrink-0" />
+                      <span>Active Accounts:</span>
+                      <strong className="text-foreground font-bold ml-auto sm:ml-0">{totalCompanyUsers ?? "..."}</strong>
+                    </div>
+
+                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-muted/40 border border-border/70 text-muted-foreground">
+                      <i className="fa-solid fa-shield-halved text-emerald-500 text-sm shrink-0" />
+                      <span>Isolation Mode:</span>
+                      <strong className="text-foreground font-bold whitespace-nowrap ml-auto sm:ml-0">Tenant ID Strict</strong>
+                    </div>
                   </div>
 
                   {user?.role === "Admin" ? (
-                    <Button color="primary" type="submit" disabled={updatingCompany} className="gap-2">
+                    <Button color="primary" type="submit" disabled={updatingCompany} className="gap-2 w-full sm:w-auto h-9 font-semibold">
                       <i className="fa-solid fa-floppy-disk text-xs" /> {updatingCompany ? "Saving Company..." : "Save Company Details"}
                     </Button>
                   ) : (
-                    <span className="text-xs text-muted-foreground italic flex items-center gap-1">
-                      <i className="fa-solid fa-lock" /> Admin access required to update company name
+                    <span className="text-xs text-muted-foreground italic flex items-center gap-1.5 py-1">
+                      <i className="fa-solid fa-lock text-xs" /> Admin access required to update company name
                     </span>
                   )}
                 </div>

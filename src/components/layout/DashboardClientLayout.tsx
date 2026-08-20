@@ -57,6 +57,23 @@ export function DashboardClientLayout({ session, menuItems, isPending = false, c
   const [tourOpen, setTourOpen] = useState(false);
   const pathname = usePathname();
 
+  // Close mobile drawer when route changes
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [pathname]);
+
+  // Lock body scroll when mobile drawer is open
+  useEffect(() => {
+    if (mobileOpen) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [mobileOpen]);
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === "k") {
@@ -78,43 +95,48 @@ export function DashboardClientLayout({ session, menuItems, isPending = false, c
   const role = user?.role || session.role;
   const tenantName = (user?.tenantId as any)?.name || session.tenantName;
 
-  const initials = userName
-    ? userName
-        .split(" ")
-        .map((n) => n[0])
-        .join("")
-        .toUpperCase()
-    : "U";
-
   return (
     <div className="flex min-h-screen bg-background text-foreground">
-      {/* Mobile Backdrop */}
+      {/* Mobile Backdrop Overlay */}
       {mobileOpen && (
         <div
           className="fixed inset-0 z-40 bg-black/60 backdrop-blur-xs lg:hidden transition-opacity"
           onClick={() => setMobileOpen(false)}
+          aria-hidden="true"
         />
       )}
 
-      {/* Dashcode Sidebar */}
+      {/* Dashboard Sidebar Drawer */}
       <aside
         className={cn(
-          "fixed top-0 bottom-0 left-0 z-50 flex flex-col border-r border-border bg-card/95 backdrop-blur-md transition-all duration-300 lg:static lg:h-screen lg:sticky lg:top-0",
-          mobileOpen ? "translate-x-0 w-72" : "-translate-x-full lg:translate-x-0",
+          "fixed top-0 bottom-0 left-0 z-50 flex flex-col border-r border-border bg-card/95 backdrop-blur-md transition-all duration-300 w-72 max-w-[85vw] lg:static lg:h-screen lg:sticky lg:top-0",
+          mobileOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full lg:translate-x-0",
           sidebarCollapsed ? "lg:w-20" : "lg:w-72"
         )}
       >
         {/* Brand Header */}
-        <div className={cn("flex items-center justify-between h-16 border-b border-border transition-all", sidebarCollapsed ? "px-3 justify-center" : "px-6")}>
-          <Link href="/dashboard" className="flex items-center gap-3 font-semibold text-lg tracking-tight overflow-hidden">
+        <div
+          className={cn(
+            "flex items-center justify-between h-16 border-b border-border transition-all px-4 sm:px-6",
+            sidebarCollapsed && "lg:px-3 lg:justify-center"
+          )}
+        >
+          <Link
+            href="/dashboard"
+            onClick={() => setMobileOpen(false)}
+            className="flex items-center gap-3 font-semibold text-lg tracking-tight overflow-hidden"
+          >
             <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-primary text-primary-foreground shadow-md shadow-primary/30 shrink-0">
               <i className="fa-solid fa-wand-magic-sparkles text-base" />
             </div>
-            {!sidebarCollapsed && (
-              <span className="bg-gradient-to-r from-teal-400 via-[#30b8bd] to-cyan-300 bg-clip-text text-transparent font-bold truncate">
-                NexAce CRM
-              </span>
-            )}
+            <span
+              className={cn(
+                "bg-gradient-to-r from-teal-400 via-[#30b8bd] to-cyan-300 bg-clip-text text-transparent font-bold truncate",
+                sidebarCollapsed && "lg:hidden"
+              )}
+            >
+              NexAce CRM
+            </span>
           </Link>
           <div className="flex items-center gap-1">
             {/* Collapse / Expand toggle button (desktop only) */}
@@ -128,11 +150,11 @@ export function DashboardClientLayout({ session, menuItems, isPending = false, c
             </button>
             {/* Close sidebar button (mobile only) */}
             <button
-              className="lg:hidden text-muted-foreground hover:text-foreground p-1 rounded-md"
+              className="lg:hidden text-muted-foreground hover:text-foreground p-2 rounded-lg hover:bg-accent/80 transition-colors cursor-pointer"
               onClick={() => setMobileOpen(false)}
               aria-label="Close Sidebar"
             >
-              <i className="fa-solid fa-xmark text-base" />
+              <i className="fa-solid fa-xmark text-lg" />
             </button>
           </div>
         </div>
@@ -156,16 +178,14 @@ export function DashboardClientLayout({ session, menuItems, isPending = false, c
                     title={sidebarCollapsed ? item.name : "Locked until account is approved"}
                     className={cn(
                       "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium relative select-none opacity-40 cursor-not-allowed",
-                      sidebarCollapsed && "justify-center px-0"
+                      sidebarCollapsed && "lg:justify-center lg:px-0"
                     )}
                   >
                     <i className={cn(iconClass, "text-base shrink-0 text-muted-foreground")} />
-                    {!sidebarCollapsed && (
-                      <>
-                        <span className="truncate text-muted-foreground">{item.name}</span>
-                        <i className="fa-solid fa-lock text-[10px] ml-auto text-muted-foreground/60" />
-                      </>
-                    )}
+                    <span className={cn("truncate text-muted-foreground", sidebarCollapsed && "lg:hidden")}>
+                      {item.name}
+                    </span>
+                    <i className={cn("fa-solid fa-lock text-[10px] ml-auto text-muted-foreground/60", sidebarCollapsed && "lg:hidden")} />
                   </div>
                 );
               }
@@ -180,24 +200,42 @@ export function DashboardClientLayout({ session, menuItems, isPending = false, c
                     isActive
                       ? "bg-primary text-primary-foreground shadow-md shadow-primary/25 font-semibold"
                       : "text-muted-foreground hover:text-foreground hover:bg-accent/60",
-                    sidebarCollapsed && "justify-center px-0"
+                    sidebarCollapsed && "lg:justify-center lg:px-0"
                   )}
                   title={sidebarCollapsed ? item.name : undefined}
                 >
-                  <i className={cn(iconClass, "text-base transition-transform group-hover:scale-110 shrink-0", isActive ? "text-primary-foreground" : "text-muted-foreground group-hover:text-foreground")} />
-                  {!sidebarCollapsed && <span className="truncate">{item.name}</span>}
+                  <i
+                    className={cn(
+                      iconClass,
+                      "text-base transition-transform group-hover:scale-110 shrink-0",
+                      isActive ? "text-primary-foreground" : "text-muted-foreground group-hover:text-foreground"
+                    )}
+                  />
+                  <span className={cn("truncate", sidebarCollapsed && "lg:hidden")}>{item.name}</span>
                 </Link>
               );
             })}
         </div>
 
+        {/* Mobile Quick Utility Controls inside Sidebar */}
+        <div className="lg:hidden px-4 py-2.5 border-t border-border/60 bg-muted/20 flex items-center justify-between">
+          <span className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
+            <i className="fa-solid fa-sliders text-xs text-primary" /> Controls
+          </span>
+          <div className="flex items-center gap-1 bg-card dark:bg-slate-800 border border-border dark:border-slate-700 rounded-lg p-0.5 shadow-xs">
+            <ThemeToggle />
+            <NotificationBell />
+          </div>
+        </div>
+
         {/* User Footer Profile Card */}
-        <div className={cn("border-t border-border bg-card/50", sidebarCollapsed ? "p-2" : "p-4")}>
+        <div className={cn("border-t border-border bg-card/50 p-3 sm:p-4", sidebarCollapsed && "lg:p-2")}>
           <Link
             href="/dashboard/settings"
+            onClick={() => setMobileOpen(false)}
             className={cn(
-              "flex items-center rounded-xl bg-accent/50 hover:bg-accent/80 border border-border/50 transition-all duration-200 group relative cursor-pointer",
-              sidebarCollapsed ? "justify-center p-2" : "gap-3 p-2.5"
+              "flex items-center rounded-xl bg-accent/50 hover:bg-accent/80 border border-border/50 transition-all duration-200 group relative cursor-pointer gap-3 p-2.5",
+              sidebarCollapsed && "lg:justify-center lg:p-2"
             )}
             title={sidebarCollapsed ? `${userName} (${role}) - Manage Profile` : "Manage Profile & Settings"}
           >
@@ -209,15 +247,13 @@ export function DashboardClientLayout({ session, menuItems, isPending = false, c
                 {userName ? userName.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2) : "U"}
               </AvatarFallback>
             </Avatar>
-            {!sidebarCollapsed && (
-              <div className="flex flex-col min-w-0 flex-1">
-                <div className="flex items-center justify-between">
-                  <p className="text-xs font-bold text-foreground truncate group-hover:text-primary transition-colors">{userName}</p>
-                  <i className="fa-solid fa-gear text-[10px] text-muted-foreground group-hover:text-primary transition-colors ml-1 opacity-0 group-hover:opacity-100" />
-                </div>
-                <span className="text-[10px] text-muted-foreground font-medium truncate">{role} • {tenantName}</span>
+            <div className={cn("flex flex-col min-w-0 flex-1", sidebarCollapsed && "lg:hidden")}>
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-bold text-foreground truncate group-hover:text-primary transition-colors">{userName}</p>
+                <i className="fa-solid fa-gear text-[10px] text-muted-foreground group-hover:text-primary transition-colors ml-1 opacity-0 group-hover:opacity-100" />
               </div>
-            )}
+              <span className="text-[10px] text-muted-foreground font-medium truncate">{role} • {tenantName}</span>
+            </div>
           </Link>
         </div>
       </aside>
@@ -225,37 +261,42 @@ export function DashboardClientLayout({ session, menuItems, isPending = false, c
       {/* Main Workspace Area */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Header Bar */}
-        <header className="sticky top-0 z-30 flex items-center justify-between h-16 px-6 border-b border-border bg-card/80 backdrop-blur-md">
-          <div className="flex items-center gap-4 flex-1 max-w-xl">
+        <header className="sticky top-0 z-30 flex items-center justify-between h-16 px-3 sm:px-6 border-b border-border bg-card/80 backdrop-blur-md gap-2">
+          <div className="flex items-center gap-2 sm:gap-4 flex-1 max-w-xl min-w-0">
+            {/* Mobile Hamburger Button */}
             <button
-              className={cn(
-                "text-muted-foreground hover:text-foreground p-2 rounded-md hover:bg-accent",
-                !sidebarCollapsed && "lg:hidden"
-              )}
-              onClick={() => {
-                if (window.innerWidth < 1024) {
-                  setMobileOpen(true);
-                } else {
-                  setSidebarCollapsed(false);
-                }
-              }}
-              aria-label={sidebarCollapsed ? "Expand Sidebar" : "Open Sidebar"}
-              title={sidebarCollapsed ? "Expand Sidebar" : "Open Sidebar"}
+              type="button"
+              className="lg:hidden text-muted-foreground hover:text-foreground p-2 rounded-lg hover:bg-accent/80 transition-colors flex items-center justify-center shrink-0 cursor-pointer"
+              onClick={() => setMobileOpen(true)}
+              aria-label="Open Mobile Menu"
             >
-              <i className="fa-solid fa-bars text-base" />
+              <i className="fa-solid fa-bars text-lg" />
             </button>
+
+            {/* Desktop Expand Button when collapsed */}
+            {sidebarCollapsed && (
+              <button
+                type="button"
+                className="hidden lg:flex text-muted-foreground hover:text-foreground p-2 rounded-lg hover:bg-accent/80 transition-colors items-center justify-center shrink-0 cursor-pointer"
+                onClick={() => setSidebarCollapsed(false)}
+                aria-label="Expand Sidebar"
+                title="Expand Sidebar"
+              >
+                <i className="fa-solid fa-bars text-base" />
+              </button>
+            )}
 
             {/* Global Search Bar (Triggers Command Palette) */}
             <div
-              className="relative w-full cursor-pointer"
+              className="relative w-full cursor-pointer min-w-0"
               onClick={() => setCommandPaletteOpen(true)}
             >
               <i className="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground" />
               <input
                 type="text"
                 readOnly
-                placeholder="Search command palette... (e.g. OKRs, Referrals, Timesheets)"
-                className="w-full pl-9 pr-14 py-2 text-sm bg-muted/60 dark:bg-slate-800/80 hover:bg-muted/80 dark:hover:bg-slate-800 border border-border/80 dark:border-slate-700/80 rounded-lg focus:outline-none transition-all placeholder:text-muted-foreground shadow-xs cursor-pointer"
+                placeholder="Search..."
+                className="w-full pl-9 pr-3 sm:pr-14 py-2 text-sm bg-muted/60 dark:bg-slate-800/80 hover:bg-muted/80 dark:hover:bg-slate-800 border border-border/80 dark:border-slate-700/80 rounded-lg focus:outline-none transition-all placeholder:text-muted-foreground shadow-xs cursor-pointer truncate"
               />
               <kbd className="absolute right-3 top-1/2 -translate-y-1/2 hidden sm:inline-block px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground bg-background border border-border rounded shadow-2xs">
                 Ctrl + K
@@ -264,23 +305,28 @@ export function DashboardClientLayout({ session, menuItems, isPending = false, c
           </div>
 
           {/* Right Header Actions */}
-          <div className="flex items-center gap-1.5 md:gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             <button
               type="button"
               onClick={() => setTourOpen(true)}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary transition-colors text-xs font-semibold cursor-pointer border border-primary/20"
+              className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary transition-colors text-xs font-semibold cursor-pointer border border-primary/20"
               title="Start Guided Product Tour"
             >
               <i className="fa-solid fa-compass text-sm animate-spin-slow text-primary" />
-              <span className="hidden sm:inline">Tour</span>
+              <span>Tour</span>
             </button>
 
-            <ZoomControl />
-            <div className="flex items-center gap-1 bg-muted/60 dark:bg-slate-800/80 border border-border/80 dark:border-slate-700/80 rounded-lg p-0.5 shadow-xs">
+            <div className="hidden md:flex">
+              <ZoomControl />
+            </div>
+
+            {/* Desktop Theme & Notifications (Hidden on small mobile screens, available inside drawer) */}
+            <div className="hidden sm:flex items-center gap-0.5 sm:gap-1 bg-muted/60 dark:bg-slate-800/80 border border-border/80 dark:border-slate-700/80 rounded-lg p-0.5 shadow-xs">
               <ThemeToggle />
               <NotificationBell />
             </div>
-            <div className="h-6 w-px bg-border/60 mx-1" />
+
+            <div className="hidden sm:block h-6 w-px bg-border/60 mx-0.5" />
             <LogoutHeaderBtn />
           </div>
         </header>
@@ -292,7 +338,7 @@ export function DashboardClientLayout({ session, menuItems, isPending = false, c
         <CommandPalette open={commandPaletteOpen} onClose={() => setCommandPaletteOpen(false)} />
 
         {/* Content Body */}
-        <main className="flex-1 p-6 md:p-8 overflow-y-auto bg-background">
+        <main className="flex-1 p-4 sm:p-6 md:p-8 overflow-y-auto bg-background">
           <div className="max-w-7xl mx-auto space-y-6">
             <ProfileCompletionBanner />
             {children}
