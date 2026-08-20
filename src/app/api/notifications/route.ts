@@ -11,19 +11,37 @@ export async function GET() {
     const authResult = await requireTenantSession();
     if (isAuthError(authResult)) return authResult;
 
-    const { tenantObjectId, userObjectId } = authResult;
+    const { tenantObjectId, userObjectId, session } = authResult;
     await connectToDatabase();
 
-    const notifications = await Notification.find({
+    const isAdminLevel = ["Admin", "OPS"].includes(session.role);
+
+    // Admin-operational notification titles that non-admin roles should never see
+    const ADMIN_ONLY_TITLES = [
+      "New Employee Added",
+      "New Employee Account Pending Approval",
+    ];
+
+    // Build filter: non-admin users are excluded from adminOnly notifications
+    // and from legacy notifications that match known admin-only title patterns
+    const baseFilter: Record<string, unknown> = {
       tenantId: tenantObjectId,
       recipientId: userObjectId,
-    })
+    };
+
+    if (!isAdminLevel) {
+      baseFilter["$and"] = [
+        { adminOnly: { $ne: true } },
+        { title: { $nin: ADMIN_ONLY_TITLES } },
+      ];
+    }
+
+    const notifications = await Notification.find(baseFilter)
       .sort({ createdAt: -1 })
       .limit(50);
 
     const unreadCount = await Notification.countDocuments({
-      tenantId: tenantObjectId,
-      recipientId: userObjectId,
+      ...baseFilter,
       read: false,
     });
 

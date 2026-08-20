@@ -4,6 +4,7 @@ import { connectToDatabase } from "@/lib/db";
 import { User } from "@/models/User";
 import "@/models/Tenant";
 import { DashboardClientLayout } from "@/components/layout/DashboardClientLayout";
+import { AuthProvider } from "@/context/AuthContext";
 import mongoose from "mongoose";
 import { isSubAdminRole } from "@/lib/roles";
 
@@ -102,9 +103,11 @@ export default async function DashboardLayout({ children }: DashboardLayoutProps
   }
 
   return (
-    <DashboardClientLayout session={updatedSession} menuItems={menuItems} isPending={isPending}>
-      {children}
-    </DashboardClientLayout>
+    <AuthProvider>
+      <DashboardClientLayout session={updatedSession} menuItems={menuItems} isPending={isPending}>
+        {children}
+      </DashboardClientLayout>
+    </AuthProvider>
   );
 }
 

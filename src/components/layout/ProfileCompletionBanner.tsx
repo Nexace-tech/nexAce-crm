@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 export function ProfileCompletionBanner() {
   const { user } = useAuthContext();
   const [dismissed, setDismissed] = useState(false);
+  const [pwBannerDismissed, setPwBannerDismissed] = useState(false);
   const [isNewUserModalOpen, setIsNewUserModalOpen] = useState(false);
 
   // Check profile completion percentage & missing fields
@@ -35,69 +36,142 @@ export function ProfileCompletionBanner() {
     }
   }, [user?._id, isProfileIncomplete]);
 
-  if (!user || !isProfileIncomplete || dismissed) {
+  // Restore per-session dismiss state for password banner
+  useEffect(() => {
+    if (user?._id) {
+      const wasDismissed = sessionStorage.getItem(`pw_banner_dismissed_${user._id}`);
+      if (wasDismissed) setPwBannerDismissed(true);
+    }
+  }, [user?._id]);
+
+  const handleDismissPwBanner = () => {
+    setPwBannerDismissed(true);
+    if (user?._id) {
+      sessionStorage.setItem(`pw_banner_dismissed_${user._id}`, "true");
+    }
+  };
+
+  const showPasswordBanner = Boolean(user?.forcePasswordReset) && !pwBannerDismissed;
+  const showProfileBanner = Boolean(user && isProfileIncomplete && !dismissed);
+
+  if (!showPasswordBanner && !showProfileBanner) {
     return null;
   }
 
   return (
     <>
-      {/* ── Top Floating Banner ── */}
-      <div className="relative overflow-hidden rounded-2xl border border-amber-500/30 bg-gradient-to-r from-amber-500/10 via-primary/10 to-indigo-500/10 p-4 shadow-sm backdrop-blur-md transition-all">
-        {/* Glow effect */}
-        <div className="absolute -right-12 -top-12 h-32 w-32 rounded-full bg-amber-500/15 blur-2xl pointer-events-none" />
+      {/* Password Change Reminder Banner (admin-provisioned users only) */}
+      {showPasswordBanner && (
+        <div className="relative overflow-hidden rounded-2xl border border-red-500/40 bg-gradient-to-r from-red-500/10 via-orange-500/8 to-amber-500/10 p-4 shadow-sm backdrop-blur-md">
+          <div className="absolute -left-6 -top-6 h-24 w-24 rounded-full bg-red-500/20 blur-2xl pointer-events-none animate-pulse" />
+          <div className="absolute -right-6 -bottom-6 h-20 w-20 rounded-full bg-orange-500/15 blur-2xl pointer-events-none" />
 
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div className="flex items-start sm:items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0 border border-amber-500/30 shadow-xs">
-              <i className="fa-solid fa-id-card text-lg" />
-            </div>
-            <div className="space-y-0.5">
-              <div className="flex items-center gap-2">
-                <span className="font-bold text-sm text-foreground">
-                  Complete Your Profile ({percent}%)
-                </span>
-                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-300">
-                  {missingFields.length} item{missingFields.length === 1 ? "" : "s"} missing
-                </span>
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="flex items-start sm:items-center gap-3">
+              <div className="w-11 h-11 rounded-xl bg-red-500/20 text-red-500 dark:text-red-400 flex items-center justify-center shrink-0 border border-red-500/30 shadow-xs">
+                <i className="fa-solid fa-key text-lg" />
               </div>
-              <p className="text-xs text-muted-foreground">
-                Add your <span className="font-medium text-foreground">{missingFields.slice(0, 2).join(", ")}{missingFields.length > 2 ? ` and ${missingFields.length - 2} more` : ""}</span> to help your team connect with you.
-              </p>
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-bold text-sm text-foreground">
+                    Action Required: Change Your Password
+                  </span>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-500/20 text-red-600 dark:text-red-400 border border-red-500/20 animate-pulse">
+                    Temporary Password Active
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Your account was set up by an administrator with a temporary password.{" "}
+                  <span className="font-semibold text-foreground">Please set your own password</span>{" "}
+                  in Settings to keep your account secure.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 w-full sm:w-auto justify-end shrink-0">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleDismissPwBanner}
+                className="h-8 px-3 text-xs text-muted-foreground hover:text-foreground border-border/60"
+              >
+                Remind Later
+              </Button>
+              <Button
+                size="sm"
+                className="h-8 px-3.5 text-xs font-bold gap-1.5 shadow-sm bg-red-500 hover:bg-red-600 text-white border-transparent"
+                asChild
+              >
+                <Link href="/dashboard/settings">
+                  <i className="fa-solid fa-lock text-xs" /> Change Password
+                </Link>
+              </Button>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setDismissed(true)}
-              className="h-8 px-3 text-xs text-muted-foreground hover:text-foreground"
-            >
-              Remind Later
-            </Button>
-            <Button
-              color="primary"
-              size="sm"
-              className="h-8 px-3.5 text-xs font-semibold gap-1.5 shadow-sm"
-              asChild
-            >
-              <Link href="/dashboard/settings">
-                <i className="fa-solid fa-pen-to-square text-xs" /> Complete Profile
-              </Link>
-            </Button>
+          <div className="mt-3 w-full bg-muted/60 rounded-full h-1 overflow-hidden">
+            <div className="bg-gradient-to-r from-red-500 via-orange-500 to-amber-400 h-full rounded-full w-full opacity-70" />
           </div>
         </div>
+      )}
 
-        {/* Mini progress line */}
-        <div className="mt-3 w-full bg-muted/60 rounded-full h-1.5 overflow-hidden">
-          <div
-            className="bg-gradient-to-r from-amber-500 to-primary h-full rounded-full transition-all duration-700"
-            style={{ width: `${percent}%` }}
-          />
+      {/* Profile Completion Banner */}
+      {showProfileBanner && (
+        <div className="relative overflow-hidden rounded-2xl border border-amber-500/30 bg-gradient-to-r from-amber-500/10 via-primary/10 to-indigo-500/10 p-4 shadow-sm backdrop-blur-md transition-all">
+          <div className="absolute -right-12 -top-12 h-32 w-32 rounded-full bg-amber-500/15 blur-2xl pointer-events-none" />
+
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="flex items-start sm:items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0 border border-amber-500/30 shadow-xs">
+                <i className="fa-solid fa-id-card text-lg" />
+              </div>
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-sm text-foreground">
+                    Complete Your Profile ({percent}%)
+                  </span>
+                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-300">
+                    {missingFields.length} item{missingFields.length === 1 ? "" : "s"} missing
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Add your <span className="font-medium text-foreground">{missingFields.slice(0, 2).join(", ")}{missingFields.length > 2 ? ` and ${missingFields.length - 2} more` : ""}</span> to help your team connect with you.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setDismissed(true)}
+                className="h-8 px-3 text-xs text-muted-foreground hover:text-foreground"
+              >
+                Remind Later
+              </Button>
+              <Button
+                color="primary"
+                size="sm"
+                className="h-8 px-3.5 text-xs font-semibold gap-1.5 shadow-sm"
+                asChild
+              >
+                <Link href="/dashboard/settings">
+                  <i className="fa-solid fa-pen-to-square text-xs" /> Complete Profile
+                </Link>
+              </Button>
+            </div>
+          </div>
+
+          <div className="mt-3 w-full bg-muted/60 rounded-full h-1.5 overflow-hidden">
+            <div
+              className="bg-gradient-to-r from-amber-500 to-primary h-full rounded-full transition-all duration-700"
+              style={{ width: `${percent}%` }}
+            />
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* ── First-Time Welcome Modal ── */}
+      {/* First-Time Welcome Modal */}
       {isNewUserModalOpen && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in"
@@ -107,20 +181,18 @@ export function ProfileCompletionBanner() {
             className="relative w-full max-w-md bg-card border border-border rounded-2xl p-6 shadow-2xl space-y-5 animate-in zoom-in-95"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Header with Icon */}
             <div className="text-center space-y-2">
               <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-primary to-indigo-600 text-white flex items-center justify-center mx-auto shadow-lg shadow-primary/30">
                 <i className="fa-solid fa-user-astronaut text-2xl" />
               </div>
               <h3 className="text-xl font-bold text-foreground">
-                Welcome to NexAce CRM, {user?.name?.split(" ")[0] || "there"}! 👋
+                Welcome to NexAce CRM, {user?.name?.split(" ")[0] || "there"}! ??
               </h3>
               <p className="text-xs text-muted-foreground leading-relaxed">
-                Your account is ready. Let's take a quick minute to fill out your profile details so your team members can reach you seamlessly.
+                Your account is ready. Let&apos;s take a quick minute to fill out your profile details so your team members can reach you seamlessly.
               </p>
             </div>
 
-            {/* Checklist items */}
             <div className="p-3.5 rounded-xl border border-border/80 bg-muted/30 space-y-2.5">
               <p className="text-xs font-bold text-foreground flex items-center gap-1.5">
                 <i className="fa-solid fa-list-check text-primary text-xs" /> Profile Setup Checklist
@@ -145,7 +217,6 @@ export function ProfileCompletionBanner() {
               </div>
             </div>
 
-            {/* Action buttons */}
             <div className="flex items-center gap-2 pt-1">
               <Button
                 variant="outline"
@@ -153,7 +224,7 @@ export function ProfileCompletionBanner() {
                 className="w-1/2"
                 onClick={() => setIsNewUserModalOpen(false)}
               >
-                I'll Do It Later
+                I&apos;ll Do It Later
               </Button>
               <Button
                 color="primary"

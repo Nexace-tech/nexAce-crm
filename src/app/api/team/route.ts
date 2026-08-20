@@ -238,14 +238,14 @@ export async function POST(request: Request) {
         createdUsers.push(safeUser);
       }
 
-      // Notify HR + Admin users about bulk employee addition
+      // Notify only Admin users about bulk employee addition
       if (createdUsers.length > 0) {
         const creatorUser = await User.findById(session.userId).select("name");
         const senderName = creatorUser?.name || session.userName || "Admin";
 
         const notifyRoles = await User.find({
           tenantId: tenantObjectId,
-          role: { $in: ["Admin", "HR"] },
+          role: { $in: ["Admin"] },
           status: "Active",
         }).select("_id");
 
@@ -258,6 +258,7 @@ export async function POST(request: Request) {
           type: "system",
           linkUrl: "/dashboard/team",
           read: false,
+          adminOnly: true,
         }));
         if (notifDocs.length > 0) await Notification.insertMany(notifDocs);
       }
@@ -324,13 +325,13 @@ export async function POST(request: Request) {
       forcePasswordReset: true,
     });
 
-    // Notify HR + Admin users about new employee
+    // Notify only Admin users about new employee
     const creatorUser = await User.findById(session.userId).select("name");
     const senderName = creatorUser?.name || session.userName || "Admin";
 
     const notifyRoles = await User.find({
       tenantId: tenantObjectId,
-      role: { $in: ["Admin", "HR"] },
+      role: { $in: ["Admin"] },
       status: "Active",
     }).select("_id");
 
@@ -342,6 +343,7 @@ export async function POST(request: Request) {
       type: "system",
       linkUrl: "/dashboard/team",
       read: false,
+      adminOnly: true,
     }));
     if (notifDocs.length > 0) await Notification.insertMany(notifDocs);
 

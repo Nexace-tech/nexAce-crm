@@ -28,6 +28,7 @@ interface UserProfile {
     instagram?: string;
     facebook?: string;
   };
+  forcePasswordReset?: boolean;
 }
 
 interface AuthContextType {

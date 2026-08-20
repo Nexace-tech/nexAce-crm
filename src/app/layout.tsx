@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { Inter, Geist_Mono } from "next/font/google";
-import { AuthProvider } from "@/context/AuthContext";
 import { ThemeProvider } from "@/providers/theme-provider";
 import "./globals.css";
 
@@ -37,9 +36,7 @@ export default function RootLayout({
       </head>
       <body suppressHydrationWarning className="bg-background text-foreground antialiased min-h-screen">
         <ThemeProvider defaultTheme="system">
-          <AuthProvider>
-            {children}
-          </AuthProvider>
+          {children}
         </ThemeProvider>
       </body>
     </html>

@@ -176,10 +176,9 @@ export async function registerAction(state: FormState | undefined, formData: For
     // Delete verification record only after User.create succeeds
     await EmailVerification.deleteOne({ _id: verification._id });
 
-    // Notify existing tenant Admins AND HR users about new registration
+    // Notify only Admin users about new registration (only Admins can approve accounts)
     const tenantAdmins = await User.find({ tenantId: tenant._id, role: "Admin", status: "Active" });
-    const tenantHRs = await User.find({ tenantId: tenant._id, role: "HR", status: "Active" });
-    const notifyRecipients = [...tenantAdmins, ...tenantHRs];
+    const notifyRecipients = [...tenantAdmins];
 
     if (notifyRecipients.length > 0) {
       const notifDocs = notifyRecipients.map((a) => ({
@@ -190,6 +189,7 @@ export async function registerAction(state: FormState | undefined, formData: For
         type: "system",
         linkUrl: "/dashboard/team",
         read: false,
+        adminOnly: true,
       }));
       await Notification.insertMany(notifDocs);
 
@@ -321,17 +321,6 @@ export async function loginAction(state: FormState | undefined, formData: FormDa
         message: "Your account is pending approval. Please wait for your workspace administrator to activate your account.",
         enteredEmail: email,
         enteredPassword: password
-      };
-    }
-
-    // Enforce first-run password reset for provisioned accounts (weak/temp passwords)
-    if (user.forcePasswordReset) {
-      return {
-        step: "reset",
-        resetEmail: email,
-        enteredEmail: email,
-        enteredPassword: password,
-        message: "You must set a new password before signing in. Check your email for a verification code or use the Forgot Password link.",
       };
     }
 
