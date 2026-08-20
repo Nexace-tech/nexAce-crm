@@ -41,7 +41,7 @@ const ExternalTeamSchema = new Schema<IExternalTeam>(
     },
     assignedProject: { type: String, trim: true, default: "General Operational Support" },
     hourlyRate: { type: Number, default: 0 },
-    currency: { type: String, default: "USD" },
+    currency: { type: String, default: "INR" },
     status: {
       type: String,
       enum: ["Active", "On Hold", "Contract Ended"],

@@ -112,14 +112,14 @@ async function apiFetch(url: string, opts?: RequestInit) {
 
 // ─── Utilities ───────────────────────────────────────────────────────────────
 
-const formatCurrency = (n: number, currency: string = "USD") => {
-  if (currency === "INR") {
-    return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" }).format(n);
+const formatCurrency = (n: number, currency: string = "INR") => {
+  if (currency === "USD") {
+    return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
   }
-  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
+  return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 }).format(n);
 };
 
-const getCurrencySymbol = (currency?: string) => (currency === "INR" ? "₹" : "$");
+const getCurrencySymbol = (currency?: string) => (currency === "USD" ? "$" : "₹");
 
 const statusBadge = (status: string) => {
   const map: Record<string, string> = {
@@ -1092,9 +1092,9 @@ const EMPTY_INVOICE: Omit<Invoice, "id"> = {
   ],
   subtotal: 1500,
   taxRate: 10,
-  taxAmount: 150,
-  total: 1650,
-  currency: "USD",
+  taxAmount: 180,
+  total: 1180,
+  currency: "INR",
   status: "Draft",
   notes: "Payment due upon receipt.",
 };
@@ -1173,9 +1173,9 @@ function InvoiceModal({ initial, onSave, onClose, saving }: { initial: Omit<Invo
               </div>
               <div>
                 <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Currency</label>
-                <select className={cn(fieldCls, "cursor-pointer font-semibold text-primary")} value={form.currency || "USD"} onChange={(e) => setFormKey("currency", e.target.value)}>
-                  <option value="USD">USD ($ - US Dollar)</option>
+                <select className={cn(fieldCls, "cursor-pointer font-semibold text-primary")} value={form.currency || "INR"} onChange={(e) => setFormKey("currency", e.target.value)}>
                   <option value="INR">INR (₹ - Indian Rupee)</option>
+                  <option value="USD">USD ($ - US Dollar)</option>
                 </select>
               </div>
               <div>
@@ -1503,8 +1503,8 @@ function InvoicesTab({ invoices, loading, onAdd, onEdit, onDelete, autoOpenAdd }
           </select>
           <select className={SELECT_CLS} value={filterCurrency} onChange={(e) => setFilterCurrency(e.target.value)} title="Filter by Currency">
             <option value="All">All Currencies</option>
-            <option value="USD">USD ($)</option>
             <option value="INR">INR (₹)</option>
+            <option value="USD">USD ($)</option>
           </select>
           <select className={SELECT_CLS} value={filterDateRange} onChange={(e) => setFilterDateRange(e.target.value)} title="Filter by Date">
             <option value="All Time">All Time</option>

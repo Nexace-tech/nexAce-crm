@@ -59,7 +59,7 @@ const ITInvoiceSchema = new Schema<IITInvoice>(
     taxRate: { type: Number, default: 0 },
     taxAmount: { type: Number, default: 0 },
     total: { type: Number, default: 0 },
-    currency: { type: String, default: "USD" },
+    currency: { type: String, default: "INR" },
     status: {
       type: String,
       enum: ["Draft", "Sent", "Pending", "Paid", "Overdue", "Archived", "Cancelled"],

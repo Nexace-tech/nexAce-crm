@@ -65,15 +65,11 @@ export function usePermissions() {
     if (featurePermissions[featureKey] !== undefined) {
       return Boolean(featurePermissions[featureKey]);
     }
-    // Default administrative features to false for SubAdmin / OPS
+    // Default super-sensitive administrative features to false for SubAdmin / OPS unless explicitly granted
     if ([
-      "manageUsers",
       "changeUserRoles",
       "manageRolePermissions",
       "resetUserPasswords",
-      "viewBillingSubscription",
-      "manageBilling",
-      "manageShifts",
       "manageFileRestrictions",
       "manageIntegrations"
     ].includes(featureKey)) {

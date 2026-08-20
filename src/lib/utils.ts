@@ -40,6 +40,43 @@ export function getISTDateString(date: Date | string | number = new Date()): str
   return d.toLocaleDateString("en-CA", { timeZone: APP_TIMEZONE });
 }
 
+/**
+ * Formats a number as a currency string. Defaults to Indian Rupee (INR / ₹).
+ */
+export function formatCurrency(
+  amount: number | string = 0,
+  currency: string = "INR",
+  options: Intl.NumberFormatOptions = {}
+): string {
+  const num = typeof amount === "string" ? parseFloat(amount) || 0 : isNaN(amount) ? 0 : amount;
+  const cur = (currency || "INR").toUpperCase();
+  try {
+    return new Intl.NumberFormat(cur === "INR" ? "en-IN" : "en-US", {
+      style: "currency",
+      currency: cur,
+      maximumFractionDigits: 2,
+      ...options,
+    }).format(num);
+  } catch {
+    return `${cur === "INR" ? "₹" : "$"}${num.toLocaleString("en-IN")}`;
+  }
+}
+
+/**
+ * Returns the currency symbol. Defaults to ₹ (INR).
+ */
+export function getCurrencySymbol(currency: string = "INR"): string {
+  switch ((currency || "INR").toUpperCase()) {
+    case "USD": return "$";
+    case "EUR": return "€";
+    case "GBP": return "£";
+    case "AED": return "AED";
+    case "INR":
+    default:
+      return "₹";
+  }
+}
+
 export const hexToRGB = (hex: string, alpha?: number): string => {
   const r = parseInt(hex.slice(1, 3), 16);
   const g = parseInt(hex.slice(3, 5), 16);

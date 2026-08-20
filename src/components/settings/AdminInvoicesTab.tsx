@@ -127,13 +127,13 @@ export function AdminInvoicesTab({ showToast }: AdminInvoicesTabProps) {
     );
   };
 
-  const formatCurrency = (amount: number, currency: string = "USD") => {
-    const symbol = currency === "EUR" ? "€" : currency === "GBP" ? "£" : currency === "INR" ? "₹" : "$";
-    return `${symbol}${amount.toLocaleString()}`;
+  const formatCurrency = (amount: number, currency: string = "INR") => {
+    const symbol = currency === "USD" ? "$" : currency === "EUR" ? "€" : currency === "GBP" ? "£" : currency === "AED" ? "AED " : "₹";
+    return `${symbol}${Number(amount || 0).toLocaleString("en-IN")}`;
   };
 
   const handleExportPDF = (invoice: Invoice) => {
-    const symbol = invoice.currency === "EUR" ? "€" : invoice.currency === "GBP" ? "£" : invoice.currency === "INR" ? "₹" : "$";
+    const symbol = invoice.currency === "USD" ? "$" : invoice.currency === "EUR" ? "€" : invoice.currency === "GBP" ? "£" : invoice.currency === "AED" ? "AED " : "₹";
     const printWindow = window.open("", "_blank");
     if (!printWindow) {
       showToast("Pop-up blocker is preventing export. Please allow popups.", "error");

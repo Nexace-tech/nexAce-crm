@@ -559,13 +559,13 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
                   <select
                     value={invoiceFormData.currency}
                     onChange={(e) => setInvoiceFormData((prev) => ({ ...prev, currency: e.target.value }))}
-                    className="w-full h-9 px-3 text-xs bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer"
+                    className="w-full h-9 px-3 text-xs bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer font-medium"
                   >
-                    <option value="USD">USD ($)</option>
-                    <option value="EUR">EUR (€)</option>
-                    <option value="GBP">GBP (£)</option>
-                    <option value="INR">INR (₹)</option>
-                    <option value="AED">AED (Dh)</option>
+                    <option value="INR">INR (₹ - Indian Rupee)</option>
+                    <option value="USD">USD ($ - US Dollar)</option>
+                    <option value="EUR">EUR (€ - Euro)</option>
+                    <option value="GBP">GBP (£ - British Pound)</option>
+                    <option value="AED">AED (Dh - UAE Dirham)</option>
                   </select>
                 </div>
 

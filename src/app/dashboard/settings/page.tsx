@@ -627,12 +627,14 @@ function SettingsPageContent() {
       </div>
 
       {/* Settings Navigation Tabs */}
-      <div className="flex border-b border-border space-x-1.5 overflow-x-auto no-scrollbar scroll-smooth pb-0.5 -mx-4 px-4 sm:mx-0 sm:px-0">
+      <div className="flex flex-wrap items-center gap-1.5 p-1.5 bg-muted/40 dark:bg-muted/20 rounded-xl border border-border/80">
         <button
           onClick={() => setActiveTab("profile")}
           className={cn(
-            "px-3.5 py-2 sm:px-4 sm:py-2.5 text-xs sm:text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap shrink-0",
-            activeTab === "profile" ? "border-primary text-primary bg-primary/10 rounded-t-md font-semibold -mb-px" : "border-transparent text-muted-foreground hover:text-foreground"
+            "px-3 py-2 text-xs sm:text-sm font-medium rounded-lg transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
+            activeTab === "profile"
+              ? "bg-background text-primary shadow-xs font-bold border border-border"
+              : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
           )}
         >
           <i className="fa-solid fa-user-gear text-sm text-primary" /> User Profile
@@ -641,18 +643,22 @@ function SettingsPageContent() {
         <button
           onClick={() => setActiveTab("security")}
           className={cn(
-            "px-3.5 py-2 sm:px-4 sm:py-2.5 text-xs sm:text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap shrink-0",
-            activeTab === "security" ? "border-primary text-primary bg-primary/10 rounded-t-md font-semibold -mb-px" : "border-transparent text-muted-foreground hover:text-foreground"
+            "px-3 py-2 text-xs sm:text-sm font-medium rounded-lg transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
+            activeTab === "security"
+              ? "bg-background text-primary shadow-xs font-bold border border-border"
+              : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
           )}
         >
-          <i className="fa-solid fa-shield-halved text-emerald-500 text-sm" /> Password & Security
+          <i className="fa-solid fa-shield-halved text-emerald-500 text-sm" /> Password &amp; Security
         </button>
 
         <button
           onClick={() => setActiveTab("invoice")}
           className={cn(
-            "px-3.5 py-2 sm:px-4 sm:py-2.5 text-xs sm:text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap shrink-0",
-            activeTab === "invoice" ? "border-primary text-primary bg-primary/10 rounded-t-md font-semibold -mb-px" : "border-transparent text-muted-foreground hover:text-foreground"
+            "px-3 py-2 text-xs sm:text-sm font-medium rounded-lg transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
+            activeTab === "invoice"
+              ? "bg-background text-primary shadow-xs font-bold border border-border"
+              : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
           )}
         >
           <i className="fa-solid fa-file-invoice-dollar text-primary text-sm" /> Generate My Invoice
@@ -662,59 +668,69 @@ function SettingsPageContent() {
           <button
             onClick={() => setActiveTab("all-invoices")}
             className={cn(
-              "px-3.5 py-2 sm:px-4 sm:py-2.5 text-xs sm:text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap shrink-0",
-              activeTab === "all-invoices" ? "border-primary text-primary bg-primary/10 rounded-t-md font-semibold -mb-px" : "border-transparent text-muted-foreground hover:text-foreground"
+              "px-3 py-2 text-xs sm:text-sm font-medium rounded-lg transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
+              activeTab === "all-invoices"
+                ? "bg-background text-primary shadow-xs font-bold border border-border"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
             )}
           >
-            <i className="fa-solid fa-file-invoice text-amber-500 text-sm" /> Master User Invoices (Admin)
+            <i className="fa-solid fa-file-invoice text-amber-500 text-sm" /> Master Invoices
           </button>
         )}
 
-        {(can("manageUsers") || isAdmin) && (
+        {(can("manageUsers") || isAdmin || isOPS) && (
           <button
             onClick={() => setActiveTab("users")}
             className={cn(
-              "px-3.5 py-2 sm:px-4 sm:py-2.5 text-xs sm:text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap shrink-0",
-              activeTab === "users" ? "border-primary text-primary bg-primary/10 rounded-t-md font-semibold -mb-px" : "border-transparent text-muted-foreground hover:text-foreground"
+              "px-3 py-2 text-xs sm:text-sm font-medium rounded-lg transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
+              activeTab === "users"
+                ? "bg-background text-primary shadow-xs font-bold border border-border"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
             )}
           >
             <i className="fa-solid fa-users-gear text-purple-500 text-sm" /> User Management
           </button>
         )}
 
-        {(can("manageShifts") || isAdmin) && (
+        {(can("manageShifts") || isAdmin || isOPS) && (
           <button
             onClick={() => setActiveTab("shifts")}
             className={cn(
-              "px-3.5 py-2 sm:px-4 sm:py-2.5 text-xs sm:text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap shrink-0",
-              activeTab === "shifts" ? "border-primary text-primary bg-primary/10 rounded-t-md font-semibold -mb-px" : "border-transparent text-muted-foreground hover:text-foreground"
+              "px-3 py-2 text-xs sm:text-sm font-medium rounded-lg transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
+              activeTab === "shifts"
+                ? "bg-background text-primary shadow-xs font-bold border border-border"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
             )}
           >
-            <i className="fa-solid fa-clock-rotate-left text-amber-500 text-sm" /> Shifts &amp; Employment Types
+            <i className="fa-solid fa-clock-rotate-left text-amber-500 text-sm" /> Shifts &amp; Employment
           </button>
         )}
 
-        {(can("manageRolePermissions") || isAdmin) && (
+        {(can("manageRolePermissions") || isAdmin || isOPS) && (
           <button
             onClick={() => setActiveTab("permissions")}
             className={cn(
-              "px-3.5 py-2 sm:px-4 sm:py-2.5 text-xs sm:text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap shrink-0",
-              activeTab === "permissions" ? "border-primary text-primary bg-primary/10 rounded-t-md font-semibold -mb-px" : "border-transparent text-muted-foreground hover:text-foreground"
+              "px-3 py-2 text-xs sm:text-sm font-medium rounded-lg transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
+              activeTab === "permissions"
+                ? "bg-background text-primary shadow-xs font-bold border border-border"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
             )}
           >
-            <i className="fa-solid fa-lock text-sky-500 text-sm" /> Roles & Multi-Tenant Security
+            <i className="fa-solid fa-lock text-sky-500 text-sm" /> Roles &amp; Security
           </button>
         )}
 
-        {(can("viewBillingSubscription") || isAdmin) && (
+        {(can("viewBillingSubscription") || isAdmin || isOPS) && (
           <button
             onClick={() => setActiveTab("subscription")}
             className={cn(
-              "px-3.5 py-2 sm:px-4 sm:py-2.5 text-xs sm:text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap shrink-0",
-              activeTab === "subscription" ? "border-primary text-primary bg-primary/10 rounded-t-md font-semibold -mb-px" : "border-transparent text-muted-foreground hover:text-foreground"
+              "px-3 py-2 text-xs sm:text-sm font-medium rounded-lg transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
+              activeTab === "subscription"
+                ? "bg-background text-amber-500 shadow-xs font-bold border border-border"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
             )}
           >
-            <i className="fa-solid fa-credit-card text-amber-500 text-sm" /> SaaS Billing & Seats
+            <i className="fa-solid fa-crown text-amber-500 text-sm" /> Subscription &amp; Plans
           </button>
         )}
       </div>
@@ -1284,7 +1300,7 @@ function SettingsPageContent() {
               </div>
 
               <div className="text-right">
-                <p className="text-2xl font-extrabold text-foreground">${subscription?.amount || 299} / mo</p>
+                <p className="text-2xl font-extrabold text-foreground">₹{Number(subscription?.amount || 24999).toLocaleString("en-IN")} / mo</p>
                 <p className="text-xs text-muted-foreground">
                   Renews on: {subscription?.renewalDate ? new Date(subscription.renewalDate).toLocaleDateString() : "Next Month"}
                 </p>
@@ -1323,14 +1339,14 @@ function SettingsPageContent() {
                     <div className="p-4 rounded-xl border border-border bg-card space-y-3 flex flex-col justify-between">
                       <div>
                         <p className="font-bold text-sm text-foreground">Standard Team</p>
-                        <p className="text-xl font-extrabold text-foreground mt-1">$149 <span className="text-xs font-normal text-muted-foreground">/mo</span></p>
+                        <p className="text-xl font-extrabold text-foreground mt-1">₹12,499 <span className="text-xs font-normal text-muted-foreground">/mo</span></p>
                         <p className="text-xs text-muted-foreground mt-1">Up to 25 seats for small agile agencies.</p>
                       </div>
                       <Button
                         variant="outline"
                         size="sm"
                         disabled={updatingPlan || subscription?.planName === "Standard Team"}
-                        onClick={() => handleUpdatePlan("Standard Team", 25, 149)}
+                        onClick={() => handleUpdatePlan("Standard Team", 25, 12499)}
                       >
                         {subscription?.planName === "Standard Team" ? "Current Tier" : "Select Tier"}
                       </Button>
@@ -1340,14 +1356,14 @@ function SettingsPageContent() {
                       <div>
                         <Badge color="primary" className="mb-1">Recommended</Badge>
                         <p className="font-bold text-sm text-foreground">Enterprise Team Tier</p>
-                        <p className="text-xl font-extrabold text-foreground mt-1">$299 <span className="text-xs font-normal text-muted-foreground">/mo</span></p>
+                        <p className="text-xl font-extrabold text-foreground mt-1">₹24,999 <span className="text-xs font-normal text-muted-foreground">/mo</span></p>
                         <p className="text-xs text-muted-foreground mt-1">Up to 100 seats with multi-tenant isolation.</p>
                       </div>
                       <Button
                         color="primary"
                         size="sm"
                         disabled={updatingPlan || subscription?.planName === "Enterprise Team Tier"}
-                        onClick={() => handleUpdatePlan("Enterprise Team Tier", 100, 299)}
+                        onClick={() => handleUpdatePlan("Enterprise Team Tier", 100, 24999)}
                       >
                         {subscription?.planName === "Enterprise Team Tier" ? "Current Tier" : "Upgrade Plan"}
                       </Button>
@@ -1356,14 +1372,14 @@ function SettingsPageContent() {
                     <div className="p-4 rounded-xl border border-border bg-card space-y-3 flex flex-col justify-between">
                       <div>
                         <p className="font-bold text-sm text-foreground">Scale & Growth (500 Seats)</p>
-                        <p className="text-xl font-extrabold text-foreground mt-1">$799 <span className="text-xs font-normal text-muted-foreground">/mo</span></p>
+                        <p className="text-xl font-extrabold text-foreground mt-1">₹64,999 <span className="text-xs font-normal text-muted-foreground">/mo</span></p>
                         <p className="text-xs text-muted-foreground mt-1">Up to 500 seats with custom SLAs.</p>
                       </div>
                       <Button
                         variant="outline"
                         size="sm"
                         disabled={updatingPlan || subscription?.planName === "Scale & Growth (500 Seats)"}
-                        onClick={() => handleUpdatePlan("Scale & Growth (500 Seats)", 500, 799)}
+                        onClick={() => handleUpdatePlan("Scale & Growth (500 Seats)", 500, 64999)}
                       >
                         {subscription?.planName === "Scale & Growth (500 Seats)" ? "Current Tier" : "Select Tier"}
                       </Button>
