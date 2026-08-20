@@ -694,14 +694,16 @@ export default function TeamDashboardPage() {
   };
 
   const orgTreeRoots = useMemo(() => {
-    const filteredUsers = departmentFilter && departmentFilter !== "All"
-      ? users.filter((u) => u.department === departmentFilter || (u.departments && u.departments.includes(departmentFilter)))
-      : users;
-
     const userMap: { [key: string]: OrgNode } = {};
     const rootNodes: OrgNode[] = [];
-    // Guard: track placed nodes to prevent any user appearing twice in the tree
     const placedIds = new Set<string>();
+
+    const getStrId = (id: any): string => {
+      if (!id) return "";
+      if (typeof id === "string") return id;
+      if (id._id) return String(id._id);
+      return String(id);
+    };
 
     const roleWeight = (role: string) => {
       const r = (role || "").toLowerCase().trim();
@@ -712,56 +714,93 @@ export default function TeamDashboardPage() {
       return 4; // Employee and others
     };
 
-    filteredUsers.forEach((u) => {
-      userMap[u._id] = {
-        _id: u._id,
+    // 1. First map ALL workspace users
+    users.forEach((u) => {
+      const sId = getStrId(u._id);
+      userMap[sId] = {
+        _id: sId,
         name: u.name,
         email: u.email,
-        role: u.role,
-        department: u.department || "Engineering",
+        role: u.role || "Employee",
+        department: u.department || (u.departments && u.departments[0]) || "General",
         photoUrl: u.photoUrl,
         status: u.status || "Active",
-        managerId: u.managerId?._id || u.managerId,
+        managerId: getStrId(u.managerId),
         managerName: u.managerId?.name || undefined,
+        socialLinks: u.socialLinks,
         reports: [],
       };
     });
 
-    const globalFirstAdmin = filteredUsers.find((u) => u.role === "Admin")?._id || users.find((u) => u.role === "Admin")?._id || null;
-    const globalFirstManager = filteredUsers.find((u) => u.role === "Manager")?._id || users.find((u) => u.role === "Manager")?._id || null;
-
-    filteredUsers.forEach((u) => {
-      const node = userMap[u._id];
-      const managerId = u.managerId?._id || u.managerId;
-      const managerNode = managerId ? userMap[managerId] : null;
-
-      const deptManager = filteredUsers.find(
-        (m) => (m.role === "Manager" || m.role === "OPS" || m.role === "Admin") && m._id !== u._id && (m.department === u.department || (m.departments && u.departments && m.departments.some((d: string) => u.departments.includes(d))))
-      )?._id;
-
-      const fallbackManagerId = deptManager || globalFirstAdmin || globalFirstManager;
-
-      const isTopLevelRole = u.role === "Admin" || u.role === "OPS" || isSubAdminRole(u.role);
-
-      // 1. Explicit assigned manager exists in current view
-      if (managerId && managerNode && managerId !== u._id && !placedIds.has(u._id)) {
-        node.managerName = managerNode.name;
-        userMap[managerId].reports.push(node);
-        placedIds.add(u._id);
-      }
-      // 2. Non-top-level user with no explicit manager: nest under top workspace Admin / OPS / Manager
-      else if (!isTopLevelRole && fallbackManagerId && fallbackManagerId !== u._id && userMap[fallbackManagerId] && !placedIds.has(u._id)) {
-        node.managerName = userMap[fallbackManagerId].name;
-        userMap[fallbackManagerId].reports.push(node);
-        placedIds.add(u._id);
-      }
-      // 3. Root Level (Admin, OPS, or unassigned top-level) — only if not already placed
-      else if (!placedIds.has(u._id)) {
-        rootNodes.push(node);
-        placedIds.add(u._id);
+    // 2. Also register any populated manager object that might not already be in userMap
+    users.forEach((u) => {
+      if (u.managerId && typeof u.managerId === "object" && u.managerId._id) {
+        const mgrId = getStrId(u.managerId._id);
+        if (!userMap[mgrId]) {
+          userMap[mgrId] = {
+            _id: mgrId,
+            name: u.managerId.name || "Manager",
+            email: u.managerId.email || "",
+            role: u.managerId.role || "Manager",
+            department: "Leadership",
+            photoUrl: u.managerId.photoUrl,
+            status: "Active",
+            reports: [],
+          };
+        }
       }
     });
 
+    const displayUsers = departmentFilter && departmentFilter !== "All"
+      ? users.filter((u) => u.department === departmentFilter || (u.departments && u.departments.includes(departmentFilter)))
+      : users;
+
+    const globalFirstAdmin = users.find((u) => u.role === "Admin")?._id ? getStrId(users.find((u) => u.role === "Admin")?._id) : null;
+    const globalFirstManager = users.find((u) => u.role === "Manager")?._id ? getStrId(users.find((u) => u.role === "Manager")?._id) : null;
+
+    // 3. Connect reporting tree lines
+    displayUsers.forEach((u) => {
+      const sId = getStrId(u._id);
+      const node = userMap[sId];
+      if (!node) return;
+
+      const managerId = getStrId(u.managerId);
+      const managerNode = managerId ? userMap[managerId] : null;
+      const isTopLevelRole = u.role === "Admin" || u.role === "OPS" || isSubAdminRole(u.role);
+
+      // (a) Assigned explicit manager
+      if (managerId && managerNode && managerId !== sId && !placedIds.has(sId)) {
+        node.managerName = managerNode.name;
+        userMap[managerId].reports.push(node);
+        placedIds.add(sId);
+      }
+      // (b) Non-top-level member with fallback manager
+      else if (!isTopLevelRole && globalFirstAdmin && globalFirstAdmin !== sId && userMap[globalFirstAdmin] && !placedIds.has(sId)) {
+        node.managerName = userMap[globalFirstAdmin].name;
+        userMap[globalFirstAdmin].reports.push(node);
+        placedIds.add(sId);
+      }
+      else if (!isTopLevelRole && globalFirstManager && globalFirstManager !== sId && userMap[globalFirstManager] && !placedIds.has(sId)) {
+        node.managerName = userMap[globalFirstManager].name;
+        userMap[globalFirstManager].reports.push(node);
+        placedIds.add(sId);
+      }
+      // (c) Top-level root
+      else if (!placedIds.has(sId)) {
+        rootNodes.push(node);
+        placedIds.add(sId);
+      }
+    });
+
+    // 4. Ensure any manager who has reports is included in rootNodes if not already placed
+    Object.values(userMap).forEach((node) => {
+      if (node.reports.length > 0 && !placedIds.has(node._id)) {
+        rootNodes.push(node);
+        placedIds.add(node._id);
+      }
+    });
+
+    // Sort reports and roots by hierarchy weight (Admin -> OPS -> Manager -> HR -> Employee)
     Object.values(userMap).forEach((node) => {
       node.reports.sort((a, b) => roleWeight(a.role) - roleWeight(b.role) || a.name.localeCompare(b.name));
     });

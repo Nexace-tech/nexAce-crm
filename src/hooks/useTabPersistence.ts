@@ -27,13 +27,15 @@ export function useTabPersistence<T extends string>(
   const [activeTab, setActiveTab] = useState<T>(getInitialTab);
 
   const handleTabChange = (tab: T) => {
+    if (tab === activeTab) return;
     setActiveTab(tab);
     if (typeof window !== "undefined") {
       localStorage.setItem(storageKey, tab);
       const params = new URLSearchParams(window.location.search);
-      params.set("tab", tab);
-      // Use router.replace to keep URL in sync without a full navigation
-      router.replace(`${window.location.pathname}?${params.toString()}`, { scroll: false });
+      if (params.get("tab") !== tab) {
+        params.set("tab", tab);
+        router.replace(`${window.location.pathname}?${params.toString()}`, { scroll: false });
+      }
     }
   };
 

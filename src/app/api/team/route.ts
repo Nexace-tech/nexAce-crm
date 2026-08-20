@@ -51,6 +51,7 @@ export async function GET(request: Request) {
           { managerId: userObjId },
           { department: userDept },
           { departments: userDept },
+          { role: { $in: ["Admin", "OPS", "Sub Admin"] } },
         ]
       });
     } else if (dataScope.scope === "own") {

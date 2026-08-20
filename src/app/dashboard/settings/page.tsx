@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, Suspense } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { usePermissions } from "@/hooks/usePermissions";
 import { Preloader } from "@/components/ui/Preloader";
@@ -17,7 +17,7 @@ import { ShiftAndStatusTab } from "@/components/settings/ShiftAndStatusTab";
 import { SelfServiceInvoiceTab } from "@/components/settings/SelfServiceInvoiceTab";
 import { AdminInvoicesTab } from "@/components/settings/AdminInvoicesTab";
 
-export default function SettingsPage() {
+function SettingsPageContent() {
   const { user, loading: authLoading, refreshUser } = useAuth();
   const { can, isAdmin, isOPS } = usePermissions();
 
@@ -26,6 +26,17 @@ export default function SettingsPage() {
     "profile",
     ["profile", "security", "invoice", "all-invoices", "users", "shifts", "subscription", "permissions"]
   );
+
+  // Sync tab with custom event from banners
+  useEffect(() => {
+    const handleTabSwitch = (e: any) => {
+      if (e.detail && e.detail !== activeTab && ["profile", "security", "invoice", "all-invoices", "users", "shifts", "subscription", "permissions"].includes(e.detail)) {
+        setActiveTab(e.detail);
+      }
+    };
+    window.addEventListener("switch-settings-tab", handleTabSwitch);
+    return () => window.removeEventListener("switch-settings-tab", handleTabSwitch);
+  }, [activeTab, setActiveTab]);
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -555,6 +566,7 @@ export default function SettingsPage() {
       const data = await response.json();
       if (response.ok) {
         showToast("Password updated successfully!", "success");
+        await refreshUser();
         setCurrentPassword("");
         setNewPassword("");
         setConfirmPassword("");
@@ -1461,5 +1473,13 @@ export default function SettingsPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function SettingsPage() {
+  return (
+    <Suspense fallback={<Preloader label="Loading Settings & Profile..." />}>
+      <SettingsPageContent />
+    </Suspense>
   );
 }

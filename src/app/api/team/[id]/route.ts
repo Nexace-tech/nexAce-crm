@@ -4,6 +4,7 @@ import { connectToDatabase } from "@/lib/db";
 import { User } from "@/models/User";
 import { EmailVerification } from "@/models/EmailVerification";
 import mongoose from "mongoose";
+import bcrypt from "bcryptjs";
 import { sendEmail } from "@/lib/mail";
 import { validatePasswordPattern } from "@/lib/utils";
 
@@ -122,8 +123,9 @@ export async function PUT(request: Request, { params }: RouteParams) {
         return NextResponse.json({ error: pwdValidation.error }, { status: 400 });
       }
 
-      const bcrypt = await import("bcryptjs");
-      if (isSelf) {
+      // If user has forcePasswordReset (first-time setup), allow direct new password update.
+      // Regular password changes (when not first-run) still enforce currentPassword & email verification.
+      if (isSelf && !user.forcePasswordReset) {
         if (!body.currentPassword) {
           return NextResponse.json({ error: "Current password is required to change password" }, { status: 400 });
         }
