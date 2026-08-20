@@ -1,5 +1,6 @@
 import Link from "next/link";
 import styles from "./page.module.css";
+import { ThemeToggle } from "@/components/layout/ThemeToggle";
 
 export default function Home() {
   return (
@@ -19,6 +20,7 @@ export default function Home() {
           <span className={styles.logoText}>NexAce <span className={styles.logoCRM}>CRM</span></span>
         </div>
         <nav className={styles.nav}>
+          <ThemeToggle />
           <Link href="/login" className={styles.navLink}>
             <i className="fa-solid fa-right-to-bracket" /> Sign In
           </Link>
