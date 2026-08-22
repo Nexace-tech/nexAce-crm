@@ -10,3 +10,5 @@ node_modules
 # User uploaded files — ignore binaries, track directory structure only
 src/uploads/**
 !src/uploads/.gitkeep
+README.md
+USER_MANUAL.md

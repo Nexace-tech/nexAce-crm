@@ -21,6 +21,9 @@ export default function Home() {
         </div>
         <nav className={styles.nav}>
           <ThemeToggle />
+          <Link href="/guide" className={styles.navLink}>
+            <i className="fa-solid fa-book-open" /> User Guide
+          </Link>
           <Link href="/login" className={styles.navLink}>
             <i className="fa-solid fa-right-to-bracket" /> Sign In
           </Link>
@@ -50,6 +53,9 @@ export default function Home() {
         <div className={styles.ctaGroup}>
           <Link href="/dashboard" className={styles.btnHero}>
             <i className="fa-solid fa-bolt" /> Get Started Free
+          </Link>
+          <Link href="/guide" className={styles.btnGhost}>
+            <i className="fa-solid fa-book-bookmark" /> Explore Feature Guide
           </Link>
           <Link href="/register" className={styles.btnGhost}>
             <i className="fa-solid fa-building" /> Register Workspace
@@ -224,6 +230,7 @@ export default function Home() {
           © {new Date().getFullYear()} NexAce CRM · All rights reserved
         </span>
         <div className={styles.footerLinks}>
+          <Link href="/guide" className={styles.footerLink}>User Guide</Link>
           <Link href="/login" className={styles.footerLink}>Sign In</Link>
           <Link href="/register" className={styles.footerLink}>Register</Link>
           <Link href="/dashboard" className={styles.footerLink}>Dashboard</Link>
