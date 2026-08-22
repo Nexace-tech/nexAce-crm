@@ -1,8 +1,24 @@
+"use client";
+
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import styles from "./page.module.css";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
 
 export default function Home() {
+  const [currentUser, setCurrentUser] = useState<{ name: string; role?: string } | null>(null);
+
+  useEffect(() => {
+    fetch("/api/auth/me")
+      .then((res) => (res.ok ? res.json() : { user: null }))
+      .then((data) => {
+        if (data.user) {
+          setCurrentUser(data.user);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   return (
     <div className={styles.container}>
 
@@ -24,12 +40,25 @@ export default function Home() {
           <Link href="/guide" className={styles.navLink}>
             <i className="fa-solid fa-book-open" /> User Guide
           </Link>
-          <Link href="/login" className={styles.navLink}>
-            <i className="fa-solid fa-right-to-bracket" /> Sign In
-          </Link>
-          <Link href="/dashboard" className={styles.btnPrimary}>
-            <i className="fa-solid fa-rocket" /> Enter Dashboard
-          </Link>
+          {currentUser ? (
+            <>
+              <span className={styles.userBadge}>
+                <i className="fa-solid fa-circle-user" /> {currentUser.name}
+              </span>
+              <Link href="/dashboard" className={styles.btnPrimary}>
+                <i className="fa-solid fa-gauge-high" /> Enter Dashboard
+              </Link>
+            </>
+          ) : (
+            <>
+              <Link href="/login" className={styles.navLink}>
+                <i className="fa-solid fa-right-to-bracket" /> Sign In
+              </Link>
+              <Link href="/dashboard" className={styles.btnPrimary}>
+                <i className="fa-solid fa-rocket" /> Enter Dashboard
+              </Link>
+            </>
+          )}
         </nav>
       </header>
 

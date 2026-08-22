@@ -37,8 +37,10 @@ export async function GET() {
     }
 
     const notifications = await Notification.find(baseFilter)
+      .select("_id title message type linkUrl read createdAt")
       .sort({ createdAt: -1 })
-      .limit(50);
+      .limit(50)
+      .lean();
 
     const unreadCount = await Notification.countDocuments({
       ...baseFilter,

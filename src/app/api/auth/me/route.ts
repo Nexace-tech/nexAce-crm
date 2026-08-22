@@ -20,7 +20,7 @@ export async function GET() {
       user = await User.findByIdAndUpdate(
         session.userId,
         { $set: { lastActiveAt: new Date() } },
-        { new: true }
+        { returnDocument: "after" }
       )
         .select("-passwordHash")
         .populate("tenantId")

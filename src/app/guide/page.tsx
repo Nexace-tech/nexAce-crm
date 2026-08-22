@@ -822,6 +822,18 @@ export default function GuidePage() {
   const [scrollProgress, setScrollProgress] = useState(0);
   const [openFaqIdx, setOpenFaqIdx] = useState<number | null>(null);
   const [copiedAnchor, setCopiedAnchor] = useState<string | null>(null);
+  const [currentUser, setCurrentUser] = useState<{ name: string; role?: string } | null>(null);
+
+  useEffect(() => {
+    fetch("/api/auth/me")
+      .then((res) => (res.ok ? res.json() : { user: null }))
+      .then((data) => {
+        if (data.user) {
+          setCurrentUser(data.user);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const categories = ["All", "Core", "Agile & Projects", "HR & Culture", "Operations & IT"];
 
@@ -933,12 +945,25 @@ export default function GuidePage() {
           <Link href="/" className={styles.navLink}>
             <i className="fa-solid fa-house" /> Home
           </Link>
-          <Link href="/login" className={styles.navLink}>
-            <i className="fa-solid fa-right-to-bracket" /> Sign In
-          </Link>
-          <Link href="/dashboard" className={styles.btnPrimary}>
-            <i className="fa-solid fa-gauge-high" /> Enter Dashboard
-          </Link>
+          {currentUser ? (
+            <>
+              <span className={styles.userBadge}>
+                <i className="fa-solid fa-circle-user" /> {currentUser.name}
+              </span>
+              <Link href="/dashboard" className={styles.btnPrimary}>
+                <i className="fa-solid fa-gauge-high" /> Enter Dashboard
+              </Link>
+            </>
+          ) : (
+            <>
+              <Link href="/login" className={styles.navLink}>
+                <i className="fa-solid fa-right-to-bracket" /> Sign In
+              </Link>
+              <Link href="/dashboard" className={styles.btnPrimary}>
+                <i className="fa-solid fa-gauge-high" /> Enter Dashboard
+              </Link>
+            </>
+          )}
         </nav>
       </header>
 

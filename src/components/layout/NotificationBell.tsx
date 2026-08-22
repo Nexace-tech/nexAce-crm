@@ -156,8 +156,39 @@ export function NotificationBell() {
 
   useEffect(() => {
     fetchNotifications();
-    const interval = setInterval(fetchNotifications, 4000);
-    return () => clearInterval(interval);
+
+    let intervalId: NodeJS.Timeout;
+
+    const setupPolling = () => {
+      clearInterval(intervalId);
+      // When tab is hidden, poll every 60s; when active, poll every 15s
+      const pollDelay = typeof document !== "undefined" && document.hidden ? 60000 : 15000;
+      intervalId = setInterval(fetchNotifications, pollDelay);
+    };
+
+    setupPolling();
+
+    const handleVisibilityChange = () => {
+      if (typeof document !== "undefined" && !document.hidden) {
+        // Tab became active: fetch immediately and resume fast polling
+        fetchNotifications();
+      }
+      setupPolling();
+    };
+
+    const handleWindowFocus = () => {
+      fetchNotifications();
+      setupPolling();
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("focus", handleWindowFocus);
+
+    return () => {
+      clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("focus", handleWindowFocus);
+    };
   }, []);
 
   // Auto-dismiss live toast after 6 seconds
