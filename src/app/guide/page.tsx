@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
@@ -696,8 +696,41 @@ const MODULES: ModuleItem[] = [
 export default function GuidePage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("All");
+  const [activeSection, setActiveSection] = useState<string>("overview");
+  const [showScrollTop, setShowScrollTop] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const categories = ["All", "Core", "Agile & Projects", "HR & Culture", "Operations & IT"];
+
+  // Scroll to top button visibility and active section spy
+  useEffect(() => {
+    const handleScroll = () => {
+      if (window.scrollY > 300) {
+        setShowScrollTop(true);
+      } else {
+        setShowScrollTop(false);
+      }
+
+      // Detect active section on scroll
+      const sectionElements = MODULES.map((m) => document.getElementById(m.id));
+      const scrollPosition = window.scrollY + 180;
+
+      for (let i = sectionElements.length - 1; i >= 0; i--) {
+        const el = sectionElements[i];
+        if (el && el.offsetTop <= scrollPosition) {
+          setActiveSection(MODULES[i].id);
+          break;
+        }
+      }
+    };
+
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  const scrollToTop = () => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
 
   const filteredModules = useMemo(() => {
     return MODULES.filter((m) => {
@@ -728,6 +761,13 @@ export default function GuidePage() {
       {/* Header Navigation */}
       <header className={styles.header}>
         <div className={styles.logoSection}>
+          <button
+            onClick={() => setSidebarOpen(!sidebarOpen)}
+            className={styles.mobileSidebarToggle}
+            aria-label="Toggle Side Menu"
+          >
+            <i className="fa-solid fa-bars" />
+          </button>
           <Link href="/" className={styles.logoLink}>
             <span className={styles.logoIcon}>
               <i className="fa-solid fa-gem" />
@@ -737,7 +777,7 @@ export default function GuidePage() {
             </span>
           </Link>
           <span className={styles.guideBadge}>
-            <i className="fa-solid fa-book-open" /> Complete Operational Manual
+            <i className="fa-solid fa-book-open" /> Operational Manual
           </span>
         </div>
         <nav className={styles.nav}>
@@ -798,206 +838,273 @@ export default function GuidePage() {
             ))}
           </div>
         </div>
-
-        {/* Quick Module Jump Links */}
-        <div className={styles.jumpNav}>
-          <span className={styles.jumpLabel}>Quick Jump to Module:</span>
-          <div className={styles.jumpPills}>
-            {MODULES.map((m) => (
-              <a key={m.id} href={`#${m.id}`} className={styles.jumpPill}>
-                <i className={`fa-solid ${m.icon}`} style={{ color: m.color }} /> {m.name}
-              </a>
-            ))}
-          </div>
-        </div>
       </section>
 
-      {/* Role Architecture Callout */}
-      <section className={styles.roleSection}>
-        <div className={styles.roleHeader}>
-          <i className="fa-solid fa-shield-halved" />
-          <h2>Role-Based Capabilities Overview</h2>
-        </div>
-        <p className={styles.roleDesc}>
-          Access permissions and dashboards adapt dynamically based on your assigned workspace role.
-        </p>
-        <div className={styles.roleGrid}>
-          {[
-            {
-              role: "Admin",
-              color: "#6366f1",
-              icon: "fa-crown",
-              desc: "Unrestricted workspace control, user invitations, role permission matrix, SaaS billing, and security audit logs.",
-            },
-            {
-              role: "Sub Admin / OPS",
-              color: "#06b6d4",
-              icon: "fa-user-tie",
-              desc: "Client project delivery, sales pipeline deals, resource staffing bench, IT asset inventory, and shift oversight.",
-            },
-            {
-              role: "Manager",
-              color: "#10b981",
-              icon: "fa-user-check",
-              desc: "Timesheet review & sign-offs, sprint progress tracking, 1:1 check-in meeting agendas, and team appraisals.",
-            },
-            {
-              role: "HR",
-              color: "#ec4899",
-              icon: "fa-briefcase",
-              desc: "Onboarding & exit checklists, leave approvals, document vaulting, help desk ticketing, and company pulse surveys.",
-            },
-            {
-              role: "Employee",
-              color: "#f59e0b",
-              icon: "fa-user",
-              desc: "Daily clock-in/out work timer, task execution, weekly timesheet logging, peer kudos, and candidate referrals.",
-            },
-          ].map((r) => (
-            <div key={r.role} className={styles.roleCard}>
-              <div className={styles.roleIconWrap} style={{ background: r.color + "18", color: r.color }}>
-                <i className={`fa-solid ${r.icon}`} />
-              </div>
-              <h3 className={styles.roleTitle}>{r.role}</h3>
-              <p className={styles.roleCardDesc}>{r.desc}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* Modules Detailed Step-by-Step Breakdown */}
-      <section className={styles.modulesSection}>
-        <div className={styles.sectionHeading}>
-          <span className={styles.sectionTag}>
-            <i className="fa-solid fa-list-ol" /> Visual Walkthroughs & Action Items
-          </span>
-          <h2 className={styles.sectionTitle}>Click-by-Click Instructions</h2>
-          <p className={styles.sectionSubtitle}>
-            Showing {filteredModules.length} of {MODULES.length} modules. Follow the illustrated screenshots and exact instructions.
-          </p>
-        </div>
-
-        {filteredModules.length === 0 ? (
-          <div className={styles.noResultsBox}>
-            <i className="fa-solid fa-circle-question text-3xl mb-2 opacity-50" />
-            <h3>No matching features found</h3>
-            <p>Try searching for a different keyword or reset the category filter.</p>
-            <button onClick={() => { setSearchQuery(""); setSelectedCategory("All"); }} className={styles.resetBtn}>
-              Reset Filters
+      {/* Main Content Layout with Left Sidebar Menu */}
+      <div className={styles.guideLayout}>
+        {/* Left Sticky Sidebar Navigation */}
+        <aside className={`${styles.sideMenu} ${sidebarOpen ? styles.sideMenuOpen : ""}`}>
+          <div className={styles.sideMenuHeader}>
+            <span className={styles.sideMenuTitle}>
+              <i className="fa-solid fa-compass" /> Feature Navigation
+            </span>
+            <button
+              onClick={() => setSidebarOpen(false)}
+              className={styles.closeSidebarBtn}
+            >
+              <i className="fa-solid fa-xmark" />
             </button>
           </div>
-        ) : (
-          <div className={styles.moduleList}>
-            {filteredModules.map((mod, idx) => (
-              <article key={mod.id} id={mod.id} className={styles.moduleCard}>
-                <div className={styles.moduleHeader}>
-                  <div className={styles.moduleIconBox} style={{ background: mod.color + "18", color: mod.color }}>
-                    <i className={`fa-solid ${mod.icon}`} />
-                  </div>
-                  <div className={styles.moduleMeta}>
-                    <div className={styles.moduleTopRow}>
-                      <span className={styles.moduleIndex}>0{idx + 1}</span>
-                      <span
-                        className={styles.moduleTag}
-                        style={{ color: mod.color, borderColor: mod.color + "33", background: mod.color + "11" }}
-                      >
-                        {mod.tag}
-                      </span>
-                      <code className={styles.moduleRoute}>{mod.path}</code>
-                    </div>
-                    <h3 className={styles.moduleName}>{mod.name}</h3>
-                    <p className={styles.moduleDescription}>{mod.description}</p>
-                  </div>
+
+          <div className={styles.sideMenuNav}>
+            <div className={styles.sideMenuSectionTitle}>WORKSPACE MODULES</div>
+            {MODULES.map((m, idx) => (
+              <a
+                key={m.id}
+                href={`#${m.id}`}
+                onClick={() => setSidebarOpen(false)}
+                className={`${styles.sideMenuItem} ${activeSection === m.id ? styles.sideMenuItemActive : ""}`}
+                style={{
+                  "--active-accent": m.color,
+                } as React.CSSProperties}
+              >
+                <div className={styles.sideMenuIcon} style={{ color: m.color, background: m.color + "18" }}>
+                  <i className={`fa-solid ${m.icon}`} />
                 </div>
+                <div className={styles.sideMenuMeta}>
+                  <span className={styles.sideMenuItemName}>{m.name}</span>
+                  <span className={styles.sideMenuItemTag}>{m.category}</span>
+                </div>
+                <span className={styles.sideMenuIndex}>0{idx + 1}</span>
+              </a>
+            ))}
 
-                {/* Quick Feature Stats Pills */}
-                {mod.quickStats && (
-                  <div className={styles.quickStatsRow}>
-                    {mod.quickStats.map((st) => (
-                      <div key={st.label} className={styles.quickStatPill}>
-                        <span className={styles.quickStatLabel}>{st.label}:</span>
-                        <strong className={styles.quickStatVal}>{st.value}</strong>
-                      </div>
-                    ))}
+            <div className={styles.sideMenuDivider} />
+
+            <div className={styles.sideMenuSectionTitle}>QUICK ACTIONS</div>
+            <Link href="/dashboard" className={styles.sideMenuQuickLink}>
+              <i className="fa-solid fa-gauge-high" /> Open Dashboard
+            </Link>
+            <Link href="/register" className={styles.sideMenuQuickLink}>
+              <i className="fa-solid fa-building" /> Create Workspace
+            </Link>
+            <button onClick={scrollToTop} className={styles.sideMenuQuickLink}>
+              <i className="fa-solid fa-arrow-up" /> Back to Top
+            </button>
+          </div>
+        </aside>
+
+        {/* Backdrop for mobile drawer */}
+        {sidebarOpen && (
+          <div
+            className={styles.sidebarBackdrop}
+            onClick={() => setSidebarOpen(false)}
+            aria-hidden
+          />
+        )}
+
+        {/* Right Main Content Area */}
+        <main className={styles.mainContent}>
+          {/* Role Architecture Callout */}
+          <section className={styles.roleSection}>
+            <div className={styles.roleHeader}>
+              <i className="fa-solid fa-shield-halved" />
+              <h2>Role-Based Capabilities Overview</h2>
+            </div>
+            <p className={styles.roleDesc}>
+              Access permissions and dashboards adapt dynamically based on your assigned workspace role.
+            </p>
+            <div className={styles.roleGrid}>
+              {[
+                {
+                  role: "Admin",
+                  color: "#6366f1",
+                  icon: "fa-crown",
+                  desc: "Unrestricted workspace control, user invitations, role permission matrix, SaaS billing, and security audit logs.",
+                },
+                {
+                  role: "Sub Admin / OPS",
+                  color: "#06b6d4",
+                  icon: "fa-user-tie",
+                  desc: "Client project delivery, sales pipeline deals, resource staffing bench, IT asset inventory, and shift oversight.",
+                },
+                {
+                  role: "Manager",
+                  color: "#10b981",
+                  icon: "fa-user-check",
+                  desc: "Timesheet review & sign-offs, sprint progress tracking, 1:1 check-in meeting agendas, and team appraisals.",
+                },
+                {
+                  role: "HR",
+                  color: "#ec4899",
+                  icon: "fa-briefcase",
+                  desc: "Onboarding & exit checklists, leave approvals, document vaulting, help desk ticketing, and company pulse surveys.",
+                },
+                {
+                  role: "Employee",
+                  color: "#f59e0b",
+                  icon: "fa-user",
+                  desc: "Daily clock-in/out work timer, task execution, weekly timesheet logging, peer kudos, and candidate referrals.",
+                },
+              ].map((r) => (
+                <div key={r.role} className={styles.roleCard}>
+                  <div className={styles.roleIconWrap} style={{ background: r.color + "18", color: r.color }}>
+                    <i className={`fa-solid ${r.icon}`} />
                   </div>
-                )}
+                  <h3 className={styles.roleTitle}>{r.role}</h3>
+                  <p className={styles.roleCardDesc}>{r.desc}</p>
+                </div>
+              ))}
+            </div>
+          </section>
 
-                {/* Screenshot Preview Showcase */}
-                {mod.screenshot && (
-                  <div className={styles.screenshotWrapper}>
-                    <div className={styles.screenshotFrame}>
-                      <div className={styles.screenshotTopBar}>
-                        <span className={styles.browserDot} style={{ background: "#ff5f56" }} />
-                        <span className={styles.browserDot} style={{ background: "#ffbd2e" }} />
-                        <span className={styles.browserDot} style={{ background: "#27c93f" }} />
-                        <span className={styles.browserAddress}>localhost:3000{mod.path}</span>
+          {/* Modules Detailed Step-by-Step Breakdown */}
+          <section className={styles.modulesSection}>
+            <div className={styles.sectionHeading}>
+              <span className={styles.sectionTag}>
+                <i className="fa-solid fa-list-ol" /> Visual Walkthroughs & Action Items
+              </span>
+              <h2 className={styles.sectionTitle}>Click-by-Click Instructions</h2>
+              <p className={styles.sectionSubtitle}>
+                Showing {filteredModules.length} of {MODULES.length} modules. Follow the illustrated screenshots and exact instructions.
+              </p>
+            </div>
+
+            {filteredModules.length === 0 ? (
+              <div className={styles.noResultsBox}>
+                <i className="fa-solid fa-circle-question text-3xl mb-2 opacity-50" />
+                <h3>No matching features found</h3>
+                <p>Try searching for a different keyword or reset the category filter.</p>
+                <button onClick={() => { setSearchQuery(""); setSelectedCategory("All"); }} className={styles.resetBtn}>
+                  Reset Filters
+                </button>
+              </div>
+            ) : (
+              <div className={styles.moduleList}>
+                {filteredModules.map((mod, idx) => (
+                  <article key={mod.id} id={mod.id} className={styles.moduleCard}>
+                    <div className={styles.moduleHeader}>
+                      <div className={styles.moduleIconBox} style={{ background: mod.color + "18", color: mod.color }}>
+                        <i className={`fa-solid ${mod.icon}`} />
                       </div>
-                      <div className={styles.screenshotImageContainer}>
-                        <Image
-                          src={mod.screenshot}
-                          alt={`${mod.name} Screenshot`}
-                          width={1200}
-                          height={675}
-                          className={styles.screenshotImage}
-                          unoptimized
-                        />
+                      <div className={styles.moduleMeta}>
+                        <div className={styles.moduleTopRow}>
+                          <span className={styles.moduleIndex}>0{idx + 1}</span>
+                          <span
+                            className={styles.moduleTag}
+                            style={{ color: mod.color, borderColor: mod.color + "33", background: mod.color + "11" }}
+                          >
+                            {mod.tag}
+                          </span>
+                          <code className={styles.moduleRoute}>{mod.path}</code>
+                        </div>
+                        <h3 className={styles.moduleName}>{mod.name}</h3>
+                        <p className={styles.moduleDescription}>{mod.description}</p>
                       </div>
                     </div>
-                    {mod.screenshotCaption && (
-                      <div className={styles.screenshotCaption}>
-                        <i className="fa-solid fa-camera" /> {mod.screenshotCaption}
+
+                    {/* Quick Feature Stats Pills */}
+                    {mod.quickStats && (
+                      <div className={styles.quickStatsRow}>
+                        {mod.quickStats.map((st) => (
+                          <div key={st.label} className={styles.quickStatPill}>
+                            <span className={styles.quickStatLabel}>{st.label}:</span>
+                            <strong className={styles.quickStatVal}>{st.value}</strong>
+                          </div>
+                        ))}
                       </div>
                     )}
-                  </div>
-                )}
 
-                {/* Step-by-Step Action Items */}
-                <div className={styles.stepsContainer}>
-                  {mod.steps.map((st, sIdx) => (
-                    <div key={st.title} className={styles.stepBlock}>
-                      <div className={styles.stepHeader}>
-                        <span className={styles.stepNumberBadge} style={{ background: mod.color }}>
-                          {sIdx + 1}
-                        </span>
-                        <div className={styles.stepHeaderMain}>
-                          <h4 className={styles.stepHeading}>{st.title}</h4>
-                          {st.purpose && <p className={styles.stepPurpose}>{st.purpose}</p>}
+                    {/* Screenshot Preview Showcase */}
+                    {mod.screenshot && (
+                      <div className={styles.screenshotWrapper}>
+                        <div className={styles.screenshotFrame}>
+                          <div className={styles.screenshotTopBar}>
+                            <span className={styles.browserDot} style={{ background: "#ff5f56" }} />
+                            <span className={styles.browserDot} style={{ background: "#ffbd2e" }} />
+                            <span className={styles.browserDot} style={{ background: "#27c93f" }} />
+                            <span className={styles.browserAddress}>localhost:3000{mod.path}</span>
+                          </div>
+                          <div className={styles.screenshotImageContainer}>
+                            <Image
+                              src={mod.screenshot}
+                              alt={`${mod.name} Screenshot`}
+                              width={1200}
+                              height={675}
+                              className={styles.screenshotImage}
+                              unoptimized
+                            />
+                          </div>
                         </div>
-                        {st.hotkey && (
-                          <span className={styles.hotkeyTag}>
-                            <i className="fa-solid fa-keyboard" /> {st.hotkey}
-                          </span>
+                        {mod.screenshotCaption && (
+                          <div className={styles.screenshotCaption}>
+                            <i className="fa-solid fa-camera" /> {mod.screenshotCaption}
+                          </div>
                         )}
                       </div>
-                      <ol className={styles.instructionList}>
-                        {st.instructions.map((inst, iIdx) => (
-                          <li key={iIdx} className={styles.instructionItem}>
-                            <span className={styles.instructionBullet} style={{ borderColor: mod.color }} />
-                            <span>{inst}</span>
-                          </li>
-                        ))}
-                      </ol>
-                      {st.tip && (
-                        <div className={styles.tipBox}>
-                          <i className="fa-solid fa-lightbulb" />
-                          <span><strong>Pro Tip:</strong> {st.tip}</span>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
+                    )}
 
-                <div className={styles.moduleFooter}>
-                  <Link href={mod.path} className={styles.openModuleBtn} style={{ background: mod.color }}>
-                    <span>Launch {mod.name}</span>
-                    <i className="fa-solid fa-arrow-right" />
-                  </Link>
-                </div>
-              </article>
-            ))}
-          </div>
-        )}
-      </section>
+                    {/* Step-by-Step Action Items */}
+                    <div className={styles.stepsContainer}>
+                      {mod.steps.map((st, sIdx) => (
+                        <div key={st.title} className={styles.stepBlock}>
+                          <div className={styles.stepHeader}>
+                            <span className={styles.stepNumberBadge} style={{ background: mod.color }}>
+                              {sIdx + 1}
+                            </span>
+                            <div className={styles.stepHeaderMain}>
+                              <h4 className={styles.stepHeading}>{st.title}</h4>
+                              {st.purpose && <p className={styles.stepPurpose}>{st.purpose}</p>}
+                            </div>
+                            {st.hotkey && (
+                              <span className={styles.hotkeyTag}>
+                                <i className="fa-solid fa-keyboard" /> {st.hotkey}
+                              </span>
+                            )}
+                          </div>
+                          <ol className={styles.instructionList}>
+                            {st.instructions.map((inst, iIdx) => (
+                              <li key={iIdx} className={styles.instructionItem}>
+                                <span className={styles.instructionBullet} style={{ borderColor: mod.color }} />
+                                <span>{inst}</span>
+                              </li>
+                            ))}
+                          </ol>
+                          {st.tip && (
+                            <div className={styles.tipBox}>
+                              <i className="fa-solid fa-lightbulb" />
+                              <span><strong>Pro Tip:</strong> {st.tip}</span>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className={styles.moduleFooter}>
+                      <Link href={mod.path} className={styles.openModuleBtn} style={{ background: mod.color }}>
+                        <span>Launch {mod.name}</span>
+                        <i className="fa-solid fa-arrow-right" />
+                      </Link>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>
+        </main>
+      </div>
+
+      {/* Floating Scroll To Top Button */}
+      {showScrollTop && (
+        <button
+          onClick={scrollToTop}
+          className={styles.scrollTopButton}
+          aria-label="Scroll to top"
+          title="Back to Top"
+        >
+          <i className="fa-solid fa-arrow-up" />
+        </button>
+      )}
 
       {/* CTA Banner */}
       <section className={styles.ctaBanner}>
