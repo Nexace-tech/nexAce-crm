@@ -124,18 +124,18 @@ export function DashboardClientLayout({ session, menuItems, isPending = false, c
           <Link
             href="/dashboard"
             onClick={() => setMobileOpen(false)}
-            className="flex items-center gap-3 font-semibold text-lg tracking-tight overflow-hidden"
+            className="flex items-center gap-2.5 font-bold text-lg tracking-tight overflow-hidden"
           >
-            <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-primary text-primary-foreground shadow-md shadow-primary/30 shrink-0">
-              <i className="fa-solid fa-wand-magic-sparkles text-base" />
+            <div className="flex items-center justify-center w-8.5 h-8.5 rounded-xl bg-gradient-to-br from-indigo-500 via-primary to-cyan-400 text-white shadow-md shadow-indigo-500/25 shrink-0">
+              <i className="fa-solid fa-gem text-sm" />
             </div>
             <span
               className={cn(
-                "bg-gradient-to-r from-teal-400 via-[#30b8bd] to-cyan-300 bg-clip-text text-transparent font-bold truncate",
+                "font-extrabold text-foreground truncate",
                 sidebarCollapsed && "lg:hidden"
               )}
             >
-              NexAce CRM
+              NexAce <span className="bg-gradient-to-r from-indigo-500 to-cyan-400 bg-clip-text text-transparent">CRM</span>
             </span>
           </Link>
           <div className="flex items-center gap-1">

@@ -30,9 +30,9 @@ export function Preloader({
         {/* Rotating gradient border ring */}
         <div className="absolute inset-0 rounded-2xl border-2 border-transparent border-t-primary border-r-blue-500 border-b-emerald-500 animate-spin" />
         
-        {/* Center Sparkles Icon */}
-        <div className="relative flex items-center justify-center w-12 h-12 rounded-xl bg-card border border-border shadow-lg shadow-primary/20 text-primary">
-          <i className="fa-solid fa-wand-magic-sparkles text-lg animate-pulse" />
+        {/* Center Gem Icon */}
+        <div className="relative flex items-center justify-center w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500 via-primary to-cyan-400 text-white shadow-lg shadow-primary/25">
+          <i className="fa-solid fa-gem text-lg animate-pulse" />
         </div>
       </div>
 

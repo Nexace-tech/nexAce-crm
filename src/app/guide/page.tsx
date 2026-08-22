@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useCallback } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
@@ -693,51 +693,197 @@ const MODULES: ModuleItem[] = [
   },
 ];
 
+/* ── New data additions ── */
+
+const FAQ_ITEMS = [
+  {
+    q: "How do I reset my password?",
+    a: "Navigate to /dashboard/settings → Security tab. Enter your current password, then your new password twice, and click 'Update Password'. If you've forgotten your password entirely, contact your Admin to deactivate and re-invite your account from Settings → Users.",
+  },
+  {
+    q: "How do I invite a team member?",
+    a: "Go to /dashboard/team and click '+ Add Employee'. Fill in their name, work email, role, and department, then click 'Create Employee'. An auto-generated temporary password appears — click 'Copy Credentials' to share it. They'll be prompted to set their own password on first login.",
+  },
+  {
+    q: "What roles are available and what can each one do?",
+    a: "NexAce CRM has 5 roles: Admin (full workspace control), OPS / Sub Admin (client delivery & IT assets), Manager (team oversight & approvals), HR (people operations & onboarding), and Employee (daily tasks, timesheets, referrals). Admins can customize exactly which modules each role can access via Settings → Permissions.",
+  },
+  {
+    q: "How do timesheets get approved?",
+    a: "Employees submit timesheets via Calendar → Timesheets → 'Submit for Approval'. Their manager sees the pending submission under 'Pending Team Submissions' and clicks Approve or Reject with optional feedback. Approved timesheets are locked and feed into payroll & billing calculations.",
+  },
+  {
+    q: "Can I export data from NexAce CRM?",
+    a: "Yes — multiple modules support data export. Attendance logs export as CSV from Calendar → Attendance. Leave records support CSV, JSON, and formatted Text export. Invoices can be printed or downloaded as PDF from the IT Portal. Analytics data is also downloadable.",
+  },
+  {
+    q: "Is my company's data isolated from other organizations?",
+    a: "Absolutely. NexAce CRM uses enterprise-grade multi-tenant architecture where each company workspace has its own isolated database partition. Your employees, projects, messages, files, and configurations are never visible to any other tenant organization.",
+  },
+  {
+    q: "How do I give an employee access to a tool (GitHub, AWS, etc.)?",
+    a: "Go to /dashboard/it → Access Matrix tab → click '+ Grant Access'. Select the employee, choose the software tool, set the access level (Admin, Member, or Read-Only), and save. You can one-click toggle their status between Active, Suspended, and Revoked at any time from the same table.",
+  },
+];
+
+const QUICK_START_STEPS = [
+  {
+    number: "01",
+    icon: "fa-building",
+    color: "#6366f1",
+    title: "Register Your Workspace",
+    desc: "Create your isolated company workspace with your company name, admin email, and a secure password.",
+    anchor: null as string | null,
+    link: "/register" as string | null,
+    cta: "Go to Register",
+  },
+  {
+    number: "02",
+    icon: "fa-users",
+    color: "#06b6d4",
+    title: "Add Your Team",
+    desc: "Onboard employees individually or bulk-import entire departments with roles & reporting lines.",
+    anchor: "team" as string | null,
+    link: null as string | null,
+    cta: "View Team Module",
+  },
+  {
+    number: "03",
+    icon: "fa-shield-halved",
+    color: "#10b981",
+    title: "Set Roles & Permissions",
+    desc: "Configure the granular role-based permission matrix so each role only sees what they need.",
+    anchor: "settings" as string | null,
+    link: null as string | null,
+    cta: "View Settings",
+  },
+  {
+    number: "04",
+    icon: "fa-rocket",
+    color: "#f59e0b",
+    title: "Launch Your First Project",
+    desc: "Create a Kanban project, assign tasks to your team, and link them to an agile sprint.",
+    anchor: "projects" as string | null,
+    link: null as string | null,
+    cta: "View Projects",
+  },
+];
+
+const CATEGORY_SUMMARIES = [
+  {
+    name: "Core" as const,
+    icon: "fa-gauge-high",
+    color: "#6366f1",
+    desc: "Dashboard, Team, Chat, Settings",
+    moduleIds: ["overview", "team", "chat", "settings"],
+  },
+  {
+    name: "Agile & Projects" as const,
+    icon: "fa-diagram-project",
+    color: "#10b981",
+    desc: "Calendar, Sprints, Kanban, Gantt",
+    moduleIds: ["calendar", "projects"],
+  },
+  {
+    name: "HR & Culture" as const,
+    icon: "fa-heart-pulse",
+    color: "#8b5cf6",
+    desc: "HR Portal, Goals, Referrals",
+    moduleIds: ["hr", "goals", "referrals"],
+  },
+  {
+    name: "Operations & IT" as const,
+    icon: "fa-server",
+    color: "#f43f5e",
+    desc: "Clients, IT Assets, Analytics",
+    moduleIds: ["clients", "it", "analytics"],
+  },
+];
+
+function getReadingTime(steps: StepItem[]): string {
+  const totalWords = steps.reduce((acc, s) => {
+    return (
+      acc +
+      s.instructions.join(" ").split(" ").length +
+      (s.purpose?.split(" ").length ?? 0) +
+      s.title.split(" ").length
+    );
+  }, 0);
+  return `~${Math.max(1, Math.ceil(totalWords / 220))} min read`;
+}
+
+
 export default function GuidePage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("All");
   const [activeSection, setActiveSection] = useState<string>("overview");
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [scrollProgress, setScrollProgress] = useState(0);
+  const [openFaqIdx, setOpenFaqIdx] = useState<number | null>(null);
+  const [copiedAnchor, setCopiedAnchor] = useState<string | null>(null);
 
   const categories = ["All", "Core", "Agile & Projects", "HR & Culture", "Operations & IT"];
 
-  // Scroll to top button visibility and active section spy
   useEffect(() => {
     const handleScroll = () => {
-      if (window.scrollY > 300) {
-        setShowScrollTop(true);
-      } else {
-        setShowScrollTop(false);
-      }
+      const scrollTop = window.scrollY;
+      const docHeight = document.documentElement.scrollHeight - window.innerHeight;
+      const progress = docHeight > 0 ? Math.min(100, (scrollTop / docHeight) * 100) : 0;
+      setScrollProgress(progress);
+      setShowScrollTop(scrollTop > 300);
 
-      // Detect active section on scroll
-      const sectionElements = MODULES.map((m) => document.getElementById(m.id));
-      const scrollPosition = window.scrollY + 180;
-
-      for (let i = sectionElements.length - 1; i >= 0; i--) {
-        const el = sectionElements[i];
-        if (el && el.offsetTop <= scrollPosition) {
-          setActiveSection(MODULES[i].id);
-          break;
+      // Determine active module based on viewport position
+      let currentSection = MODULES[0].id;
+      for (const m of MODULES) {
+        const el = document.getElementById(m.id);
+        if (el) {
+          const rect = el.getBoundingClientRect();
+          // When top of the module enters upper viewport (<= 240px from top)
+          if (rect.top <= 240) {
+            currentSection = m.id;
+          }
         }
       }
+      setActiveSection(currentSection);
     };
 
     window.addEventListener("scroll", handleScroll, { passive: true });
+    handleScroll(); // initialize on mount
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
-  const scrollToTop = () => {
-    window.scrollTo({ top: 0, behavior: "smooth" });
+  const scrollToTop = () => window.scrollTo({ top: 0, behavior: "smooth" });
+
+  const handleNavClick = (e: React.MouseEvent, id: string) => {
+    e.preventDefault();
+    setSidebarOpen(false);
+    setActiveSection(id);
+    const el = document.getElementById(id);
+    if (el) {
+      const headerOffset = 80;
+      const elementPosition = el.getBoundingClientRect().top;
+      const offsetPosition = elementPosition + window.scrollY - headerOffset;
+      window.scrollTo({
+        top: offsetPosition,
+        behavior: "smooth",
+      });
+    }
   };
+
+  const copyAnchorLink = useCallback((moduleId: string) => {
+    const url = `${window.location.origin}/guide#${moduleId}`;
+    navigator.clipboard.writeText(url).then(() => {
+      setCopiedAnchor(moduleId);
+      setTimeout(() => setCopiedAnchor(null), 2000);
+    }).catch(() => {});
+  }, []);
 
   const filteredModules = useMemo(() => {
     return MODULES.filter((m) => {
       const matchesCat = selectedCategory === "All" || m.category === selectedCategory;
       const q = searchQuery.toLowerCase().trim();
       if (!q) return matchesCat;
-
       const matchesSearch =
         m.name.toLowerCase().includes(q) ||
         m.description.toLowerCase().includes(q) ||
@@ -747,13 +893,15 @@ export default function GuidePage() {
             (s.purpose && s.purpose.toLowerCase().includes(q)) ||
             s.instructions.some((ins) => ins.toLowerCase().includes(q))
         );
-
       return matchesCat && matchesSearch;
     });
   }, [searchQuery, selectedCategory]);
 
   return (
     <div className={styles.container}>
+      {/* Scroll Progress Bar */}
+      <div className={styles.progressBar} style={{ width: `${scrollProgress}%` }} />
+
       {/* Ambient background glows */}
       <div className={styles.orb1} aria-hidden />
       <div className={styles.orb2} aria-hidden />
@@ -777,7 +925,7 @@ export default function GuidePage() {
             </span>
           </Link>
           <span className={styles.guideBadge}>
-            <i className="fa-solid fa-book-open" /> Operational Manual
+            <i className="fa-solid fa-book-open" /> Docs v2.0
           </span>
         </div>
         <nav className={styles.nav}>
@@ -796,27 +944,46 @@ export default function GuidePage() {
 
       {/* Hero Banner */}
       <section className={styles.hero}>
+        <div className={styles.heroGrid} aria-hidden />
         <div className={styles.badge}>
           <span className={styles.badgeDot} />
-          Full Operational User Manual & Feature Guide
+          Full Operational User Manual &amp; Feature Guide
         </div>
         <h1 className={styles.title}>
-          How to Use <span className={styles.titleHighlight}>Each Feature</span>
+          Master <span className={styles.titleHighlight}>NexAce CRM</span>
+          <br />
+          in Minutes
         </h1>
         <p className={styles.subtitle}>
           Step-by-step operational workflows, button-by-button actions, and live UI screenshots
           for every tool and module in NexAce CRM.
         </p>
 
+        {/* Hero Stats Strip */}
+        <div className={styles.heroStats}>
+          {[
+            { icon: "fa-cubes", value: "13", label: "Modules" },
+            { icon: "fa-wand-magic-sparkles", value: "50+", label: "Features" },
+            { icon: "fa-users-gear", value: "5", label: "User Roles" },
+            { icon: "fa-building-columns", value: "\u221e", label: "Workspaces" },
+          ].map((stat) => (
+            <div key={stat.label} className={styles.heroStat}>
+              <i className={`fa-solid ${stat.icon}`} />
+              <strong>{stat.value}</strong>
+              <span>{stat.label}</span>
+            </div>
+          ))}
+        </div>
+
         {/* Live Search & Filter Bar */}
         <div className={styles.searchBarWrapper}>
           <div className={styles.searchBox}>
-            <i className="fa-solid fa-magnifying-glass" />
+            <i className={`fa-solid fa-magnifying-glass ${styles.searchIcon}`} />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search features, buttons, or workflows (e.g. 'timesheets', 'clock-in', 'access matrix', 'org chart')..."
+              placeholder="Search features, buttons, or workflows (e.g. 'timesheets', 'clock-in', 'access matrix')..."
               className={styles.searchInput}
             />
             {searchQuery && (
@@ -837,6 +1004,38 @@ export default function GuidePage() {
               </button>
             ))}
           </div>
+        </div>
+      </section>
+
+      {/* Category Overview Cards */}
+      <section className={styles.categoryOverview}>
+        <div className={styles.categoryOverviewGrid}>
+          {CATEGORY_SUMMARIES.map((cat) => {
+            const count = MODULES.filter((m) => cat.moduleIds.includes(m.id)).length;
+            const isActive = selectedCategory === cat.name;
+            return (
+              <button
+                key={cat.name}
+                className={`${styles.categoryOverviewCard} ${isActive ? styles.categoryOverviewCardActive : ""}`}
+                onClick={() => setSelectedCategory(isActive ? "All" : cat.name)}
+                style={{ "--cat-color": cat.color } as React.CSSProperties}
+              >
+                <div
+                  className={styles.categoryOverviewIcon}
+                  style={{ background: cat.color + "18", color: cat.color }}
+                >
+                  <i className={`fa-solid ${cat.icon}`} />
+                </div>
+                <div className={styles.categoryOverviewMeta}>
+                  <span className={styles.categoryOverviewName}>{cat.name}</span>
+                  <span className={styles.categoryOverviewDesc}>{cat.desc}</span>
+                </div>
+                <span className={styles.categoryOverviewCount} style={{ color: cat.color }}>
+                  {count}
+                </span>
+              </button>
+            );
+          })}
         </div>
       </section>
 
@@ -862,7 +1061,7 @@ export default function GuidePage() {
               <a
                 key={m.id}
                 href={`#${m.id}`}
-                onClick={() => setSidebarOpen(false)}
+                onClick={(e) => handleNavClick(e, m.id)}
                 className={`${styles.sideMenuItem} ${activeSection === m.id ? styles.sideMenuItemActive : ""}`}
                 style={{
                   "--active-accent": m.color,
@@ -905,7 +1104,57 @@ export default function GuidePage() {
 
         {/* Right Main Content Area */}
         <main className={styles.mainContent}>
-          {/* Role Architecture Callout */}
+
+          {/* ── Quick Start Section ── */}
+          <section className={styles.quickStartSection}>
+            <div className={styles.quickStartHeader}>
+              <span className={styles.quickStartLabel}>
+                <i className="fa-solid fa-flag" /> Getting Started
+              </span>
+              <h2 className={styles.quickStartTitle}>New to NexAce CRM?</h2>
+              <p className={styles.quickStartSubtitle}>
+                Follow these 4 steps to get your team fully operational in under 10 minutes.
+              </p>
+            </div>
+            <div className={styles.quickStartGrid}>
+              {QUICK_START_STEPS.map((step) => (
+                <div
+                  key={step.number}
+                  className={styles.quickStartCard}
+                  style={{ "--qs-color": step.color } as React.CSSProperties}
+                  onClick={() => {
+                    if (step.link) {
+                      window.location.href = step.link;
+                    } else if (step.anchor) {
+                      document.getElementById(step.anchor)?.scrollIntoView({ behavior: "smooth", block: "start" });
+                    }
+                  }}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      if (step.link) window.location.href = step.link;
+                      else if (step.anchor) document.getElementById(step.anchor)?.scrollIntoView({ behavior: "smooth" });
+                    }
+                  }}
+                >
+                  <div className={styles.quickStartNum} style={{ color: step.color }}>
+                    {step.number}
+                  </div>
+                  <div className={styles.quickStartIcon} style={{ background: step.color + "18", color: step.color }}>
+                    <i className={`fa-solid ${step.icon}`} />
+                  </div>
+                  <h3 className={styles.quickStartCardTitle}>{step.title}</h3>
+                  <p className={styles.quickStartCardDesc}>{step.desc}</p>
+                  <span className={styles.quickStartArrow} style={{ color: step.color }}>
+                    {step.cta} <i className="fa-solid fa-arrow-right" />
+                  </span>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* ── Role Architecture Callout ── */}
           <section className={styles.roleSection}>
             <div className={styles.roleHeader}>
               <i className="fa-solid fa-shield-halved" />
@@ -997,8 +1246,25 @@ export default function GuidePage() {
                             {mod.tag}
                           </span>
                           <code className={styles.moduleRoute}>{mod.path}</code>
+                          <span className={styles.readingTime}>
+                            <i className="fa-regular fa-clock" /> {getReadingTime(mod.steps)}
+                          </span>
                         </div>
-                        <h3 className={styles.moduleName}>{mod.name}</h3>
+                        <div className={styles.moduleNameRow}>
+                          <h3 className={styles.moduleName}>{mod.name}</h3>
+                          <button
+                            className={`${styles.anchorBtn} ${copiedAnchor === mod.id ? styles.anchorBtnCopied : ""}`}
+                            onClick={() => copyAnchorLink(mod.id)}
+                            title="Copy link to this section"
+                            aria-label="Copy anchor link"
+                          >
+                            {copiedAnchor === mod.id ? (
+                              <><i className="fa-solid fa-check" /> Copied!</>
+                            ) : (
+                              <><i className="fa-solid fa-link" /> Share</>
+                            )}
+                          </button>
+                        </div>
                         <p className={styles.moduleDescription}>{mod.description}</p>
                       </div>
                     </div>
@@ -1091,6 +1357,42 @@ export default function GuidePage() {
               </div>
             )}
           </section>
+
+          {/* ── FAQ Section ── */}
+          <section className={styles.faqSection}>
+            <div className={styles.faqHeader}>
+              <span className={styles.sectionTag}>
+                <i className="fa-solid fa-circle-question" /> Frequently Asked Questions
+              </span>
+              <h2 className={styles.sectionTitle}>Common Questions</h2>
+              <p className={styles.sectionSubtitle}>
+                Quick answers to the most common questions about using NexAce CRM.
+              </p>
+            </div>
+            <div className={styles.faqList}>
+              {FAQ_ITEMS.map((item, idx) => (
+                <div
+                  key={idx}
+                  className={`${styles.faqItem} ${openFaqIdx === idx ? styles.faqItemOpen : ""}`}
+                >
+                  <button
+                    className={styles.faqQuestion}
+                    onClick={() => setOpenFaqIdx(openFaqIdx === idx ? null : idx)}
+                    aria-expanded={openFaqIdx === idx}
+                  >
+                    <span>{item.q}</span>
+                    <i className={`fa-solid ${openFaqIdx === idx ? "fa-minus" : "fa-plus"}`} />
+                  </button>
+                  {openFaqIdx === idx && (
+                    <div className={styles.faqAnswer}>
+                      <p>{item.a}</p>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </section>
+
         </main>
       </div>
 
