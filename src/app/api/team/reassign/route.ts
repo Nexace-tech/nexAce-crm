@@ -29,17 +29,18 @@ export async function PUT(request: Request) {
     }
 
     await connectToDatabase();
+    const tenantObjectId = new mongoose.Types.ObjectId(session.tenantId);
 
     // Verify employee exists and belongs to tenant
-    const employee = await User.findById(employeeId);
-    if (!employee || employee.tenantId.toString() !== session.tenantId) {
+    const employee = await User.findOne({ _id: employeeId, tenantId: tenantObjectId });
+    if (!employee) {
       return NextResponse.json({ error: "Employee not found" }, { status: 404 });
     }
 
     if (managerId) {
       // Verify manager exists and belongs to tenant
-      const manager = await User.findById(managerId);
-      if (!manager || manager.tenantId.toString() !== session.tenantId) {
+      const manager = await User.findOne({ _id: managerId, tenantId: tenantObjectId });
+      if (!manager) {
         return NextResponse.json({ error: "Manager not found" }, { status: 404 });
       }
 
@@ -54,15 +55,15 @@ export async function PUT(request: Request) {
       const maxDepth = 50; // Safeguard against infinite loops
 
       while (currentManagerId && depth < maxDepth) {
-        const mgrRecord = await User.findById(currentManagerId);
-        if (!mgrRecord || !mgrRecord.managerId) break;
+        const mgrRecord = await User.findOne({ _id: currentManagerId, tenantId: tenantObjectId }).lean();
+        if (!mgrRecord || !(mgrRecord as any).managerId) break;
 
-        if (mgrRecord.managerId.toString() === employeeId) {
+        if ((mgrRecord as any).managerId.toString() === employeeId) {
           return NextResponse.json({
             error: `Circular reporting detected: ${manager.name} indirectly reports to ${employee.name}`
           }, { status: 400 });
         }
-        currentManagerId = mgrRecord.managerId.toString();
+        currentManagerId = (mgrRecord as any).managerId.toString();
         depth++;
       }
     }

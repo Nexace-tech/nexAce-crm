@@ -33,7 +33,8 @@ export async function GET(request: Request) {
 
     const logs = await ActivityLog.find(query)
       .sort({ createdAt: -1 })
-      .limit(limit);
+      .limit(limit)
+      .lean();
 
     return NextResponse.json({ logs });
   } catch (error: unknown) {

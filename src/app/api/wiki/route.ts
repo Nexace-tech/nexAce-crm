@@ -21,7 +21,8 @@ export async function GET() {
       tenantId: new mongoose.Types.ObjectId(session.tenantId),
     })
       .populate("createdBy", "name role photoUrl")
-      .sort({ updatedAt: -1 });
+      .sort({ updatedAt: -1 })
+      .lean();
 
     return NextResponse.json({ articles });
   } catch (error: unknown) {

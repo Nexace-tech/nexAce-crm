@@ -13,7 +13,8 @@ export async function GET() {
 
     const kudos = await Kudos.find({ tenantId: tenantObjectId })
       .sort({ createdAt: -1 })
-      .limit(50);
+      .limit(50)
+      .lean();
 
     return NextResponse.json({ kudos });
   } catch (error: unknown) {
@@ -27,7 +28,7 @@ export async function POST(request: Request) {
     if (isAuthError(authResult)) return authResult;
     const { tenantObjectId, session, userObjectId } = authResult;
     const body = await request.json();
-    const { toUserId, toUserName, message, companyValue } = body;
+    const { toUserId, message, companyValue } = body;
 
     if (!toUserId || !message || !companyValue) {
       return NextResponse.json({ error: "Recipient, message, and company value are required" }, { status: 400 });
@@ -35,12 +36,18 @@ export async function POST(request: Request) {
 
     await connectToDatabase();
 
+    const { User } = await import("@/models/User");
+    const recipient = await User.findOne({ _id: toUserId, tenantId: tenantObjectId }).lean();
+    if (!recipient) {
+      return NextResponse.json({ error: "Recipient user not found in this workspace" }, { status: 404 });
+    }
+
     const kudos = await Kudos.create({
       fromUserId: userObjectId,
       fromUserName: session.userName,
-      toUserId,
-      toUserName,
-      message,
+      toUserId: recipient._id,
+      toUserName: recipient.name,
+      message: message.trim(),
       companyValue,
       tenantId: tenantObjectId,
     });

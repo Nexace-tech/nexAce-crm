@@ -41,14 +41,26 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Title and File URL are required" }, { status: 400 });
     }
 
+    let validatedTargetUserId = undefined;
+    let validatedTargetUserName = targetUserName || "";
+    if (targetUserId) {
+      const { User } = await import("@/models/User");
+      const targetUser = await User.findOne({ _id: targetUserId, tenantId: tenantObjectId }).lean();
+      if (!targetUser) {
+        return NextResponse.json({ error: "Target employee not found in this workspace" }, { status: 404 });
+      }
+      validatedTargetUserId = targetUser._id;
+      validatedTargetUserName = targetUser.name;
+    }
+
     const doc = await HRDocument.create({
       tenantId: tenantObjectId,
-      title,
+      title: title.trim(),
       category: category || "Other",
       fileUrl,
       fileSize: fileSize || "1.5 MB",
-      targetUserId: targetUserId || undefined,
-      targetUserName: targetUserName || "",
+      targetUserId: validatedTargetUserId,
+      targetUserName: validatedTargetUserName,
       isRestricted: isRestricted !== undefined ? isRestricted : true,
       uploadedBy: session.userName,
     });

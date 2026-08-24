@@ -136,6 +136,14 @@ export function NotificationBell() {
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
 
+  const requestDesktopPermission = () => {
+    if (typeof window !== "undefined" && "Notification" in window && window.Notification.permission === "default") {
+      try {
+        window.Notification.requestPermission().catch(() => {});
+      } catch { /* ignore */ }
+    }
+  };
+
   const playChimeSound = () => {
     if (!soundEnabled) return;
     try {
@@ -341,7 +349,10 @@ export function NotificationBell() {
       <Button
         variant="ghost"
         size="icon"
-        onClick={() => setOpen(!open)}
+        onClick={() => {
+          setOpen(!open);
+          requestDesktopPermission();
+        }}
         className="relative text-muted-foreground hover:text-foreground h-9 w-9 rounded-full cursor-pointer transition-colors"
         title="Real-time Workspace Notifications"
       >

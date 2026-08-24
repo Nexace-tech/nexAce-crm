@@ -49,8 +49,8 @@ export async function GET() {
 
     return NextResponse.json({ notifications, unreadCount });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : "Internal Server Error";
     console.error("API GET Notifications error:", error);
+    const message = process.env.NODE_ENV === "production" ? "Internal Server Error" : (error instanceof Error ? error.message : "Internal Server Error");
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

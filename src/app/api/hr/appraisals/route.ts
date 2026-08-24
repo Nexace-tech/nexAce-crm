@@ -35,8 +35,14 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { userId, userName, managerId, managerName, cycle, type, kras, probationEndDate } = body;
 
-    if (!userId || !userName || !cycle) {
-      return NextResponse.json({ error: "User, Name and Cycle are required" }, { status: 400 });
+    if (!userId || !cycle) {
+      return NextResponse.json({ error: "User and Cycle are required" }, { status: 400 });
+    }
+
+    const { User } = await import("@/models/User");
+    const targetUser = await User.findOne({ _id: userId, tenantId: tenantObjectId }).lean();
+    if (!targetUser) {
+      return NextResponse.json({ error: "Employee not found in this workspace" }, { status: 404 });
     }
 
     const defaultKRAs = [
@@ -48,8 +54,8 @@ export async function POST(req: Request) {
 
     const appraisal = await HRAppraisal.create({
       tenantId: tenantObjectId,
-      userId,
-      userName,
+      userId: targetUser._id,
+      userName: targetUser.name,
       managerId,
       managerName: managerName || session.userName,
       cycle,

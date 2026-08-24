@@ -110,7 +110,8 @@ export async function GET(request: Request) {
     const tasks = await Task.find(query)
       .populate("assignee", "name role photoUrl")
       .populate("projectId", "name")
-      .sort({ createdAt: 1 });
+      .sort({ createdAt: 1 })
+      .lean();
 
     return NextResponse.json({ tasks });
   } catch (error: unknown) {
@@ -235,14 +236,14 @@ export async function PUT(request: Request) {
     }
 
     await connectToDatabase();
+    const tenantObjId = new mongoose.Types.ObjectId(session.tenantId);
+    const userObjId = new mongoose.Types.ObjectId(session.userId);
 
-    const task = await Task.findById(taskId);
-    if (!task || task.tenantId.toString() !== session.tenantId) {
+    const task = await Task.findOne({ _id: taskId, tenantId: tenantObjId });
+    if (!task) {
       return NextResponse.json({ error: "Task not found" }, { status: 404 });
     }
 
-    const tenantObjId = new mongoose.Types.ObjectId(session.tenantId);
-    const userObjId = new mongoose.Types.ObjectId(session.userId);
     const isPrivileged = session.role === "Admin" || session.role === "Manager";
 
     if (!isPrivileged) {
@@ -251,7 +252,7 @@ export async function PUT(request: Request) {
         ? await Project.exists({
             _id: task.projectId,
             tenantId: tenantObjId,
-            $or: [{ members: userObjId }, { createdBy: userObjId }],
+            members: userObjId,
           })
         : false;
       if (!isAssignee && !isMember) {
@@ -444,8 +445,11 @@ export async function DELETE(request: Request) {
 
     await connectToDatabase();
 
-    const task = await Task.findById(taskId);
-    if (!task || task.tenantId.toString() !== session.tenantId) {
+    const task = await Task.findOne({
+      _id: taskId,
+      tenantId: new mongoose.Types.ObjectId(session.tenantId),
+    });
+    if (!task) {
       return NextResponse.json({ error: "Task not found" }, { status: 404 });
     }
 

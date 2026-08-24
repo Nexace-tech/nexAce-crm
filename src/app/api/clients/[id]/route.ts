@@ -25,7 +25,7 @@ export async function GET(
     const client = await Client.findOne({
       _id: id,
       tenantId: new mongoose.Types.ObjectId(session.tenantId),
-    });
+    }).lean();
 
     if (!client) {
       return NextResponse.json({ error: "Client not found" }, { status: 404 });

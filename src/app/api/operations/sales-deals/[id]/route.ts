@@ -18,9 +18,21 @@ export async function PATCH(
     const body = await request.json();
     await connectToDatabase();
 
+    const { dealName, clientName, value, stage, probability, owner, expectedCloseDate, notes, priority } = body;
+    const updatePayload: Record<string, unknown> = {};
+    if (dealName !== undefined) updatePayload.dealName = dealName;
+    if (clientName !== undefined) updatePayload.clientName = clientName;
+    if (value !== undefined) updatePayload.value = Number(value);
+    if (stage !== undefined) updatePayload.stage = stage;
+    if (probability !== undefined) updatePayload.probability = Number(probability);
+    if (owner !== undefined) updatePayload.owner = owner;
+    if (expectedCloseDate !== undefined) updatePayload.expectedCloseDate = expectedCloseDate ? new Date(expectedCloseDate) : null;
+    if (notes !== undefined) updatePayload.notes = notes;
+    if (priority !== undefined) updatePayload.priority = priority;
+
     const deal = await SalesDeal.findOneAndUpdate(
       { _id: new mongoose.Types.ObjectId(id), tenantId: tenantObjectId },
-      { $set: body },
+      { $set: updatePayload },
       { returnDocument: 'after' }
     );
 

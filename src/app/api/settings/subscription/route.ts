@@ -72,7 +72,7 @@ export async function PUT(request: Request) {
     }
 
     if (planName) subscription.planName = planName;
-    if (maxSeats) subscription.maxSeats = Number(maxSeats);
+    if (maxSeats !== undefined && maxSeats !== null && maxSeats !== "") subscription.maxSeats = Number(maxSeats);
     if (billingCycle) subscription.billingCycle = billingCycle;
     if (amount !== undefined) subscription.amount = Number(amount);
 

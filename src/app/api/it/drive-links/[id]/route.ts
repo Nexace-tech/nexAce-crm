@@ -23,9 +23,18 @@ export async function PATCH(
     const body = await request.json();
     await connectToDatabase();
 
+    const { name, url, category, description, accessRoles, isPublic } = body;
+    const updatePayload: Record<string, unknown> = { updatedAt: new Date() };
+    if (name !== undefined) updatePayload.name = name;
+    if (url !== undefined) updatePayload.url = url;
+    if (category !== undefined) updatePayload.category = category;
+    if (description !== undefined) updatePayload.description = description;
+    if (accessRoles !== undefined) updatePayload.accessRoles = accessRoles;
+    if (isPublic !== undefined) updatePayload.isPublic = isPublic;
+
     const updated = await ITDriveLink.findOneAndUpdate(
       { _id: id, tenantId: tenantObjectId },
-      { $set: { ...body, updatedAt: new Date() } },
+      { $set: updatePayload },
       { returnDocument: 'after' }
     );
 

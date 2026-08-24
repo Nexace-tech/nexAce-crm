@@ -37,21 +37,22 @@ export async function GET(request: Request) {
 
     const events = await Event.find(query)
       .populate("userId", "name role photoUrl department")
-      .sort({ startDate: 1 });
+      .sort({ startDate: 1 })
+      .lean();
 
     // Filter personal events (only owner can view personal items)
     const explicitEvents = events.filter((evt) => {
       if (evt.type === "Personal") {
-        return evt.userId?._id?.toString() === session.userId;
+        return (evt.userId as any)?._id?.toString() === session.userId;
       }
       return true;
-    }).map((evt) => evt.toObject());
+    });
 
     // 2. Dynamic Task Due Dates as Deadline Events
     const tasks = await Task.find({
       tenantId: tenantObjectId,
       dueDate: { $exists: true, $ne: null },
-    }).populate("assignee", "name role photoUrl department");
+    }).populate("assignee", "name role photoUrl department").lean();
 
     const taskEvents = tasks.map((task) => ({
       _id: `task_${task._id}`,
@@ -69,7 +70,7 @@ export async function GET(request: Request) {
     const teamMembers = await User.find({
       tenantId: tenantObjectId,
       joinDate: { $exists: true, $ne: null },
-    }).select("name department photoUrl joinDate role");
+    }).select("name department photoUrl joinDate role").lean();
 
     const currentYear = new Date().getFullYear();
     const anniversaryEvents = teamMembers.map((member) => {
@@ -84,17 +85,13 @@ export async function GET(request: Request) {
         startDate: anniversaryThisYear,
         endDate: anniversaryThisYear,
         department: member.department || "All",
-        userId: member.toObject(),
+        userId: member,
         isSynced: true,
       };
     });
 
-    const getTime = (dateVal: any) => (dateVal ? new Date(dateVal).getTime() : 0);
-
-    // Merge and sort all events by startDate
-    const allEvents = [...explicitEvents, ...taskEvents, ...anniversaryEvents].sort(
-      (a, b) => getTime(a.startDate) - getTime(b.startDate)
-    );
+    // 4. Merge all streams
+    const allEvents = [...explicitEvents, ...taskEvents, ...anniversaryEvents];
 
     return NextResponse.json({ events: allEvents });
   } catch (error: unknown) {
@@ -121,14 +118,25 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Title, start date, and end date are required" }, { status: 400 });
     }
 
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+      return NextResponse.json({ error: "Invalid date format" }, { status: 400 });
+    }
+
+    if (end.getTime() < start.getTime()) {
+      return NextResponse.json({ error: "End date cannot be earlier than start date" }, { status: 400 });
+    }
+
     await connectToDatabase();
 
     const newEvent = await Event.create({
-      title,
+      title: title.trim(),
       description: description || "",
       type: type || "Meeting",
-      startDate: new Date(startDate),
-      endDate: new Date(endDate),
+      startDate: start,
+      endDate: end,
       department: department || "All",
       userId: new mongoose.Types.ObjectId(session.userId),
       tenantId: new mongoose.Types.ObjectId(session.tenantId),

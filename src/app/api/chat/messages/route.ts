@@ -152,7 +152,8 @@ export async function GET(request: Request) {
 
     const messages = await ChatMessage.find(queryCondition)
       .sort({ createdAt: 1 })
-      .limit(100);
+      .limit(100)
+      .lean();
 
     return NextResponse.json({ messages });
   } catch (error: unknown) {
@@ -386,8 +387,8 @@ export async function DELETE(request: Request) {
     const userIdStr = userObjectId.toString();
 
     if (deleteMode === "everyone") {
-      const isSender = message.senderId?.toString() === userIdStr || message.senderName === userName;
-      const isAdminOrManager = session.role === "Admin" || session.role === "Manager";
+      const isSender = message.senderId?.toString() === userIdStr;
+      const isAdminOrManager = session.role === "Admin" || session.role === "Manager" || session.role === "OPS";
 
       if (!isSender && !isAdminOrManager) {
         return NextResponse.json({ error: "Only the message sender or an admin can delete a message for everyone" }, { status: 403 });

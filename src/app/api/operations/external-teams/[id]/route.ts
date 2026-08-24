@@ -22,9 +22,21 @@ export async function PATCH(
     const body = await request.json();
     await connectToDatabase();
 
+    const { name, role, organization, email, phone, projectIds, accessLevel, status, notes } = body;
+    const updatePayload: Record<string, unknown> = { updatedAt: new Date() };
+    if (name !== undefined) updatePayload.name = name;
+    if (role !== undefined) updatePayload.role = role;
+    if (organization !== undefined) updatePayload.organization = organization;
+    if (email !== undefined) updatePayload.email = email;
+    if (phone !== undefined) updatePayload.phone = phone;
+    if (projectIds !== undefined) updatePayload.projectIds = projectIds;
+    if (accessLevel !== undefined) updatePayload.accessLevel = accessLevel;
+    if (status !== undefined) updatePayload.status = status;
+    if (notes !== undefined) updatePayload.notes = notes;
+
     const updated = await ExternalTeam.findOneAndUpdate(
       { _id: id, tenantId: tenantObjectId },
-      { $set: { ...body, updatedAt: new Date() } },
+      { $set: updatePayload },
       { returnDocument: 'after' }
     );
 

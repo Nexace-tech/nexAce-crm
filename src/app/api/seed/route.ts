@@ -18,10 +18,23 @@ import { Referral } from "@/models/Referral";
 import { Notification } from "@/models/Notification";
 import { Client } from "@/models/Client";
 
-export async function GET() {
-  // Only allow seeding in development environment
+export async function GET(request: Request) {
+  // 1. Strictly deny in production environment
   if (process.env.NODE_ENV === "production") {
-    return NextResponse.json({ error: "Not allowed in production" }, { status: 403 });
+    return NextResponse.json({ error: "Forbidden: Seeding is not permitted in production" }, { status: 403 });
+  }
+
+  // 2. In development, require a confirmation secret to prevent accidental wipes
+  const { searchParams } = new URL(request.url);
+  const confirmKey = searchParams.get("confirm");
+  const authHeader = request.headers.get("authorization");
+  const seedSecret = process.env.SEED_SECRET || "nexace-dev-seed-confirmed";
+
+  if (confirmKey !== seedSecret && authHeader !== `Bearer ${seedSecret}`) {
+    return NextResponse.json(
+      { error: "Forbidden: Missing or invalid confirmation key (?confirm=nexace-dev-seed-confirmed)" },
+      { status: 403 }
+    );
   }
 
   try {

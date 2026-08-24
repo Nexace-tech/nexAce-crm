@@ -28,9 +28,10 @@ export async function GET(request: Request, { params }: RouteParams) {
 
     const user = await User.findById(id)
       .select("-passwordHash")
-      .populate("managerId", "name email role photoUrl");
+      .populate("managerId", "name email role photoUrl")
+      .lean();
 
-    if (!user || user.tenantId.toString() !== session.tenantId) {
+    if (!user || (user.tenantId as any).toString() !== session.tenantId) {
       return NextResponse.json({ error: "Employee not found" }, { status: 404 });
     }
 
@@ -86,7 +87,11 @@ export async function PUT(request: Request, { params }: RouteParams) {
         return NextResponse.json({ error: "Verification code is required to update email address." }, { status: 400 });
       }
       const verification = await EmailVerification.findOne({ email: user.email });
-      if (!verification || verification.code !== body.code) {
+      const isExpired = verification && (Date.now() - new Date(verification.createdAt).getTime() > 10 * 60 * 1000);
+      if (!verification || verification.code !== body.code || isExpired) {
+        if (verification && isExpired) {
+          await EmailVerification.deleteOne({ _id: verification._id });
+        }
         return NextResponse.json({ error: "Incorrect or expired verification code. Please request a new code." }, { status: 400 });
       }
 
@@ -232,10 +237,11 @@ export async function PUT(request: Request, { params }: RouteParams) {
 
     await user.save();
 
-    // If user edited their own profile, refresh session cookie with the new name
-    if (isSelf && body.name) {
+    // If user edited their own profile critical credentials, clean up old session and re-mint cookie
+    if (isSelf && (body.name || body.email || body.role)) {
       try {
-        const { createSession } = await import("@/lib/session");
+        const { createSession, deleteSession } = await import("@/lib/session");
+        await deleteSession();
         await createSession(
           user._id.toString(),
           user.tenantId.toString(),
@@ -244,7 +250,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
           user.role
         );
       } catch (sessErr) {
-        console.error("Failed to refresh session cookie on profile rename:", sessErr);
+        console.error("Failed to refresh session cookie on profile update:", sessErr);
       }
     }
 

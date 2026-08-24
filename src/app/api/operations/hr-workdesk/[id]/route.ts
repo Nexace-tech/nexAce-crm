@@ -18,9 +18,24 @@ export async function PATCH(
     const body = await request.json();
     await connectToDatabase();
 
+    const { employeeId, employeeName, department, role, allocatedProject, allocationPercentage, billingRate, skills, startDate, endDate, notes, status } = body;
+    const updatePayload: Record<string, unknown> = {};
+    if (employeeId !== undefined) updatePayload.employeeId = employeeId ? new mongoose.Types.ObjectId(employeeId) : null;
+    if (employeeName !== undefined) updatePayload.employeeName = employeeName;
+    if (department !== undefined) updatePayload.department = department;
+    if (role !== undefined) updatePayload.role = role;
+    if (allocatedProject !== undefined) updatePayload.allocatedProject = allocatedProject;
+    if (allocationPercentage !== undefined) updatePayload.allocationPercentage = Number(allocationPercentage);
+    if (billingRate !== undefined) updatePayload.billingRate = Number(billingRate);
+    if (skills !== undefined) updatePayload.skills = skills;
+    if (startDate !== undefined) updatePayload.startDate = startDate ? new Date(startDate) : null;
+    if (endDate !== undefined) updatePayload.endDate = endDate ? new Date(endDate) : null;
+    if (notes !== undefined) updatePayload.notes = notes;
+    if (status !== undefined) updatePayload.status = status;
+
     const allocation = await HRResourceAllocation.findOneAndUpdate(
       { _id: new mongoose.Types.ObjectId(id), tenantId: tenantObjectId },
-      { $set: body },
+      { $set: updatePayload },
       { returnDocument: 'after' }
     );
 

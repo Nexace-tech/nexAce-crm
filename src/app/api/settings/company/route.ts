@@ -66,7 +66,8 @@ export async function PUT(request: Request) {
     }
 
     tenant.name = name.trim();
-    tenant.slug = name.trim().toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
+    const generatedSlug = name.trim().toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
+    tenant.slug = generatedSlug || `workspace-${tenant._id.toString().slice(-6)}`;
     await tenant.save();
 
     return NextResponse.json({ success: true, company: tenant });

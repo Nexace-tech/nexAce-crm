@@ -21,16 +21,16 @@ export async function GET() {
 
     const rawSprints = await Sprint.find({
       tenantId: tenantObjectId,
-    }).sort({ startDate: -1 });
+    }).sort({ startDate: -1 }).lean();
 
     // Populate burndown stats and linked tasks for each sprint
     const sprintsWithStats = await Promise.all(
       rawSprints.map(async (sprintDoc) => {
-        const sprint = sprintDoc.toObject();
+        const sprint = sprintDoc;
         const linkedTasks = await Task.find({
           tenantId: tenantObjectId,
           sprintId: sprintDoc._id,
-        }).populate("assignee", "name photoUrl role department");
+        }).populate("assignee", "name photoUrl role department").lean();
 
         const totalTasks = linkedTasks.length;
         const completedTasks = linkedTasks.filter((t) => t.status === "Done").length;
@@ -132,9 +132,10 @@ export async function PUT(request: Request) {
     }
 
     await connectToDatabase();
+    const tenantObjectId = new mongoose.Types.ObjectId(session.tenantId);
 
-    const sprint = await Sprint.findById(sprintId);
-    if (!sprint || sprint.tenantId.toString() !== session.tenantId) {
+    const sprint = await Sprint.findOne({ _id: sprintId, tenantId: tenantObjectId });
+    if (!sprint) {
       return NextResponse.json({ error: "Sprint not found" }, { status: 404 });
     }
 

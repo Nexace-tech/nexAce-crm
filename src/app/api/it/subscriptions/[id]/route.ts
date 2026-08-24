@@ -22,9 +22,23 @@ export async function PATCH(
     const body = await request.json();
     await connectToDatabase();
 
+    const { tool, vendor, billingCycle, cost, seats, activeUsers, renewalDate, paymentMethod, status, licenseKey, notes } = body;
+    const updatePayload: Record<string, unknown> = { updatedAt: new Date() };
+    if (tool !== undefined) updatePayload.tool = tool;
+    if (vendor !== undefined) updatePayload.vendor = vendor;
+    if (billingCycle !== undefined) updatePayload.billingCycle = billingCycle;
+    if (cost !== undefined) updatePayload.cost = Number(cost);
+    if (seats !== undefined) updatePayload.seats = Number(seats);
+    if (activeUsers !== undefined) updatePayload.activeUsers = Number(activeUsers);
+    if (renewalDate !== undefined) updatePayload.renewalDate = renewalDate ? new Date(renewalDate) : null;
+    if (paymentMethod !== undefined) updatePayload.paymentMethod = paymentMethod;
+    if (status !== undefined) updatePayload.status = status;
+    if (licenseKey !== undefined) updatePayload.licenseKey = licenseKey;
+    if (notes !== undefined) updatePayload.notes = notes;
+
     const updated = await ITSubscription.findOneAndUpdate(
       { _id: id, tenantId: tenantObjectId },
-      { $set: { ...body, updatedAt: new Date() } },
+      { $set: updatePayload },
       { returnDocument: 'after' }
     );
 

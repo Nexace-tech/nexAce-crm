@@ -29,9 +29,10 @@ export async function PUT(request: Request, { params }: RouteParams) {
     const { name, description, code, managerId } = body;
 
     await connectToDatabase();
+    const tenantObjectId = new mongoose.Types.ObjectId(session.tenantId);
 
-    const department = await Department.findById(id);
-    if (!department || department.tenantId.toString() !== session.tenantId) {
+    const department = await Department.findOne({ _id: id, tenantId: tenantObjectId });
+    if (!department) {
       return NextResponse.json({ error: "Department not found" }, { status: 404 });
     }
 
@@ -93,9 +94,10 @@ export async function DELETE(request: Request, { params }: RouteParams) {
     const { id } = await params;
 
     await connectToDatabase();
+    const tenantObjectId = new mongoose.Types.ObjectId(session.tenantId);
 
-    const department = await Department.findById(id);
-    if (!department || department.tenantId.toString() !== session.tenantId) {
+    const department = await Department.findOne({ _id: id, tenantId: tenantObjectId });
+    if (!department) {
       return NextResponse.json({ error: "Department not found" }, { status: 404 });
     }
 

@@ -515,7 +515,7 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
   const filteredUsers = directoryUsers.filter((u) => {
     const matchesDept = deptFilter === "All" || u.department === deptFilter || (u.departments && u.departments.includes(deptFilter));
     const matchesRole = roleFilter === "All" || u.role === roleFilter;
-    const matchesSearch = !searchQuery || u.name.toLowerCase().includes(searchQuery.toLowerCase()) || u.email.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesSearch = !searchQuery || (u.name?.toLowerCase() || "").includes(searchQuery.toLowerCase()) || (u.email?.toLowerCase() || "").includes(searchQuery.toLowerCase());
     return matchesDept && matchesRole && matchesSearch;
   });
 

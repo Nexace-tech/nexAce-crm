@@ -18,7 +18,7 @@ export async function GET() {
     const tenantIdObj = new mongoose.Types.ObjectId(session.tenantId);
 
     // Auto-seed default Pulse survey if none exist
-    let surveys = await PulseSurvey.find({ tenantId: tenantIdObj }).sort({ createdAt: -1 });
+    let surveys = await PulseSurvey.find({ tenantId: tenantIdObj }).sort({ createdAt: -1 }).lean();
 
     if (surveys.length === 0) {
       const defaultSurvey = await PulseSurvey.create({

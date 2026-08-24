@@ -16,7 +16,7 @@ export async function GET() {
       filter.userId = authResult.userObjectId;
     }
 
-    const leaves = await LeaveRequest.find(filter).sort({ createdAt: -1 });
+    const leaves = await LeaveRequest.find(filter).sort({ createdAt: -1 }).lean();
     return NextResponse.json({ leaves });
   } catch (error: unknown) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Internal Server Error" }, { status: 500 });
@@ -38,15 +38,26 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Start date, end date, and reason are required" }, { status: 400 });
     }
 
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+      return NextResponse.json({ error: "Invalid date format" }, { status: 400 });
+    }
+
+    if (end.getTime() < start.getTime()) {
+      return NextResponse.json({ error: "End date cannot be earlier than start date" }, { status: 400 });
+    }
+
     await connectToDatabase();
 
     const leave = await LeaveRequest.create({
       userId: userObjectId,
       userName: session.userName,
       type: leaveType,
-      startDate: new Date(startDate),
-      endDate: new Date(endDate),
-      reason,
+      startDate: start,
+      endDate: end,
+      reason: reason.trim(),
       status: "Pending",
       tenantId: tenantObjectId,
     });

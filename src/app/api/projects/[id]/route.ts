@@ -86,20 +86,20 @@ export async function PUT(
         targetName: project.name,
         details: `Updated project '${project.name}' status from '${oldStatus}' to '${status}'`,
       });
+    } else {
+      await ActivityLog.create({
+        tenantId: new mongoose.Types.ObjectId(session.tenantId),
+        projectId: project._id,
+        userId: new mongoose.Types.ObjectId(session.userId),
+        userName: session.userName,
+        userRole: session.role,
+        action: "Project Edited",
+        targetName: project.name,
+        details: `Project details updated for '${project.name}'`,
+      });
     }
 
-    await ActivityLog.create({
-      tenantId: new mongoose.Types.ObjectId(session.tenantId),
-      projectId: project._id,
-      userId: new mongoose.Types.ObjectId(session.userId),
-      userName: session.userName,
-      userRole: session.role,
-      action: "Project Edited",
-      targetName: project.name,
-      details: `Project details updated for '${project.name}'`,
-    });
-
-    const updatedProject = await Project.findById(id).populate("members", "name role photoUrl");
+    const updatedProject = await Project.findById(id).populate("members", "name role photoUrl").lean();
 
     return NextResponse.json({ success: true, project: updatedProject });
   } catch (error: unknown) {

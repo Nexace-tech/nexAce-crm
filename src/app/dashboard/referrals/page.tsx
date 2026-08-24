@@ -199,11 +199,11 @@ export default function ReferralsPage() {
     return referrals.filter((r) => {
       const matchesSearch =
         !searchQuery ||
-        r.candidateName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        r.candidateEmail.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        r.position.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (r.referralCode && r.referralCode.toLowerCase().includes(searchQuery.toLowerCase())) ||
-        r.referrerName.toLowerCase().includes(searchQuery.toLowerCase());
+        (r.candidateName?.toLowerCase() || "").includes(searchQuery.toLowerCase()) ||
+        (r.candidateEmail?.toLowerCase() || "").includes(searchQuery.toLowerCase()) ||
+        (r.position?.toLowerCase() || "").includes(searchQuery.toLowerCase()) ||
+        (r.referralCode?.toLowerCase() || "").includes(searchQuery.toLowerCase()) ||
+        (r.referrerName?.toLowerCase() || "").includes(searchQuery.toLowerCase());
 
       const matchesStage = stageFilter === "All" || r.status === stageFilter;
 

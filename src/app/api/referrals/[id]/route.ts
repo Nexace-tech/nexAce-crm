@@ -25,10 +25,23 @@ export async function GET(
     const referral = await Referral.findOne({
       _id: id,
       tenantId: new mongoose.Types.ObjectId(session.tenantId),
-    });
+    }).lean();
 
     if (!referral) {
       return NextResponse.json({ error: "Referral not found" }, { status: 404 });
+    }
+
+    const dataScope = await getUserDataScope(session);
+    const isElevated =
+      session.role === "Admin" ||
+      isSubAdminRole(session.role) ||
+      session.role === "HR" ||
+      dataScope.canViewFeature("manageReferrals");
+
+    const isOwner = referral.referrerId?.toString() === session.userId;
+
+    if (!isElevated && !isOwner) {
+      return NextResponse.json({ error: "Forbidden: Access denied to this referral record" }, { status: 403 });
     }
 
     return NextResponse.json({ referral });

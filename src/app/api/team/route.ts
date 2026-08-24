@@ -154,8 +154,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    if (session.role !== "Admin" && session.role !== "Manager") {
-      return NextResponse.json({ error: "Forbidden: Admins or Managers only" }, { status: 403 });
+    const isPrivileged = session.role === "Admin" || session.role === "Manager" || isSubAdminRole(session.role);
+    if (!isPrivileged) {
+      return NextResponse.json({ error: "Forbidden: Admins, Managers, or Operations Admins only" }, { status: 403 });
     }
 
     const body = await request.json();
@@ -194,9 +195,9 @@ export async function POST(request: Request) {
           continue;
         }
 
-        const existingUser = await User.findOne({ email: item.email.toLowerCase() });
+        const existingUser = await User.findOne({ email: item.email.toLowerCase().trim(), tenantId: tenantObjectId });
         if (existingUser) {
-          errors.push(`Row ${i + 1} (${item.email}): User already exists`);
+          errors.push(`Row ${i + 1} (${item.email}): User already exists in this workspace`);
           continue;
         }
 
@@ -289,9 +290,9 @@ export async function POST(request: Request) {
       );
     }
 
-    const existingUser = await User.findOne({ email: email.toLowerCase().trim() });
+    const existingUser = await User.findOne({ email: email.toLowerCase().trim(), tenantId: tenantObjectId });
     if (existingUser) {
-      return NextResponse.json({ error: "An employee with this email already exists" }, { status: 400 });
+      return NextResponse.json({ error: "An employee with this email already exists in this workspace" }, { status: 400 });
     }
 
     // Duplicate name check (case-insensitive, within same tenant)

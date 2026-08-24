@@ -22,9 +22,19 @@ export async function PATCH(
     const body = await request.json();
     await connectToDatabase();
 
+    const { tool, category, assignee, assigneeEmail, roleOrLicense, status, notes } = body;
+    const updatePayload: Record<string, unknown> = { updatedAt: new Date() };
+    if (tool !== undefined) updatePayload.tool = tool;
+    if (category !== undefined) updatePayload.category = category;
+    if (assignee !== undefined) updatePayload.assignee = assignee;
+    if (assigneeEmail !== undefined) updatePayload.assigneeEmail = assigneeEmail;
+    if (roleOrLicense !== undefined) updatePayload.roleOrLicense = roleOrLicense;
+    if (status !== undefined) updatePayload.status = status;
+    if (notes !== undefined) updatePayload.notes = notes;
+
     const updated = await ITAccessEntry.findOneAndUpdate(
       { _id: id, tenantId: tenantObjectId },
-      { $set: { ...body, updatedAt: new Date() } },
+      { $set: updatePayload },
       { returnDocument: 'after' }
     );
 

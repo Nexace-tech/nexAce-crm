@@ -1,6 +1,7 @@
 "use client";
 
-import React from "react";
+import React, { useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import { AdminDashboard } from "@/components/dashboard/AdminDashboard";
 import { SubAdminDashboard } from "@/components/dashboard/SubAdminDashboard";
@@ -13,16 +14,16 @@ import { isSubAdminRole } from "@/lib/roles";
 
 export default function DashboardHome() {
   const { user, loading } = useAuth();
+  const router = useRouter();
 
-  if (loading) {
-    return <Preloader label="Loading Workspace Dashboard" />;
-  }
-
-  if (!user) {
-    if (typeof window !== "undefined") {
-      window.location.href = "/login";
+  useEffect(() => {
+    if (!loading && !user) {
+      router.push("/login");
     }
-    return <Preloader label="Redirecting to Login..." />;
+  }, [loading, user, router]);
+
+  if (loading || !user) {
+    return <Preloader label={loading ? "Loading Workspace Dashboard" : "Redirecting to Login..."} />;
   }
 
   const role = user.role?.toLowerCase();

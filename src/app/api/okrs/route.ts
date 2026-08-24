@@ -11,7 +11,7 @@ export async function GET() {
     const { tenantObjectId } = authResult;
     await connectToDatabase();
 
-    const okrs = await OKR.find({ tenantId: tenantObjectId }).sort({ deadline: 1 });
+    const okrs = await OKR.find({ tenantId: tenantObjectId }).sort({ deadline: 1 }).lean();
     return NextResponse.json({ okrs });
   } catch (error: unknown) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Internal Server Error" }, { status: 500 });
@@ -33,15 +33,20 @@ export async function POST(request: Request) {
     await connectToDatabase();
 
     const okr = await OKR.create({
-      title,
-      description: description || "",
-      level: level || "Team",
+      tenantId: tenantObjectId,
       ownerId: userObjectId,
       ownerName: session.userName,
+      title: title.trim(),
+      description: description || "",
+      level: level || "Company",
       deadline: new Date(deadline),
+      keyResults: Array.isArray(keyResults) && keyResults.length > 0
+        ? keyResults
+        : [
+            { title: "Key Milestone 1", targetValue: 100, currentValue: 0, unit: "%" },
+            { title: "Key Milestone 2", targetValue: 100, currentValue: 0, unit: "%" },
+          ],
       status: "On Track",
-      keyResults: keyResults || [],
-      tenantId: tenantObjectId,
     });
 
     // Broadcast to all team members (Company-level OKRs affect everyone)
@@ -60,9 +65,9 @@ export async function POST(request: Request) {
 
 export async function PUT(request: Request) {
   try {
-    const authResult = await requireTenantSession(["Admin", "Manager", "HR"]);
+    const authResult = await requireTenantSession(["Admin", "Manager"]);
     if (isAuthError(authResult)) return authResult;
-    const { tenantObjectId, session } = authResult;
+    const { tenantObjectId } = authResult;
     const body = await request.json();
     const { okrId, status, keyResults, title, description, level, deadline } = body;
 
@@ -75,15 +80,13 @@ export async function PUT(request: Request) {
     const okr = await OKR.findOne({ _id: okrId, tenantId: tenantObjectId });
     if (!okr) return NextResponse.json({ error: "OKR not found" }, { status: 404 });
 
-    const updates: Record<string, unknown> = {};
-    if (status) updates.status = status;
-    if (keyResults) updates.keyResults = keyResults;
-    if (title) updates.title = title;
-    if (description !== undefined) updates.description = description;
-    if (level) updates.level = level;
-    if (deadline) updates.deadline = new Date(deadline);
+    if (status !== undefined) okr.status = status;
+    if (keyResults !== undefined) okr.keyResults = keyResults;
+    if (title !== undefined) okr.title = title.trim();
+    if (description !== undefined) okr.description = description;
+    if (level !== undefined) okr.level = level;
+    if (deadline !== undefined) okr.deadline = new Date(deadline);
 
-    Object.assign(okr, updates);
     await okr.save();
 
     return NextResponse.json({ okr, message: "OKR updated" });

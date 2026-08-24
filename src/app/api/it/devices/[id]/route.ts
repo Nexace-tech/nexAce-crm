@@ -22,9 +22,29 @@ export async function PATCH(
     const body = await request.json();
     await connectToDatabase();
 
+    const { deviceType, brand, model, serialNumber, assetTag, assignedTo, assignedToName, assignedToEmail, assignedDate, status, condition, purchaseDate, purchaseCost, warrantyExpiry, notes, specs } = body;
+    
+    const updatePayload: Record<string, unknown> = { updatedAt: new Date() };
+    if (deviceType !== undefined) updatePayload.deviceType = deviceType;
+    if (brand !== undefined) updatePayload.brand = brand;
+    if (model !== undefined) updatePayload.model = model;
+    if (serialNumber !== undefined) updatePayload.serialNumber = serialNumber;
+    if (assetTag !== undefined) updatePayload.assetTag = assetTag;
+    if (assignedTo !== undefined) updatePayload.assignedTo = assignedTo ? new mongoose.Types.ObjectId(assignedTo) : null;
+    if (assignedToName !== undefined) updatePayload.assignedToName = assignedToName;
+    if (assignedToEmail !== undefined) updatePayload.assignedToEmail = assignedToEmail;
+    if (assignedDate !== undefined) updatePayload.assignedDate = assignedDate ? new Date(assignedDate) : null;
+    if (status !== undefined) updatePayload.status = status;
+    if (condition !== undefined) updatePayload.condition = condition;
+    if (purchaseDate !== undefined) updatePayload.purchaseDate = purchaseDate ? new Date(purchaseDate) : null;
+    if (purchaseCost !== undefined) updatePayload.purchaseCost = Number(purchaseCost);
+    if (warrantyExpiry !== undefined) updatePayload.warrantyExpiry = warrantyExpiry ? new Date(warrantyExpiry) : null;
+    if (notes !== undefined) updatePayload.notes = notes;
+    if (specs !== undefined) updatePayload.specs = specs;
+
     const updated = await ITDevice.findOneAndUpdate(
       { _id: id, tenantId: tenantObjectId },
-      { $set: { ...body, updatedAt: new Date() } },
+      { $set: updatePayload },
       { returnDocument: 'after' }
     );
 
