@@ -4,7 +4,7 @@ import { Client } from "@/models/Client";
 import { Referral } from "@/models/Referral";
 import { ChatMessage } from "@/models/ChatMessage";
 import { Announcement } from "@/models/Announcement";
-import { DriveFile } from "@/models/DriveFile";
+import { SalesDeal } from "@/models/SalesDeal";
 import { requireTenantSession, isAuthError } from "@/lib/auth-guard";
 
 export async function POST() {
@@ -15,13 +15,98 @@ export async function POST() {
 
     await connectToDatabase();
 
-    // 1. Seed Clients
+    // 1. Seed Sales Deals
+    const dealCount = await SalesDeal.countDocuments({ tenantId: tenantObjectId });
+    if (dealCount === 0) {
+      await SalesDeal.insertMany([
+        {
+          tenantId: tenantObjectId,
+          createdBy: userObjectId,
+          clientAccount: "NovaWave LLC",
+          dealName: "Annual Software Enterprise",
+          dealValue: 1994938,
+          stage: "Closed Won",
+          probability: 90,
+          owner: session.userName || "Robert Johnson",
+          expectedClose: "2026-10-31",
+          venture: "Ace Consultancys",
+          notes: "Multi-year enterprise contract signed.",
+        },
+        {
+          tenantId: tenantObjectId,
+          createdBy: userObjectId,
+          clientAccount: "Silver Hawk",
+          dealName: "CRM Onboarding & Migration",
+          dealValue: 1544540,
+          stage: "Closed Won",
+          probability: 90,
+          owner: "Isabella Cooper",
+          expectedClose: "2026-11-15",
+          venture: "Ace Consultancys",
+          notes: "Complete migration across 5 departments.",
+        },
+        {
+          tenantId: tenantObjectId,
+          createdBy: userObjectId,
+          clientAccount: "Summit LLC",
+          dealName: "Enterprise Plan Rollout",
+          dealValue: 1036390,
+          stage: "Closed Won",
+          probability: 80,
+          owner: "John Smith",
+          expectedClose: "2026-09-30",
+          venture: "Ace Consultancys",
+          notes: "Custom branding and workspace isolation enabled.",
+        },
+        {
+          tenantId: tenantObjectId,
+          createdBy: userObjectId,
+          clientAccount: "Bluesky Industries",
+          dealName: "BrightWorks Global Retainer",
+          dealValue: 1015280,
+          stage: "Proposal Sent",
+          probability: 72,
+          owner: "Sophia Parker",
+          expectedClose: "2026-12-20",
+          venture: "Ace Consultancys",
+          notes: "Proposal submitted to executive board.",
+        },
+        {
+          tenantId: tenantObjectId,
+          createdBy: userObjectId,
+          clientAccount: "HealthTech Innovations",
+          dealName: "Sales Pipeline Automation",
+          dealValue: 1014112,
+          stage: "Negotiation",
+          probability: 60,
+          owner: "Emma Reynolds",
+          expectedClose: "2026-11-30",
+          venture: "Ace Consultancys",
+          notes: "In final terms and contract review.",
+        },
+        {
+          tenantId: tenantObjectId,
+          createdBy: userObjectId,
+          clientAccount: "Acme Corp",
+          dealName: "Custom Analytics Engine",
+          dealValue: 850000,
+          stage: "Prospecting",
+          probability: 50,
+          owner: session.userName || "Admin",
+          expectedClose: "2026-12-15",
+          venture: "Ace Consultancys",
+          notes: "Discovery call scheduled next week.",
+        },
+      ]);
+    }
+
+    // 2. Seed Clients
     const clientCount = await Client.countDocuments({ tenantId: tenantObjectId });
     if (clientCount === 0) {
       await Client.insertMany([
         {
           projectId: "CLP-001",
-          clientAccount: "Acme Corporation",
+          clientAccount: "NovaWave LLC",
           venture: "Ace Consultancys",
           projectName: "Enterprise UI Design Retainer",
           deliveryOwner: session.userName,
@@ -32,44 +117,44 @@ export async function POST() {
           estHours: 40,
           actualHours: 28,
           progressPercent: 70,
-          name: "Acme Corporation",
-          company: "Acme Inc.",
-          email: "contact@acme.com",
-          phone: "+1 555-0192",
+          name: "NovaWave LLC",
+          company: "NovaWave Inc.",
+          email: "contact@novawave.de",
+          phone: "+49 30 123456",
           status: "Active",
           retainerHours: 40,
           usedHours: 28,
-          monthlyValue: 3500,
+          monthlyValue: 166244,
           notes: "Primary retainer account for enterprise UI design.",
           tenantId: tenantObjectId,
         },
         {
           projectId: "CLP-002",
-          clientAccount: "Starlight Media",
+          clientAccount: "Silver Hawk",
           venture: "Ace Consultancys",
-          projectName: "Q4 Marketing Campaigns",
+          projectName: "Q4 Marketing & Growth",
           deliveryOwner: session.userName,
           phase: "In Delivery",
           priority: "Medium",
-          health: "Amber",
+          health: "Green",
           billingType: "Project",
           estHours: 20,
-          actualHours: 0,
-          progressPercent: 10,
-          name: "Starlight Media",
-          company: "Starlight Ltd",
-          email: "billing@starlight.io",
-          phone: "+1 555-0811",
-          status: "Lead",
+          actualHours: 12,
+          progressPercent: 60,
+          name: "Silver Hawk",
+          company: "Silver Hawk Media",
+          email: "billing@silverhawk.au",
+          phone: "+61 2 9876 5432",
+          status: "Active",
           retainerHours: 20,
-          usedHours: 0,
-          monthlyValue: 1800,
-          notes: "Prospecting for Q4 digital marketing campaigns.",
+          usedHours: 12,
+          monthlyValue: 128711,
+          notes: "Growth campaigns in delivery.",
           tenantId: tenantObjectId,
         },
         {
           projectId: "CLP-003",
-          clientAccount: "Nexus Labs",
+          clientAccount: "Summit LLC",
           venture: "Ace Consultancys",
           projectName: "Dedicated Backend Engineering",
           deliveryOwner: session.userName,
@@ -80,21 +165,21 @@ export async function POST() {
           estHours: 60,
           actualHours: 45,
           progressPercent: 75,
-          name: "Nexus Labs",
-          company: "Nexus Tech",
-          email: "support@nexuslabs.com",
-          phone: "+1 555-9922",
+          name: "Summit LLC",
+          company: "Summit Tech",
+          email: "support@summit.it",
+          phone: "+39 06 6987",
           status: "Active",
           retainerHours: 60,
           usedHours: 45,
-          monthlyValue: 5000,
+          monthlyValue: 86365,
           notes: "Dedicated backend engineering retainer.",
           tenantId: tenantObjectId,
         }
       ]);
     }
 
-    // 2. Seed Referrals
+    // 3. Seed Referrals
     const refCount = await Referral.countDocuments({ tenantId: tenantObjectId });
     if (refCount === 0) {
       await Referral.insertMany([
@@ -127,7 +212,7 @@ export async function POST() {
       ]);
     }
 
-    // 3. Seed Chat Messages & Announcements
+    // 4. Seed Chat Messages & Announcements
     const chatCount = await ChatMessage.countDocuments({ tenantId: tenantObjectId });
     if (chatCount === 0) {
       await ChatMessage.insertMany([
@@ -162,7 +247,7 @@ export async function POST() {
       });
     }
 
-    return NextResponse.json({ message: "Seed completed successfully!" });
+    return NextResponse.json({ message: "Demo data seeded successfully!" });
   } catch (error: unknown) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Internal Server Error" }, { status: 500 });
   }

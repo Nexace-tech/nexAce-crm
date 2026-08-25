@@ -138,18 +138,18 @@
     --default: 222.2 47.4% 11.2%;
     --default-foreground: 210 40% 98%;
 
-    --primary-50: 184 60% 94%;
-    --primary-100: 184 65% 85%;
-    --primary-200: 184 65% 72%;
-    --primary-300: 184 65% 58%;
-    --primary-400: 184 70% 45%;
-    --primary-500: 184 85% 35%;
-    --primary-600: 184 100% 27%;
-    --primary-700: 184 100% 22%;
-    --primary-800: 184 100% 17%;
-    --primary-900: 184 100% 12%;
-    --primary-950: 184 100% 7%;
-    --primary: 184 100% 22%;
+    --primary-50: 168 100% 97%;
+    --primary-100: 168 93% 90%;
+    --primary-200: 168 90% 80%;
+    --primary-300: 168 85% 65%;
+    --primary-400: 168 80% 50%;
+    --primary-500: 168 100% 39%; /* #00c5a0 Mint Teal */
+    --primary-600: 168 100% 34%;
+    --primary-700: 168 100% 28%;
+    --primary-800: 168 100% 22%;
+    --primary-900: 168 100% 16%;
+    --primary-950: 168 100% 10%;
+    --primary: 168 100% 39%; /* #00c5a0 */
     --primary-foreground: 0 0% 100%;
 
     --sidebar: 0 0% 100%;
@@ -160,29 +160,29 @@
   }
 
   .dark {
-    --background: 200 22% 10%;
-    --foreground: 0 0% 98%;
+    --background: 215 28% 9%; /* #11161d deep charcoal */
+    --foreground: 210 40% 98%;
 
-    --muted: 200 20% 16%;
-    --muted-foreground: 200 12% 65%;
+    --muted: 215 25% 15%; /* #1c2430 */
+    --muted-foreground: 215 15% 65%;
 
-    --popover: 200 22% 9%;
-    --popover-foreground: 0 0% 98%;
+    --popover: 215 25% 12%; /* #161c24 */
+    --popover-foreground: 210 40% 98%;
 
-    --card: 200 24% 12.5%;
-    --card-foreground: 0 0% 98%;
+    --card: 215 25% 12%; /* #161c24 */
+    --card-foreground: 210 40% 98%;
 
-    --border: 200 18% 20%;
-    --input: 200 18% 20%;
+    --border: 215 25% 18%; /* #232d3b */
+    --input: 215 25% 18%;
 
-    --primary: 184 75% 48%; /* #26c6da Bright Readable Cyan/Teal in Dark Mode */
-    --primary-foreground: 200 24% 10%;
+    --primary: 168 100% 39%; /* #00c5a0 */
+    --primary-foreground: 0 0% 100%;
 
-    --secondary: 184 40% 18%;
+    --secondary: 217 33% 20%;
     --secondary-foreground: 0 0% 98%;
 
-    --accent: 184 60% 13%; /* #0d3135 Active Dark Teal Container */
-    --accent-foreground: 184 60% 48%; /* #30b8bd Vibrant Cyan Accent */
+    --accent: 0 84% 15%;
+    --accent-foreground: 0 84% 65%;
 
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 210 40% 98%;
@@ -193,30 +193,30 @@
     --warning: 16 93% 70%;
     --warning-foreground: 33.3 100% 96.5%;
 
-    --info: 184 85% 48%;
-    --info-foreground: 183.2 100% 96.3%;
+    --info: 217 91% 60%;
+    --info-foreground: 0 0% 100%;
 
-    --ring: 184 60% 48%;
+    --ring: 0 84.2% 60.2%;
 
     --default-950: 0 0% 98%;
     --default-900: 0 0% 95%;
-    --default-800: 200 15% 88%;
-    --default-700: 200 15% 75%;
-    --default-600: 200 12% 65%;
-    --default-500: 200 12% 50%;
-    --default-400: 200 15% 35%;
-    --default-300: 200 18% 25%;
-    --default-200: 200 20% 16%;
-    --default-100: 200 22% 12.5%;
-    --default-50: 200 22% 10%;
-    --default: 184 60% 48%;
-    --default-foreground: 200 22% 10%;
+    --default-800: 215 20% 88%;
+    --default-700: 215 20% 75%;
+    --default-600: 215 20% 65%;
+    --default-500: 215 20% 50%;
+    --default-400: 217 33% 35%;
+    --default-300: 217 33% 25%;
+    --default-200: 217 33% 20%;
+    --default-100: 217 33% 15%;
+    --default-50: 222 47% 11%;
+    --default: 0 84.2% 60.2%;
+    --default-foreground: 0 0% 100%;
 
-    --sidebar: 200 24% 12.5%;
-    --header: 200 24% 12.5%;
-    --menu-arrow: 200 18% 20%;
-    --menu-arrow-active: 184 60% 13%;
-    --menu-foreground: 200 15% 75%;
+    --sidebar: 217 33% 15%;
+    --header: 217 33% 15%;
+    --menu-arrow: 217 33% 20%;
+    --menu-arrow-active: 0 84% 15%;
+    --menu-foreground: 215 20% 75%;
   }
 
   *,

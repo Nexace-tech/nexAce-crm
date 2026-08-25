@@ -5,7 +5,7 @@ import { User } from "@/models/User";
 import { Attendance } from "@/models/Attendance";
 import { Notification } from "@/models/Notification";
 import { getUserDataScope } from "@/lib/dataScope";
-import { canAssignRole } from "@/lib/roles";
+import { canAssignRole, isSubAdminRole } from "@/lib/roles";
 import { generateSecurePassword } from "@/lib/utils";
 import mongoose from "mongoose";
 import bcrypt from "bcryptjs";

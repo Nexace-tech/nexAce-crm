@@ -30,11 +30,12 @@ interface ModuleItem {
 }
 
 const MODULES: ModuleItem[] = [
+  // ── 1. Dashboard Overview ──────────────────────────────────────────────────
   {
     id: "overview",
     name: "Dashboard Overview",
     path: "/dashboard",
-    icon: "fa-chart-pie",
+    icon: "fa-gauge-high",
     color: "#6366f1",
     tag: "Central Command",
     category: "Core",
@@ -77,6 +78,8 @@ const MODULES: ModuleItem[] = [
       },
     ],
   },
+
+  // ── 2. My Team & Organization ──────────────────────────────────────────────
   {
     id: "team",
     name: "My Team & Organization",
@@ -147,6 +150,8 @@ const MODULES: ModuleItem[] = [
       },
     ],
   },
+
+  // ── 3. Calendar, Timesheets & Sprints ──────────────────────────────────────
   {
     id: "calendar",
     name: "Calendar, Sprints & Attendance",
@@ -205,6 +210,8 @@ const MODULES: ModuleItem[] = [
       },
     ],
   },
+
+  // ── 4. Projects, Tasks, Wiki & Drive ───────────────────────────────────────
   {
     id: "projects",
     name: "Projects, Tasks, Wiki & Drive",
@@ -260,6 +267,8 @@ const MODULES: ModuleItem[] = [
       },
     ],
   },
+
+  // ── 5. Communication Hub & Mail ───────────────────────────────────────────
   {
     id: "chat",
     name: "Communication Hub",
@@ -315,6 +324,168 @@ const MODULES: ModuleItem[] = [
       },
     ],
   },
+
+  // ── 6. Operation Portal, Sales & Clients ──────────────────────────────────
+  {
+    id: "clients",
+    name: "Operation Portal, Sales & Clients",
+    path: "/dashboard/clients",
+    icon: "fa-list-check",
+    color: "#14b8a6",
+    tag: "Clients & Pipelines",
+    category: "Operations & IT",
+    screenshot: "/screenshots/operations_portal.png",
+    screenshotCaption: "Sales Deal Pipeline Workbench with Deal Value Probability and Close Dates",
+    quickStats: [
+      { label: "Health Indicators", value: "Green / Amber / Red" },
+      { label: "Deal Stages", value: "6 Stage Pipeline" },
+      { label: "Bulk Importer", value: "CSV & Paste" },
+    ],
+    description: "Client delivery accounts, sales deals pipeline, batch data importer, staffing utilization grid, and external contractor directory.",
+    steps: [
+      {
+        title: "How to Bulk Import Data (CSV, JSON & Copy-Paste)",
+        purpose: "Batch import dozens of client retainers and sales pipeline deals simultaneously.",
+        instructions: [
+          "In the top right of the Operation Portal, click the 'Bulk Import' button.",
+          "Select the Entity Type: 'Client Retainers & Projects' or 'Sales Pipeline Deals'.",
+          "Choose your input method: Drag and drop a `.csv`, `.tsv`, `.txt`, or `.json` file, or click 'Paste Spreadsheet Data' to paste directly from Excel or Google Sheets.",
+          "Click 'Download Template' if you need a formatted sample template.",
+          "Review the live Summary Chips (Total Records, Total Value $, Unique Clients) and inspect rows in the interactive preview table.",
+          "Click 'Execute Import' to batch persist all records directly to your database.",
+        ],
+        tip: "You can delete unwanted rows or filter records within the preview table prior to running the import.",
+      },
+      {
+        title: "How to Track Client Accounts & Retainer Health",
+        purpose: "Monitor retainer hour burn rates, delivery health flags, and client communication histories.",
+        instructions: [
+          "In the 'Operations' tab, click '+ New Client Project', input Client Name, Project Name, Delivery Lead, Billing Type (e.g. 'Monthly Retainer'), and Budget Hours.",
+          "Set Delivery Health: Green (On track, healthy burn rate), Amber (Approaching retainer ceiling), or Red (Over budget or critical blocker).",
+          "Open any client account to log contact history entries (Calls, Emails, Meetings).",
+        ],
+      },
+      {
+        title: "How to Manage the Sales Deal Pipeline",
+        purpose: "Track sales opportunities across stages with deal valuations and probability weighting.",
+        instructions: [
+          "In the 'Sales' tab, toggle between Kanban Board and Table View.",
+          "Click '+ New Deal', enter Client Account, Deal Title, Deal Value ($/₹), Probability (%), Expected Close Date, and Deal Owner.",
+          "Drag deal cards across stages: Prospecting -> Discovery -> Proposal Sent -> Negotiation -> Closed Won / Closed Lost.",
+        ],
+      },
+      {
+        title: "How to Manage Staff Resource Allocation & Bench",
+        purpose: "Optimize workforce utilization and prevent employee burnout.",
+        instructions: [
+          "In 'HR Allocations', review staff deployment: Deployed (Fully booked), Partially Allocated (Available for tasks), Bench (Ready for new deployments), or On Leave.",
+          "Click 'Edit Allocation' to adjust weekly allocated hours.",
+        ],
+      },
+      {
+        title: "How to Track External Contractors & Freelancers",
+        purpose: "Manage third-party vendor relationships, contracts, and hourly spend.",
+        instructions: [
+          "In 'External Teams', click '+ Add Contractor', enter Name, Agency, Service Category, Assigned Project, Hourly Rate, and Currency (USD/INR).",
+          "Monitor active contract durations and spend.",
+        ],
+      },
+    ],
+  },
+
+  // ── 7. Candidate Referral Pipeline ─────────────────────────────────────────
+  {
+    id: "referrals",
+    name: "Candidate Referral Pipeline",
+    path: "/dashboard/referrals",
+    icon: "fa-link",
+    color: "#0ea5e9",
+    tag: "Talent Acquisition",
+    category: "HR & Culture",
+    screenshot: "/screenshots/referral_pipeline.png",
+    screenshotCaption: "Candidate Referral Pipeline Kanban Board with Reward Bounty Tracking",
+    quickStats: [
+      { label: "Stages", value: "Submitted to Paid" },
+      { label: "Bounties", value: "Custom Reward Value" },
+      { label: "Payout Sync", value: "Approval Workflow" },
+    ],
+    description: "Employee candidate referral engine with reward tracking and interview pipeline stages.",
+    steps: [
+      {
+        title: "How to Submit a Candidate Referral",
+        purpose: "Refer candidates with resume links and earn reward bounties upon hiring.",
+        instructions: [
+          "Navigate to /dashboard/referrals and click '+ Refer Candidate'.",
+          "Enter Candidate Name, Email, Phone Number, Target Job Role, Department, Experience, Resume URL, and eligible Reward Bounty (e.g. $500).",
+          "Click 'Submit Referral'. The card appears in the 'Submitted' column.",
+        ],
+      },
+      {
+        title: "How to Track Interview Stages & Reward Payouts",
+        purpose: "Recruiters manage candidate hiring pipelines and trigger referral bonus disbursements.",
+        instructions: [
+          "Recruiters drag candidate cards through stages: Submitted -> Interviewing -> Hired -> Paid (or Rejected).",
+          "When marked Hired, the payout status becomes Approved. Upon payout disbursement, HR updates payout status to Paid with payment timestamp.",
+        ],
+      },
+    ],
+  },
+
+  // ── 8. Goals, OKRs & Culture ───────────────────────────────────────────────
+  {
+    id: "goals",
+    name: "Goals, OKRs & Culture",
+    path: "/dashboard/goals",
+    icon: "fa-bullseye",
+    color: "#3b82f6",
+    tag: "Performance & Culture",
+    category: "HR & Culture",
+    screenshot: "/screenshots/goals_okrs.png",
+    screenshotCaption: "Company to Individual OKR Tracker with Numeric Progress Sliders and Peer Kudos",
+    quickStats: [
+      { label: "OKR Tiers", value: "4 Hierarchy Levels" },
+      { label: "Surveys", value: "Anonymous Sentiment" },
+      { label: "1:1 Meetings", value: "Rollover Actions" },
+    ],
+    description: "Align company strategy with measurable OKRs, social Kudos wall, pulse surveys, and structured 1:1 meetings.",
+    steps: [
+      {
+        title: "How to Create & Update OKRs",
+        purpose: "Set and measure strategic targets with numeric progress indicators.",
+        instructions: [
+          "Go to /dashboard/goals > 'OKRs' and click '+ New OKR'.",
+          "Set Objective Title (e.g. 'Scale Infrastructure for 100k Users'), Level (Company, Department, Team, Individual), Deadline, and add measurable Key Results (Target Value, Current Value, Unit). Click 'Save OKR'.",
+          "Updating Progress: Click on an existing OKR, drag the current value slider for any Key Result, and the status updates automatically (On Track, At Risk, Behind, Completed).",
+        ],
+      },
+      {
+        title: "How to Post Kudos on the Recognition Wall",
+        purpose: "Celebrate peer contributions and promote core company values.",
+        instructions: [
+          "In the 'Kudos' tab, click 'Give Kudos'.",
+          "Select the colleague you want to appreciate, tag a matching Company Value (Innovation, Speed, Customer First, Teamwork), write your message, and click 'Post Kudos'.",
+        ],
+      },
+      {
+        title: "How to Submit Weekly Anonymous Pulse Surveys",
+        purpose: "Provide anonymous feedback on morale, support, and company culture.",
+        instructions: [
+          "In the 'Surveys' tab, answer the weekly check-in question by clicking 1 to 5 stars.",
+          "Enter optional anonymous feedback and click 'Submit Response'. Executive leadership views aggregate score trend charts without exposing individual identities.",
+        ],
+      },
+      {
+        title: "How to Conduct 1:1 Check-In Meetings",
+        purpose: "Structured manager-employee recurring check-ins with carryover action items.",
+        instructions: [
+          "In the '1:1 Meetings' tab, click '+ Schedule 1:1', pick your manager/report, set the date/time, and define the shared agenda.",
+          "During the meeting, record meeting minutes in the notes box and add Action Items. Unchecked action items automatically roll over into your next scheduled 1:1 meeting.",
+        ],
+      },
+    ],
+  },
+
+  // ── 9. HR Portal & People Operations ───────────────────────────────────────
   {
     id: "hr",
     name: "HR Portal & People Operations",
@@ -379,111 +550,8 @@ const MODULES: ModuleItem[] = [
       },
     ],
   },
-  {
-    id: "goals",
-    name: "Goals, OKRs & Culture",
-    path: "/dashboard/goals",
-    icon: "fa-bullseye",
-    color: "#3b82f6",
-    tag: "Performance & Culture",
-    category: "HR & Culture",
-    screenshot: "/screenshots/goals_okrs.png",
-    screenshotCaption: "Company to Individual OKR Tracker with Numeric Progress Sliders and Peer Kudos",
-    quickStats: [
-      { label: "OKR Tiers", value: "4 Hierarchy Levels" },
-      { label: "Surveys", value: "Anonymous Sentiment" },
-      { label: "1:1 Meetings", value: "Rollover Actions" },
-    ],
-    description: "Align company strategy with measurable OKRs, social Kudos wall, pulse surveys, and structured 1:1 meetings.",
-    steps: [
-      {
-        title: "How to Create & Update OKRs",
-        purpose: "Set and measure strategic targets with numeric progress indicators.",
-        instructions: [
-          "Go to /dashboard/goals > 'OKRs' and click '+ New OKR'.",
-          "Set Objective Title (e.g. 'Scale Infrastructure for 100k Users'), Level (Company, Department, Team, Individual), Deadline, and add measurable Key Results (Target Value, Current Value, Unit). Click 'Save OKR'.",
-          "Updating Progress: Click on an existing OKR, drag the current value slider for any Key Result, and the status updates automatically (On Track, At Risk, Behind, Completed).",
-        ],
-      },
-      {
-        title: "How to Post Kudos on the Recognition Wall",
-        purpose: "Celebrate peer contributions and promote core company values.",
-        instructions: [
-          "In the 'Kudos' tab, click 'Give Kudos'.",
-          "Select the colleague you want to appreciate, tag a matching Company Value (Innovation, Speed, Customer First, Teamwork), write your message, and click 'Post Kudos'.",
-        ],
-      },
-      {
-        title: "How to Submit Weekly Anonymous Pulse Surveys",
-        purpose: "Provide anonymous feedback on morale, support, and company culture.",
-        instructions: [
-          "In the 'Surveys' tab, answer the weekly check-in question by clicking 1 to 5 stars.",
-          "Enter optional anonymous feedback and click 'Submit Response'. Executive leadership views aggregate score trend charts without exposing individual identities.",
-        ],
-      },
-      {
-        title: "How to Conduct 1:1 Check-In Meetings",
-        purpose: "Structured manager-employee recurring check-ins with carryover action items.",
-        instructions: [
-          "In the '1:1 Meetings' tab, click '+ Schedule 1:1', pick your manager/report, set the date/time, and define the shared agenda.",
-          "During the meeting, record meeting minutes in the notes box and add Action Items. Unchecked action items automatically roll over into your next scheduled 1:1 meeting.",
-        ],
-      },
-    ],
-  },
-  {
-    id: "clients",
-    name: "Operation Portal, Sales & Clients",
-    path: "/dashboard/clients",
-    icon: "fa-list-check",
-    color: "#14b8a6",
-    tag: "Clients & Pipelines",
-    category: "Operations & IT",
-    screenshot: "/screenshots/operations_portal.png",
-    screenshotCaption: "Sales Deal Pipeline Workbench with Deal Value Probability and Close Dates",
-    quickStats: [
-      { label: "Health Indicators", value: "Green / Amber / Red" },
-      { label: "Deal Stages", value: "6 Stage Pipeline" },
-      { label: "Staffing", value: "Bench & Deployed" },
-    ],
-    description: "Client delivery accounts, sales deals pipeline, staffing utilization grid, and external contractor directory.",
-    steps: [
-      {
-        title: "How to Track Client Accounts & Retainer Health",
-        purpose: "Monitor retainer hour burn rates, delivery health flags, and client communication histories.",
-        instructions: [
-          "In the 'Operations' tab, click '+ New Client Project', input Client Name, Project Name, Delivery Lead, Billing Type (e.g. 'Monthly Retainer'), and Budget Hours.",
-          "Set Delivery Health: Green (On track, healthy burn rate), Amber (Approaching retainer ceiling), or Red (Over budget or critical blocker).",
-          "Open any client account to log contact history entries (Calls, Emails, Meetings).",
-        ],
-      },
-      {
-        title: "How to Manage the Sales Deal Pipeline",
-        purpose: "Track sales opportunities across stages with deal valuations and probability weighting.",
-        instructions: [
-          "In the 'Sales' tab, toggle between Kanban Board and Table View.",
-          "Click '+ New Deal', enter Client Account, Deal Title, Deal Value ($/₹), Probability (%), Expected Close Date, and Deal Owner.",
-          "Drag deal cards across stages: Prospecting -> Discovery -> Proposal Sent -> Negotiation -> Closed Won / Closed Lost.",
-        ],
-      },
-      {
-        title: "How to Manage Staff Resource Allocation & Bench",
-        purpose: "Optimize workforce utilization and prevent employee burnout.",
-        instructions: [
-          "In 'HR Allocations', review staff deployment: Deployed (Fully booked), Partially Allocated (Available for tasks), Bench (Ready for new deployments), or On Leave.",
-          "Click 'Edit Allocation' to adjust weekly allocated hours.",
-        ],
-      },
-      {
-        title: "How to Track External Contractors & Freelancers",
-        purpose: "Manage third-party vendor relationships, contracts, and hourly spend.",
-        instructions: [
-          "In 'External Teams', click '+ Add Contractor', enter Name, Agency, Service Category, Assigned Project, Hourly Rate, and Currency (USD/INR).",
-          "Monitor active contract durations and spend.",
-        ],
-      },
-    ],
-  },
+
+  // ── 10. IT Portal, Assets & Invoicing ──────────────────────────────────────
   {
     id: "it",
     name: "IT Portal, Assets & Invoicing",
@@ -545,6 +613,8 @@ const MODULES: ModuleItem[] = [
       },
     ],
   },
+
+  // ── 11. Analytics & Security Audit Logs ────────────────────────────────────
   {
     id: "analytics",
     name: "Analytics & Security Audit Logs",
@@ -586,42 +656,8 @@ const MODULES: ModuleItem[] = [
       },
     ],
   },
-  {
-    id: "referrals",
-    name: "Candidate Referral Pipeline",
-    path: "/dashboard/referrals",
-    icon: "fa-link",
-    color: "#0ea5e9",
-    tag: "Talent Acquisition",
-    category: "HR & Culture",
-    screenshot: "/screenshots/referral_pipeline.png",
-    screenshotCaption: "Candidate Referral Pipeline Kanban Board with Reward Bounty Tracking",
-    quickStats: [
-      { label: "Stages", value: "Submitted to Paid" },
-      { label: "Bounties", value: "Custom Reward Value" },
-      { label: "Payout Sync", value: "Approval Workflow" },
-    ],
-    description: "Employee candidate referral engine with reward tracking and interview pipeline stages.",
-    steps: [
-      {
-        title: "How to Submit a Candidate Referral",
-        purpose: "Refer candidates with resume links and earn reward bounties upon hiring.",
-        instructions: [
-          "Navigate to /dashboard/referrals and click '+ Refer Candidate'.",
-          "Enter Candidate Name, Email, Phone Number, Target Job Role, Department, Experience, Resume URL, and eligible Reward Bounty (e.g. $500).",
-          "Click 'Submit Referral'. The card appears in the 'Submitted' column.",
-        ],
-      },
-      {
-        title: "How to Track Interview Stages & Reward Payouts",
-        purpose: "Recruiters manage candidate hiring pipelines and trigger referral bonus disbursements.",
-        instructions: [
-          "Recruiters drag candidate cards through stages: Submitted -> Interviewing -> Hired -> Paid (or Rejected).",
-          "When marked Hired, the payout status becomes Approved. Upon payout disbursement, HR updates payout status to Paid with payment timestamp.",
-        ],
-      },
-    ],
-  },
+
+  // ── 12. Settings, RBAC & Work Shifts ───────────────────────────────────────
   {
     id: "settings",
     name: "Settings, RBAC & Work Shifts",

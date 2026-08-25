@@ -25,11 +25,11 @@ function LoginForm() {
       <Card className="w-full max-w-md border border-border shadow-2xl relative z-10 animate-in fade-in zoom-in-95">
         <CardHeader className="text-center space-y-2 pb-2">
           <div className="flex items-center justify-center gap-2.5 font-bold text-xl tracking-tight">
-            <div className="flex items-center justify-center w-8 h-8 rounded-xl bg-gradient-to-br from-indigo-500 via-primary to-cyan-400 text-white shadow-md shadow-indigo-500/25">
+            <div className="flex items-center justify-center w-8.5 h-8.5 rounded-xl bg-gradient-to-br from-rose-500 via-primary to-orange-400 text-white shadow-md shadow-rose-500/25">
               <i className="fa-solid fa-gem text-xs" />
             </div>
             <span className="font-extrabold text-foreground">
-              NexAce <span className="bg-gradient-to-r from-indigo-500 to-cyan-400 bg-clip-text text-transparent">CRM</span>
+              NexAce <span className="bg-gradient-to-r from-rose-500 to-orange-400 bg-clip-text text-transparent">CRM</span>
             </span>
           </div>
           <CardTitle className="text-2xl font-bold tracking-tight text-foreground">Sign In</CardTitle>

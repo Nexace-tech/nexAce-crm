@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Pagination } from "@/components/ui/pagination";
 import { usePermissions } from "@/hooks/usePermissions";
+import { BulkImportModal } from "@/components/operations/BulkImportModal";
 import { cn } from "@/lib/utils";
 
 interface ClientData {
@@ -266,6 +267,7 @@ export default function OperationsPage() {
   };
 
   const [showModal, setShowModal] = useState(false);
+  const [showBulkImportModal, setShowBulkImportModal] = useState(false);
   const [editingProject, setEditingProject] = useState<ClientData | null>(null);
 
   const [formData, setFormData] = useState({
@@ -1261,6 +1263,16 @@ export default function OperationsPage() {
                 <option value="Amber">Amber</option>
                 <option value="Red">Red</option>
               </select>
+
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setShowBulkImportModal(true)}
+                className="gap-2 font-semibold h-9 shrink-0 cursor-pointer bg-[#00c5a0]/10 border-[#00c5a0]/30 text-[#00c5a0] hover:bg-[#00c5a0]/20"
+              >
+                <i className="fa-solid fa-file-import text-xs text-[#00c5a0]" /> Bulk Import
+              </Button>
 
               <Button
                 type="button"
@@ -3905,6 +3917,17 @@ export default function OperationsPage() {
           </div>
         </div>
       )}
+
+      {/* Bulk Import Modal */}
+      <BulkImportModal
+        isOpen={showBulkImportModal}
+        defaultTarget={activeTab === "sales" ? "deals" : "clients"}
+        onClose={() => setShowBulkImportModal(false)}
+        onSuccess={() => {
+          fetchProjects();
+          fetchSalesDeals();
+        }}
+      />
     </div>
   );
 }

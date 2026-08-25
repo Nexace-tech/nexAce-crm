@@ -417,7 +417,14 @@ export function NotificationBell() {
 
       {/* ── Notifications Dropdown Panel ── */}
       {open && (
-        <div className="absolute right-0 top-full mt-2 w-[22rem] sm:w-[26rem] bg-card border border-border rounded-xl shadow-2xl z-50 overflow-hidden animate-in fade-in zoom-in-95">
+        <>
+          {/* Backdrop for outside click */}
+          <div
+            className="fixed inset-0 z-[190] bg-black/40 backdrop-blur-xs"
+            onClick={() => setOpen(false)}
+          />
+
+          <div className="fixed inset-x-3 top-16 max-w-sm sm:max-w-md mx-auto md:absolute md:top-full md:right-0 md:inset-x-auto md:w-[26rem] mt-2 bg-card border border-border rounded-2xl shadow-2xl z-[200] overflow-hidden animate-in fade-in zoom-in-95 max-h-[85vh] flex flex-col">
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/30">
             <div className="flex items-center gap-2">
@@ -594,6 +601,7 @@ export function NotificationBell() {
             </button>
           </div>
         </div>
+        </>
       )}
 
       {/* ── Broadcast Modal (Admin / Manager / OPS only) ── */}

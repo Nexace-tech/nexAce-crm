@@ -20,7 +20,7 @@ export interface TourStep {
 const adminTourSteps: TourStep[] = [
   {
     id: "welcome_admin",
-    title: "Welcome Admin 🚀",
+    title: "Welcome Admin",
     subtitle: "Enterprise Multi-Tenant Workspace & Management Command Center",
     description:
       "As an Admin/Manager, you have full control over real-time operations, team attendance, employee registrations, HR leave approvals, document vaults, and system security.",
@@ -34,114 +34,170 @@ const adminTourSteps: TourStep[] = [
   },
   {
     id: "dashboard_admin",
-    title: "Operations & Attendance Overview 📊",
-    subtitle: "Active Projects, Shift Schedule & Registration Approvals",
+    title: "Dashboard & Live Analytics",
+    subtitle: "Revenue Analytics, Traffic Sources & KPI Cards",
     description:
-      "Monitor active project counts, live team shift schedules, pending employee registration requests with 1-click activation, and workspace chat previews.",
+      "Monitor revenue trends, live lead traffic sources, deal conversion ratios, active project deliveries, and live sync feature hub.",
     route: "/dashboard",
-    icon: "fa-solid fa-chart-line text-blue-400",
+    icon: "fa-solid fa-gauge-high text-blue-400",
     highlights: [
-      "1-Click employee registration activation",
-      "Real-time team shift attendance tracking",
+      "Revenue analytics with weekly/monthly toggles",
+      "Traffic sources breakdown & top active deals",
       "Clickable KPI summary shortcuts",
     ],
   },
   {
-    id: "hr_portal_admin",
-    title: "HR Portal & Leave Management 💼",
-    subtitle: "Directory, Leave Approvals, Vault & Cases",
+    id: "team_admin",
+    title: "My Team & Organization",
+    subtitle: "Directory, Hierarchy Tree & Department Roster",
     description:
-      "Manage employee directory, onboarding checklists, approve leave requests with 12-hour AM/PM audit timestamps, export leave data (CSV/TXT/JSON), and track help desk cases.",
-    route: "/dashboard/hr",
-    icon: "fa-solid fa-briefcase text-emerald-400",
+      "Manage employee profiles, visual reporting hierarchy org chart, add single or bulk employees, and assign department leads.",
+    route: "/dashboard/team",
+    icon: "fa-solid fa-users text-cyan-400",
     highlights: [
-      "Approve/Reject leaves with 12-hour AM/PM timestamps",
-      "Export leave records (CSV, TXT, JSON)",
-      "Interactive tabs & pagination controls",
+      "Visual drag-and-drop hierarchy org chart",
+      "1-Click employee onboarding & credential export",
+      "Department head assignments & skill search",
     ],
   },
   {
     id: "calendar_admin",
-    title: "Calendar & Timesheet Approvals 📅",
-    subtitle: "Task Scheduling & Employee Timesheets",
+    title: "Calendar, Timesheets & Sprints",
+    subtitle: "Team Events, Weekly Timesheets & Shift Attendance",
     description:
-      "Schedule workspace events, manage active calendar tasks, and approve employee timesheet entries with 12-hour AM/PM timestamps.",
+      "Schedule workspace events, manage agile sprints, track shift attendance, and approve employee weekly timesheets with 12-hour AM/PM timestamps.",
     route: "/dashboard/calendar",
-    icon: "fa-solid fa-calendar-days text-indigo-400",
+    icon: "fa-solid fa-calendar-days text-emerald-400",
     highlights: [
-      "Today's active task metrics",
-      "Timesheet entry approval workflow",
-      "12-Hour clock standard timestamps",
-    ],
-  },
-  {
-    id: "chat_admin",
-    title: "Workspace Messaging & Drive Attachments 💬",
-    subtitle: "Team Channels, DMs & Image Uploads",
-    description:
-      "Real-time team chat with public channels and private 1-on-1 Direct Messages. Features WhatsApp-style blue double check ticks, message options toolbar, and image attachment previews (saved in Chat directory).",
-    route: "/dashboard/chat",
-    icon: "fa-solid fa-comments text-sky-400",
-    highlights: [
-      "Blue double check mark read receipts",
-      "Image preview & direct download cards",
-      "Message delete & forward actions",
+      "Multi-department shared calendar scheduling",
+      "Weekly billable timesheet approvals",
+      "Full attendance logs export (CSV)",
     ],
   },
   {
     id: "projects_admin",
-    title: "Projects, Kanban Boards & Sprints 🚀",
-    subtitle: "Agile Workflow & Task Management",
+    title: "Projects, Tasks, Wiki & Drive",
+    subtitle: "Agile Kanban Delivery, Gantt & Cloud Drive",
     description:
-      "Manage projects, agile sprints, and task milestones on interactive Kanban boards. Perform bulk reassignments and track real-time completion progress.",
+      "Manage projects, agile sprints, task milestones on drag-and-drop Kanban boards, author SOPs in Markdown Wiki, and organize assets in Drive.",
     route: "/dashboard/projects",
-    icon: "fa-solid fa-folder-tree text-purple-400",
+    icon: "fa-solid fa-folder-tree text-amber-400",
     highlights: [
-      "Visual drag-and-drop Kanban boards",
-      "Sprint tracking & milestone indicators",
-      "Bulk team reassignments",
+      "Visual Kanban boards with subtasks & comments",
+      "Gantt timeline & employee workload heatmaps",
+      "Secure cloud Drive file storage & Wiki docs",
     ],
   },
   {
-    id: "goals_admin",
-    title: "Goals & Strategic OKRs 🎯",
-    subtitle: "Key Results & Performance Alignment",
+    id: "chat_admin",
+    title: "Communication Hub & Mail",
+    subtitle: "Channels, DMs, Mail Center & WhatsApp",
     description:
-      "Define company goals, align quarterly OKRs, track key performance indicators, and link KRAs directly to employee performance reviews.",
-    route: "/dashboard/goals",
-    icon: "fa-solid fa-bullseye text-rose-400",
+      "Real-time team chat with public channels, private 1-on-1 Direct Messages with read receipts, integrated Mail Center, WhatsApp Business API, and video calls.",
+    route: "/dashboard/chat",
+    icon: "fa-solid fa-comments text-pink-400",
     highlights: [
-      "Quarterly OKR target tracking",
-      "Key Result progress bars",
-      "Performance appraisal integration",
+      "Real-time messaging with image attachments",
+      "Integrated client Mail center & WhatsApp API",
+      "WebRTC video standup meeting rooms",
+    ],
+  },
+  {
+    id: "clients_admin",
+    title: "Operation Portal, Sales & Bulk Import",
+    subtitle: "Client Retainers, Sales Deals & Staffing Workdesk",
+    description:
+      "Manage client delivery accounts, sales deal pipelines, batch CSV/paste bulk data import, staff resource bench allocation, and external contractor teams.",
+    route: "/dashboard/clients",
+    icon: "fa-solid fa-list-check text-teal-400",
+    highlights: [
+      "Multi-entity Bulk Data Importer (CSV/JSON/Paste)",
+      "Sales deal pipeline with stage probabilities",
+      "Staff deployment utilization & contractor tracking",
     ],
   },
   {
     id: "referrals_admin",
-    title: "Referral Pipeline & Rewards 🎁",
-    subtitle: "Talent Referrals & Payout Approvals",
+    title: "Candidate Referral Pipeline",
+    subtitle: "Talent Referrals & Bonus Payout Approvals",
     description:
-      "Review employee candidate referrals, track recruitment pipeline stages, and approve referral bonus payouts.",
+      "Review employee candidate referrals, track recruitment pipeline stages, and approve referral cash bonus disbursements upon hiring.",
     route: "/dashboard/referrals",
-    icon: "fa-solid fa-link text-yellow-400",
+    icon: "fa-solid fa-link text-sky-400",
     highlights: [
-      "Recruitment pipeline tracking",
-      "Referral bonus payout approvals",
-      "1-Click referral submission",
+      "Recruitment pipeline tracking from Submitted to Paid",
+      "Referral bounty reward approvals",
+      "1-Click candidate referral submission",
+    ],
+  },
+  {
+    id: "goals_admin",
+    title: "Goals, OKRs & Culture",
+    subtitle: "Strategic Objectives, Kudos Wall & Pulse Surveys",
+    description:
+      "Define company OKRs, track measurable Key Results progress, celebrate peer contributions on the Kudos wall, and run weekly anonymous pulse surveys.",
+    route: "/dashboard/goals",
+    icon: "fa-solid fa-bullseye text-blue-400",
+    highlights: [
+      "Quarterly OKR target tracking & numeric sliders",
+      "Social peer Kudos recognition wall",
+      "Structured 1:1 check-in meetings with rollover tasks",
+    ],
+  },
+  {
+    id: "hr_portal_admin",
+    title: "HR Portal & Leave Management",
+    subtitle: "Directory, Leave Approvals, Vault & Cases",
+    description:
+      "Manage employee directory, onboarding checklists, approve leave requests with 12-hour AM/PM audit timestamps, export leave data (CSV/TXT/JSON), and track help desk cases.",
+    route: "/dashboard/hr",
+    icon: "fa-solid fa-briefcase text-purple-400",
+    highlights: [
+      "Approve/Reject leaves with 12-hour AM/PM timestamps",
+      "Confidential Document Vault with access control",
+      "Performance appraisal review cycles & probation alerts",
+    ],
+  },
+  {
+    id: "it_portal_admin",
+    title: "IT Portal, Assets & Invoicing",
+    subtitle: "Access Matrix, SaaS Subscriptions & Invoicing",
+    description:
+      "Provision software tool licenses with 1-click status toggles, track hardware devices, monitor SaaS renewals, and generate itemized client invoices with PDF download.",
+    route: "/dashboard/it",
+    icon: "fa-solid fa-terminal text-rose-400",
+    highlights: [
+      "Software access matrix with 1-click Suspend/Revoke",
+      "Hardware asset tag tracking & SaaS renewal alerts",
+      "Itemized client invoice generator (PDF / Print)",
+    ],
+  },
+  {
+    id: "analytics_admin",
+    title: "Analytics & Security Audit Logs",
+    subtitle: "Billability Ratios & Enterprise Audit Trail",
+    description:
+      "Evaluate project billable ratios, department productivity metrics, and conduct security audits across all workspace CREATE, UPDATE, and DELETE activities.",
+    route: "/dashboard/analytics",
+    icon: "fa-solid fa-chart-line text-violet-400",
+    highlights: [
+      "Billable vs. non-billable workforce effort metrics",
+      "Manager compliance & department hours charts",
+      "Searchable system-wide security audit trail",
     ],
   },
   {
     id: "settings_admin",
-    title: "Settings & Security Control ⚙️",
-    subtitle: "Branding, File Upload Rules & Subscriptions",
+    title: "Settings, RBAC & Security Control",
+    subtitle: "Branding, Granular RBAC, File Rules & Shifts",
     description:
-      "Manage workspace company profile, security policies, allowed file extensions, file upload size limits, and subscription billing details.",
+      "Manage company branding, configure granular role-based permissions per module, define working shift hours, and enforce file upload security policies.",
     route: "/dashboard/settings",
     icon: "fa-solid fa-gear text-slate-400",
     highlights: [
-      "Company logo & branding settings",
-      "Allowed file upload types & security limits",
-      "Subscription plan management",
+      "Granular Role & Module Permission matrix",
+      "Company branding & allowed file extension rules",
+      "Work shift configuration & subscription management",
     ],
   },
 ];
@@ -149,7 +205,7 @@ const adminTourSteps: TourStep[] = [
 const employeeTourSteps: TourStep[] = [
   {
     id: "welcome_employee",
-    title: "Welcome to your Workspace 👤",
+    title: "Welcome to your Workspace",
     subtitle: "Employee Self-Service Portal",
     description:
       "Welcome to your personal workspace! Track your daily shifts, submit time-off requests, log timesheets, chat with team members, and view company OKRs.",
@@ -162,22 +218,8 @@ const employeeTourSteps: TourStep[] = [
     ],
   },
   {
-    id: "leaves_employee",
-    title: "Request Time-Off & Leave History 🏖️",
-    subtitle: "Leave Balances & Status Tracking",
-    description:
-      "Check your leave balances (Casual, Sick, Earned), submit time-off requests, track real-time approval status with 12-hour AM/PM timestamps, and export your leave history.",
-    route: "/dashboard/hr",
-    icon: "fa-solid fa-plane-departure text-sky-400",
-    highlights: [
-      "Request Time-Off form with instant notifications",
-      "Track approval status & approver timestamps",
-      "Export personal leave details to CSV/TXT",
-    ],
-  },
-  {
-    id: "timesheets_employee",
-    title: "My Timesheets & Active Tasks ⏱️",
+    id: "calendar_employee",
+    title: "My Timesheets & Active Tasks",
     subtitle: "Log Hours & Track Work",
     description:
       "Log your daily working hours, view calendar task deadlines, and submit timesheets for manager review.",
@@ -190,8 +232,22 @@ const employeeTourSteps: TourStep[] = [
     ],
   },
   {
+    id: "projects_employee",
+    title: "Projects & Kanban Deliverables",
+    subtitle: "Task Execution & Sprint Milestones",
+    description:
+      "View assigned project tasks on interactive Kanban boards, update checklists, collaborate on subtasks, and access shared team files.",
+    route: "/dashboard/projects",
+    icon: "fa-solid fa-folder-tree text-amber-400",
+    highlights: [
+      "Drag-and-drop task status updates",
+      "Task detail drawer with subtasks & comments",
+      "Access department Wiki guides & Drive storage",
+    ],
+  },
+  {
     id: "chat_employee",
-    title: "Team Chat & Direct Messaging 💬",
+    title: "Team Chat & Direct Messaging",
     subtitle: "Instant Communication & Files",
     description:
       "Collaborate in team channels and 1-on-1 Direct Messages. Share image attachments, see blue double-tick read receipts, and preview uploads.",
@@ -204,8 +260,22 @@ const employeeTourSteps: TourStep[] = [
     ],
   },
   {
+    id: "referrals_employee",
+    title: "Refer Candidates & Earn Rewards",
+    subtitle: "Employee Referral Program",
+    description:
+      "Refer talented colleagues for open roles, track candidate hiring progress, and earn cash referral bonuses upon successful hiring.",
+    route: "/dashboard/referrals",
+    icon: "fa-solid fa-award text-yellow-400",
+    highlights: [
+      "Submit candidate referrals in 1-click",
+      "Track hiring pipeline progress",
+      "View referral bonus payout status",
+    ],
+  },
+  {
     id: "goals_employee",
-    title: "My Goals & Key Results 🎯",
+    title: "My Goals & Key Results",
     subtitle: "Individual Performance Alignment",
     description:
       "View your assigned goals, track quarterly Key Results progress, and review your performance appraisal feedback.",
@@ -218,17 +288,17 @@ const employeeTourSteps: TourStep[] = [
     ],
   },
   {
-    id: "referrals_employee",
-    title: "Refer Candidates & Earn Rewards 🎁",
-    subtitle: "Employee Referral Program",
+    id: "leaves_employee",
+    title: "Request Time-Off & Leave History",
+    subtitle: "Leave Balances & Status Tracking",
     description:
-      "Refer talented colleagues for open roles, track candidate hiring progress, and earn cash referral bonuses upon successful hiring.",
-    route: "/dashboard/referrals",
-    icon: "fa-solid fa-award text-yellow-400",
+      "Check your leave balances (Casual, Sick, Earned), submit time-off requests, track real-time approval status with 12-hour AM/PM timestamps, and export your leave history.",
+    route: "/dashboard/hr",
+    icon: "fa-solid fa-plane-departure text-sky-400",
     highlights: [
-      "Submit candidate referrals in 1-click",
-      "Track hiring pipeline progress",
-      "View referral bonus payout status",
+      "Request Time-Off form with instant notifications",
+      "Track approval status & approver timestamps",
+      "Export personal leave details to CSV/TXT",
     ],
   },
 ];
@@ -236,7 +306,7 @@ const employeeTourSteps: TourStep[] = [
 const clientTourSteps: TourStep[] = [
   {
     id: "welcome_client",
-    title: "Welcome to Client Portal 🤝",
+    title: "Welcome to Client Portal",
     subtitle: "Project Tracking & Retainer Workspace",
     description:
       "Welcome to your dedicated client workspace! Track project deliverables, monitor active retainers, view deal pipelines, and chat directly with your account team.",
@@ -250,7 +320,7 @@ const clientTourSteps: TourStep[] = [
   },
   {
     id: "projects_client",
-    title: "Active Projects & Kanban Deliverables 🚀",
+    title: "Active Projects & Kanban Deliverables",
     subtitle: "Milestone & Sprint Progress",
     description:
       "Track real-time progress on your projects, view task milestones, and monitor completed deliverables on the Kanban board.",
@@ -264,7 +334,7 @@ const clientTourSteps: TourStep[] = [
   },
   {
     id: "chat_client",
-    title: "Direct Client Support Chat 💬",
+    title: "Direct Client Support Chat",
     subtitle: "Instant Communication with Account Team",
     description:
       "Message your dedicated account manager and team members in real time. Share file attachments and get quick updates.",
