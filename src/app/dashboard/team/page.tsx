@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { BrokenPhotoPlaceholder, BrokenPhotoBanner } from "@/components/ui/BrokenPhotoPlaceholder";
 import { Pagination } from "@/components/ui/pagination";
 import { cn } from "@/lib/utils";
 import { isSubAdminRole } from "@/lib/roles";
@@ -99,6 +100,7 @@ export default function TeamDashboardPage() {
   const [editSkillsText, setEditSkillsText] = useState("");
   const [editPhotoUrl, setEditPhotoUrl] = useState("");
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [brokenPhotos, setBrokenPhotos] = useState<Set<string>>(new Set());
   const memberFileInputRef = React.useRef<HTMLInputElement | null>(null);
   const [editName, setEditName] = useState("");
   const [editEmail, setEditEmail] = useState("");
@@ -1083,12 +1085,33 @@ export default function TeamDashboardPage() {
                           )}
 
                           <Avatar size="default">
-                            {member.photoUrl ? (
-                              <AvatarImage src={member.photoUrl} alt={member.name} />
+                            {member.photoUrl && !brokenPhotos.has(member._id) ? (
+                              <AvatarImage
+                                src={member.photoUrl}
+                                alt={member.name}
+                                onBroken={() =>
+                                  setBrokenPhotos((prev) => new Set(prev).add(member._id))
+                                }
+                              />
+                            ) : brokenPhotos.has(member._id) ? (
+                              /* Broken photo — show camera placeholder */
+                              null
                             ) : (
                               <AvatarFallback>{initials}</AvatarFallback>
                             )}
+                            {!member.photoUrl && <AvatarFallback>{initials}</AvatarFallback>}
                           </Avatar>
+                          {brokenPhotos.has(member._id) && (
+                            <BrokenPhotoPlaceholder
+                              size="default"
+                              showReuploadHint={currentUser?._id === member._id}
+                              onReuploadClick={
+                                currentUser?._id === member._id
+                                  ? () => memberFileInputRef.current?.click()
+                                  : undefined
+                              }
+                            />
+                          )}
 
                           <div className="min-w-0">
                             <h3 className="font-semibold text-sm text-foreground truncate group-hover:text-primary transition-colors">

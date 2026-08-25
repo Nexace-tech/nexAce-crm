@@ -39,17 +39,43 @@ const Avatar = React.forwardRef<
 ));
 Avatar.displayName = AvatarPrimitive.Root.displayName;
 
+/**
+ * AvatarImage — wraps Radix's Image primitive with a robust onError fallback.
+ *
+ * Problem: corrupt or tiny files (e.g. a 1KB broken PNG) are served with HTTP 200,
+ * so Radix never triggers the automatic fallback — the browser just shows a
+ * broken-image icon. We fix this by:
+ *   1. Hiding the <img> element on any load error via onError.
+ *   2. Skipping render entirely if src is empty/undefined.
+ *   3. Calling the optional `onBroken` callback so parents can swap in a placeholder.
+ */
 const AvatarImage = React.forwardRef<
   React.ElementRef<typeof AvatarPrimitive.Image>,
-  React.ComponentPropsWithoutRef<typeof AvatarPrimitive.Image>
->(({ className, ...props }, ref) => (
-  <AvatarPrimitive.Image
-    ref={ref}
-    className={cn("aspect-square h-full w-full object-cover", className)}
-    {...props}
-  />
-));
+  React.ComponentPropsWithoutRef<typeof AvatarPrimitive.Image> & {
+    /** Called when the image fails to load (corrupt, 404, etc.) */
+    onBroken?: () => void;
+  }
+>(({ className, src, onError, onBroken, ...props }, ref) => {
+  // Don't render the image at all if src is empty — let fallback show immediately
+  if (!src) return null;
+
+  return (
+    <AvatarPrimitive.Image
+      ref={ref}
+      src={src}
+      className={cn("aspect-square h-full w-full object-cover", className)}
+      onError={(e) => {
+        // Hide the broken image so Radix renders AvatarFallback
+        (e.currentTarget as HTMLImageElement).style.display = "none";
+        onBroken?.();
+        onError?.(e);
+      }}
+      {...props}
+    />
+  );
+});
 AvatarImage.displayName = AvatarPrimitive.Image.displayName;
+
 
 const AvatarFallback = React.forwardRef<
   React.ElementRef<typeof AvatarPrimitive.Fallback>,

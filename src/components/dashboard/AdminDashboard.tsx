@@ -426,13 +426,13 @@ export function AdminDashboard({ user }: { user: any }) {
 
           <div className="flex flex-col gap-2 mt-2">
             {dynamicTrafficData.map((item: any, i: number) => (
-              <div key={i} className="flex items-center justify-between text-xs">
+              <Link key={i} href="/dashboard/referrals" className="flex items-center justify-between text-xs no-underline hover:bg-slate-50 dark:hover:bg-[#1e2632] rounded-md px-1 py-0.5 -mx-1 transition-colors group">
                 <div className="flex items-center gap-2">
                   <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: item.color }} />
-                  <span className="text-slate-600 dark:text-slate-400 truncate max-w-[140px]">{item.name}</span>
+                  <span className="text-slate-600 dark:text-slate-400 group-hover:text-slate-900 dark:group-hover:text-white truncate max-w-[140px] transition-colors">{item.name}</span>
                 </div>
                 <span className="font-bold text-slate-900 dark:text-white">{Number(item.value).toLocaleString()}</span>
-              </div>
+              </Link>
             ))}
           </div>
         </div>
@@ -441,7 +441,7 @@ export function AdminDashboard({ user }: { user: any }) {
       {/* ── Stat Cards Row (4 Columns) ─────────────────────────────────────── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
         {/* Card 1: Revenue */}
-        <Link href="/dashboard/clients" className="block text-decoration-none">
+        <Link href="/dashboard/clients" className="block no-underline">
           <div className="bg-white dark:bg-[#161c24] rounded-2xl border border-slate-200 dark:border-[#232d3b] p-5 shadow-xs hover:-translate-y-0.5 hover:shadow-md transition-all cursor-pointer">
             <div className="flex items-start justify-between mb-2">
               <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">Revenue</span>
@@ -458,7 +458,7 @@ export function AdminDashboard({ user }: { user: any }) {
         </Link>
 
         {/* Card 2: Active Deals */}
-        <Link href="/dashboard/clients" className="block text-decoration-none">
+        <Link href="/dashboard/clients" className="block no-underline">
           <div className="bg-white dark:bg-[#161c24] rounded-2xl border border-slate-200 dark:border-[#232d3b] p-5 shadow-xs hover:-translate-y-0.5 hover:shadow-md transition-all cursor-pointer">
             <div className="flex items-start justify-between mb-2">
               <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">Active Deals</span>
@@ -475,7 +475,7 @@ export function AdminDashboard({ user }: { user: any }) {
         </Link>
 
         {/* Card 3: Conversion Rate */}
-        <Link href="/dashboard/clients" className="block text-decoration-none">
+        <Link href="/dashboard/clients" className="block no-underline">
           <div className="bg-white dark:bg-[#161c24] rounded-2xl border border-slate-200 dark:border-[#232d3b] p-5 shadow-xs hover:-translate-y-0.5 hover:shadow-md transition-all cursor-pointer">
             <div className="flex items-start justify-between mb-2">
               <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">Conversion Rate</span>
@@ -492,7 +492,7 @@ export function AdminDashboard({ user }: { user: any }) {
         </Link>
 
         {/* Card 4: Total Contacts */}
-        <Link href="/dashboard/team" className="block text-decoration-none">
+        <Link href="/dashboard/team" className="block no-underline">
           <div className="bg-white dark:bg-[#161c24] rounded-2xl border border-slate-200 dark:border-[#232d3b] p-5 shadow-xs hover:-translate-y-0.5 hover:shadow-md transition-all cursor-pointer">
             <div className="flex items-start justify-between mb-1">
               <div>
@@ -926,7 +926,11 @@ export function AdminDashboard({ user }: { user: any }) {
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-[#232d3b]">
               {mergedDeals.slice(0, 5).map((deal: any, i: number) => (
-                <tr key={i} className="hover:bg-slate-50 dark:hover:bg-[#1e2632]/50 transition-colors">
+                <tr
+                  key={i}
+                  className="hover:bg-slate-50 dark:hover:bg-[#1e2632]/50 transition-colors cursor-pointer"
+                  onClick={() => window.location.href = "/dashboard/clients"}
+                >
                   <td className="py-3 px-3.5 font-semibold text-slate-900 dark:text-white">{deal.name}</td>
                   <td className="py-3 px-3.5 text-slate-500 dark:text-slate-400">{deal.stage}</td>
                   <td className="py-3 px-3.5 font-semibold text-slate-900 dark:text-white">

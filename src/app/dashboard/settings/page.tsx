@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { BrokenPhotoPlaceholder, BrokenPhotoBanner } from "@/components/ui/BrokenPhotoPlaceholder";
 import { cn, generateSecurePassword } from "@/lib/utils";
 import { useTabPersistence } from "@/hooks/useTabPersistence";
 import { UserManagementTab } from "@/components/settings/UserManagementTab";
@@ -45,6 +46,7 @@ function SettingsPageContent() {
   const [skills, setSkills] = useState("");
 
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [photoBroken, setPhotoBroken] = useState(false);
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
 
   const [linkedin, setLinkedin] = useState("");
@@ -833,20 +835,36 @@ function SettingsPageContent() {
                   onClick={() => !uploadingPhoto && fileInputRef.current?.click()}
                   title="Click to upload/change photo"
                 >
-                  <Avatar className="h-20 w-20 ring-4 ring-primary/20 shadow-md">
-                    {user?.photoUrl ? (
-                      <AvatarImage src={user.photoUrl} alt={user.name} />
-                    ) : (
-                      <AvatarFallback className="text-xl font-bold bg-primary text-primary-foreground">
-                        {user?.name ? user.name.substring(0, 2).toUpperCase() : "U"}
-                      </AvatarFallback>
-                    )}
-                  </Avatar>
+                  {/* Show broken placeholder if photo failed to load */}
+                  {photoBroken ? (
+                    <BrokenPhotoPlaceholder
+                      size="xl"
+                      showReuploadHint
+                      onReuploadClick={() => fileInputRef.current?.click()}
+                    />
+                  ) : (
+                    <Avatar className="h-20 w-20 ring-4 ring-primary/20 shadow-md">
+                      {user?.photoUrl ? (
+                        <AvatarImage
+                          src={user.photoUrl}
+                          alt={user.name}
+                          onBroken={() => setPhotoBroken(true)}
+                        />
+                      ) : (
+                        <AvatarFallback className="text-xl font-bold bg-primary text-primary-foreground">
+                          {user?.name ? user.name.substring(0, 2).toUpperCase() : "U"}
+                        </AvatarFallback>
+                      )}
+                    </Avatar>
+                  )}
 
-                  <div className="absolute inset-0 rounded-full bg-black/55 opacity-0 group-hover/avatar:opacity-100 transition-opacity flex flex-col items-center justify-center text-white text-[10px] font-semibold gap-1 backdrop-blur-2xs">
-                    <i className="fa-solid fa-camera text-sm" />
-                    <span>Change</span>
-                  </div>
+                  {/* Hover overlay — only when photo is valid */}
+                  {!photoBroken && (
+                    <div className="absolute inset-0 rounded-full bg-black/55 opacity-0 group-hover/avatar:opacity-100 transition-opacity flex flex-col items-center justify-center text-white text-[10px] font-semibold gap-1 backdrop-blur-2xs">
+                      <i className="fa-solid fa-camera text-sm" />
+                      <span>Change</span>
+                    </div>
+                  )}
 
                   {uploadingPhoto && (
                     <div className="absolute inset-0 rounded-full bg-black/65 flex items-center justify-center text-white">
@@ -867,6 +885,13 @@ function SettingsPageContent() {
                       Upload a portrait or avatar photo. Supported: PNG, JPG, WebP, GIF (max 5MB).
                     </p>
                   </div>
+
+                  {/* Broken photo warning banner */}
+                  {photoBroken && (
+                    <BrokenPhotoBanner
+                      onReuploadClick={() => fileInputRef.current?.click()}
+                    />
+                  )}
 
                   <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 pt-1">
                     <input

@@ -142,7 +142,7 @@ export function DashboardClientLayout({ session, menuItems, isPending = false, c
         {/* Brand Header */}
         <div className="flex items-center justify-between px-5 h-16 border-b border-slate-200 dark:border-[#232d3b] shrink-0">
           <Link href="/dashboard" onClick={() => setMobileOpen(false)}
-            className="flex items-center gap-2.5 text-decoration-none">
+            className="flex items-center gap-2.5 no-underline">
             <div className="w-8.5 h-8.5 rounded-xl bg-gradient-to-br from-[#00c5a0] to-[#0ea5e9] flex items-center justify-center shadow-md shadow-[#00c5a0]/20">
               <i className="fa-solid fa-layer-group text-slate-950 text-sm font-black" />
             </div>
@@ -343,7 +343,7 @@ export function DashboardClientLayout({ session, menuItems, isPending = false, c
 
               {/* User Avatar */}
               <div className="ml-1">
-                <Link href="/dashboard/settings" className="block text-decoration-none">
+              <Link href="/dashboard/settings" className="block no-underline">
                   <Avatar className="w-9 h-9 cursor-pointer border-2 border-[#00c5a0]/40">
                     {user?.photoUrl ? <AvatarImage src={user.photoUrl} alt={userName} /> : null}
                     <AvatarFallback className="bg-[#00c5a0]/15 text-[#00c5a0] font-bold text-xs">
