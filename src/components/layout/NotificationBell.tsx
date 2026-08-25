@@ -163,6 +163,11 @@ export function NotificationBell() {
   };
 
   useEffect(() => {
+    // Don't fetch notifications until the user session is confirmed.
+    // This prevents a burst of 401/404 errors immediately after login
+    // while the AuthContext is still resolving the session cookie.
+    if (!user) return;
+
     fetchNotifications();
 
     let intervalId: NodeJS.Timeout;
@@ -197,7 +202,8 @@ export function NotificationBell() {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.removeEventListener("focus", handleWindowFocus);
     };
-  }, []);
+  }, [user]); // re-run when user session resolves so polling starts correctly
+
 
   // Auto-dismiss live toast after 6 seconds
   useEffect(() => {
