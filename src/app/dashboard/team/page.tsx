@@ -11,7 +11,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { BrokenPhotoPlaceholder, BrokenPhotoBanner } from "@/components/ui/BrokenPhotoPlaceholder";
 import { Pagination } from "@/components/ui/pagination";
 import { cn } from "@/lib/utils";
 import { isSubAdminRole } from "@/lib/roles";
@@ -100,13 +99,13 @@ export default function TeamDashboardPage() {
   const [editSkillsText, setEditSkillsText] = useState("");
   const [editPhotoUrl, setEditPhotoUrl] = useState("");
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
-  const [brokenPhotos, setBrokenPhotos] = useState<Set<string>>(new Set());
   const memberFileInputRef = React.useRef<HTMLInputElement | null>(null);
   const [editName, setEditName] = useState("");
   const [editEmail, setEditEmail] = useState("");
   const [editPhone, setEditPhone] = useState("");
   const [editDepts, setEditDepts] = useState<string[]>(["Engineering"]);
   const [editRole, setEditRole] = useState("Employee");
+  const [editManagerId, setEditManagerId] = useState("");
   const [editSocialLinkedin, setEditSocialLinkedin] = useState("");
   const [editSocialTwitter, setEditSocialTwitter] = useState("");
   const [editSocialGithub, setEditSocialGithub] = useState("");
@@ -440,6 +439,7 @@ export default function TeamDashboardPage() {
         updateData.departments = editDepts;
         updateData.department = editDepts[0] || "General";
         updateData.role = editRole;
+        updateData.managerId = editManagerId || null;
       }
 
       const response = await fetch(`/api/team/${selectedMember._id}`, {
@@ -685,6 +685,12 @@ export default function TeamDashboardPage() {
         : [member.department || "Engineering"];
       setEditDepts(userDepts);
       setEditRole(member.role || "Employee");
+      const mgrId = member.managerId?._id
+        ? String(member.managerId._id)
+        : member.managerId
+        ? String(member.managerId)
+        : "";
+      setEditManagerId(mgrId);
       setEditSocialLinkedin(member.socialLinks?.linkedin || "");
       setEditSocialTwitter(member.socialLinks?.twitter || "");
       setEditSocialGithub(member.socialLinks?.github || "");
@@ -817,9 +823,13 @@ export default function TeamDashboardPage() {
   const isManagerOrAdmin = Boolean(isAdmin || userRole.toLowerCase() === "manager");
 
   const directReports = useMemo(() => {
+    if (!currentUser?._id) return [];
+    const currentId = String(currentUser._id);
     return users.filter((u) => {
-      const mgrId = u.managerId?._id || u.managerId;
-      return mgrId === currentUser?._id;
+      // managerId may be a populated object { _id, name } or a raw string/ObjectId
+      const raw = u.managerId;
+      const mgrId = raw?._id ? String(raw._id) : raw ? String(raw) : "";
+      return mgrId === currentId;
     });
   }, [users, currentUser?._id]);
 
@@ -1084,34 +1094,13 @@ export default function TeamDashboardPage() {
                             />
                           )}
 
+                          {/* Standard Radix pattern: Fallback shows automatically when image fails */}
                           <Avatar size="default">
-                            {member.photoUrl && !brokenPhotos.has(member._id) ? (
-                              <AvatarImage
-                                src={member.photoUrl}
-                                alt={member.name}
-                                onBroken={() =>
-                                  setBrokenPhotos((prev) => new Set(prev).add(member._id))
-                                }
-                              />
-                            ) : brokenPhotos.has(member._id) ? (
-                              /* Broken photo — show camera placeholder */
-                              null
-                            ) : (
-                              <AvatarFallback>{initials}</AvatarFallback>
+                            {member.photoUrl && (
+                              <AvatarImage src={member.photoUrl} alt={member.name} />
                             )}
-                            {!member.photoUrl && <AvatarFallback>{initials}</AvatarFallback>}
+                            <AvatarFallback>{initials}</AvatarFallback>
                           </Avatar>
-                          {brokenPhotos.has(member._id) && (
-                            <BrokenPhotoPlaceholder
-                              size="default"
-                              showReuploadHint={currentUser?._id === member._id}
-                              onReuploadClick={
-                                currentUser?._id === member._id
-                                  ? () => memberFileInputRef.current?.click()
-                                  : undefined
-                              }
-                            />
-                          )}
 
                           <div className="min-w-0">
                             <h3 className="font-semibold text-sm text-foreground truncate group-hover:text-primary transition-colors">
@@ -1996,6 +1985,25 @@ export default function TeamDashboardPage() {
                     </select>
                   </div>
                 )}
+                {isAdmin && (
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-foreground">Reporting Manager</label>
+                    <select
+                      value={editManagerId}
+                      onChange={(e) => setEditManagerId(e.target.value)}
+                      className="w-full h-9 px-3 text-sm bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                    >
+                      <option value="">None (Reports to CEO / Top-level)</option>
+                      {users
+                        .filter((u) => u._id !== selectedMember._id)
+                        .map((u) => (
+                          <option key={u._id} value={u._id}>
+                            {u.name} ({u.role || "Member"})
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+                )}
               </div>
 
               <div className="space-y-1">
@@ -2129,17 +2137,14 @@ export default function TeamDashboardPage() {
                     onChange={(e) => setAddManagerId(e.target.value)}
                     className="w-full h-9 px-3 text-sm bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
                   >
-                    <option value="">None (Reports to CEO)</option>
-                    {users.filter((u) => u.role === "HR").map((u) => (
-                      <option key={u._id} value={u._id}>
-                        {u.name} (HR)
-                      </option>
-                    ))}
-                    {users.filter((u) => u.role === "Manager").map((u) => (
-                      <option key={u._id} value={u._id}>
-                        {u.name} (Manager)
-                      </option>
-                    ))}
+                    <option value="">None (Reports to CEO / Top-level)</option>
+                    {users
+                      .filter((u) => ["Admin", "OPS", "Manager", "HR"].includes(u.role) || isSubAdminRole(u.role))
+                      .map((u) => (
+                        <option key={u._id} value={u._id}>
+                          {u.name} ({u.role})
+                        </option>
+                      ))}
                   </select>
                 </div>
               </div>
