@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef, startTransition } from "react";
+import Link from "next/link";
 import { useAuth } from "@/hooks/useAuth";
 import { usePermissions } from "@/hooks/usePermissions";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";

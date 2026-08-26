@@ -478,7 +478,7 @@ export default function NotificationsPage() {
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            handleMarkSingleRead(n._id, targetUrl);
+                            handleMarkSingleRead(n._id, targetUrl ?? undefined);
                           }}
                           className="text-primary font-semibold hover:underline flex items-center gap-1.5 cursor-pointer bg-primary/10 hover:bg-primary/20 px-2.5 py-0.5 rounded-md border border-primary/20 transition-all"
                         >
