@@ -10,7 +10,7 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const authResult = await requireTenantSession(["Admin", "OPS", "Sub Admin"]);
+    const authResult = await requireTenantSession();
     if (isAuthError(authResult)) return authResult;
     const { tenantObjectId, userObjectId, session } = authResult;
 
@@ -19,22 +19,30 @@ export async function PATCH(
       return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
     }
 
-    const body = await request.json();
+    const isPrivileged = ["Admin", "OPS", "Sub Admin"].includes(session.role);
+
     await connectToDatabase();
 
-    const { tool, vendor, billingCycle, cost, seats, activeUsers, renewalDate, paymentMethod, status, licenseKey, notes } = body;
+    const existing = await ITSubscription.findOne({ _id: id, tenantId: tenantObjectId });
+    if (!existing) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+
+    if (!isPrivileged && !existing.createdBy?.equals(userObjectId) && existing.owner !== session.userName) {
+      return NextResponse.json({ error: "Forbidden: You do not have permission to modify this subscription" }, { status: 403 });
+    }
+
+    const body = await request.json();
+    const { tool, category, plan, costPerMonth, seats, renewalDate, owner, status } = body;
     const updatePayload: Record<string, unknown> = { updatedAt: new Date() };
     if (tool !== undefined) updatePayload.tool = tool;
-    if (vendor !== undefined) updatePayload.vendor = vendor;
-    if (billingCycle !== undefined) updatePayload.billingCycle = billingCycle;
-    if (cost !== undefined) updatePayload.cost = Number(cost);
+    if (category !== undefined) updatePayload.category = category;
+    if (plan !== undefined) updatePayload.plan = plan;
+    if (costPerMonth !== undefined) updatePayload.costPerMonth = Number(costPerMonth);
     if (seats !== undefined) updatePayload.seats = Number(seats);
-    if (activeUsers !== undefined) updatePayload.activeUsers = Number(activeUsers);
-    if (renewalDate !== undefined) updatePayload.renewalDate = renewalDate ? new Date(renewalDate) : null;
-    if (paymentMethod !== undefined) updatePayload.paymentMethod = paymentMethod;
+    if (renewalDate !== undefined) updatePayload.renewalDate = renewalDate;
+    if (owner !== undefined) updatePayload.owner = owner;
     if (status !== undefined) updatePayload.status = status;
-    if (licenseKey !== undefined) updatePayload.licenseKey = licenseKey;
-    if (notes !== undefined) updatePayload.notes = notes;
 
     const updated = await ITSubscription.findOneAndUpdate(
       { _id: id, tenantId: tenantObjectId },
@@ -69,7 +77,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const authResult = await requireTenantSession(["Admin", "OPS", "Sub Admin"]);
+    const authResult = await requireTenantSession();
     if (isAuthError(authResult)) return authResult;
     const { tenantObjectId, userObjectId, session } = authResult;
 
@@ -78,7 +86,19 @@ export async function DELETE(
       return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
     }
 
+    const isPrivileged = ["Admin", "OPS", "Sub Admin"].includes(session.role);
+
     await connectToDatabase();
+
+    const existing = await ITSubscription.findOne({ _id: id, tenantId: tenantObjectId });
+    if (!existing) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+
+    if (!isPrivileged && !existing.createdBy?.equals(userObjectId) && existing.owner !== session.userName) {
+      return NextResponse.json({ error: "Forbidden: You do not have permission to delete this subscription" }, { status: 403 });
+    }
+
     const deleted = await ITSubscription.findOneAndDelete({ _id: id, tenantId: tenantObjectId });
 
     if (!deleted) {

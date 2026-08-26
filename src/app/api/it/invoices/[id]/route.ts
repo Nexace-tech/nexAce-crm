@@ -76,7 +76,7 @@ export async function PATCH(
                   <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 16px; border-radius: 8px; margin: 16px 0;">
                     <p style="margin: 4px 0; font-size: 14px;"><strong>Invoice Number:</strong> ${updated.invoiceNo}</p>
                     <p style="margin: 4px 0; font-size: 14px;"><strong>New Status:</strong> <span style="color: #2563eb; font-weight: bold;">${updated.status}</span></p>
-                    <p style="margin: 4px 0; font-size: 14px;"><strong>Total Amount:</strong> $${updated.total?.toLocaleString()}</p>
+                    <p style="margin: 4px 0; font-size: 14px;"><strong>Total Amount:</strong> ₹${updated.total?.toLocaleString()}</p>
                   </div>
                   <p style="color: #94a3b8; font-size: 12px;">This update applies to internal team invoices (Our Team).</p>
                 </div>

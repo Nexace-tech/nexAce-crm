@@ -111,7 +111,7 @@ async function apiFetch(url: string, opts?: RequestInit) {
   return res.json();
 }
 
-// ─── Utilities ───────────────────────────────────────────────────────────────
+// ─── Utilities & Constants ───────────────────────────────────────────────────
 
 const formatCurrency = (n: number, currency: string = "INR") => {
   if (currency === "USD") {
@@ -120,7 +120,59 @@ const formatCurrency = (n: number, currency: string = "INR") => {
   return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 }).format(n);
 };
 
-const getCurrencySymbol = (currency?: string) => (currency === "USD" ? "$" : "₹");
+const getCurrencySymbol = (_currency?: string) => "₹";
+
+const SUB_CATEGORIES = [
+  "Communication",
+  "Dev Tools",
+  "Design",
+  "Infrastructure",
+  "CRM",
+  "Productivity",
+  "Knowledge Base",
+  "AI/Automation",
+  "HR/Recruiting",
+  "Finance",
+  "Marketing",
+  "Security",
+  "Other",
+];
+
+const DRIVE_CATEGORIES = [
+  "Ops/Admin",
+  "IT/Access",
+  "AI/Automation",
+  "HR/Recruiting",
+  "Brand/Design",
+  "Sales/Marketing",
+  "Finance",
+  "Legal/Compliance",
+  "Engineering",
+  "Other",
+];
+
+const ACCESS_CATEGORIES = [
+  "Communication",
+  "Dev Tools",
+  "Design",
+  "Infrastructure",
+  "CRM",
+  "Productivity",
+  "Knowledge Base",
+  "AI/Automation",
+  "HR/Recruiting",
+  "Finance",
+  "IT/Access",
+  "Other",
+];
+
+interface TeamMemberOption {
+  _id: string;
+  name: string;
+  department?: string;
+  role?: string;
+  email?: string;
+}
 
 const statusBadge = (status: string) => {
   const map: Record<string, string> = {
@@ -165,12 +217,14 @@ const SELECT_CLS = "h-8 rounded-lg border border-border bg-muted/60 text-xs px-2
 
 // ─── Skeleton Row ─────────────────────────────────────────────────────────────
 
+const SKELETON_WIDTHS = ["70%", "85%", "60%", "75%", "50%", "80%", "65%", "90%", "55%"];
+
 function SkeletonRow({ cols }: { cols: number }) {
   return (
     <tr className="border-b border-border/60">
       {Array.from({ length: cols }).map((_, i) => (
         <td key={i} className="px-3 py-3">
-          <div className="h-3 bg-muted animate-pulse rounded-md" style={{ width: `${40 + Math.random() * 50}%` }} />
+          <div className="h-3 bg-muted animate-pulse rounded-md" style={{ width: SKELETON_WIDTHS[i % SKELETON_WIDTHS.length] }} />
         </td>
       ))}
     </tr>
@@ -465,10 +519,22 @@ function OverviewTab({ access, subscriptions, devices, loading, onQuickAction, a
 
 const EMPTY_DRIVE = { name: "", category: "", venture: "Ace Consultancy", platform: "Google Sheets", link: "", owner: "", accessLevel: "View - Team", lastUpdated: new Date().toISOString().slice(0, 10), reviewFrequency: "Monthly", notes: "" };
 
-function DriveModal({ initial, onSave, onClose, saving }: { initial: Omit<DriveLink, "id">; onSave: (d: Omit<DriveLink, "id">) => void; onClose: () => void; saving?: boolean }) {
+function DriveModal({ initial, onSave, onClose, saving, teamMembers = [], existingCategories = [] }: {
+  initial: Omit<DriveLink, "id">;
+  onSave: (d: Omit<DriveLink, "id">) => void;
+  onClose: () => void;
+  saving?: boolean;
+  teamMembers?: TeamMemberOption[];
+  existingCategories?: string[];
+}) {
   const [form, setForm] = useState(initial);
   const set = (k: keyof typeof form, v: string) => setForm((p) => ({ ...p, [k]: v }));
   const fieldCls = "w-full h-8 rounded-lg border border-border bg-muted/60 text-xs px-3 focus:outline-none focus:ring-1 focus:ring-primary text-foreground placeholder:text-muted-foreground";
+
+  const allCategories = useMemo(() => {
+    return Array.from(new Set([...DRIVE_CATEGORIES, ...existingCategories.filter(Boolean)]));
+  }, [existingCategories]);
+
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={!saving ? onClose : undefined} />
@@ -480,13 +546,25 @@ function DriveModal({ initial, onSave, onClose, saving }: { initial: Omit<DriveL
         <div className="p-5 space-y-3 max-h-[70vh] overflow-y-auto">
           <div className="grid grid-cols-2 gap-3">
             <div className="col-span-2"><label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">File / Resource Name *</label><input className={fieldCls} value={form.name} onChange={(e) => set("name", e.target.value)} placeholder="e.g. Brand Guidelines 2026" /></div>
-            <div><label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Category</label><input className={fieldCls} value={form.category} onChange={(e) => set("category", e.target.value)} placeholder="Ops/Admin" /></div>
+            <div>
+              <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Category</label>
+              <input list="drive-categories-datalist" className={fieldCls} value={form.category} onChange={(e) => set("category", e.target.value)} placeholder="e.g. Ops/Admin" />
+              <datalist id="drive-categories-datalist">
+                {allCategories.map((c) => <option key={c} value={c} />)}
+              </datalist>
+            </div>
             <div><label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Platform</label>
               <select className={cn(fieldCls, "cursor-pointer")} value={form.platform} onChange={(e) => set("platform", e.target.value)}>
                 {["Google Sheets", "Google Docs", "Notion", "PDF", "Other"].map((p) => <option key={p}>{p}</option>)}
               </select>
             </div>
-            <div><label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Owner</label><input className={fieldCls} value={form.owner} onChange={(e) => set("owner", e.target.value)} placeholder="e.g. Ops Team" /></div>
+            <div>
+              <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Owner</label>
+              <input list="drive-owners-datalist" className={fieldCls} value={form.owner} onChange={(e) => set("owner", e.target.value)} placeholder="Select or enter owner" />
+              <datalist id="drive-owners-datalist">
+                {teamMembers.map((m) => <option key={m._id || m.name} value={m.name}>{m.department ? `${m.name} (${m.department})` : m.name}</option>)}
+              </datalist>
+            </div>
             <div><label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Access Level</label>
               <select className={cn(fieldCls, "cursor-pointer")} value={form.accessLevel} onChange={(e) => set("accessLevel", e.target.value)}>
                 {["View - Team", "Edit - Team", "Admin Only", "Public"].map((a) => <option key={a}>{a}</option>)}
@@ -513,12 +591,13 @@ function DriveModal({ initial, onSave, onClose, saving }: { initial: Omit<DriveL
   );
 }
 
-function DriveLinksTab({ links, loading, onAdd, onEdit, onDelete, autoOpenAdd }: {
+function DriveLinksTab({ links, loading, onAdd, onEdit, onDelete, autoOpenAdd, teamMembers = [] }: {
   links: DriveLink[]; loading: boolean;
   onAdd: (d: Omit<DriveLink, "id">) => Promise<void>;
   onEdit: (id: string, d: Omit<DriveLink, "id">) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
   autoOpenAdd?: boolean;
+  teamMembers?: TeamMemberOption[];
 }) {
   const [search, setSearch] = useState("");
   const [filterCat, setFilterCat] = useState("All");
@@ -535,7 +614,7 @@ function DriveLinksTab({ links, loading, onAdd, onEdit, onDelete, autoOpenAdd }:
     }
   }, [autoOpenAdd]);
 
-  const categories = useMemo(() => ["All", ...Array.from(new Set(links.map((d) => d.category).filter(Boolean)))], [links]);
+  const categories = useMemo(() => ["All", ...Array.from(new Set([...DRIVE_CATEGORIES, ...links.map((d) => d.category)].filter(Boolean)))], [links]);
   const platforms = useMemo(() => ["All", ...Array.from(new Set(links.map((d) => d.platform).filter(Boolean)))], [links]);
   const accessLevels = useMemo(() => ["All", ...Array.from(new Set(links.map((d) => d.accessLevel).filter(Boolean)))], [links]);
 
@@ -564,7 +643,7 @@ function DriveLinksTab({ links, loading, onAdd, onEdit, onDelete, autoOpenAdd }:
 
   return (
     <div className="space-y-4">
-      {modal && <DriveModal initial={modal.mode === "edit" ? modal.item : EMPTY_DRIVE} onSave={handleSave} onClose={() => !saving && setModal(null)} saving={saving} />}
+      {modal && <DriveModal initial={modal.mode === "edit" ? modal.item : EMPTY_DRIVE} onSave={handleSave} onClose={() => !saving && setModal(null)} saving={saving} teamMembers={teamMembers} existingCategories={links.map((l) => l.category)} />}
       {deleteId && <ConfirmDialog title="Remove File Link" message="This will permanently remove this file link." onConfirm={handleDelete} onCancel={() => !deleting && setDeleteId(null)} loading={deleting} />}
 
       <div className="flex flex-col sm:flex-row gap-3 flex-wrap items-start sm:items-center justify-between">
@@ -634,10 +713,22 @@ function DriveLinksTab({ links, loading, onAdd, onEdit, onDelete, autoOpenAdd }:
 
 const EMPTY_ACCESS = { tool: "", category: "", assignee: "", role: "", accessLevel: "Full Access", dateGranted: new Date().toISOString().slice(0, 10), status: "Active" as const };
 
-function AccessModal({ initial, onSave, onClose, saving }: { initial: Omit<AccessEntry, "id">; onSave: (d: Omit<AccessEntry, "id">) => void; onClose: () => void; saving?: boolean }) {
+function AccessModal({ initial, onSave, onClose, saving, teamMembers = [], existingCategories = [] }: {
+  initial: Omit<AccessEntry, "id">;
+  onSave: (d: Omit<AccessEntry, "id">) => void;
+  onClose: () => void;
+  saving?: boolean;
+  teamMembers?: TeamMemberOption[];
+  existingCategories?: string[];
+}) {
   const [form, setForm] = useState(initial);
   const set = (k: keyof typeof form, v: string) => setForm((p) => ({ ...p, [k]: v }));
   const fieldCls = "w-full h-8 rounded-lg border border-border bg-muted/60 text-xs px-3 focus:outline-none focus:ring-1 focus:ring-primary text-foreground placeholder:text-muted-foreground";
+
+  const allCategories = useMemo(() => {
+    return Array.from(new Set([...ACCESS_CATEGORIES, ...existingCategories.filter(Boolean)]));
+  }, [existingCategories]);
+
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={!saving ? onClose : undefined} />
@@ -648,10 +739,36 @@ function AccessModal({ initial, onSave, onClose, saving }: { initial: Omit<Acces
         </div>
         <div className="p-5 space-y-3">
           <div className="grid grid-cols-2 gap-3">
-            <div><label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Tool / System *</label><input className={fieldCls} value={form.tool} onChange={(e) => set("tool", e.target.value)} placeholder="e.g. Slack" /></div>
-            <div><label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Category</label><input className={fieldCls} value={form.category} onChange={(e) => set("category", e.target.value)} placeholder="Communication" /></div>
-            <div><label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Assignee *</label><input className={fieldCls} value={form.assignee} onChange={(e) => set("assignee", e.target.value)} placeholder="Full name" /></div>
-            <div><label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Role</label><input className={fieldCls} value={form.role} onChange={(e) => set("role", e.target.value)} placeholder="Admin, Editor…" /></div>
+            <div><label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Tool / System *</label><input className={fieldCls} value={form.tool} onChange={(e) => set("tool", e.target.value)} placeholder="e.g. Slack, GitHub" /></div>
+            <div>
+              <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Category</label>
+              <input list="access-categories-datalist" className={fieldCls} value={form.category} onChange={(e) => set("category", e.target.value)} placeholder="e.g. Communication" />
+              <datalist id="access-categories-datalist">
+                {allCategories.map((c) => <option key={c} value={c} />)}
+              </datalist>
+            </div>
+            <div>
+              <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Assignee *</label>
+              <input
+                list="access-assignees-datalist"
+                className={fieldCls}
+                value={form.assignee}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  const found = teamMembers.find((m) => m.name.toLowerCase() === val.toLowerCase());
+                  setForm((p) => ({
+                    ...p,
+                    assignee: val,
+                    role: p.role || found?.role || found?.department || "",
+                  }));
+                }}
+                placeholder="Full name"
+              />
+              <datalist id="access-assignees-datalist">
+                {teamMembers.map((m) => <option key={m._id || m.name} value={m.name}>{m.department ? `${m.name} (${m.department})` : m.name}</option>)}
+              </datalist>
+            </div>
+            <div><label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Role / Designation</label><input className={fieldCls} value={form.role} onChange={(e) => set("role", e.target.value)} placeholder="Admin, Editor, User…" /></div>
             <div><label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Access Level</label>
               <select className={cn(fieldCls, "cursor-pointer")} value={form.accessLevel} onChange={(e) => set("accessLevel", e.target.value)}>
                 {["Full Access", "Edit", "View Only", "Write", "Standard", "Host"].map((l) => <option key={l}>{l}</option>)}
@@ -676,13 +793,14 @@ function AccessModal({ initial, onSave, onClose, saving }: { initial: Omit<Acces
   );
 }
 
-function AccessTab({ access, loading, onAdd, onEdit, onDelete, onToggleStatus, autoOpenAdd }: {
+function AccessTab({ access, loading, onAdd, onEdit, onDelete, onToggleStatus, autoOpenAdd, teamMembers = [] }: {
   access: AccessEntry[]; loading: boolean;
   onAdd: (d: Omit<AccessEntry, "id">) => Promise<void>;
   onEdit: (id: string, d: Omit<AccessEntry, "id">) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
   onToggleStatus: (id: string, current: AccessEntry["status"]) => Promise<void>;
   autoOpenAdd?: boolean;
+  teamMembers?: TeamMemberOption[];
 }) {
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("All");
@@ -699,7 +817,7 @@ function AccessTab({ access, loading, onAdd, onEdit, onDelete, onToggleStatus, a
     }
   }, [autoOpenAdd]);
 
-  const categories = useMemo(() => ["All", ...Array.from(new Set(access.map((a) => a.category).filter(Boolean)))], [access]);
+  const categories = useMemo(() => ["All", ...Array.from(new Set([...ACCESS_CATEGORIES, ...access.map((a) => a.category)].filter(Boolean)))], [access]);
   const filtered = useMemo(() => access.filter((a) => {
     const q = search.toLowerCase();
     return (!q || a.tool.toLowerCase().includes(q) || a.assignee.toLowerCase().includes(q) || a.role?.toLowerCase().includes(q))
@@ -729,7 +847,7 @@ function AccessTab({ access, loading, onAdd, onEdit, onDelete, onToggleStatus, a
 
   return (
     <div className="space-y-4">
-      {modal && <AccessModal initial={modal.mode === "edit" ? modal.item : EMPTY_ACCESS} onSave={handleSave} onClose={() => !saving && setModal(null)} saving={saving} />}
+      {modal && <AccessModal initial={modal.mode === "edit" ? modal.item : EMPTY_ACCESS} onSave={handleSave} onClose={() => !saving && setModal(null)} saving={saving} teamMembers={teamMembers} existingCategories={access.map((a) => a.category)} />}
       {deleteId && <ConfirmDialog title="Remove Access Record" message="This will permanently remove this access record." onConfirm={handleDelete} onCancel={() => !deleting && setDeleteId(null)} loading={deleting} />}
 
       <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between flex-wrap">
@@ -799,10 +917,43 @@ function AccessTab({ access, loading, onAdd, onEdit, onDelete, onToggleStatus, a
 
 const EMPTY_SUB = { tool: "", category: "", plan: "", costPerMonth: 0, seats: 1, renewalDate: "", owner: "", status: "Active" as const };
 
-function SubModal({ initial, onSave, onClose, saving }: { initial: Omit<Subscription, "id">; onSave: (d: Omit<Subscription, "id">) => void; onClose: () => void; saving?: boolean }) {
+function SubModal({ initial, onSave, onClose, saving }: {
+  initial: Omit<Subscription, "id">;
+  onSave: (d: Omit<Subscription, "id">) => void;
+  onClose: () => void;
+  saving?: boolean;
+}) {
   const [form, setForm] = useState(initial);
+  const [activeCycle, setActiveCycle] = useState<string>(() => {
+    if (!initial.renewalDate) return "";
+    return "Custom";
+  });
+
   const set = (k: keyof typeof form, v: string | number) => setForm((p) => ({ ...p, [k]: v }));
   const fieldCls = "w-full h-8 rounded-lg border border-border bg-muted/60 text-xs px-3 focus:outline-none focus:ring-1 focus:ring-primary text-foreground placeholder:text-muted-foreground";
+
+  const handleSelectCycle = (label: string, months: number) => {
+    setActiveCycle(label);
+    const d = new Date();
+    d.setMonth(d.getMonth() + months);
+    const dateStr = d.toISOString().slice(0, 10);
+    setForm((p) => ({
+      ...p,
+      renewalDate: dateStr,
+      status: "Active",
+    }));
+  };
+
+  const daysRemaining = useMemo(() => {
+    if (!form.renewalDate) return null;
+    const renewal = new Date(form.renewalDate);
+    if (isNaN(renewal.getTime())) return null;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    renewal.setHours(0, 0, 0, 0);
+    return Math.ceil((renewal.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+  }, [form.renewalDate]);
+
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={!saving ? onClose : undefined} />
@@ -813,18 +964,112 @@ function SubModal({ initial, onSave, onClose, saving }: { initial: Omit<Subscrip
         </div>
         <div className="p-5 space-y-3">
           <div className="grid grid-cols-2 gap-3">
-            <div className="col-span-2"><label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Tool Name *</label><input className={fieldCls} value={form.tool} onChange={(e) => set("tool", e.target.value)} placeholder="e.g. Slack Pro" /></div>
-            <div><label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Category</label><input className={fieldCls} value={form.category} onChange={(e) => set("category", e.target.value)} placeholder="Communication" /></div>
-            <div><label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Plan</label><input className={fieldCls} value={form.plan} onChange={(e) => set("plan", e.target.value)} placeholder="Pro, Business…" /></div>
-            <div><label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Cost / Month ($)</label><input type="number" min="0" step="0.01" className={fieldCls} value={form.costPerMonth} onChange={(e) => set("costPerMonth", parseFloat(e.target.value) || 0)} /></div>
-            <div><label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Seats</label><input type="number" min="1" className={fieldCls} value={form.seats} onChange={(e) => set("seats", parseInt(e.target.value) || 1)} /></div>
-            <div><label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Renewal Date</label><input type="date" className={fieldCls} value={form.renewalDate} onChange={(e) => set("renewalDate", e.target.value)} /></div>
-            <div><label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Status</label>
-              <select className={cn(fieldCls, "cursor-pointer")} value={form.status} onChange={(e) => set("status", e.target.value as Subscription["status"])}>
-                {["Active", "Expiring Soon", "Expired", "Cancelled"].map((s) => <option key={s}>{s}</option>)}
-              </select>
+            <div className="col-span-2">
+              <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Tool Name *</label>
+              <input className={fieldCls} value={form.tool} onChange={(e) => set("tool", e.target.value)} placeholder="e.g. Slack Pro, GitHub Enterprise, Figma" />
             </div>
-            <div className="col-span-2"><label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Owner</label><input className={fieldCls} value={form.owner} onChange={(e) => set("owner", e.target.value)} placeholder="Who manages this?" /></div>
+
+            <div className="col-span-2">
+              <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Plan</label>
+              <input className={fieldCls} value={form.plan} onChange={(e) => set("plan", e.target.value)} placeholder="Pro, Business, Enterprise, Team…" />
+            </div>
+
+            <div>
+              <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Cost / Month (₹ INR)</label>
+              <div className="relative">
+                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-semibold text-muted-foreground">₹</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  className={cn(fieldCls, "pl-6")}
+                  value={form.costPerMonth}
+                  onChange={(e) => set("costPerMonth", parseFloat(e.target.value) || 0)}
+                  placeholder="0"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Seats</label>
+              <input type="number" min="1" className={fieldCls} value={form.seats} onChange={(e) => set("seats", parseInt(e.target.value) || 1)} />
+            </div>
+
+            {/* Auto-calculating Billing Cycle & Renewal Date */}
+            <div className="col-span-2 space-y-2 p-3 rounded-xl border border-border/80 bg-muted/30">
+              <div className="flex items-center justify-between">
+                <label className="text-[10px] font-bold text-foreground uppercase tracking-wide flex items-center gap-1.5">
+                  <i className="fa-solid fa-calendar-check text-primary text-[11px]" />
+                  Billing Cycle Option
+                </label>
+                {daysRemaining !== null && (
+                  <span className={cn(
+                    "text-[10px] font-semibold px-2 py-0.5 rounded-full border",
+                    daysRemaining < 0
+                      ? "bg-red-500/10 text-red-500 border-red-500/20"
+                      : daysRemaining <= 7
+                      ? "bg-amber-500/10 text-amber-500 border-amber-500/20"
+                      : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
+                  )}>
+                    {daysRemaining < 0 ? `Expired ${Math.abs(daysRemaining)}d ago` : daysRemaining === 0 ? "Expires Today" : `Expires in ${daysRemaining} day(s)`}
+                  </span>
+                )}
+              </div>
+
+              <div className="grid grid-cols-4 gap-1.5">
+                {[
+                  { label: "1 Month", months: 1 },
+                  { label: "3 Months", months: 3 },
+                  { label: "6 Months", months: 6 },
+                  { label: "1 Year", months: 12 },
+                ].map((cycle) => (
+                  <button
+                    key={cycle.label}
+                    type="button"
+                    onClick={() => handleSelectCycle(cycle.label, cycle.months)}
+                    className={cn(
+                      "py-1.5 px-2 rounded-lg text-[11px] font-semibold border transition-all cursor-pointer text-center",
+                      activeCycle === cycle.label
+                        ? "bg-primary text-primary-foreground border-primary shadow-sm font-bold"
+                        : "bg-card text-muted-foreground border-border hover:text-foreground hover:bg-accent"
+                    )}
+                  >
+                    {cycle.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 pt-1">
+                <div>
+                  <label className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">
+                    Renewal Date
+                  </label>
+                  <input
+                    type="date"
+                    className={fieldCls}
+                    value={form.renewalDate}
+                    onChange={(e) => {
+                      setActiveCycle("Custom");
+                      set("renewalDate", e.target.value);
+                    }}
+                  />
+                </div>
+                <div>
+                  <label className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">
+                    Status
+                  </label>
+                  <select
+                    className={cn(fieldCls, "cursor-pointer")}
+                    value={form.status}
+                    onChange={(e) => set("status", e.target.value as Subscription["status"])}
+                  >
+                    {["Active", "Expiring Soon", "Expired", "Cancelled"].map((s) => (
+                      <option key={s}>{s}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
         <div className="flex gap-2 px-5 py-4 border-t border-border">
@@ -838,12 +1083,13 @@ function SubModal({ initial, onSave, onClose, saving }: { initial: Omit<Subscrip
   );
 }
 
-function SubscriptionsTab({ subs, loading, onAdd, onEdit, onDelete, autoOpenAdd }: {
+function SubscriptionsTab({ subs, loading, onAdd, onEdit, onDelete, autoOpenAdd, teamMembers = [] }: {
   subs: Subscription[]; loading: boolean;
   onAdd: (d: Omit<Subscription, "id">) => Promise<void>;
   onEdit: (id: string, d: Omit<Subscription, "id">) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
   autoOpenAdd?: boolean;
+  teamMembers?: TeamMemberOption[];
 }) {
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("All");
@@ -859,7 +1105,7 @@ function SubscriptionsTab({ subs, loading, onAdd, onEdit, onDelete, autoOpenAdd 
     }
   }, [autoOpenAdd]);
 
-  const categories = useMemo(() => ["All", ...Array.from(new Set(subs.map((s) => s.category).filter(Boolean)))], [subs]);
+  const categories = useMemo(() => ["All", ...Array.from(new Set([...SUB_CATEGORIES, ...subs.map((s) => s.category)].filter(Boolean)))], [subs]);
   const filtered = useMemo(() => subs.filter((s) => {
     const q = search.toLowerCase();
     return (!q || s.tool.toLowerCase().includes(q) || s.owner.toLowerCase().includes(q))
@@ -975,7 +1221,16 @@ const makeEmptyDevice = (assignedTo = "", department = "", assetTag = ""): Omit<
   assetTag, type: "Laptop", brand: "", modelName: "", assignedTo, department, os: "", lastSeen: "", condition: "Good", status: "In Use",
 });
 
-function DeviceModal({ initial, onSave, onClose, saving, lockedAssignedTo, lockedDepartment, isEditing }: {
+function DeviceModal({
+  initial,
+  onSave,
+  onClose,
+  saving,
+  lockedAssignedTo,
+  lockedDepartment,
+  isEditing,
+  teamMembers = [],
+}: {
   initial: Omit<Device, "id">;
   onSave: (d: Omit<Device, "id">) => void;
   onClose: () => void;
@@ -983,6 +1238,7 @@ function DeviceModal({ initial, onSave, onClose, saving, lockedAssignedTo, locke
   lockedAssignedTo?: string;
   lockedDepartment?: string;
   isEditing?: boolean;
+  teamMembers?: TeamMemberOption[];
 }) {
   const [form, setForm] = useState(initial);
   const set = (k: keyof typeof form, v: string) => setForm((p) => ({ ...p, [k]: v }));
@@ -990,6 +1246,12 @@ function DeviceModal({ initial, onSave, onClose, saving, lockedAssignedTo, locke
   // When type changes on a new device, regenerate tag prefix hint
   const fieldCls = "w-full h-8 rounded-lg border border-border bg-muted/60 text-xs px-3 focus:outline-none focus:ring-1 focus:ring-primary text-foreground placeholder:text-muted-foreground";
   const readonlyCls = "w-full h-8 rounded-lg border border-border bg-muted/40 text-xs px-3 text-foreground font-semibold flex items-center cursor-not-allowed opacity-80";
+
+  const departmentOptions = useMemo(() => {
+    const fromTeam = teamMembers.map((m) => m.department).filter(Boolean) as string[];
+    const defaults = ["Engineering", "Design", "Product", "Operations", "HR", "Marketing", "Sales", "Finance", "IT"];
+    return Array.from(new Set([...defaults, ...fromTeam]));
+  }, [teamMembers]);
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
@@ -1015,7 +1277,7 @@ function DeviceModal({ initial, onSave, onClose, saving, lockedAssignedTo, locke
                 {["Laptop", "Desktop", "Monitor", "Mobile", "Tablet", "Router", "Printer", "Other"].map((t) => <option key={t}>{t}</option>)}
               </select>
             </div>
-            <div><label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Brand</label><input className={fieldCls} value={form.brand} onChange={(e) => set("brand", e.target.value)} placeholder="Apple, Dell…" /></div>
+            <div><label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Brand</label><input className={fieldCls} value={form.brand} onChange={(e) => set("brand", e.target.value)} placeholder="Apple, Dell, Lenovo…" /></div>
 
 
             {/* Assigned To — locked for employees */}
@@ -1028,7 +1290,30 @@ function DeviceModal({ initial, onSave, onClose, saving, lockedAssignedTo, locke
                   <i className="fa-solid fa-user text-[9px] text-muted-foreground mr-1.5" />{lockedAssignedTo}
                 </div>
               ) : (
-                <input className={fieldCls} value={form.assignedTo} onChange={(e) => set("assignedTo", e.target.value)} placeholder="Full name" />
+                <>
+                  <input
+                    list="device-assignees-datalist"
+                    className={fieldCls}
+                    value={form.assignedTo}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      const found = teamMembers.find((m) => m.name.toLowerCase() === val.toLowerCase());
+                      setForm((p) => ({
+                        ...p,
+                        assignedTo: val,
+                        department: (!lockedDepartment && found?.department) ? found.department : p.department,
+                      }));
+                    }}
+                    placeholder="Full name"
+                  />
+                  <datalist id="device-assignees-datalist">
+                    {teamMembers.map((m) => (
+                      <option key={m._id || m.name} value={m.name}>
+                        {m.department ? `${m.name} (${m.department})` : m.name}
+                      </option>
+                    ))}
+                  </datalist>
+                </>
               )}
             </div>
 
@@ -1042,11 +1327,22 @@ function DeviceModal({ initial, onSave, onClose, saving, lockedAssignedTo, locke
                   <i className="fa-solid fa-sitemap text-[9px] text-muted-foreground mr-1.5" />{lockedDepartment}
                 </div>
               ) : (
-                <input className={fieldCls} value={form.department} onChange={(e) => set("department", e.target.value)} placeholder="IT, Design…" />
+                <>
+                  <input
+                    list="device-departments-datalist"
+                    className={fieldCls}
+                    value={form.department}
+                    onChange={(e) => set("department", e.target.value)}
+                    placeholder="IT, Design, Operations…"
+                  />
+                  <datalist id="device-departments-datalist">
+                    {departmentOptions.map((d) => <option key={d} value={d} />)}
+                  </datalist>
+                </>
               )}
             </div>
 
-            <div><label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">OS</label><input className={fieldCls} value={form.os} onChange={(e) => set("os", e.target.value)} placeholder="macOS 14, Windows 11…" /></div>
+            <div><label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">OS</label><input className={fieldCls} value={form.os} onChange={(e) => set("os", e.target.value)} placeholder="macOS 14, Windows 11, Ubuntu…" /></div>
 
             <div>
               <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Condition</label>
@@ -1083,7 +1379,7 @@ function DeviceModal({ initial, onSave, onClose, saving, lockedAssignedTo, locke
   );
 }
 
-function DevicesTab({ devices, allDevices, loading, onAdd, onEdit, onDelete, autoOpenAdd, userName, userDepartment, isPrivileged }: {
+function DevicesTab({ devices, allDevices, loading, onAdd, onEdit, onDelete, autoOpenAdd, userName, userDepartment, isPrivileged, teamMembers = [] }: {
   devices: Device[];        // filtered (user-scoped) — for display
   allDevices: Device[];     // full list — for asset tag generation
   loading: boolean;
@@ -1094,6 +1390,7 @@ function DevicesTab({ devices, allDevices, loading, onAdd, onEdit, onDelete, aut
   userName?: string;
   userDepartment?: string;
   isPrivileged?: boolean;
+  teamMembers?: TeamMemberOption[];
 }) {
   const [search, setSearch] = useState("");
   const [filterType, setFilterType] = useState("All");
@@ -1147,6 +1444,7 @@ function DevicesTab({ devices, allDevices, loading, onAdd, onEdit, onDelete, aut
           onSave={handleSave}
           onClose={() => !saving && setModal(null)}
           saving={saving}
+          teamMembers={teamMembers}
         />
       )}
       {deleteId && <ConfirmDialog title="Remove Device" message="Permanently remove this device from inventory?" onConfirm={handleDelete} onCancel={() => !deleting && setDeleteId(null)} loading={deleting} />}
@@ -1741,6 +2039,7 @@ export default function ITCommandCenterPage() {
   const [subs, setSubs] = useState<Subscription[]>([]);
   const [devices, setDevices] = useState<Device[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [teamMembers, setTeamMembers] = useState<TeamMemberOption[]>([]);
 
   const [loadingLinks, setLoadingLinks] = useState(true);
   const [loadingAccess, setLoadingAccess] = useState(true);
@@ -1796,12 +2095,31 @@ export default function ITCommandCenterPage() {
     finally { setLoadingInvoices(false); }
   }, [showToast]);
 
-  useEffect(() => { loadLinks(); loadAccess(); loadSubs(); loadDevices(); loadInvoices(); }, [loadLinks, loadAccess, loadSubs, loadDevices, loadInvoices]);
+  const loadTeamMembers = useCallback(async () => {
+    try {
+      const res = await fetch("/api/team?all=true");
+      if (res.ok) {
+        const data = await res.json();
+        setTeamMembers(data.users || data.team || []);
+      }
+    } catch {
+      // non-critical
+    }
+  }, []);
+
+  useEffect(() => {
+    loadLinks();
+    loadAccess();
+    loadSubs();
+    loadDevices();
+    loadInvoices();
+    loadTeamMembers();
+  }, [loadLinks, loadAccess, loadSubs, loadDevices, loadInvoices, loadTeamMembers]);
 
   const handleRefresh = async () => {
     setRefreshing(true);
     setLoadingLinks(true); setLoadingAccess(true); setLoadingSubs(true); setLoadingDevices(true); setLoadingInvoices(true);
-    await Promise.all([loadLinks(), loadAccess(), loadSubs(), loadDevices(), loadInvoices()]);
+    await Promise.all([loadLinks(), loadAccess(), loadSubs(), loadDevices(), loadInvoices(), loadTeamMembers()]);
     setRefreshing(false);
     showToast("Data refreshed", "info");
   };
@@ -1948,7 +2266,7 @@ export default function ITCommandCenterPage() {
 
     if (activeTab === "drive") {
       headers = ["File / Resource Name", "Category", "Platform", "Link", "Owner", "Access Level", "Last Updated", "Notes"];
-      rows = visibleLinks.map((l) => [l.name, l.category, l.platform, l.link, l.owner, l.accessLevel, l.lastUpdated, l.notes || ""]);
+      rows = links.map((l) => [l.name, l.category, l.platform, l.link, l.owner, l.accessLevel, l.lastUpdated, l.notes || ""]);
     } else if (activeTab === "access") {
       headers = ["Tool / System", "Category", "Assignee", "Role", "Access Level", "Date Granted", "Status"];
       rows = access.map((a) => [a.tool, a.category, a.assignee, a.role, a.accessLevel, a.dateGranted, a.status]);
@@ -2053,10 +2371,10 @@ export default function ITCommandCenterPage() {
       {/* Tab Content */}
       <div>
         {activeTab === "overview" && <OverviewTab access={access} subscriptions={subs} devices={devices} loading={overallLoading} onQuickAction={handleQuickAction} allowedTabs={visibleTabs.map((t) => t.key).filter((k) => k !== "overview")} />}
-        {activeTab === "drive" && <DriveLinksTab links={links} loading={loadingLinks} onAdd={addLink} onEdit={editLink} onDelete={deleteLink} autoOpenAdd={autoOpenAddTab === "drive"} />}
-        {activeTab === "access" && <AccessTab access={access} loading={loadingAccess} onAdd={addAccess} onEdit={editAccess} onDelete={deleteAccess} onToggleStatus={toggleAccessStatus} autoOpenAdd={autoOpenAddTab === "access"} />}
-        {activeTab === "subscriptions" && <SubscriptionsTab subs={subs} loading={loadingSubs} onAdd={addSub} onEdit={editSub} onDelete={deleteSub} autoOpenAdd={autoOpenAddTab === "subscriptions"} />}
-        {activeTab === "devices" && <DevicesTab devices={devices} allDevices={devices} loading={loadingDevices} onAdd={addDevice} onEdit={editDevice} onDelete={deleteDevice} autoOpenAdd={autoOpenAddTab === "devices"} userName={user?.name} userDepartment={user?.department} isPrivileged={isPrivileged} />}
+        {activeTab === "drive" && <DriveLinksTab links={links} loading={loadingLinks} onAdd={addLink} onEdit={editLink} onDelete={deleteLink} autoOpenAdd={autoOpenAddTab === "drive"} teamMembers={teamMembers} />}
+        {activeTab === "access" && <AccessTab access={access} loading={loadingAccess} onAdd={addAccess} onEdit={editAccess} onDelete={deleteAccess} onToggleStatus={toggleAccessStatus} autoOpenAdd={autoOpenAddTab === "access"} teamMembers={teamMembers} />}
+        {activeTab === "subscriptions" && <SubscriptionsTab subs={subs} loading={loadingSubs} onAdd={addSub} onEdit={editSub} onDelete={deleteSub} autoOpenAdd={autoOpenAddTab === "subscriptions"} teamMembers={teamMembers} />}
+        {activeTab === "devices" && <DevicesTab devices={devices} allDevices={devices} loading={loadingDevices} onAdd={addDevice} onEdit={editDevice} onDelete={deleteDevice} autoOpenAdd={autoOpenAddTab === "devices"} userName={user?.name} userDepartment={user?.department} isPrivileged={isPrivileged} teamMembers={teamMembers} />}
         {activeTab === "invoices" && isPrivileged && <InvoicesTab invoices={invoices} loading={loadingInvoices} onAdd={addInvoice} onEdit={editInvoice} onDelete={deleteInvoice} autoOpenAdd={autoOpenAddTab === "invoices"} />}
       </div>
     </div>

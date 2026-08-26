@@ -78,7 +78,12 @@ export async function GET() {
   try {
     const authResult = await requireTenantSession();
     if (isAuthError(authResult)) return authResult;
-    const { tenantObjectId, userObjectId } = authResult;
+    const { tenantObjectId, userObjectId, session } = authResult;
+
+    const isPrivileged = ["Admin", "OPS", "Sub Admin"].includes(session.role);
+    if (!isPrivileged) {
+      return NextResponse.json({ invoices: [] });
+    }
 
     await connectToDatabase();
     let invoices = await ITInvoice.find({ tenantId: tenantObjectId }).sort({ createdAt: -1 }).lean();
