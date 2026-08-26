@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo, useCallback, startTransition } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef, startTransition } from "react";
 import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -505,6 +505,20 @@ export default function ProjectsPage() {
     }
   }, [selectedProjectId, activeTab, mounted]);
 
+  const processedTaskIdRef = useRef<string | null>(null);
+
+  const handleCloseTaskModal = () => {
+    setSelectedTask(null);
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      if (url.searchParams.has("taskId")) {
+        url.searchParams.delete("taskId");
+        const newUrl = url.pathname + (url.searchParams.toString() ? `?${url.searchParams.toString()}` : "");
+        window.history.replaceState({}, "", newUrl);
+      }
+    }
+  };
+
   // Handle URL deep linking (e.g. from Notifications: ?projectId=...&taskId=...&tab=...)
   useEffect(() => {
     if (!mounted) return;
@@ -518,7 +532,8 @@ export default function ProjectsPage() {
     if (urlProjectId && urlProjectId !== selectedProjectId) {
       setSelectedProjectId(urlProjectId);
     }
-    if (urlTaskId) {
+    if (urlTaskId && processedTaskIdRef.current !== urlTaskId) {
+      processedTaskIdRef.current = urlTaskId;
       const found = tasks.find((t) => t._id === urlTaskId);
       if (found) {
         setSelectedTask(found);
@@ -3186,7 +3201,7 @@ export default function ProjectsPage() {
 
       {/* Task Quick Preview & Status Switcher Modal */}
       {selectedTask && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in" onClick={() => setSelectedTask(null)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in" onClick={handleCloseTaskModal}>
           <div className="w-full max-w-lg bg-card border border-border rounded-2xl p-6 shadow-2xl space-y-5 animate-in zoom-in-95" onClick={(e) => e.stopPropagation()}>
             <div className="flex justify-between items-start border-b border-border/60 pb-3 gap-3">
               <div className="space-y-1 min-w-0 flex-1">
@@ -3212,7 +3227,7 @@ export default function ProjectsPage() {
                 </div>
                 <h3 className="text-base font-bold text-foreground leading-snug pt-1">{selectedTask.title}</h3>
               </div>
-              <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground" onClick={() => setSelectedTask(null)}>
+              <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground" onClick={handleCloseTaskModal}>
                 <i className="fa-solid fa-xmark text-base" />
               </Button>
             </div>
@@ -3282,7 +3297,7 @@ export default function ProjectsPage() {
                 {isDeletingTask ? "Deleting..." : "Delete Task"}
               </Button>
 
-              <Button color="primary" size="sm" onClick={() => setSelectedTask(null)} className="font-semibold text-xs px-4">
+              <Button color="primary" size="sm" onClick={handleCloseTaskModal} className="font-semibold text-xs px-4">
                 Done
               </Button>
             </div>
