@@ -14,12 +14,13 @@ const SEED_DRIVE_LINKS = [
   { name: "Client Onboarding SOP", category: "Ops/Admin", venture: "Ace Consultancy", platform: "Notion", link: "https://notion.so/client-onboarding-sop", owner: "Ops Team", accessLevel: "Edit - Team", lastUpdated: "2026-07-30", reviewFrequency: "Monthly", notes: "Step-by-step process for new client intake" },
 ];
 
-/** GET: List all IT Drive Links for this tenant (auto-seed initial items if empty) */
 export async function GET() {
   try {
     const authResult = await requireTenantSession();
     if (isAuthError(authResult)) return authResult;
-    const { tenantObjectId, userObjectId } = authResult;
+    const { tenantObjectId, userObjectId, session } = authResult;
+
+    const isPrivileged = ["Admin", "OPS", "Sub Admin"].includes(session.role);
 
     await connectToDatabase();
     let links = await ITDriveLink.find({ tenantId: tenantObjectId }).sort({ createdAt: -1 }).lean();
@@ -32,6 +33,12 @@ export async function GET() {
       }));
       await ITDriveLink.insertMany(seedDocs);
       links = await ITDriveLink.find({ tenantId: tenantObjectId }).sort({ createdAt: -1 }).lean();
+    }
+
+    // Non-privileged users only receive links they own
+    if (!isPrivileged) {
+      const name = (session.userName || "").toLowerCase();
+      links = links.filter((l: any) => (l.owner || "").toLowerCase() === name);
     }
 
     return NextResponse.json({ links });

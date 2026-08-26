@@ -23,7 +23,9 @@ export async function GET() {
   try {
     const authResult = await requireTenantSession();
     if (isAuthError(authResult)) return authResult;
-    const { tenantObjectId, userObjectId } = authResult;
+    const { tenantObjectId, userObjectId, session } = authResult;
+
+    const isPrivileged = ["Admin", "OPS", "Sub Admin"].includes(session.role);
 
     await connectToDatabase();
     let entries = await ITAccessEntry.find({ tenantId: tenantObjectId }).sort({ createdAt: -1 }).lean();
@@ -36,6 +38,12 @@ export async function GET() {
       }));
       await ITAccessEntry.insertMany(seedDocs);
       entries = await ITAccessEntry.find({ tenantId: tenantObjectId }).sort({ createdAt: -1 }).lean();
+    }
+
+    // Non-privileged users only receive their own access entries
+    if (!isPrivileged) {
+      const name = (session.userName || "").toLowerCase();
+      entries = entries.filter((e: any) => (e.assignee || "").toLowerCase() === name);
     }
 
     return NextResponse.json({ entries });

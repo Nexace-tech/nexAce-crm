@@ -21,7 +21,14 @@ export async function GET() {
   try {
     const authResult = await requireTenantSession();
     if (isAuthError(authResult)) return authResult;
-    const { tenantObjectId, userObjectId } = authResult;
+    const { tenantObjectId, userObjectId, session } = authResult;
+
+    const isPrivileged = ["Admin", "OPS", "Sub Admin"].includes(session.role);
+
+    // Subscriptions are org-wide management data — only privileged roles can see them
+    if (!isPrivileged) {
+      return NextResponse.json({ subscriptions: [] });
+    }
 
     await connectToDatabase();
     let subs = await ITSubscription.find({ tenantId: tenantObjectId }).sort({ createdAt: -1 }).lean();

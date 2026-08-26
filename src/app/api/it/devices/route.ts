@@ -21,7 +21,9 @@ export async function GET() {
   try {
     const authResult = await requireTenantSession();
     if (isAuthError(authResult)) return authResult;
-    const { tenantObjectId, userObjectId } = authResult;
+    const { tenantObjectId, userObjectId, session } = authResult;
+
+    const isPrivileged = ["Admin", "OPS", "Sub Admin"].includes(session.role);
 
     await connectToDatabase();
     let devices = await ITDevice.find({ tenantId: tenantObjectId }).sort({ createdAt: -1 }).lean();
@@ -36,6 +38,12 @@ export async function GET() {
       devices = await ITDevice.find({ tenantId: tenantObjectId }).sort({ createdAt: -1 }).lean();
     }
 
+    // Non-privileged users only receive their own devices
+    if (!isPrivileged) {
+      const name = (session.userName || "").toLowerCase();
+      devices = devices.filter((d: any) => (d.assignedTo || "").toLowerCase() === name);
+    }
+
     return NextResponse.json({ devices });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Internal Server Error";
@@ -46,7 +54,8 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const authResult = await requireTenantSession(["Admin", "OPS", "Sub Admin"]);
+    // All authenticated tenant users may register a device (employees register their own)
+    const authResult = await requireTenantSession();
     if (isAuthError(authResult)) return authResult;
     const { tenantObjectId, userObjectId, session } = authResult;
 
@@ -55,6 +64,19 @@ export async function POST(request: Request) {
 
     if (!assetTag?.trim()) {
       return NextResponse.json({ error: "Asset tag is required" }, { status: 400 });
+    }
+
+    const isPrivileged = ["Admin", "OPS", "Sub Admin"].includes(session.role);
+
+    // Non-privileged users can only register devices assigned to themselves
+    if (!isPrivileged) {
+      const normalise = (s: string) => (s || "").trim().toLowerCase();
+      if (normalise(assignedTo) !== normalise(session.userName)) {
+        return NextResponse.json(
+          { error: "You can only register devices assigned to yourself" },
+          { status: 403 }
+        );
+      }
     }
 
     await connectToDatabase();
@@ -76,7 +98,7 @@ export async function POST(request: Request) {
       os: os?.trim() || "",
       lastSeen: lastSeen || new Date().toISOString().slice(0, 10),
       condition: condition || "Good",
-      status: status || "Available",
+      status: status || "In Use",
       createdBy: userObjectId,
     });
 

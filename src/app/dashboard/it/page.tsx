@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { cn, formatISTDate, getISTDateString } from "@/lib/utils";
 import { useTabPersistence } from "@/hooks/useTabPersistence";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useAuth } from "@/hooks/useAuth";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -265,9 +266,10 @@ function DonutChart({ segments }: { segments: { value: number; color: string; la
 
 // ─── Overview Tab ─────────────────────────────────────────────────────────────
 
-function OverviewTab({ access, subscriptions, devices, loading, onQuickAction }: {
+function OverviewTab({ access, subscriptions, devices, loading, onQuickAction, allowedTabs }: {
   access: AccessEntry[]; subscriptions: Subscription[]; devices: Device[]; loading: boolean;
   onQuickAction?: (tab: TabKey) => void;
+  allowedTabs?: TabKey[];
 }) {
   const activeAccess = access.filter((a) => a.status === "Active").length;
   const activeSubs = subscriptions.filter((s) => s.status === "Active").length;
@@ -290,6 +292,12 @@ function OverviewTab({ access, subscriptions, devices, loading, onQuickAction }:
     { value: access.filter((a) => a.status === "Revoked").length, color: "#ef4444", label: "Revoked" },
   ].filter((s) => s.value > 0);
 
+  // Helpers to check what the user can see
+  const can = (tab: TabKey) => !allowedTabs || allowedTabs.includes(tab);
+  const hasAccess = can("access");
+  const hasSubs = can("subscriptions");
+  const hasDevices = can("devices");
+
   if (loading) {
     return (
       <div className="space-y-5">
@@ -309,107 +317,149 @@ function OverviewTab({ access, subscriptions, devices, loading, onQuickAction }:
     );
   }
 
-  return (
-    <div className="space-y-5">
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {[
-          { icon: "fa-solid fa-users-gear", iconCls: "bg-blue-500/15 text-blue-500", border: "border-blue-500/20", label: "Active Access Grants", value: activeAccess, sub: "across all tools" },
-          { icon: "fa-solid fa-box-open", iconCls: "bg-violet-500/15 text-violet-500", border: "border-violet-500/20", label: "Active Subscriptions", value: activeSubs, sub: `${formatCurrency(monthlyCost)}/mo` },
-          { icon: "fa-solid fa-laptop", iconCls: "bg-emerald-500/15 text-emerald-500", border: "border-emerald-500/20", label: "Devices In Use", value: devicesInUse, sub: `${devices.length} total assets` },
-          { icon: "fa-solid fa-bell-ring", iconCls: "bg-orange-500/15 text-orange-500", border: "border-orange-500/20", label: "Expiring Soon", value: expiring, sub: "subscriptions" },
-        ].map((c) => (
-          <Card key={c.label} className={cn("border", c.border)}>
-            <CardContent className="p-5">
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex flex-col gap-1">
-                  <span className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wide">{c.label}</span>
-                  <span className="text-2xl font-bold text-foreground">{c.value}</span>
-                  <span className="text-xs text-muted-foreground">{c.sub}</span>
-                </div>
-                <div className={cn("w-11 h-11 rounded-xl flex items-center justify-center shrink-0", c.iconCls)}>
-                  <i className={cn(c.icon, "text-lg")} />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+  // Build only the stat cards the user has access to
+  const statCards = [
+    hasAccess && { icon: "fa-solid fa-users-gear", iconCls: "bg-blue-500/15 text-blue-500", border: "border-blue-500/20", label: "Active Access Grants", value: activeAccess, sub: "across all tools" },
+    hasSubs && { icon: "fa-solid fa-box-open", iconCls: "bg-violet-500/15 text-violet-500", border: "border-violet-500/20", label: "Active Subscriptions", value: activeSubs, sub: `${formatCurrency(monthlyCost)}/mo` },
+    hasDevices && { icon: "fa-solid fa-laptop", iconCls: "bg-emerald-500/15 text-emerald-500", border: "border-emerald-500/20", label: "Devices In Use", value: devicesInUse, sub: `${devices.length} total assets` },
+    hasSubs && { icon: "fa-solid fa-bell-ring", iconCls: "bg-orange-500/15 text-orange-500", border: "border-orange-500/20", label: "Expiring Soon", value: expiring, sub: "subscriptions" },
+  ].filter(Boolean) as { icon: string; iconCls: string; border: string; label: string; value: number; sub: string }[];
 
-      {/* Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <Card className="border-border">
-          <CardHeader className="pb-2 pt-4 px-4"><CardTitle className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5"><i className="fa-solid fa-chart-bar text-violet-500" /> Spend by Category</CardTitle></CardHeader>
-          <CardContent className="px-4 pb-4">
-            {subsByCategory.length > 0 ? <MiniBarChart data={subsByCategory.map((d, i) => ({ ...d, color: COLORS[i % COLORS.length] }))} /> : <p className="text-xs text-muted-foreground py-4 text-center">No subscription data</p>}
-          </CardContent>
-        </Card>
-        <Card className="border-border">
-          <CardHeader className="pb-2 pt-4 px-4"><CardTitle className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5"><i className="fa-solid fa-key text-blue-500" /> Access by Status</CardTitle></CardHeader>
-          <CardContent className="px-4 pb-4">
-            {accessByStatus.length > 0 ? <DonutChart segments={accessByStatus} /> : <p className="text-xs text-muted-foreground py-4 text-center">No access data</p>}
-          </CardContent>
-        </Card>
-        <Card className="border-border">
-          <CardHeader className="pb-2 pt-4 px-4"><CardTitle className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5"><i className="fa-solid fa-laptop text-emerald-500" /> Device Health</CardTitle></CardHeader>
-          <CardContent className="px-4 pb-4">
-            {devices.length > 0 ? <DonutChart segments={[
-              { value: devices.filter((d) => d.condition === "Excellent").length, color: "#10b981", label: "Excellent" },
-              { value: devices.filter((d) => d.condition === "Good").length, color: "#3b82f6", label: "Good" },
-              { value: devices.filter((d) => d.condition === "Fair").length, color: "#f59e0b", label: "Fair" },
-              { value: devices.filter((d) => d.condition === "Poor").length, color: "#ef4444", label: "Poor" },
-            ].filter((s) => s.value > 0)} /> : <p className="text-xs text-muted-foreground py-4 text-center">No device data</p>}
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Summary Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        {[
-          { label: "Expired / Cancelled Subs", value: subscriptions.filter((s) => s.status === "Expired" || s.status === "Cancelled").length, cls: "text-red-500", icon: "fa-solid fa-ban" },
-          { label: "Revoked Access", value: access.filter((a) => a.status === "Revoked").length, cls: "text-red-500", icon: "fa-solid fa-user-xmark" },
-          { label: "Pending Access", value: access.filter((a) => a.status === "Pending").length, cls: "text-blue-500", icon: "fa-solid fa-hourglass-half" },
-          { label: "Available Devices", value: devices.filter((d) => d.status === "Available").length, cls: "text-emerald-500", icon: "fa-solid fa-laptop-code" },
-        ].map((item) => (
-          <div key={item.label} className="rounded-xl border border-border bg-card p-4 flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-muted flex items-center justify-center shrink-0">
-              <i className={cn(item.icon, item.cls, "text-sm")} />
-            </div>
-            <div>
-              <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wide leading-tight">{item.label}</p>
-              <p className={cn("text-xl font-bold mt-0.5", item.cls)}>{item.value}</p>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Quick Actions */}
-      <Card className="border-border">
-        <CardHeader className="pb-2 pt-4 px-4">
-          <CardTitle className="text-sm font-semibold flex items-center gap-2">
-            <i className="fa-solid fa-bolt text-amber-500" /> Quick Actions — Add & Manage
-          </CardTitle>
-        </CardHeader>
+  // Build only the charts the user can see
+  const charts = [
+    hasSubs && (
+      <Card key="spend" className="border-border">
+        <CardHeader className="pb-2 pt-4 px-4"><CardTitle className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5"><i className="fa-solid fa-chart-bar text-violet-500" /> Spend by Category</CardTitle></CardHeader>
         <CardContent className="px-4 pb-4">
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-            {[
-              { icon: "fa-solid fa-user-plus", label: "Grant Access", sub: "Add user tool access", tab: "access", color: "text-blue-500 bg-blue-500/10 border-blue-500/20 hover:bg-blue-500/15" },
-              { icon: "fa-solid fa-file-circle-plus", label: "Add Drive Link", sub: "Index new resource", tab: "drive", color: "text-violet-500 bg-violet-500/10 border-violet-500/20 hover:bg-violet-500/15" },
-              { icon: "fa-solid fa-laptop-medical", label: "Register Device", sub: "Add asset entry", tab: "devices", color: "text-emerald-500 bg-emerald-500/10 border-emerald-500/20 hover:bg-emerald-500/15" },
-              { icon: "fa-solid fa-credit-card", label: "Add Subscription", sub: "Track new software", tab: "subscriptions", color: "text-amber-500 bg-amber-500/10 border-amber-500/20 hover:bg-amber-500/15" },
-              { icon: "fa-solid fa-file-invoice-dollar", label: "Create Invoice", sub: "Generate client invoice", tab: "invoices", color: "text-cyan-500 bg-cyan-500/10 border-cyan-500/20 hover:bg-cyan-500/15" },
-            ].map((action) => (
-              <button key={action.label} onClick={() => onQuickAction?.(action.tab as TabKey)} className={cn("flex flex-col items-center gap-1.5 px-3 py-3 rounded-xl border text-center transition-all duration-200 cursor-pointer", action.color)}>
-                <i className={cn(action.icon, "text-lg")} />
-                <span className="text-[11px] font-bold leading-tight">{action.label}</span>
-                <span className="text-[9px] opacity-70 leading-tight">{action.sub}</span>
-              </button>
-            ))}
-          </div>
+          {subsByCategory.length > 0 ? <MiniBarChart data={subsByCategory.map((d, i) => ({ ...d, color: COLORS[i % COLORS.length] }))} /> : <p className="text-xs text-muted-foreground py-4 text-center">No subscription data</p>}
         </CardContent>
       </Card>
+    ),
+    hasAccess && (
+      <Card key="access" className="border-border">
+        <CardHeader className="pb-2 pt-4 px-4"><CardTitle className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5"><i className="fa-solid fa-key text-blue-500" /> Access by Status</CardTitle></CardHeader>
+        <CardContent className="px-4 pb-4">
+          {accessByStatus.length > 0 ? <DonutChart segments={accessByStatus} /> : <p className="text-xs text-muted-foreground py-4 text-center">No access data</p>}
+        </CardContent>
+      </Card>
+    ),
+    hasDevices && (
+      <Card key="devices" className="border-border">
+        <CardHeader className="pb-2 pt-4 px-4"><CardTitle className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5"><i className="fa-solid fa-laptop text-emerald-500" /> Device Health</CardTitle></CardHeader>
+        <CardContent className="px-4 pb-4">
+          {devices.length > 0 ? <DonutChart segments={[
+            { value: devices.filter((d) => d.condition === "Excellent").length, color: "#10b981", label: "Excellent" },
+            { value: devices.filter((d) => d.condition === "Good").length, color: "#3b82f6", label: "Good" },
+            { value: devices.filter((d) => d.condition === "Fair").length, color: "#f59e0b", label: "Fair" },
+            { value: devices.filter((d) => d.condition === "Poor").length, color: "#ef4444", label: "Poor" },
+          ].filter((s) => s.value > 0)} /> : <p className="text-xs text-muted-foreground py-4 text-center">No device data</p>}
+        </CardContent>
+      </Card>
+    ),
+  ].filter(Boolean);
+
+  // Build only the summary items the user can see
+  const summaryItems = [
+    hasSubs && { label: "Expired / Cancelled Subs", value: subscriptions.filter((s) => s.status === "Expired" || s.status === "Cancelled").length, cls: "text-red-500", icon: "fa-solid fa-ban" },
+    hasAccess && { label: "Revoked Access", value: access.filter((a) => a.status === "Revoked").length, cls: "text-red-500", icon: "fa-solid fa-user-xmark" },
+    hasAccess && { label: "Pending Access", value: access.filter((a) => a.status === "Pending").length, cls: "text-blue-500", icon: "fa-solid fa-hourglass-half" },
+    hasDevices && { label: "Available Devices", value: devices.filter((d) => d.status === "Available").length, cls: "text-emerald-500", icon: "fa-solid fa-laptop-code" },
+  ].filter(Boolean) as { label: string; value: number; cls: string; icon: string }[];
+
+  // Quick Actions — only for allowed tabs
+  const ALL_ACTIONS = [
+    { icon: "fa-solid fa-user-plus", label: "Grant Access", sub: "Add user tool access", tab: "access" as TabKey, color: "text-blue-500 bg-blue-500/10 border-blue-500/20 hover:bg-blue-500/15" },
+    { icon: "fa-solid fa-file-circle-plus", label: "Add Drive Link", sub: "Index new resource", tab: "drive" as TabKey, color: "text-violet-500 bg-violet-500/10 border-violet-500/20 hover:bg-violet-500/15" },
+    { icon: "fa-solid fa-laptop-medical", label: "Register Device", sub: "Add asset entry", tab: "devices" as TabKey, color: "text-emerald-500 bg-emerald-500/10 border-emerald-500/20 hover:bg-emerald-500/15" },
+    { icon: "fa-solid fa-credit-card", label: "Add Subscription", sub: "Track new software", tab: "subscriptions" as TabKey, color: "text-amber-500 bg-amber-500/10 border-amber-500/20 hover:bg-amber-500/15" },
+    { icon: "fa-solid fa-file-invoice-dollar", label: "Create Invoice", sub: "Generate client invoice", tab: "invoices" as TabKey, color: "text-cyan-500 bg-cyan-500/10 border-cyan-500/20 hover:bg-cyan-500/15" },
+  ];
+  const actions = allowedTabs ? ALL_ACTIONS.filter((a) => allowedTabs.includes(a.tab)) : ALL_ACTIONS;
+
+  return (
+    <div className="space-y-5">
+      {/* Stat Cards — only accessible sections */}
+      {statCards.length > 0 && (
+        <div className={cn("grid gap-4", statCards.length === 1 ? "grid-cols-1 max-w-xs" : statCards.length === 2 ? "grid-cols-2" : statCards.length === 3 ? "grid-cols-3" : "grid-cols-2 lg:grid-cols-4")}>
+          {statCards.map((c) => (
+            <Card key={c.label} className={cn("border", c.border)}>
+              <CardContent className="p-5">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex flex-col gap-1">
+                    <span className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wide">{c.label}</span>
+                    <span className="text-2xl font-bold text-foreground">{c.value}</span>
+                    <span className="text-xs text-muted-foreground">{c.sub}</span>
+                  </div>
+                  <div className={cn("w-11 h-11 rounded-xl flex items-center justify-center shrink-0", c.iconCls)}>
+                    <i className={cn(c.icon, "text-lg")} />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {/* Charts — only accessible sections */}
+      {charts.length > 0 && (
+        <div className={cn("grid gap-4", charts.length === 1 ? "grid-cols-1" : charts.length === 2 ? "grid-cols-1 lg:grid-cols-2" : "grid-cols-1 lg:grid-cols-3")}>
+          {charts}
+        </div>
+      )}
+
+      {/* Summary Cards — only accessible sections */}
+      {summaryItems.length > 0 && (
+        <div className={cn("grid gap-3", summaryItems.length <= 2 ? "grid-cols-2" : "grid-cols-2 lg:grid-cols-4")}>
+          {summaryItems.map((item) => (
+            <div key={item.label} className="rounded-xl border border-border bg-card p-4 flex items-center gap-3">
+              <div className="w-9 h-9 rounded-lg bg-muted flex items-center justify-center shrink-0">
+                <i className={cn(item.icon, item.cls, "text-sm")} />
+              </div>
+              <div>
+                <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wide leading-tight">{item.label}</p>
+                <p className={cn("text-xl font-bold mt-0.5", item.cls)}>{item.value}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Quick Actions */}
+      {actions.length > 0 && (
+        <Card className="border-border">
+          <CardHeader className="pb-2 pt-4 px-4">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <i className="fa-solid fa-bolt text-amber-500" /> Quick Actions — Add &amp; Manage
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-4 pb-4">
+            <div className={cn("grid gap-3", actions.length <= 2 ? "grid-cols-2" : actions.length === 3 ? "grid-cols-3" : "grid-cols-2 sm:grid-cols-5")}>
+              {actions.map((action) => (
+                <button key={action.label} onClick={() => onQuickAction?.(action.tab)} className={cn("flex flex-col items-center gap-1.5 px-3 py-3 rounded-xl border text-center transition-all duration-200 cursor-pointer", action.color)}>
+                  <i className={cn(action.icon, "text-lg")} />
+                  <span className="text-[11px] font-bold leading-tight">{action.label}</span>
+                  <span className="text-[9px] opacity-70 leading-tight">{action.sub}</span>
+                </button>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Empty state */}
+      {statCards.length === 0 && charts.length === 0 && summaryItems.length === 0 && (
+        <div className="flex flex-col items-center justify-center py-20 text-center">
+          <div className="w-16 h-16 rounded-2xl bg-muted flex items-center justify-center mb-4">
+            <i className="fa-solid fa-gauge-high text-2xl text-muted-foreground opacity-40" />
+          </div>
+          <p className="text-sm font-semibold text-foreground">No overview data available</p>
+          <p className="text-xs text-muted-foreground mt-1">You don&apos;t have access to any monitored sections yet.</p>
+        </div>
+      )}
     </div>
   );
 }
+
 
 // ─── Drive Links Tab ──────────────────────────────────────────────────────────
 
@@ -903,40 +953,109 @@ function SubscriptionsTab({ subs, loading, onAdd, onEdit, onDelete, autoOpenAdd 
 
 // ─── Devices Tab ──────────────────────────────────────────────────────────────
 
-const EMPTY_DEVICE = { assetTag: "", type: "Laptop", brand: "", modelName: "", assignedTo: "", department: "", os: "", lastSeen: new Date().toISOString().slice(0, 10), condition: "Good" as const, status: "Available" as const };
+// ─── Asset Tag Generator ─────────────────────────────────────────────────────
+const TYPE_CODE: Record<string, string> = {
+  Laptop: "LAP", Desktop: "DES", Monitor: "MON", Mobile: "MOB",
+  Tablet: "TAB", Router: "RTR", Printer: "PRT", Other: "OTH",
+};
 
-function DeviceModal({ initial, onSave, onClose, saving }: { initial: Omit<Device, "id">; onSave: (d: Omit<Device, "id">) => void; onClose: () => void; saving?: boolean }) {
+function generateAssetTag(type: string, existingDevices: Device[]): string {
+  const code = TYPE_CODE[type] || "OTH";
+  const prefix = `ACE-${code}-`;
+  const nums = existingDevices
+    .map((d) => d.assetTag)
+    .filter((t) => t.startsWith(prefix))
+    .map((t) => parseInt(t.replace(prefix, ""), 10))
+    .filter((n) => !isNaN(n));
+  const next = nums.length > 0 ? Math.max(...nums) + 1 : 1;
+  return `${prefix}${String(next).padStart(3, "0")}`;
+}
+
+const makeEmptyDevice = (assignedTo = "", department = "", assetTag = ""): Omit<Device, "id"> => ({
+  assetTag, type: "Laptop", brand: "", modelName: "", assignedTo, department, os: "", lastSeen: "", condition: "Good", status: "In Use",
+});
+
+function DeviceModal({ initial, onSave, onClose, saving, lockedAssignedTo, lockedDepartment, isEditing }: {
+  initial: Omit<Device, "id">;
+  onSave: (d: Omit<Device, "id">) => void;
+  onClose: () => void;
+  saving?: boolean;
+  lockedAssignedTo?: string;
+  lockedDepartment?: string;
+  isEditing?: boolean;
+}) {
   const [form, setForm] = useState(initial);
   const set = (k: keyof typeof form, v: string) => setForm((p) => ({ ...p, [k]: v }));
+
+  // When type changes on a new device, regenerate tag prefix hint
   const fieldCls = "w-full h-8 rounded-lg border border-border bg-muted/60 text-xs px-3 focus:outline-none focus:ring-1 focus:ring-primary text-foreground placeholder:text-muted-foreground";
+  const readonlyCls = "w-full h-8 rounded-lg border border-border bg-muted/40 text-xs px-3 text-foreground font-semibold flex items-center cursor-not-allowed opacity-80";
+
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={!saving ? onClose : undefined} />
       <div className="relative bg-card border border-border rounded-2xl shadow-2xl w-full max-w-lg animate-in fade-in zoom-in-95 duration-150 overflow-hidden">
         <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-          <h3 className="text-sm font-bold text-foreground flex items-center gap-2"><i className="fa-solid fa-laptop text-emerald-500" />Register / Edit Device</h3>
+          <h3 className="text-sm font-bold text-foreground flex items-center gap-2"><i className="fa-solid fa-laptop text-emerald-500" />{isEditing ? "Edit Device" : "Register Device"}</h3>
           <button onClick={onClose} disabled={saving} className="text-muted-foreground hover:text-foreground cursor-pointer disabled:opacity-50"><i className="fa-solid fa-xmark" /></button>
         </div>
         <div className="p-5 space-y-3">
           <div className="grid grid-cols-2 gap-3">
-            <div><label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Asset Tag *</label><input className={fieldCls} value={form.assetTag} onChange={(e) => set("assetTag", e.target.value)} placeholder="ACE-LAP-008" /></div>
-            <div><label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Type</label>
+            {/* Asset Tag — auto-generated, read-only */}
+            <div>
+              <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Asset Tag</label>
+              <div className="relative">
+                <input className={cn(fieldCls, "pr-8 font-mono")} value={form.assetTag} readOnly placeholder="Auto-generated" />
+                <i className="fa-solid fa-lock-keyhole absolute right-2.5 top-1/2 -translate-y-1/2 text-[9px] text-muted-foreground" />
+              </div>
+            </div>
+            <div>
+              <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Type</label>
               <select className={cn(fieldCls, "cursor-pointer")} value={form.type} onChange={(e) => set("type", e.target.value)}>
                 {["Laptop", "Desktop", "Monitor", "Mobile", "Tablet", "Router", "Printer", "Other"].map((t) => <option key={t}>{t}</option>)}
               </select>
             </div>
             <div><label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Brand</label><input className={fieldCls} value={form.brand} onChange={(e) => set("brand", e.target.value)} placeholder="Apple, Dell…" /></div>
-            <div><label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Model</label><input className={fieldCls} value={form.modelName} onChange={(e) => set("modelName", e.target.value)} placeholder="MacBook Pro 14" /></div>
-            <div><label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Assigned To</label><input className={fieldCls} value={form.assignedTo} onChange={(e) => set("assignedTo", e.target.value)} placeholder="Full name or —" /></div>
-            <div><label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Department</label><input className={fieldCls} value={form.department} onChange={(e) => set("department", e.target.value)} placeholder="IT, Design…" /></div>
+
+
+            {/* Assigned To — locked for employees */}
+            <div>
+              <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1 mb-1">
+                Assigned To {lockedAssignedTo && <i className="fa-solid fa-circle-user text-primary text-[9px]" />}
+              </label>
+              {lockedAssignedTo ? (
+                <div className={readonlyCls}>
+                  <i className="fa-solid fa-user text-[9px] text-muted-foreground mr-1.5" />{lockedAssignedTo}
+                </div>
+              ) : (
+                <input className={fieldCls} value={form.assignedTo} onChange={(e) => set("assignedTo", e.target.value)} placeholder="Full name" />
+              )}
+            </div>
+
+            {/* Department — locked for employees */}
+            <div>
+              <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1 mb-1">
+                Department {lockedDepartment && <i className="fa-solid fa-building text-primary text-[9px]" />}
+              </label>
+              {lockedDepartment ? (
+                <div className={readonlyCls}>
+                  <i className="fa-solid fa-sitemap text-[9px] text-muted-foreground mr-1.5" />{lockedDepartment}
+                </div>
+              ) : (
+                <input className={fieldCls} value={form.department} onChange={(e) => set("department", e.target.value)} placeholder="IT, Design…" />
+              )}
+            </div>
+
             <div><label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">OS</label><input className={fieldCls} value={form.os} onChange={(e) => set("os", e.target.value)} placeholder="macOS 14, Windows 11…" /></div>
-            <div><label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Last Seen</label><input type="date" className={fieldCls} value={form.lastSeen} onChange={(e) => set("lastSeen", e.target.value)} /></div>
-            <div><label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Condition</label>
+
+            <div>
+              <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Condition</label>
               <select className={cn(fieldCls, "cursor-pointer")} value={form.condition} onChange={(e) => set("condition", e.target.value as Device["condition"])}>
                 {["Excellent", "Good", "Fair", "Poor"].map((c) => <option key={c}>{c}</option>)}
               </select>
             </div>
-            <div><label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Status</label>
+            <div>
+              <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Status</label>
               <select className={cn(fieldCls, "cursor-pointer")} value={form.status} onChange={(e) => set("status", e.target.value as Device["status"])}>
                 {["In Use", "Available", "In Repair", "Retired"].map((s) => <option key={s}>{s}</option>)}
               </select>
@@ -945,7 +1064,17 @@ function DeviceModal({ initial, onSave, onClose, saving }: { initial: Omit<Devic
         </div>
         <div className="flex gap-2 px-5 py-4 border-t border-border">
           <button onClick={onClose} disabled={saving} className="flex-1 h-9 rounded-lg border border-border bg-muted/60 text-xs font-semibold text-muted-foreground hover:bg-muted cursor-pointer disabled:opacity-50">Cancel</button>
-          <button onClick={() => { if (form.assetTag.trim()) onSave(form); }} disabled={!form.assetTag.trim() || saving} className="flex-1 h-9 rounded-lg bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 disabled:opacity-50 cursor-pointer flex items-center justify-center gap-1.5">
+          <button
+            onClick={() => {
+              const finalForm = {
+                ...form,
+                assignedTo: lockedAssignedTo || form.assignedTo,
+                department: lockedDepartment || form.department,
+              };
+              if (finalForm.assetTag.trim()) onSave(finalForm);
+            }}
+            disabled={!form.assetTag.trim() || saving}
+            className="flex-1 h-9 rounded-lg bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 disabled:opacity-50 cursor-pointer flex items-center justify-center gap-1.5">
             {saving ? <><i className="fa-solid fa-circle-notch fa-spin text-[10px]" />Saving…</> : "Save"}
           </button>
         </div>
@@ -954,12 +1083,17 @@ function DeviceModal({ initial, onSave, onClose, saving }: { initial: Omit<Devic
   );
 }
 
-function DevicesTab({ devices, loading, onAdd, onEdit, onDelete, autoOpenAdd }: {
-  devices: Device[]; loading: boolean;
+function DevicesTab({ devices, allDevices, loading, onAdd, onEdit, onDelete, autoOpenAdd, userName, userDepartment, isPrivileged }: {
+  devices: Device[];        // filtered (user-scoped) — for display
+  allDevices: Device[];     // full list — for asset tag generation
+  loading: boolean;
   onAdd: (d: Omit<Device, "id">) => Promise<void>;
   onEdit: (id: string, d: Omit<Device, "id">) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
   autoOpenAdd?: boolean;
+  userName?: string;
+  userDepartment?: string;
+  isPrivileged?: boolean;
 }) {
   const [search, setSearch] = useState("");
   const [filterType, setFilterType] = useState("All");
@@ -1000,7 +1134,21 @@ function DevicesTab({ devices, loading, onAdd, onEdit, onDelete, autoOpenAdd }: 
 
   return (
     <div className="space-y-4">
-      {modal && <DeviceModal initial={modal.mode === "edit" ? modal.item : EMPTY_DEVICE} onSave={handleSave} onClose={() => !saving && setModal(null)} saving={saving} />}
+      {modal && (
+        <DeviceModal
+          initial={modal.mode === "edit" ? modal.item : makeEmptyDevice(
+            isPrivileged ? "" : (userName || ""),
+            isPrivileged ? "" : (userDepartment || ""),
+            modal.mode === "add" ? generateAssetTag("Laptop", allDevices) : ""
+          )}
+          isEditing={modal.mode === "edit"}
+          lockedAssignedTo={(!isPrivileged && modal.mode === "add") ? (userName || undefined) : undefined}
+          lockedDepartment={(!isPrivileged && modal.mode === "add") ? (userDepartment || undefined) : undefined}
+          onSave={handleSave}
+          onClose={() => !saving && setModal(null)}
+          saving={saving}
+        />
+      )}
       {deleteId && <ConfirmDialog title="Remove Device" message="Permanently remove this device from inventory?" onConfirm={handleDelete} onCancel={() => !deleting && setDeleteId(null)} loading={deleting} />}
 
       <div className="flex flex-wrap gap-3 items-center">
@@ -1575,6 +1723,8 @@ const TABS: { key: TabKey; label: string; icon: string }[] = [
 
 export default function ITCommandCenterPage() {
   const { can, isAdmin, isOPS } = usePermissions();
+  const { user } = useAuth();
+  const isPrivileged = isAdmin || isOPS;
   const [activeTab, setActiveTab] = useTabPersistence<TabKey>("it_command_center_tab", "overview", ["overview", "drive", "access", "subscriptions", "devices", "invoices"]);
   const [autoOpenAddTab, setAutoOpenAddTab] = useState<TabKey | null>(null);
 
@@ -1785,10 +1935,11 @@ export default function ITCommandCenterPage() {
       if (tab.key === "access") return isAdmin || isOPS || can("manageITAccess") || can("viewITPortal");
       if (tab.key === "subscriptions") return isAdmin || isOPS || can("manageITSubscriptions") || can("viewITPortal");
       if (tab.key === "devices") return isAdmin || isOPS || can("manageITDevices") || can("viewITPortal");
-      if (tab.key === "invoices") return isAdmin || isOPS || can("manageITInvoices") || can("viewITPortal");
+      // Invoices tab: only privileged users (Admin / OPS)
+      if (tab.key === "invoices") return isPrivileged || can("manageITInvoices");
       return true;
     });
-  }, [isAdmin, isOPS, can]);
+  }, [isAdmin, isOPS, isPrivileged, can]);
 
   const handleExportTabCSV = () => {
     let headers: string[] = [];
@@ -1797,7 +1948,7 @@ export default function ITCommandCenterPage() {
 
     if (activeTab === "drive") {
       headers = ["File / Resource Name", "Category", "Platform", "Link", "Owner", "Access Level", "Last Updated", "Notes"];
-      rows = links.map((l) => [l.name, l.category, l.platform, l.link, l.owner, l.accessLevel, l.lastUpdated, l.notes || ""]);
+      rows = visibleLinks.map((l) => [l.name, l.category, l.platform, l.link, l.owner, l.accessLevel, l.lastUpdated, l.notes || ""]);
     } else if (activeTab === "access") {
       headers = ["Tool / System", "Category", "Assignee", "Role", "Access Level", "Date Granted", "Status"];
       rows = access.map((a) => [a.tool, a.category, a.assignee, a.role, a.accessLevel, a.dateGranted, a.status]);
@@ -1834,7 +1985,8 @@ export default function ITCommandCenterPage() {
     showToast(`Exported ${activeTab} CSV`, "info");
   };
 
-  const totalRecords = links.length + access.length + subs.length + devices.length + invoices.length;
+  // ─── Server already returns user-scoped data — no client-side filtering needed ─
+  const totalRecords = links.length + access.length + subs.length + devices.length + (isPrivileged ? invoices.length : 0);
   const overallLoading = loadingLinks && loadingAccess && loadingSubs && loadingDevices && loadingInvoices;
 
   return (
@@ -1849,7 +2001,11 @@ export default function ITCommandCenterPage() {
           </div>
           <div>
             <h1 className="text-xl font-bold text-foreground tracking-tight">IT Portal</h1>
-            <p className="text-xs text-muted-foreground">Manage access, subscriptions, assets, invoices & shared resources (IST Standard)</p>
+            <p className="text-xs text-muted-foreground">
+              {isPrivileged
+                ? "Manage access, subscriptions, assets, invoices & shared resources (IST Standard)"
+                : `Showing your assigned resources${user?.name ? ` — ${user.name}` : ""}`}
+            </p>
           </div>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
@@ -1896,13 +2052,14 @@ export default function ITCommandCenterPage() {
 
       {/* Tab Content */}
       <div>
-        {activeTab === "overview" && <OverviewTab access={access} subscriptions={subs} devices={devices} loading={overallLoading} onQuickAction={handleQuickAction} />}
+        {activeTab === "overview" && <OverviewTab access={access} subscriptions={subs} devices={devices} loading={overallLoading} onQuickAction={handleQuickAction} allowedTabs={visibleTabs.map((t) => t.key).filter((k) => k !== "overview")} />}
         {activeTab === "drive" && <DriveLinksTab links={links} loading={loadingLinks} onAdd={addLink} onEdit={editLink} onDelete={deleteLink} autoOpenAdd={autoOpenAddTab === "drive"} />}
         {activeTab === "access" && <AccessTab access={access} loading={loadingAccess} onAdd={addAccess} onEdit={editAccess} onDelete={deleteAccess} onToggleStatus={toggleAccessStatus} autoOpenAdd={autoOpenAddTab === "access"} />}
         {activeTab === "subscriptions" && <SubscriptionsTab subs={subs} loading={loadingSubs} onAdd={addSub} onEdit={editSub} onDelete={deleteSub} autoOpenAdd={autoOpenAddTab === "subscriptions"} />}
-        {activeTab === "devices" && <DevicesTab devices={devices} loading={loadingDevices} onAdd={addDevice} onEdit={editDevice} onDelete={deleteDevice} autoOpenAdd={autoOpenAddTab === "devices"} />}
-        {activeTab === "invoices" && <InvoicesTab invoices={invoices} loading={loadingInvoices} onAdd={addInvoice} onEdit={editInvoice} onDelete={deleteInvoice} autoOpenAdd={autoOpenAddTab === "invoices"} />}
+        {activeTab === "devices" && <DevicesTab devices={devices} allDevices={devices} loading={loadingDevices} onAdd={addDevice} onEdit={editDevice} onDelete={deleteDevice} autoOpenAdd={autoOpenAddTab === "devices"} userName={user?.name} userDepartment={user?.department} isPrivileged={isPrivileged} />}
+        {activeTab === "invoices" && isPrivileged && <InvoicesTab invoices={invoices} loading={loadingInvoices} onAdd={addInvoice} onEdit={editInvoice} onDelete={deleteInvoice} autoOpenAdd={autoOpenAddTab === "invoices"} />}
       </div>
     </div>
   );
 }
+

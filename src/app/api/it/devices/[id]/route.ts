@@ -5,12 +5,15 @@ import { ActivityLog } from "@/models/ActivityLog";
 import { requireTenantSession, isAuthError } from "@/lib/auth-guard";
 import mongoose from "mongoose";
 
+const PRIVILEGED = ["Admin", "OPS", "Sub Admin"];
+
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const authResult = await requireTenantSession(["Admin", "OPS", "Sub Admin"]);
+    // All authenticated users may attempt a PATCH; ownership is verified below
+    const authResult = await requireTenantSession();
     if (isAuthError(authResult)) return authResult;
     const { tenantObjectId, userObjectId, session } = authResult;
 
@@ -19,38 +22,52 @@ export async function PATCH(
       return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
     }
 
-    const body = await request.json();
     await connectToDatabase();
 
-    const { deviceType, brand, model, serialNumber, assetTag, assignedTo, assignedToName, assignedToEmail, assignedDate, status, condition, purchaseDate, purchaseCost, warrantyExpiry, notes, specs } = body;
-    
+    const isPrivileged = PRIVILEGED.includes(session.role);
+
+    // Fetch the existing record first
+    const existing = await ITDevice.findOne({ _id: id, tenantId: tenantObjectId }).lean() as any;
+    if (!existing) {
+      return NextResponse.json({ error: "Device not found" }, { status: 404 });
+    }
+
+    // Non-privileged users may only edit devices assigned to themselves
+    if (!isPrivileged) {
+      const recordOwner = (existing.assignedTo || "").toLowerCase();
+      const requester = (session.userName || "").toLowerCase();
+      if (recordOwner !== requester) {
+        return NextResponse.json(
+          { error: "Forbidden: You can only edit your own devices" },
+          { status: 403 }
+        );
+      }
+    }
+
+    const body = await request.json();
+    const { type, brand, modelName, assignedTo, department, os, lastSeen, condition, status, assetTag } = body;
+
     const updatePayload: Record<string, unknown> = { updatedAt: new Date() };
-    if (deviceType !== undefined) updatePayload.deviceType = deviceType;
+    if (type !== undefined) updatePayload.type = type;
     if (brand !== undefined) updatePayload.brand = brand;
-    if (model !== undefined) updatePayload.model = model;
-    if (serialNumber !== undefined) updatePayload.serialNumber = serialNumber;
-    if (assetTag !== undefined) updatePayload.assetTag = assetTag;
-    if (assignedTo !== undefined) updatePayload.assignedTo = assignedTo ? new mongoose.Types.ObjectId(assignedTo) : null;
-    if (assignedToName !== undefined) updatePayload.assignedToName = assignedToName;
-    if (assignedToEmail !== undefined) updatePayload.assignedToEmail = assignedToEmail;
-    if (assignedDate !== undefined) updatePayload.assignedDate = assignedDate ? new Date(assignedDate) : null;
-    if (status !== undefined) updatePayload.status = status;
+    if (modelName !== undefined) updatePayload.modelName = modelName;
+    if (os !== undefined) updatePayload.os = os;
+    if (lastSeen !== undefined) updatePayload.lastSeen = lastSeen;
     if (condition !== undefined) updatePayload.condition = condition;
-    if (purchaseDate !== undefined) updatePayload.purchaseDate = purchaseDate ? new Date(purchaseDate) : null;
-    if (purchaseCost !== undefined) updatePayload.purchaseCost = Number(purchaseCost);
-    if (warrantyExpiry !== undefined) updatePayload.warrantyExpiry = warrantyExpiry ? new Date(warrantyExpiry) : null;
-    if (notes !== undefined) updatePayload.notes = notes;
-    if (specs !== undefined) updatePayload.specs = specs;
+    if (status !== undefined) updatePayload.status = status;
+    if (assetTag !== undefined) updatePayload.assetTag = assetTag;
+
+    // Non-privileged users cannot reassign the device to someone else
+    if (isPrivileged) {
+      if (assignedTo !== undefined) updatePayload.assignedTo = assignedTo;
+      if (department !== undefined) updatePayload.department = department;
+    }
 
     const updated = await ITDevice.findOneAndUpdate(
       { _id: id, tenantId: tenantObjectId },
       { $set: updatePayload },
-      { returnDocument: 'after' }
+      { returnDocument: "after" }
     );
-
-    if (!updated) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
-    }
 
     await ActivityLog.create({
       tenantId: tenantObjectId,
@@ -58,8 +75,8 @@ export async function PATCH(
       userName: session.userName,
       userRole: session.role,
       action: "IT_DEVICE_UPDATED",
-      targetName: updated.assetTag,
-      details: `Updated device ${updated.assetTag} — status: ${updated.status}, condition: ${updated.condition}`,
+      targetName: updated?.assetTag,
+      details: `Updated device ${updated?.assetTag} — condition: ${updated?.condition}, status: ${updated?.status}`,
     });
 
     return NextResponse.json({ device: updated });
@@ -75,7 +92,8 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const authResult = await requireTenantSession(["Admin", "OPS", "Sub Admin"]);
+    // All authenticated users may attempt DELETE; ownership is verified below
+    const authResult = await requireTenantSession();
     if (isAuthError(authResult)) return authResult;
     const { tenantObjectId, userObjectId, session } = authResult;
 
@@ -85,11 +103,27 @@ export async function DELETE(
     }
 
     await connectToDatabase();
-    const deleted = await ITDevice.findOneAndDelete({ _id: id, tenantId: tenantObjectId });
 
-    if (!deleted) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    const isPrivileged = PRIVILEGED.includes(session.role);
+
+    // Fetch first to verify ownership
+    const existing = await ITDevice.findOne({ _id: id, tenantId: tenantObjectId }).lean() as any;
+    if (!existing) {
+      return NextResponse.json({ error: "Device not found" }, { status: 404 });
     }
+
+    if (!isPrivileged) {
+      const recordOwner = (existing.assignedTo || "").toLowerCase();
+      const requester = (session.userName || "").toLowerCase();
+      if (recordOwner !== requester) {
+        return NextResponse.json(
+          { error: "Forbidden: You can only delete your own devices" },
+          { status: 403 }
+        );
+      }
+    }
+
+    const deleted = await ITDevice.findOneAndDelete({ _id: id, tenantId: tenantObjectId });
 
     await ActivityLog.create({
       tenantId: tenantObjectId,
@@ -97,8 +131,8 @@ export async function DELETE(
       userName: session.userName,
       userRole: session.role,
       action: "IT_DEVICE_DELETED",
-      targetName: deleted.assetTag,
-      details: `Removed device ${deleted.assetTag} from inventory`,
+      targetName: deleted?.assetTag,
+      details: `Removed device ${deleted?.assetTag} from inventory`,
     });
 
     return NextResponse.json({ success: true });
