@@ -3,6 +3,7 @@ import { getSession } from "@/lib/session";
 import { connectToDatabase } from "@/lib/db";
 import { Sprint } from "@/models/Sprint";
 import { Task } from "@/models/Task";
+import { getUserDataScope } from "@/lib/dataScope";
 import mongoose from "mongoose";
 
 /**
@@ -69,9 +70,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const isManagerOrAdmin = session.role === "Admin" || session.role === "Manager";
-    if (!isManagerOrAdmin) {
-      return NextResponse.json({ error: "Forbidden: Access denied" }, { status: 403 });
+    const dataScope = await getUserDataScope(session);
+    const isAdmin = Boolean(session.role && session.role.trim().toLowerCase() === "admin");
+    const canCreate = isAdmin || session.role === "Manager" || dataScope.canViewFeature("createSprints");
+
+    if (!canCreate) {
+      return NextResponse.json({ error: "Forbidden: Access denied to create sprints" }, { status: 403 });
     }
 
     const body = await request.json();
@@ -119,9 +123,12 @@ export async function PUT(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const isManagerOrAdmin = session.role === "Admin" || session.role === "Manager";
-    if (!isManagerOrAdmin) {
-      return NextResponse.json({ error: "Forbidden: Access denied" }, { status: 403 });
+    const dataScope = await getUserDataScope(session);
+    const isAdmin = Boolean(session.role && session.role.trim().toLowerCase() === "admin");
+    const canManage = isAdmin || session.role === "Manager" || dataScope.canViewFeature("completeSprints") || dataScope.canViewFeature("createSprints");
+
+    if (!canManage) {
+      return NextResponse.json({ error: "Forbidden: Access denied to update sprints" }, { status: 403 });
     }
 
     const body = await request.json();
@@ -157,3 +164,49 @@ export async function PUT(request: Request) {
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
+
+/**
+ * DELETE: Delete a sprint.
+ * Query / Body: { sprintId: string }
+ */
+export async function DELETE(request: Request) {
+  try {
+    const session = await getSession();
+    if (!session) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const dataScope = await getUserDataScope(session);
+    const isAdmin = Boolean(session.role && session.role.trim().toLowerCase() === "admin");
+    const canDelete = isAdmin || session.role === "Manager" || dataScope.canViewFeature("deleteSprints");
+
+    if (!canDelete) {
+      return NextResponse.json({ error: "Forbidden: Access denied to delete sprints" }, { status: 403 });
+    }
+
+    const { searchParams } = new URL(request.url);
+    const sprintId = searchParams.get("sprintId");
+
+    if (!sprintId) {
+      return NextResponse.json({ error: "Sprint ID is required" }, { status: 400 });
+    }
+
+    await connectToDatabase();
+    const tenantObjectId = new mongoose.Types.ObjectId(session.tenantId);
+
+    // Unlink any tasks linked to this sprint
+    await Task.updateMany(
+      { tenantId: tenantObjectId, sprintId: new mongoose.Types.ObjectId(sprintId) },
+      { $unset: { sprintId: "" } }
+    );
+
+    await Sprint.deleteOne({ _id: sprintId, tenantId: tenantObjectId });
+
+    return NextResponse.json({ success: true });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Internal Server Error";
+    console.error("API DELETE Sprints error:", error);
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+

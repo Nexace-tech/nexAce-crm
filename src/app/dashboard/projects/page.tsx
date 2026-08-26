@@ -154,6 +154,7 @@ export default function ProjectsPage() {
   const [taskSearchQuery, setTaskSearchQuery] = useState<string>("");
   const [taskPriorityFilter, setTaskPriorityFilter] = useState<"all" | "High" | "Medium" | "Low">("all");
   const [taskAssigneeFilter, setTaskAssigneeFilter] = useState<string>("all");
+  const [taskSprintFilter, setTaskSprintFilter] = useState<string>("all");
   const [taskDueSoonOnly, setTaskDueSoonOnly] = useState<boolean>(false);
   const [selectedTask, setSelectedTask] = useState<any | null>(null);
   const [isDeletingTask, setIsDeletingTask] = useState<boolean>(false);
@@ -249,6 +250,18 @@ export default function ProjectsPage() {
       }
     } catch (e) {
       console.error("fetchTasks error:", e);
+    }
+  };
+
+  const fetchSprints = async () => {
+    try {
+      const res = await fetch("/api/sprints");
+      if (res.ok) {
+        const data = await res.json();
+        setSprints(data.sprints || []);
+      }
+    } catch (e) {
+      console.error("fetchSprints error:", e);
     }
   };
 
@@ -474,6 +487,7 @@ export default function ProjectsPage() {
       setLoading(true);
       await fetchProjects();
       await fetchTeam();
+      await fetchSprints();
       await fetchDriveFiles();
       await fetchWikiArticles();
       setLoading(false);
@@ -1231,6 +1245,20 @@ export default function ProjectsPage() {
                   ))}
                 </select>
 
+                {/* Sprint Cycle Filter */}
+                <select
+                  value={taskSprintFilter}
+                  onChange={(e) => setTaskSprintFilter(e.target.value)}
+                  className="h-8 rounded-lg border border-input bg-background px-2.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary font-medium max-w-[150px]"
+                >
+                  <option value="all">All Sprints</option>
+                  <option value="active">🏃 Active Sprint</option>
+                  <option value="none">No Sprint (Backlog)</option>
+                  {sprints.map((s) => (
+                    <option key={s._id} value={s._id}>{s.name} ({s.status})</option>
+                  ))}
+                </select>
+
                 {/* Due Soon / Overdue Toggle */}
                 <button
                   type="button"
@@ -1305,6 +1333,17 @@ export default function ProjectsPage() {
                   if (taskAssigneeFilter !== "all") {
                     const aId = t.assignee?._id || t.assignee;
                     if (aId !== taskAssigneeFilter) return false;
+                  }
+                  if (taskSprintFilter !== "all") {
+                    const tSprintId = t.sprintId?._id || t.sprintId;
+                    if (taskSprintFilter === "active") {
+                      const activeSprintId = sprints.find((s) => s.status === "Active")?._id;
+                      if (!activeSprintId || tSprintId !== activeSprintId) return false;
+                    } else if (taskSprintFilter === "none") {
+                      if (tSprintId) return false;
+                    } else {
+                      if (tSprintId !== taskSprintFilter) return false;
+                    }
                   }
                   if (taskDueSoonOnly) {
                     if (!t.dueDate) return false;
@@ -1425,6 +1464,11 @@ export default function ProjectsPage() {
                             {selectedProjectId === "all" && t.projectId?.name && (
                               <div className="flex items-center gap-1 text-[10px] text-primary font-semibold">
                                 <i className="fa-solid fa-folder text-[9px]" /> {t.projectId.name}
+                              </div>
+                            )}
+                            {t.sprintId && (
+                              <div className="flex items-center gap-1 text-[10px] text-amber-600 dark:text-amber-400 font-semibold">
+                                <i className="fa-solid fa-person-running text-[9px]" /> {sprints.find(s => s._id === (t.sprintId?._id || t.sprintId))?.name || "Sprint Task"}
                               </div>
                             )}
                             {t.description && <p className="text-[11px] text-foreground/80 leading-relaxed line-clamp-2">{t.description}</p>}
@@ -2925,6 +2969,22 @@ export default function ProjectsPage() {
                 </div>
 
                 <div className="space-y-1.5">
+                  <label className="font-semibold text-foreground">Sprint Cycle</label>
+                  <select
+                    value={newTaskSprint}
+                    onChange={(e) => setNewTaskSprint(e.target.value)}
+                    className="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                  >
+                    <option value="">No Sprint (Backlog)</option>
+                    {sprints.map((s) => (
+                      <option key={s._id} value={s._id}>{s.name} ({s.status})</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
                   <label className="font-semibold text-foreground">Priority Level</label>
                   <select
                     value={newTaskPriority}
@@ -2936,15 +2996,15 @@ export default function ProjectsPage() {
                     <option value="High">High</option>
                   </select>
                 </div>
-              </div>
 
-              <div className="space-y-1.5">
-                <label className="font-semibold text-foreground">Due Date</label>
-                <Input
-                  type="date"
-                  value={newTaskDueDate}
-                  onChange={(e) => setNewTaskDueDate(e.target.value)}
-                />
+                <div className="space-y-1.5">
+                  <label className="font-semibold text-foreground">Due Date</label>
+                  <Input
+                    type="date"
+                    value={newTaskDueDate}
+                    onChange={(e) => setNewTaskDueDate(e.target.value)}
+                  />
+                </div>
               </div>
 
               <div className="space-y-1.5">
@@ -3141,6 +3201,12 @@ export default function ProjectsPage() {
                     <Badge variant="outline" className="text-[10px] px-2 py-0.5 bg-primary/10 text-primary border-primary/30 font-semibold">
                       <i className="fa-solid fa-folder text-[9px] mr-1" />
                       {selectedTask.projectId.name}
+                    </Badge>
+                  )}
+                  {selectedTask.sprintId && (
+                    <Badge variant="outline" className="text-[10px] px-2 py-0.5 bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30 font-semibold">
+                      <i className="fa-solid fa-person-running text-[9px] mr-1" />
+                      {sprints.find(s => s._id === (selectedTask.sprintId?._id || selectedTask.sprintId))?.name || "Sprint Task"}
                     </Badge>
                   )}
                 </div>

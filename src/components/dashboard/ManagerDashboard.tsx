@@ -11,15 +11,17 @@ export function ManagerDashboard({ user }: { user: any }) {
   const [projects, setProjects] = useState<any[]>([]);
   const [tasks, setTasks] = useState<any[]>([]);
   const [timesheets, setTimesheets] = useState<any[]>([]);
+  const [sprints, setSprints] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function fetchManagerData() {
       try {
-        const [projRes, taskRes, tsRes] = await Promise.all([
+        const [projRes, taskRes, tsRes, sprintRes] = await Promise.all([
           fetch("/api/projects"),
           fetch("/api/tasks"),
           fetch("/api/timesheets"),
+          fetch("/api/sprints"),
         ]);
 
         if (projRes.ok) {
@@ -33,6 +35,10 @@ export function ManagerDashboard({ user }: { user: any }) {
         if (tsRes.ok) {
           const tsData = await tsRes.json();
           setTimesheets(tsData.entries || []);
+        }
+        if (sprintRes.ok) {
+          const sData = await sprintRes.json();
+          setSprints(sData.sprints || []);
         }
       } catch (err) {
         console.error("Error fetching manager dashboard data:", err);
@@ -181,6 +187,101 @@ export function ManagerDashboard({ user }: { user: any }) {
               )}
             </CardContent>
           </Card>
+
+          {/* Active Sprint Widget for Manager */}
+          {(() => {
+            const activeSprint = sprints.find((s) => s.status === "Active");
+            const plannedSprint = sprints.find((s) => s.status === "Planned");
+            const currentSprint = activeSprint || plannedSprint;
+
+            if (!currentSprint && sprints.length === 0 && !loading) return null;
+
+            return (
+              <Card className="border border-border/80 shadow-xs overflow-hidden">
+                <CardHeader className="flex flex-row items-center justify-between pb-3 bg-gradient-to-r from-blue-500/5 via-blue-500/10 to-transparent">
+                  <div>
+                    <CardTitle className="text-base font-bold flex items-center gap-2 text-foreground">
+                      <i className="fa-solid fa-rocket text-blue-500 text-base" />
+                      {activeSprint ? "Active Agile Sprint" : "Upcoming Sprint"}
+                    </CardTitle>
+                    <CardDescription>Department sprint cycle, progress & milestones</CardDescription>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {activeSprint ? (
+                      <Badge color="primary" className="font-semibold gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Active
+                      </Badge>
+                    ) : (
+                      <Badge color="warning" variant="soft" className="font-semibold">
+                        Planned
+                      </Badge>
+                    )}
+                    <Button asChild variant="outline" size="sm" className="h-7 text-xs">
+                      <Link href="/dashboard/calendar?tab=sprints" className="gap-1 text-primary">
+                        Sprint Board <i className="fa-solid fa-arrow-up-right-from-square text-[10px]" />
+                      </Link>
+                    </Button>
+                  </div>
+                </CardHeader>
+
+                <CardContent className="p-5 space-y-4">
+                  {currentSprint ? (
+                    <div className="space-y-4">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border/60 pb-3">
+                        <div>
+                          <h4 className="font-bold text-sm text-foreground">{currentSprint.name}</h4>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            <strong>Goal:</strong> {currentSprint.goal || "Complete sprint deliverables and milestone items."}
+                          </p>
+                        </div>
+                        <div className="text-right sm:text-right text-xs text-muted-foreground shrink-0 font-mono">
+                          <span>{new Date(currentSprint.startDate).toLocaleDateString()} – {new Date(currentSprint.endDate).toLocaleDateString()}</span>
+                        </div>
+                      </div>
+
+                      {/* Burndown Progress */}
+                      <div className="space-y-1.5">
+                        <div className="flex justify-between text-xs font-semibold">
+                          <span className="text-muted-foreground flex items-center gap-1.5">
+                            <i className="fa-solid fa-fire text-amber-500 text-xs" /> Sprint Burndown Progress
+                          </span>
+                          <span className="text-primary font-bold">{currentSprint.burndownProgress || 0}% Completed</span>
+                        </div>
+                        <div className="h-2.5 bg-muted rounded-full overflow-hidden border border-border/40">
+                          <div
+                            className="h-full bg-gradient-to-r from-blue-500 to-emerald-500 rounded-full transition-all duration-500"
+                            style={{ width: `${Math.max(currentSprint.burndownProgress || 0, 4)}%` }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Task Breakdown Stats */}
+                      <div className="grid grid-cols-3 gap-2.5 text-center text-xs pt-1">
+                        <div className="p-2.5 rounded-lg bg-muted/40 border border-border/60 space-y-0.5">
+                          <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">To Do</span>
+                          <p className="font-bold text-sm text-foreground">{currentSprint.todoTasks || 0}</p>
+                        </div>
+                        <div className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20 space-y-0.5">
+                          <span className="text-[10px] font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wider">In Progress</span>
+                          <p className="font-bold text-sm text-amber-600 dark:text-amber-400">{currentSprint.inProgressTasks || 0}</p>
+                        </div>
+                        <div className="p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 space-y-0.5">
+                          <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Done</span>
+                          <p className="font-bold text-sm text-emerald-600 dark:text-emerald-400">{currentSprint.completedTasks || 0}</p>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-center py-6 text-muted-foreground space-y-2">
+                      <i className="fa-solid fa-person-running text-3xl opacity-30 block mx-auto text-primary" />
+                      <p className="text-xs font-semibold text-foreground">No active sprint cycle</p>
+                      <p className="text-[11px]">Sprint iterations will appear here once scheduled.</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })()}
         </div>
 
         {/* Right Column (1 span): Recent Tasks */}

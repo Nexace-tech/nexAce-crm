@@ -48,7 +48,11 @@ export function isSubAdminRole(role?: string | null): boolean {
 export function normalizeRoleKey(role?: string | null): string {
   if (!role) return "Employee";
   if (isSubAdminRole(role)) return "OPS";
-  if (role.trim().toLowerCase() === "admin") return "Admin";
+  const normalized = role.trim().toLowerCase();
+  if (normalized === "admin") return "Admin";
+  if (normalized === "hr" || normalized === "hr specialist") return "HR";
+  if (normalized === "manager" || normalized === "department manager") return "Manager";
+  if (normalized === "employee" || normalized === "staff") return "Employee";
   return role.trim();
 }
 

@@ -478,7 +478,7 @@ export default function CalendarPage() {
     }
   };
 
-  const handleUpdateSprintStatus = async (sprintId: string, status: "Active" | "Completed") => {
+  const handleUpdateSprintStatus = async (sprintId: string, status: "Active" | "Completed" | "Planned") => {
     try {
       const res = await fetch("/api/sprints", {
         method: "PUT",
@@ -488,10 +488,32 @@ export default function CalendarPage() {
       if (res.ok) {
         await fetchSprints();
         showToast(`Sprint marked as ${status}!`, "success");
+      } else {
+        const data = await res.json();
+        showToast(data.error || "Failed to update sprint status.", "error");
       }
     } catch (err) {
       console.error(err);
       showToast("Failed to update sprint status.", "error");
+    }
+  };
+
+  const handleDeleteSprint = async (sprintId: string) => {
+    if (!confirm("Are you sure you want to delete this sprint? Linked tasks will be unassigned from this sprint.")) return;
+    try {
+      const res = await fetch(`/api/sprints?sprintId=${sprintId}`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        await fetchSprints();
+        showToast("Sprint deleted successfully!", "success");
+      } else {
+        const data = await res.json();
+        showToast(data.error || "Failed to delete sprint.", "error");
+      }
+    } catch (err) {
+      console.error(err);
+      showToast("Failed to delete sprint.", "error");
     }
   };
 
@@ -665,8 +687,8 @@ export default function CalendarPage() {
             </Button>
           )}
 
-          {activeTab === "sprints" && isManagerOrAdmin && (
-            <Button color="primary" size="sm" onClick={() => setShowSprintModal(true)} className="gap-2 font-semibold">
+          {activeTab === "sprints" && (isAdmin || isOPS || currentUser?.role === "Manager" || can("createSprints")) && (
+            <Button color="primary" size="sm" onClick={() => setShowSprintModal(true)} className="gap-2 font-semibold cursor-pointer">
               <i className="fa-solid fa-rocket text-xs" /> Plan Sprint
             </Button>
           )}
@@ -1141,60 +1163,170 @@ export default function CalendarPage() {
       {activeTab === "sprints" && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <Card className="lg:col-span-2">
-            <CardHeader>
-              <CardTitle className="text-lg font-bold flex items-center gap-2">
-                <i className="fa-solid fa-rocket text-primary text-base" /> Active Sprint & Burndown
-              </CardTitle>
-              <CardDescription>Current sprint objective and task velocity</CardDescription>
+            <CardHeader className="flex flex-row items-center justify-between pb-3">
+              <div>
+                <CardTitle className="text-lg font-bold flex items-center gap-2">
+                  <i className="fa-solid fa-rocket text-primary text-base" /> Active Sprint & Burndown
+                </CardTitle>
+                <CardDescription>Current sprint objective, milestone progress, and velocity</CardDescription>
+              </div>
+              {(isAdmin || isOPS || currentUser?.role === "Manager" || can("createSprints")) && (
+                <Button size="sm" color="primary" onClick={() => setShowSprintModal(true)} className="gap-1.5 font-semibold cursor-pointer">
+                  <i className="fa-solid fa-plus text-xs" /> Plan New Sprint
+                </Button>
+              )}
             </CardHeader>
             <CardContent className="space-y-6">
               {sprints.filter((s) => s.status === "Active").length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-8">No active sprint running right now.</p>
+                <div className="text-center py-12 space-y-3">
+                  <i className="fa-solid fa-person-running text-4xl text-muted-foreground/40 block mx-auto" />
+                  <p className="text-base font-semibold text-foreground">No active sprint running right now</p>
+                  <p className="text-xs text-muted-foreground max-w-sm mx-auto">
+                    Activate a planned sprint from the backlog or plan a new sprint cycle to start tracking task burndown velocity.
+                  </p>
+                </div>
               ) : (
                 sprints.filter((s) => s.status === "Active").map((active) => (
-                  <div key={active._id} className="space-y-4 p-4 rounded-xl border border-border bg-muted/20">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-base font-bold text-foreground">{active.name}</h3>
-                      <Badge color="primary">Active</Badge>
+                  <div key={active._id} className="space-y-5 p-5 rounded-2xl border border-border bg-card shadow-sm">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border/60 pb-3">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h3 className="text-lg font-bold text-foreground">{active.name}</h3>
+                          <Badge color="primary" className="font-semibold gap-1">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Active
+                          </Badge>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          <strong className="text-foreground">Goal:</strong> {active.goal || "Complete sprint deliverables and milestone items."}
+                        </p>
+                      </div>
+                      <div className="text-right sm:text-right text-xs text-muted-foreground shrink-0 font-mono">
+                        <p className="font-semibold text-foreground">
+                          {new Date(active.startDate).toLocaleDateString()} – {new Date(active.endDate).toLocaleDateString()}
+                        </p>
+                        <p className="text-[11px] text-primary mt-0.5">{active.totalTasks || 0} Linked Tasks</p>
+                      </div>
                     </div>
-                    <p className="text-sm text-muted-foreground"><strong>Goal:</strong> {active.goal || "None"}</p>
+
+                    {/* Burndown Progress Bar */}
                     <div className="space-y-1.5">
                       <div className="flex justify-between text-xs font-semibold">
-                        <span>Burndown Progress</span>
-                        <span className="text-primary">{active.burndownProgress || 0}%</span>
+                        <span className="text-muted-foreground flex items-center gap-1.5">
+                          <i className="fa-solid fa-fire text-amber-500 text-xs" /> Burndown Progress
+                        </span>
+                        <span className="text-primary font-bold">{active.burndownProgress || 0}% Completed</span>
                       </div>
-                      <div className="h-2 bg-muted rounded-full overflow-hidden">
-                        <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${active.burndownProgress || 0}%` }} />
+                      <div className="h-3 bg-muted rounded-full overflow-hidden border border-border/40">
+                        <div
+                          className="h-full bg-gradient-to-r from-primary to-emerald-500 rounded-full transition-all duration-500"
+                          style={{ width: `${Math.max(active.burndownProgress || 0, 3)}%` }}
+                        />
                       </div>
                     </div>
-                    {isManagerOrAdmin && (
-                      <Button size="sm" variant="outline" onClick={() => handleUpdateSprintStatus(active._id, "Completed")}>
-                        Complete Sprint
+
+                    {/* Task Breakdown Stats */}
+                    <div className="grid grid-cols-3 gap-3 text-center text-xs">
+                      <div className="p-3 rounded-xl bg-muted/40 border border-border/60 space-y-0.5">
+                        <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">To Do</span>
+                        <p className="font-bold text-base text-foreground">{active.todoTasks || 0}</p>
+                      </div>
+                      <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 space-y-0.5">
+                        <span className="text-[10px] font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wider">In Progress</span>
+                        <p className="font-bold text-base text-amber-600 dark:text-amber-400">{active.inProgressTasks || 0}</p>
+                      </div>
+                      <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 space-y-0.5">
+                        <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Completed</span>
+                        <p className="font-bold text-base text-emerald-600 dark:text-emerald-400">{active.completedTasks || 0}</p>
+                      </div>
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div className="flex items-center justify-between pt-2 border-t border-border/60">
+                      <Button asChild variant="outline" size="sm">
+                        <Link href="/dashboard/projects" className="gap-1.5 text-xs text-primary">
+                          <i className="fa-solid fa-folder-tree text-xs" /> View in Projects Board
+                        </Link>
                       </Button>
-                    )}
+
+                      {(isAdmin || isOPS || currentUser?.role === "Manager" || can("completeSprints")) && (
+                        <Button
+                          size="sm"
+                          color="primary"
+                          onClick={() => handleUpdateSprintStatus(active._id, "Completed")}
+                          className="gap-1.5 font-semibold text-xs cursor-pointer"
+                        >
+                          <i className="fa-solid fa-flag-checkered text-xs" /> Complete Sprint
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 ))
               )}
             </CardContent>
           </Card>
 
+          {/* Sprints Backlog & Roadmap */}
           <Card>
-            <CardHeader>
-              <CardTitle className="text-lg font-bold">Planned & Completed</CardTitle>
-              <CardDescription>Sprint backlog roadmap</CardDescription>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base font-bold flex items-center gap-2">
+                <i className="fa-solid fa-layer-group text-primary text-sm" /> Sprint Roadmap & Backlog
+              </CardTitle>
+              <CardDescription>Planned and completed sprint cycles</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
-              {sprints.filter((s) => s.status !== "Active").map((sprint) => (
-                <div key={sprint._id} className="p-3 rounded-lg border border-border bg-card flex items-center justify-between text-xs">
-                  <div>
-                    <p className="font-bold text-foreground">{sprint.name}</p>
-                    <p className="text-muted-foreground mt-0.5">{new Date(sprint.startDate).toLocaleDateString()} - {new Date(sprint.endDate).toLocaleDateString()}</p>
+              {sprints.filter((s) => s.status !== "Active").length === 0 ? (
+                <p className="text-xs text-muted-foreground text-center py-6">No other sprints in roadmap.</p>
+              ) : (
+                sprints.filter((s) => s.status !== "Active").map((sprint) => (
+                  <div key={sprint._id} className="p-3.5 rounded-xl border border-border bg-card space-y-2 text-xs">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <p className="font-bold text-foreground text-sm">{sprint.name}</p>
+                        <p className="text-[11px] text-muted-foreground font-mono mt-0.5">
+                          {new Date(sprint.startDate).toLocaleDateString()} – {new Date(sprint.endDate).toLocaleDateString()}
+                        </p>
+                      </div>
+                      <Badge color={sprint.status === "Planned" ? "warning" : "success"} variant="soft" className="text-[10px]">
+                        {sprint.status}
+                      </Badge>
+                    </div>
+
+                    {sprint.goal && (
+                      <p className="text-[11px] text-muted-foreground line-clamp-2">
+                        {sprint.goal}
+                      </p>
+                    )}
+
+                    <div className="flex items-center justify-between pt-2 border-t border-border/40">
+                      <span className="text-[10px] text-muted-foreground font-semibold">
+                        {sprint.totalTasks || 0} tasks ({sprint.burndownProgress || 0}% done)
+                      </span>
+
+                      <div className="flex items-center gap-1.5">
+                        {sprint.status === "Planned" && (isAdmin || isOPS || currentUser?.role === "Manager" || can("createSprints")) && (
+                          <button
+                            type="button"
+                            onClick={() => handleUpdateSprintStatus(sprint._id, "Active")}
+                            className="px-2 py-1 text-[10px] font-semibold text-primary bg-primary/10 hover:bg-primary/20 rounded-md transition-colors cursor-pointer"
+                          >
+                            Activate
+                          </button>
+                        )}
+                        {(isAdmin || isOPS || can("deleteSprints")) && (
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteSprint(sprint._id)}
+                            className="px-2 py-1 text-[10px] font-semibold text-rose-500 bg-rose-500/10 hover:bg-rose-500/20 rounded-md transition-colors cursor-pointer"
+                            title="Delete Sprint"
+                          >
+                            <i className="fa-solid fa-trash-can" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                  <Badge color={sprint.status === "Planned" ? "warning" : "success"} variant="soft">
-                    {sprint.status}
-                  </Badge>
-                </div>
-              ))}
+                ))
+              )}
             </CardContent>
           </Card>
         </div>
