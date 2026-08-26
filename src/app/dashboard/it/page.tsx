@@ -275,17 +275,31 @@ function ConfirmDialog({ title, message, onConfirm, onCancel, loading = false }:
 
 // ─── Mini Bar Chart ──────────────────────────────────────────────────────────
 
+// ─── Mini Bar Chart ──────────────────────────────────────────────────────────
+
 function MiniBarChart({ data }: { data: { label: string; value: number; color: string }[] }) {
   const max = Math.max(...data.map((d) => d.value), 1);
   return (
-    <div className="flex items-end gap-1.5 h-16">
-      {data.map((d) => (
-        <div key={d.label} className="flex flex-col items-center gap-1 flex-1">
-          <span className="text-[9px] font-bold text-foreground">{d.value}</span>
-          <div className="w-full rounded-t-sm transition-all duration-500" style={{ height: `${(d.value / max) * 40}px`, backgroundColor: d.color }} />
-          <span className="text-[8px] text-muted-foreground text-center leading-tight truncate w-full">{d.label}</span>
-        </div>
-      ))}
+    <div className="flex items-end justify-center gap-3 h-24 pt-2 px-1">
+      {data.map((d) => {
+        const heightPct = Math.max(16, Math.round((d.value / max) * 100));
+        return (
+          <div key={d.label} className="flex flex-col items-center gap-1 flex-1 max-w-[120px] group">
+            <span className="text-[10px] font-bold text-foreground opacity-90 group-hover:opacity-100 tabular-nums">
+              ₹{d.value >= 1000 ? `${(d.value / 1000).toFixed(1)}k` : d.value}
+            </span>
+            <div className="w-full bg-muted/40 rounded-t-md h-16 flex items-end p-0.5 overflow-hidden">
+              <div
+                className="w-full rounded-t transition-all duration-500 shadow-sm"
+                style={{ height: `${heightPct}%`, backgroundColor: d.color }}
+              />
+            </div>
+            <span className="text-[9px] font-medium text-muted-foreground text-center leading-tight truncate w-full" title={d.label || "General"}>
+              {d.label || "General"}
+            </span>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -293,24 +307,50 @@ function MiniBarChart({ data }: { data: { label: string; value: number; color: s
 function DonutChart({ segments }: { segments: { value: number; color: string; label: string }[] }) {
   const total = segments.reduce((a, b) => a + b.value, 0) || 1;
   let offset = 0;
-  const r = 28, cx = 32, cy = 32, circ = 2 * Math.PI * r;
+  const r = 26, cx = 36, cy = 36, circ = 2 * Math.PI * r;
+
   return (
-    <div className="flex items-center gap-3">
-      <svg width="64" height="64" viewBox="0 0 64 64">
-        {segments.map((seg, i) => {
-          const frac = seg.value / total;
-          const dash = frac * circ;
-          const gap = circ - dash;
-          const rot = offset * 360;
-          offset += frac;
-          return <circle key={i} cx={cx} cy={cy} r={r} fill="none" stroke={seg.color} strokeWidth="10" strokeDasharray={`${dash} ${gap}`} strokeDashoffset={circ * 0.25} transform={`rotate(${rot} ${cx} ${cy})`} className="transition-all duration-500" />;
-        })}
-      </svg>
-      <div className="flex flex-col gap-1">
+    <div className="flex items-center justify-around gap-3 py-1">
+      <div className="relative flex items-center justify-center shrink-0">
+        <svg width="72" height="72" viewBox="0 0 72 72" className="transform -rotate-90">
+          <circle cx={cx} cy={cy} r={r} fill="none" stroke="currentColor" strokeWidth="7" className="text-muted/30" />
+          {segments.map((seg, i) => {
+            const frac = seg.value / total;
+            const dash = frac * circ;
+            const gap = circ - dash;
+            const rot = offset * 360;
+            offset += frac;
+            return (
+              <circle
+                key={i}
+                cx={cx}
+                cy={cy}
+                r={r}
+                fill="none"
+                stroke={seg.color}
+                strokeWidth="7"
+                strokeDasharray={`${dash} ${gap}`}
+                strokeLinecap="round"
+                transform={`rotate(${rot} ${cx} ${cy})`}
+                className="transition-all duration-500"
+              />
+            );
+          })}
+        </svg>
+        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+          <span className="text-xs font-bold text-foreground leading-none">{total}</span>
+          <span className="text-[7px] text-muted-foreground uppercase font-semibold mt-0.5">Total</span>
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-1.5 min-w-[90px]">
         {segments.map((seg, i) => (
-          <div key={i} className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: seg.color }} />
-            <span className="text-[9px] text-muted-foreground">{seg.label} <span className="font-semibold text-foreground">{seg.value}</span></span>
+          <div key={i} className="flex items-center justify-between gap-2 text-xs">
+            <div className="flex items-center gap-1.5 truncate">
+              <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: seg.color }} />
+              <span className="text-[10px] text-muted-foreground truncate">{seg.label}</span>
+            </div>
+            <span className="text-[10px] font-bold text-foreground tabular-nums shrink-0">{seg.value}</span>
           </div>
         ))}
       </div>
@@ -320,8 +360,9 @@ function DonutChart({ segments }: { segments: { value: number; color: string; la
 
 // ─── Overview Tab ─────────────────────────────────────────────────────────────
 
-function OverviewTab({ access, subscriptions, devices, loading, onQuickAction, allowedTabs }: {
+function OverviewTab({ access, subscriptions, devices, loading, onNavigate, onQuickAction, allowedTabs }: {
   access: AccessEntry[]; subscriptions: Subscription[]; devices: Device[]; loading: boolean;
+  onNavigate?: (tab: TabKey) => void;
   onQuickAction?: (tab: TabKey) => void;
   allowedTabs?: TabKey[];
 }) {
@@ -333,7 +374,10 @@ function OverviewTab({ access, subscriptions, devices, loading, onQuickAction, a
 
   const subsByCategory = useMemo(() => {
     const m: Record<string, number> = {};
-    subscriptions.filter((s) => s.status === "Active" || s.status === "Expiring Soon").forEach((s) => { m[s.category] = (m[s.category] || 0) + s.costPerMonth; });
+    subscriptions.filter((s) => s.status === "Active" || s.status === "Expiring Soon").forEach((s) => {
+      const cat = s.category?.trim() || "General";
+      m[cat] = (m[cat] || 0) + s.costPerMonth;
+    });
     return Object.entries(m).map(([label, value]) => ({ label, value: Math.round(value) }));
   }, [subscriptions]);
 
@@ -373,34 +417,64 @@ function OverviewTab({ access, subscriptions, devices, loading, onQuickAction, a
 
   // Build only the stat cards the user has access to
   const statCards = [
-    hasAccess && { icon: "fa-solid fa-users-gear", iconCls: "bg-blue-500/15 text-blue-500", border: "border-blue-500/20", label: "Active Access Grants", value: activeAccess, sub: "across all tools" },
-    hasSubs && { icon: "fa-solid fa-box-open", iconCls: "bg-violet-500/15 text-violet-500", border: "border-violet-500/20", label: "Active Subscriptions", value: activeSubs, sub: `${formatCurrency(monthlyCost)}/mo` },
-    hasDevices && { icon: "fa-solid fa-laptop", iconCls: "bg-emerald-500/15 text-emerald-500", border: "border-emerald-500/20", label: "Devices In Use", value: devicesInUse, sub: `${devices.length} total assets` },
-    hasSubs && { icon: "fa-solid fa-bell-ring", iconCls: "bg-orange-500/15 text-orange-500", border: "border-orange-500/20", label: "Expiring Soon", value: expiring, sub: "subscriptions" },
-  ].filter(Boolean) as { icon: string; iconCls: string; border: string; label: string; value: number; sub: string }[];
+    hasAccess && { icon: "fa-solid fa-users-gear", iconCls: "bg-blue-500/15 text-blue-500", border: "border-blue-500/20", label: "Active Access Grants", value: activeAccess, sub: "across all tools", tab: "access" as TabKey },
+    hasSubs && { icon: "fa-solid fa-box-open", iconCls: "bg-violet-500/15 text-violet-500", border: "border-violet-500/20", label: "Active Subscriptions", value: activeSubs, sub: `${formatCurrency(monthlyCost)}/mo`, tab: "subscriptions" as TabKey },
+    hasDevices && { icon: "fa-solid fa-laptop", iconCls: "bg-emerald-500/15 text-emerald-500", border: "border-emerald-500/20", label: "Devices In Use", value: devicesInUse, sub: `${devices.length} total assets`, tab: "devices" as TabKey },
+    hasSubs && { icon: "fa-solid fa-hourglass-half", iconCls: "bg-amber-500/15 text-amber-500", border: "border-amber-500/20", label: "Expiring Soon", value: expiring, sub: "subscriptions", tab: "subscriptions" as TabKey },
+  ].filter(Boolean) as { icon: string; iconCls: string; border: string; label: string; value: number; sub: string; tab: TabKey }[];
 
   // Build only the charts the user can see
   const charts = [
     hasSubs && (
-      <Card key="spend" className="border-border">
-        <CardHeader className="pb-2 pt-4 px-4"><CardTitle className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5"><i className="fa-solid fa-chart-bar text-violet-500" /> Spend by Category</CardTitle></CardHeader>
-        <CardContent className="px-4 pb-4">
+      <Card
+        key="spend"
+        onClick={() => onNavigate?.("subscriptions")}
+        className="border-border hover:border-violet-500/50 hover:shadow-md transition-all cursor-pointer group"
+        title="View Subscriptions"
+      >
+        <CardHeader className="pb-1 pt-4 px-4">
+          <CardTitle className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center justify-between">
+            <span className="flex items-center gap-1.5"><i className="fa-solid fa-chart-bar text-violet-500" /> Spend by Category</span>
+            <i className="fa-solid fa-arrow-right text-[10px] opacity-0 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all text-violet-500" />
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="px-4 pb-3">
           {subsByCategory.length > 0 ? <MiniBarChart data={subsByCategory.map((d, i) => ({ ...d, color: COLORS[i % COLORS.length] }))} /> : <p className="text-xs text-muted-foreground py-4 text-center">No subscription data</p>}
         </CardContent>
       </Card>
     ),
     hasAccess && (
-      <Card key="access" className="border-border">
-        <CardHeader className="pb-2 pt-4 px-4"><CardTitle className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5"><i className="fa-solid fa-key text-blue-500" /> Access by Status</CardTitle></CardHeader>
-        <CardContent className="px-4 pb-4">
+      <Card
+        key="access"
+        onClick={() => onNavigate?.("access")}
+        className="border-border hover:border-blue-500/50 hover:shadow-md transition-all cursor-pointer group"
+        title="View Access Grants"
+      >
+        <CardHeader className="pb-1 pt-4 px-4">
+          <CardTitle className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center justify-between">
+            <span className="flex items-center gap-1.5"><i className="fa-solid fa-key text-blue-500" /> Access by Status</span>
+            <i className="fa-solid fa-arrow-right text-[10px] opacity-0 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all text-blue-500" />
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="px-4 pb-3">
           {accessByStatus.length > 0 ? <DonutChart segments={accessByStatus} /> : <p className="text-xs text-muted-foreground py-4 text-center">No access data</p>}
         </CardContent>
       </Card>
     ),
     hasDevices && (
-      <Card key="devices" className="border-border">
-        <CardHeader className="pb-2 pt-4 px-4"><CardTitle className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5"><i className="fa-solid fa-laptop text-emerald-500" /> Device Health</CardTitle></CardHeader>
-        <CardContent className="px-4 pb-4">
+      <Card
+        key="devices"
+        onClick={() => onNavigate?.("devices")}
+        className="border-border hover:border-emerald-500/50 hover:shadow-md transition-all cursor-pointer group"
+        title="View Devices"
+      >
+        <CardHeader className="pb-1 pt-4 px-4">
+          <CardTitle className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center justify-between">
+            <span className="flex items-center gap-1.5"><i className="fa-solid fa-laptop text-emerald-500" /> Device Health</span>
+            <i className="fa-solid fa-arrow-right text-[10px] opacity-0 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all text-emerald-500" />
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="px-4 pb-3">
           {devices.length > 0 ? <DonutChart segments={[
             { value: devices.filter((d) => d.condition === "Excellent").length, color: "#10b981", label: "Excellent" },
             { value: devices.filter((d) => d.condition === "Good").length, color: "#3b82f6", label: "Good" },
@@ -414,11 +488,11 @@ function OverviewTab({ access, subscriptions, devices, loading, onQuickAction, a
 
   // Build only the summary items the user can see
   const summaryItems = [
-    hasSubs && { label: "Expired / Cancelled Subs", value: subscriptions.filter((s) => s.status === "Expired" || s.status === "Cancelled").length, cls: "text-red-500", icon: "fa-solid fa-ban" },
-    hasAccess && { label: "Revoked Access", value: access.filter((a) => a.status === "Revoked").length, cls: "text-red-500", icon: "fa-solid fa-user-xmark" },
-    hasAccess && { label: "Pending Access", value: access.filter((a) => a.status === "Pending").length, cls: "text-blue-500", icon: "fa-solid fa-hourglass-half" },
-    hasDevices && { label: "Available Devices", value: devices.filter((d) => d.status === "Available").length, cls: "text-emerald-500", icon: "fa-solid fa-laptop-code" },
-  ].filter(Boolean) as { label: string; value: number; cls: string; icon: string }[];
+    hasSubs && { label: "Expired / Cancelled Subs", value: subscriptions.filter((s) => s.status === "Expired" || s.status === "Cancelled").length, cls: "text-red-500", icon: "fa-solid fa-ban", tab: "subscriptions" as TabKey },
+    hasAccess && { label: "Revoked Access", value: access.filter((a) => a.status === "Revoked").length, cls: "text-red-500", icon: "fa-solid fa-user-xmark", tab: "access" as TabKey },
+    hasAccess && { label: "Pending Access", value: access.filter((a) => a.status === "Pending").length, cls: "text-blue-500", icon: "fa-solid fa-hourglass-half", tab: "access" as TabKey },
+    hasDevices && { label: "Available Devices", value: devices.filter((d) => d.status === "Available").length, cls: "text-emerald-500", icon: "fa-solid fa-laptop-code", tab: "devices" as TabKey },
+  ].filter(Boolean) as { label: string; value: number; cls: string; icon: string; tab: TabKey }[];
 
   // Quick Actions — only for allowed tabs
   const ALL_ACTIONS = [
@@ -436,15 +510,20 @@ function OverviewTab({ access, subscriptions, devices, loading, onQuickAction, a
       {statCards.length > 0 && (
         <div className={cn("grid gap-4", statCards.length === 1 ? "grid-cols-1 max-w-xs" : statCards.length === 2 ? "grid-cols-2" : statCards.length === 3 ? "grid-cols-3" : "grid-cols-2 lg:grid-cols-4")}>
           {statCards.map((c) => (
-            <Card key={c.label} className={cn("border", c.border)}>
+            <Card
+              key={c.label}
+              onClick={() => onNavigate?.(c.tab)}
+              className={cn("border cursor-pointer hover:border-primary/50 hover:shadow-md transition-all group", c.border)}
+              title={`View ${c.tab}`}
+            >
               <CardContent className="p-5">
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex flex-col gap-1">
-                    <span className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wide">{c.label}</span>
+                    <span className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wide group-hover:text-foreground transition-colors">{c.label}</span>
                     <span className="text-2xl font-bold text-foreground">{c.value}</span>
                     <span className="text-xs text-muted-foreground">{c.sub}</span>
                   </div>
-                  <div className={cn("w-11 h-11 rounded-xl flex items-center justify-center shrink-0", c.iconCls)}>
+                  <div className={cn("w-11 h-11 rounded-xl flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform", c.iconCls)}>
                     <i className={cn(c.icon, "text-lg")} />
                   </div>
                 </div>
@@ -454,26 +533,28 @@ function OverviewTab({ access, subscriptions, devices, loading, onQuickAction, a
         </div>
       )}
 
-      {/* Charts — only accessible sections */}
-      {charts.length > 0 && (
-        <div className={cn("grid gap-4", charts.length === 1 ? "grid-cols-1" : charts.length === 2 ? "grid-cols-1 lg:grid-cols-2" : "grid-cols-1 lg:grid-cols-3")}>
+      {/* Charts & Summary Cards in One Row */}
+      {(charts.length > 0 || summaryItems.length > 0) && (
+        <div className={cn("grid gap-4", (charts.length + summaryItems.length) <= 2 ? "grid-cols-1 md:grid-cols-2" : (charts.length + summaryItems.length) === 3 ? "grid-cols-1 md:grid-cols-3" : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-4")}>
           {charts}
-        </div>
-      )}
-
-      {/* Summary Cards — only accessible sections */}
-      {summaryItems.length > 0 && (
-        <div className={cn("grid gap-3", summaryItems.length <= 2 ? "grid-cols-2" : "grid-cols-2 lg:grid-cols-4")}>
           {summaryItems.map((item) => (
-            <div key={item.label} className="rounded-xl border border-border bg-card p-4 flex items-center gap-3">
-              <div className="w-9 h-9 rounded-lg bg-muted flex items-center justify-center shrink-0">
-                <i className={cn(item.icon, item.cls, "text-sm")} />
+            <Card
+              key={item.label}
+              onClick={() => onNavigate?.(item.tab)}
+              className="border-border hover:border-primary/50 hover:shadow-md transition-all cursor-pointer flex flex-col justify-between p-4 group"
+              title={`View ${item.tab}`}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wide leading-tight group-hover:text-foreground transition-colors">{item.label}</span>
+                <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                  <i className={cn(item.icon, item.cls, "text-xs")} />
+                </div>
               </div>
-              <div>
-                <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wide leading-tight">{item.label}</p>
-                <p className={cn("text-xl font-bold mt-0.5", item.cls)}>{item.value}</p>
+              <div className="mt-4 flex items-center justify-between">
+                <span className={cn("text-2xl font-bold tabular-nums", item.cls)}>{item.value}</span>
+                <i className="fa-solid fa-arrow-right text-[10px] text-muted-foreground opacity-0 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all" />
               </div>
-            </div>
+            </Card>
           ))}
         </div>
       )}
@@ -2370,7 +2451,7 @@ export default function ITCommandCenterPage() {
 
       {/* Tab Content */}
       <div>
-        {activeTab === "overview" && <OverviewTab access={access} subscriptions={subs} devices={devices} loading={overallLoading} onQuickAction={handleQuickAction} allowedTabs={visibleTabs.map((t) => t.key).filter((k) => k !== "overview")} />}
+        {activeTab === "overview" && <OverviewTab access={access} subscriptions={subs} devices={devices} loading={overallLoading} onNavigate={(tab) => setActiveTab(tab)} onQuickAction={handleQuickAction} allowedTabs={visibleTabs.map((t) => t.key).filter((k) => k !== "overview")} />}
         {activeTab === "drive" && <DriveLinksTab links={links} loading={loadingLinks} onAdd={addLink} onEdit={editLink} onDelete={deleteLink} autoOpenAdd={autoOpenAddTab === "drive"} teamMembers={teamMembers} />}
         {activeTab === "access" && <AccessTab access={access} loading={loadingAccess} onAdd={addAccess} onEdit={editAccess} onDelete={deleteAccess} onToggleStatus={toggleAccessStatus} autoOpenAdd={autoOpenAddTab === "access"} teamMembers={teamMembers} />}
         {activeTab === "subscriptions" && <SubscriptionsTab subs={subs} loading={loadingSubs} onAdd={addSub} onEdit={editSub} onDelete={deleteSub} autoOpenAdd={autoOpenAddTab === "subscriptions"} teamMembers={teamMembers} />}
