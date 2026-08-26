@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, startTransition } from "react";
+import React, { useState, useEffect, useMemo, useCallback, startTransition } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { usePermissions } from "@/hooks/usePermissions";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
@@ -133,6 +133,15 @@ export default function ProjectsPage() {
   const [previewFile, setPreviewFile] = useState<any | null>(null);
   const [showBatchDeleteModal, setShowBatchDeleteModal] = useState<boolean>(false);
   const [isDeletingBatch, setIsDeletingBatch] = useState<boolean>(false);
+
+  // Drive Files Filtering & Sorting State
+  const [driveSearch, setDriveSearch] = useState<string>("");
+  const [driveTypeFilter, setDriveTypeFilter] = useState<string>("All");
+  const [driveUploaderFilter, setDriveUploaderFilter] = useState<string>("All");
+  const [driveSortBy, setDriveSortBy] = useState<string>("newest");
+  const [drivePage, setDrivePage] = useState<number>(1);
+  const [drivePerPage, setDrivePerPage] = useState<number>(6);
+  const [driveShowAll, setDriveShowAll] = useState<boolean>(false);
 
   // Project Activity History Pagination state
   const [historyPage, setHistoryPage] = useState<number>(1);
@@ -365,11 +374,55 @@ export default function ProjectsPage() {
     );
   };
 
+  const driveUploaders = useMemo(() => {
+    return ["All", ...Array.from(new Set(driveFiles.map((f) => f.uploadedBy?.name).filter(Boolean)))];
+  }, [driveFiles]);
+
+  const filteredDriveFiles = useMemo(() => {
+    return driveFiles.filter((file) => {
+      const q = driveSearch.toLowerCase().trim();
+      const uploaderName = file.uploadedBy?.name || "Member";
+      const matchesSearch = !q || file.name.toLowerCase().includes(q) || uploaderName.toLowerCase().includes(q);
+
+      const ext = file.name.includes(".") ? file.name.split(".").pop()?.toLowerCase() || "" : "";
+      const mime = file.mimeType || "";
+
+      let matchesType = true;
+      if (driveTypeFilter === "Images") {
+        matchesType = mime.startsWith("image/") || ["png", "jpg", "jpeg", "webp", "gif", "svg", "bmp"].includes(ext);
+      } else if (driveTypeFilter === "PDFs") {
+        matchesType = mime === "application/pdf" || ext === "pdf";
+      } else if (driveTypeFilter === "Documents") {
+        matchesType = ["doc", "docx", "txt", "rtf", "md"].includes(ext) || mime.includes("word") || mime.includes("text");
+      } else if (driveTypeFilter === "Spreadsheets") {
+        matchesType = ["xls", "xlsx", "csv"].includes(ext) || mime.includes("sheet") || mime.includes("csv");
+      } else if (driveTypeFilter === "Archives") {
+        matchesType = ["zip", "rar", "7z", "tar", "gz"].includes(ext) || mime.includes("zip");
+      } else if (driveTypeFilter === "Other") {
+        const isCommon = mime.startsWith("image/") || ext === "pdf" || ["doc", "docx", "txt", "xls", "xlsx", "csv", "zip"].includes(ext);
+        matchesType = !isCommon;
+      }
+
+      const matchesUploader = driveUploaderFilter === "All" || uploaderName === driveUploaderFilter;
+
+      return matchesSearch && matchesType && matchesUploader;
+    }).sort((a, b) => {
+      if (driveSortBy === "oldest") return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+      if (driveSortBy === "name-asc") return a.name.localeCompare(b.name);
+      if (driveSortBy === "name-desc") return b.name.localeCompare(a.name);
+      if (driveSortBy === "member-asc") return (a.uploadedBy?.name || "Member").localeCompare(b.uploadedBy?.name || "Member");
+      if (driveSortBy === "member-desc") return (b.uploadedBy?.name || "Member").localeCompare(a.uploadedBy?.name || "Member");
+      if (driveSortBy === "size-desc") return (b.size || 0) - (a.size || 0);
+      if (driveSortBy === "size-asc") return (a.size || 0) - (b.size || 0);
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
+  }, [driveFiles, driveSearch, driveTypeFilter, driveUploaderFilter, driveSortBy]);
+
   const handleSelectAllDriveFiles = () => {
-    if (selectedDriveFileIds.length === driveFiles.length) {
+    if (selectedDriveFileIds.length === filteredDriveFiles.length && filteredDriveFiles.length > 0) {
       setSelectedDriveFileIds([]);
     } else {
-      setSelectedDriveFileIds(driveFiles.map((f) => f._id));
+      setSelectedDriveFileIds(filteredDriveFiles.map((f) => f._id));
     }
   };
 
@@ -1603,8 +1656,8 @@ export default function ProjectsPage() {
                     onClick={handleSelectAllDriveFiles}
                     className="h-8 gap-1.5 text-xs font-semibold"
                   >
-                    <i className={cn("fa-solid text-xs", selectedDriveFileIds.length === driveFiles.length ? "fa-square-check text-primary" : "fa-square")} />
-                    {selectedDriveFileIds.length === driveFiles.length ? "Deselect All" : "Select All"}
+                    <i className={cn("fa-solid text-xs", selectedDriveFileIds.length === filteredDriveFiles.length && filteredDriveFiles.length > 0 ? "fa-square-check text-primary" : "fa-square")} />
+                    {selectedDriveFileIds.length === filteredDriveFiles.length && filteredDriveFiles.length > 0 ? "Deselect All" : "Select All"}
                   </Button>
 
                   {selectedDriveFileIds.length > 0 && (
@@ -1639,128 +1692,343 @@ export default function ProjectsPage() {
               )}
             </CardHeader>
 
-            <CardContent className="px-0 pt-2">
-              {driveFiles.length === 0 ? (
-                <div className="py-12 text-center text-muted-foreground text-sm space-y-1">
-                  <i className="fa-solid fa-folder-open text-3xl opacity-50 text-primary mb-2 block" />
-                  <p className="font-medium">No files uploaded yet.</p>
-                  <p className="text-xs">Use the upload box above to add your first file to Drive Space.</p>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {driveFiles.map((file) => {
-                    const isSelected = selectedDriveFileIds.includes(file._id);
-                    const isImg = (file.mimeType || "").startsWith("image/") || /\.(png|jpe?g|gif|webp|svg)$/i.test(file.name);
-                    const fileDownloadUrl = `/api/drive/download?fileId=${file._id}`;
-
-                    return (
-                      <div
-                        key={file._id}
-                        className={cn(
-                          "p-4 rounded-xl border transition-all flex flex-col justify-between space-y-3 relative group",
-                          isSelected ? "border-primary bg-primary/5 shadow-xs" : "border-border bg-card hover:shadow-md"
-                        )}
+            {/* Filter Toolbar for Drive Files */}
+            {driveFiles.length > 0 && (
+              <div className="pt-2 pb-4 border-b border-border flex flex-col md:flex-row items-start md:items-center justify-between gap-3 flex-wrap">
+                <div className="flex items-center gap-2 flex-wrap w-full md:w-auto">
+                  {/* Search bar */}
+                  <div className="relative flex-1 md:w-56">
+                    <i className="fa-solid fa-magnifying-glass absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground" />
+                    <Input
+                      type="text"
+                      placeholder="Search files or uploaders…"
+                      value={driveSearch}
+                      onChange={(e) => setDriveSearch(e.target.value)}
+                      className="pl-8 h-8 text-xs w-full bg-background"
+                    />
+                    {driveSearch && (
+                      <button
+                        onClick={() => setDriveSearch("")}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground text-xs"
                       >
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="flex items-start gap-3 min-w-0 flex-1">
-                            {/* Multi-select checkbox */}
-                            <button
-                              type="button"
-                              onClick={() => toggleSelectDriveFile(file._id)}
-                              className="mt-1 text-muted-foreground hover:text-primary transition-colors focus:outline-none"
-                              title={isSelected ? "Deselect file" : "Select file"}
-                            >
-                              <i className={cn("fa-lg", isSelected ? "fa-solid fa-square-check text-primary" : "fa-regular fa-square")} />
-                            </button>
+                        <i className="fa-solid fa-xmark" />
+                      </button>
+                    )}
+                  </div>
 
-                            {/* Thumbnail or File Icon */}
-                            {isImg ? (
-                              <div
-                                onClick={() => setPreviewFile(file)}
-                                className="relative w-12 h-12 rounded-lg border border-border/80 bg-muted/30 overflow-hidden cursor-pointer shrink-0 group/img flex items-center justify-center"
-                                title="Click to view image preview"
-                              >
-                                <img
-                                  src={fileDownloadUrl}
-                                  alt={file.name}
-                                  className="w-full h-full object-cover group-hover/img:scale-105 transition-transform"
-                                />
-                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center text-white">
-                                  <i className="fa-solid fa-eye text-xs" />
+                  {/* File Type Filter */}
+                  <select
+                    value={driveTypeFilter}
+                    onChange={(e) => setDriveTypeFilter(e.target.value)}
+                    className="h-8 px-2.5 text-xs rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
+                    title="Filter by file type"
+                  >
+                    <option value="All">All Types</option>
+                    <option value="Images">Images (PNG, JPG, WEBP, SVG)</option>
+                    <option value="PDFs">PDF Documents</option>
+                    <option value="Documents">Word / Text Docs</option>
+                    <option value="Spreadsheets">Spreadsheets (XLSX, CSV)</option>
+                    <option value="Archives">Archives (ZIP, RAR)</option>
+                    <option value="Other">Other Formats</option>
+                  </select>
+
+                  {/* Uploader Filter */}
+                  <select
+                    value={driveUploaderFilter}
+                    onChange={(e) => setDriveUploaderFilter(e.target.value)}
+                    className="h-8 px-2.5 text-xs rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
+                    title="Filter by uploader"
+                  >
+                    {driveUploaders.map((u) => (
+                      <option key={u} value={u}>
+                        {u === "All" ? "All Uploaders" : `By ${u}`}
+                      </option>
+                    ))}
+                  </select>
+
+                  {/* Sort Filter */}
+                  <select
+                    value={driveSortBy}
+                    onChange={(e) => setDriveSortBy(e.target.value)}
+                    className="h-8 px-2.5 text-xs rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
+                    title="Sort files"
+                  >
+                    <option value="newest">Newest Uploads</option>
+                    <option value="oldest">Oldest Uploads</option>
+                    <option value="name-asc">Name (A → Z)</option>
+                    <option value="name-desc">Name (Z → A)</option>
+                    <option value="member-asc">Member / Uploader (A → Z)</option>
+                    <option value="member-desc">Member / Uploader (Z → A)</option>
+                    <option value="size-desc">Size (Largest)</option>
+                    <option value="size-asc">Size (Smallest)</option>
+                  </select>
+                </div>
+
+                <div className="flex items-center gap-2 self-end md:self-auto flex-wrap">
+                  {/* Rows per page selector */}
+                  <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                    <span>Show:</span>
+                    <select
+                      value={drivePerPage}
+                      onChange={(e) => {
+                        setDrivePerPage(Number(e.target.value));
+                        setDrivePage(1);
+                      }}
+                      disabled={driveShowAll}
+                      className="h-8 px-2 text-xs rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer disabled:opacity-50"
+                      title="Files per page"
+                    >
+                      <option value={6}>6</option>
+                      <option value={12}>12</option>
+                      <option value={24}>24</option>
+                      <option value={48}>48</option>
+                    </select>
+                  </div>
+
+                  {/* Toggle Show All */}
+                  <Button
+                    variant={driveShowAll ? "soft" : "outline"}
+                    color={driveShowAll ? "primary" : "default"}
+                    size="sm"
+                    onClick={() => {
+                      setDriveShowAll(!driveShowAll);
+                      setDrivePage(1);
+                    }}
+                    className="h-8 text-xs gap-1.5 font-semibold"
+                    title={driveShowAll ? "Switch to Paginated View" : "Show all files without pagination"}
+                  >
+                    <i className={cn("fa-solid text-[10px]", driveShowAll ? "fa-list" : "fa-expand")} />
+                    {driveShowAll ? "Paginated" : "All"}
+                  </Button>
+
+                  {(driveSearch || driveTypeFilter !== "All" || driveUploaderFilter !== "All" || driveSortBy !== "newest") && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setDriveSearch("");
+                        setDriveTypeFilter("All");
+                        setDriveUploaderFilter("All");
+                        setDriveSortBy("newest");
+                        setDrivePage(1);
+                      }}
+                      className="h-8 text-xs text-muted-foreground hover:text-foreground gap-1.5"
+                    >
+                      <i className="fa-solid fa-arrow-rotate-left text-[10px]" /> Reset
+                    </Button>
+                  )}
+                </div>
+              </div>
+            )}
+
+            <CardContent className="px-0 pt-4 space-y-4">
+              {(() => {
+                const totalDriveItems = filteredDriveFiles.length;
+                const effectiveDrivePerPage = driveShowAll ? (totalDriveItems || 1) : drivePerPage;
+                const totalDrivePages = Math.ceil(totalDriveItems / effectiveDrivePerPage) || 1;
+                const driveStartIndex = (drivePage - 1) * effectiveDrivePerPage;
+                const paginatedDriveFiles = filteredDriveFiles.slice(driveStartIndex, driveStartIndex + effectiveDrivePerPage);
+
+                if (driveFiles.length === 0) {
+                  return (
+                    <div className="py-12 text-center text-muted-foreground text-sm space-y-1">
+                      <i className="fa-solid fa-folder-open text-3xl opacity-50 text-primary mb-2 block" />
+                      <p className="font-medium">No files uploaded yet.</p>
+                      <p className="text-xs">Use the upload box above to add your first file to Drive Space.</p>
+                    </div>
+                  );
+                }
+
+                if (filteredDriveFiles.length === 0) {
+                  return (
+                    <div className="py-12 text-center text-muted-foreground text-sm space-y-2">
+                      <i className="fa-solid fa-filter-circle-xmark text-3xl opacity-50 text-muted-foreground mb-2 block" />
+                      <p className="font-medium text-foreground">No files match your filters</p>
+                      <p className="text-xs">Try searching with a different keyword or resetting your filter selections.</p>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setDriveSearch("");
+                          setDriveTypeFilter("All");
+                          setDriveUploaderFilter("All");
+                          setDriveSortBy("newest");
+                          setDrivePage(1);
+                        }}
+                        className="h-8 text-xs gap-1.5 mt-2"
+                      >
+                        <i className="fa-solid fa-arrow-rotate-left text-[10px]" /> Clear All Filters
+                      </Button>
+                    </div>
+                  );
+                }
+
+                return (
+                  <>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {paginatedDriveFiles.map((file) => {
+                        const isSelected = selectedDriveFileIds.includes(file._id);
+                        const isImg = (file.mimeType || "").startsWith("image/") || /\.(png|jpe?g|gif|webp|svg)$/i.test(file.name);
+                        const fileDownloadUrl = `/api/drive/download?fileId=${file._id}`;
+
+                        return (
+                          <div
+                            key={file._id}
+                            className={cn(
+                              "p-4 rounded-xl border transition-all flex flex-col justify-between space-y-3 relative group",
+                              isSelected ? "border-primary bg-primary/5 shadow-xs" : "border-border bg-card hover:shadow-md"
+                            )}
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex items-start gap-3 min-w-0 flex-1">
+                                {/* Multi-select checkbox */}
+                                <button
+                                  type="button"
+                                  onClick={() => toggleSelectDriveFile(file._id)}
+                                  className="mt-1 text-muted-foreground hover:text-primary transition-colors focus:outline-none"
+                                  title={isSelected ? "Deselect file" : "Select file"}
+                                >
+                                  <i className={cn("fa-lg", isSelected ? "fa-solid fa-square-check text-primary" : "fa-regular fa-square")} />
+                                </button>
+
+                                {/* Thumbnail or File Icon */}
+                                {isImg ? (
+                                  <div
+                                    onClick={() => setPreviewFile(file)}
+                                    className="relative w-12 h-12 rounded-lg border border-border/80 bg-muted/30 overflow-hidden cursor-pointer shrink-0 group/img flex items-center justify-center"
+                                    title="Click to view image preview"
+                                  >
+                                    <img
+                                      src={fileDownloadUrl}
+                                      alt={file.name}
+                                      className="w-full h-full object-cover group-hover/img:scale-105 transition-transform"
+                                    />
+                                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center text-white">
+                                      <i className="fa-solid fa-eye text-xs" />
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div
+                                    onClick={() => setPreviewFile(file)}
+                                    className="p-2.5 bg-primary/10 text-primary rounded-lg shrink-0 flex items-center justify-center w-10 h-10 cursor-pointer hover:bg-primary/20 transition-colors"
+                                    title="Click to view file details"
+                                  >
+                                    <i className={cn("fa-solid text-lg", isImg ? "fa-image" : file.name.endsWith(".pdf") ? "fa-file-pdf text-rose-500" : "fa-file-lines")} />
+                                  </div>
+                                )}
+
+                                <div className="min-w-0 flex-1">
+                                  <p
+                                    onClick={() => setPreviewFile(file)}
+                                    className="font-semibold text-xs text-foreground truncate cursor-pointer hover:text-primary transition-colors"
+                                    title={file.name}
+                                  >
+                                    {file.name}
+                                  </p>
+                                  <p className="text-[10px] text-muted-foreground">
+                                    {Math.round((file.size || 0) / 1024)} KB • {new Date(file.createdAt).toLocaleDateString()}
+                                  </p>
                                 </div>
                               </div>
-                            ) : (
-                              <div
-                                onClick={() => setPreviewFile(file)}
-                                className="p-2.5 bg-primary/10 text-primary rounded-lg shrink-0 flex items-center justify-center w-10 h-10 cursor-pointer hover:bg-primary/20 transition-colors"
-                                title="Click to view file details"
-                              >
-                                <i className={cn("fa-solid text-lg", isImg ? "fa-image" : file.name.endsWith(".pdf") ? "fa-file-pdf text-rose-500" : "fa-file-lines")} />
-                              </div>
-                            )}
 
-                            <div className="min-w-0 flex-1">
-                              <p
-                                onClick={() => setPreviewFile(file)}
-                                className="font-semibold text-xs text-foreground truncate cursor-pointer hover:text-primary transition-colors"
-                                title={file.name}
-                              >
-                                {file.name}
-                              </p>
-                              <p className="text-[10px] text-muted-foreground">
-                                {Math.round((file.size || 0) / 1024)} KB • {new Date(file.createdAt).toLocaleDateString()}
-                              </p>
+                              <div className="flex items-center gap-1 shrink-0">
+                                {/* Preview button */}
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => setPreviewFile(file)}
+                                  className="h-7 w-7 text-muted-foreground hover:text-primary hover:bg-primary/10"
+                                  title="View file details / Preview"
+                                >
+                                  <i className="fa-solid fa-eye text-xs" />
+                                </Button>
+
+                                {/* Download button */}
+                                <a
+                                  href={fileDownloadUrl}
+                                  download={file.name}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="inline-flex items-center justify-center h-7 w-7 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
+                                  title="Download File"
+                                >
+                                  <i className="fa-solid fa-download text-xs" />
+                                </a>
+
+                                {/* Delete button */}
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => setDeleteConfirmFile(file)}
+                                  className="h-7 w-7 text-destructive hover:bg-destructive/10"
+                                  title="Delete File"
+                                >
+                                  <i className="fa-solid fa-trash-can text-xs" />
+                                </Button>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center justify-between text-[10px] text-muted-foreground border-t border-border/60 pt-2">
+                              <span>By {file.uploadedBy?.name || "Member"}</span>
+                              <Badge variant="outline" className="text-[9px] px-1.5 py-0">
+                                {file.mimeType?.split("/")[1] || "file"}
+                              </Badge>
                             </div>
                           </div>
+                        );
+                      })}
+                    </div>
 
-                          <div className="flex items-center gap-1 shrink-0">
-                            {/* Preview button */}
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => setPreviewFile(file)}
-                              className="h-7 w-7 text-muted-foreground hover:text-primary hover:bg-primary/10"
-                              title="View file details / Preview"
-                            >
-                              <i className="fa-solid fa-eye text-xs" />
-                            </Button>
-
-                            {/* Download button */}
-                            <a
-                              href={fileDownloadUrl}
-                              download={file.name}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="inline-flex items-center justify-center h-7 w-7 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
-                              title="Download File"
-                            >
-                              <i className="fa-solid fa-download text-xs" />
-                            </a>
-
-                            {/* Delete button */}
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => setDeleteConfirmFile(file)}
-                              className="h-7 w-7 text-destructive hover:bg-destructive/10"
-                              title="Delete File"
-                            >
-                              <i className="fa-solid fa-trash-can text-xs" />
-                            </Button>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center justify-between text-[10px] text-muted-foreground border-t border-border/60 pt-2">
-                          <span>By {file.uploadedBy?.name || "Member"}</span>
-                          <Badge variant="outline" className="text-[9px] px-1.5 py-0">
-                            {file.mimeType?.split("/")[1] || "file"}
-                          </Badge>
-                        </div>
+                    {/* Pagination Footer */}
+                    <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-border/60 text-xs text-muted-foreground">
+                      <div>
+                        Showing <strong className="text-foreground">{totalDriveItems === 0 ? 0 : driveStartIndex + 1}</strong> to <strong className="text-foreground">{Math.min(driveStartIndex + effectiveDrivePerPage, totalDriveItems)}</strong> of <strong className="text-foreground">{totalDriveItems}</strong> files
                       </div>
-                    );
-                  })}
-                </div>
-              )}
+
+                      {!driveShowAll && totalDrivePages > 1 && (
+                        <div className="flex items-center gap-1.5">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={drivePage <= 1}
+                            onClick={() => setDrivePage((prev) => Math.max(1, prev - 1))}
+                            className="h-8 gap-1 text-xs"
+                          >
+                            <i className="fa-solid fa-chevron-left text-[10px]" /> Prev
+                          </Button>
+
+                          <div className="flex items-center gap-1">
+                            {Array.from({ length: totalDrivePages }, (_, i) => i + 1).map((pageNum) => (
+                              <button
+                                key={pageNum}
+                                onClick={() => setDrivePage(pageNum)}
+                                className={cn(
+                                  "h-8 min-w-[32px] px-2 rounded-md text-xs font-semibold transition-colors cursor-pointer",
+                                  drivePage === pageNum
+                                    ? "bg-primary text-primary-foreground font-bold shadow-xs"
+                                    : "border border-border bg-background hover:bg-muted text-muted-foreground hover:text-foreground"
+                                )}
+                              >
+                                {pageNum}
+                              </button>
+                            ))}
+                          </div>
+
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={drivePage >= totalDrivePages}
+                            onClick={() => setDrivePage((prev) => Math.min(totalDrivePages, prev + 1))}
+                            className="h-8 gap-1 text-xs"
+                          >
+                            Next <i className="fa-solid fa-chevron-right text-[10px]" />
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  </>
+                );
+              })()}
             </CardContent>
           </Card>
         </div>
