@@ -157,3 +157,48 @@ export function generateSecurePassword(length: number = 12): string {
 
   return password.join("");
 }
+
+/**
+ * Resolves the destination deep link for any notification.
+ * Uses explicit linkUrl if present, or intelligently determines the target dashboard route from type/title/message.
+ */
+export function getNotificationTargetUrl(n: { type?: string; title?: string; message?: string; linkUrl?: string }): string | null {
+  if (n.linkUrl && n.linkUrl.trim()) return n.linkUrl.trim();
+
+  const title = (n.title || "").toLowerCase();
+  const msg = (n.message || "").toLowerCase();
+  const type = (n.type || "").toLowerCase();
+
+  if (type === "task" || title.includes("task") || msg.includes("task") || title.includes("project")) {
+    return "/dashboard/projects";
+  }
+  if (type === "chat" || title.includes("message") || msg.includes("message") || title.includes("chat")) {
+    return "/dashboard/chat";
+  }
+  if (type === "announcement" || title.includes("announcement") || msg.includes("announcement")) {
+    return "/dashboard/chat?tab=announcements";
+  }
+  if (type === "leave" || title.includes("leave") || msg.includes("leave")) {
+    return "/dashboard/hr?tab=leaves";
+  }
+  if (type === "appraisal" || title.includes("appraisal") || msg.includes("appraisal")) {
+    return "/dashboard/hr?tab=appraisals";
+  }
+  if (type === "kudos" || title.includes("kudos") || msg.includes("kudos")) {
+    return "/dashboard/team?tab=kudos";
+  }
+  if (type === "referral" || title.includes("referral") || msg.includes("referral")) {
+    return "/dashboard/hr?tab=referrals";
+  }
+  if (type === "okr" || title.includes("okr") || title.includes("goal") || msg.includes("objective")) {
+    return "/dashboard/okr";
+  }
+  if (title.includes("subscription") || msg.includes("subscription") || title.includes("device") || title.includes("access grant") || title.includes("drive link") || title.includes("invoice")) {
+    return "/dashboard/it";
+  }
+  if (type === "hr" || title.includes("hr") || msg.includes("payroll") || msg.includes("timesheet") || title.includes("timesheet") || title.includes("checklist")) {
+    return "/dashboard/hr";
+  }
+
+  return null;
+}

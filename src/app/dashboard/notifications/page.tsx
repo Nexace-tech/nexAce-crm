@@ -8,7 +8,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { cn } from "@/lib/utils";
+import { cn, getNotificationTargetUrl } from "@/lib/utils";
 import { usePermissions } from "@/hooks/usePermissions";
 
 interface NotifItem {
@@ -429,12 +429,12 @@ export default function NotificationsPage() {
           ) : (
             paginatedNotifications.map((n) => {
               const details = getTypeDetails(n.type);
-              const targetUrl = n.linkUrl && n.linkUrl !== "/dashboard/tasks" ? n.linkUrl : n.type === "task" ? "/dashboard/hr?tab=tasks" : n.linkUrl || "/dashboard/hr?tab=tasks";
+              const targetUrl = getNotificationTargetUrl(n);
 
               return (
                 <div
                   key={n._id}
-                  onClick={() => handleMarkSingleRead(n._id, targetUrl)}
+                  onClick={() => handleMarkSingleRead(n._id, targetUrl || undefined)}
                   className={cn(
                     "p-4 transition-all cursor-pointer hover:bg-primary/5 flex items-start justify-between gap-4 group border-l-4",
                     !n.read ? "bg-primary/10 border-l-primary font-medium" : "border-l-transparent opacity-85"

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo, useCallback, startTransition } from "react";
+import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import { usePermissions } from "@/hooks/usePermissions";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
@@ -14,6 +15,7 @@ import { useTabPersistence } from "@/hooks/useTabPersistence";
 
 export default function ProjectsPage() {
   const { user: currentUser, loading: authLoading } = useAuth();
+  const searchParams = useSearchParams();
   const { can, isAdmin, isOPS } = usePermissions();
   const [activeTab, setActiveTab] = useTabPersistence<"kanban" | "gantt" | "wiki" | "drive" | "workload" | "history">(
     "projects_active_tab",
@@ -488,6 +490,40 @@ export default function ProjectsPage() {
       setActivityLogs([]);
     }
   }, [selectedProjectId, activeTab, mounted]);
+
+  // Handle URL deep linking (e.g. from Notifications: ?projectId=...&taskId=...&tab=...)
+  useEffect(() => {
+    if (!mounted) return;
+    const urlProjectId = searchParams.get("projectId");
+    const urlTaskId = searchParams.get("taskId");
+    const urlTab = searchParams.get("tab");
+
+    if (urlTab && ["kanban", "gantt", "wiki", "drive", "workload", "history"].includes(urlTab)) {
+      setActiveTab(urlTab as any);
+    }
+    if (urlProjectId && urlProjectId !== selectedProjectId) {
+      setSelectedProjectId(urlProjectId);
+    }
+    if (urlTaskId) {
+      const found = tasks.find((t) => t._id === urlTaskId);
+      if (found) {
+        setSelectedTask(found);
+      } else {
+        fetch(`/api/tasks?taskId=${urlTaskId}`)
+          .then((res) => (res.ok ? res.json() : null))
+          .then((data) => {
+            if (data?.task) {
+              setSelectedTask(data.task);
+              const pId = data.task.projectId?._id || data.task.projectId;
+              if (pId && pId !== selectedProjectId) {
+                setSelectedProjectId(pId);
+              }
+            }
+          })
+          .catch(() => {});
+      }
+    }
+  }, [mounted, searchParams]);
 
   const handleOpenEditProject = () => {
     if (!selectedProjectId || selectedProjectId === "all") return;

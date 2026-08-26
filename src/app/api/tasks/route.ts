@@ -20,11 +20,24 @@ export async function GET(request: Request) {
     }
 
     const { searchParams } = new URL(request.url);
+    const taskId = searchParams.get("taskId");
     const projectId = searchParams.get("projectId");
     const sprintId = searchParams.get("sprintId");
     const assigneeId = searchParams.get("assignee");
 
     await connectToDatabase();
+
+    if (taskId) {
+      const task = await Task.findOne({
+        _id: new mongoose.Types.ObjectId(taskId),
+        tenantId: new mongoose.Types.ObjectId(session.tenantId),
+      })
+        .populate("assignee", "name role photoUrl")
+        .populate("projectId", "name")
+        .lean();
+      return NextResponse.json({ task });
+    }
+
     const dataScope = await getUserDataScope(session);
     const userObjId = new mongoose.Types.ObjectId(session.userId);
 
@@ -191,13 +204,15 @@ export async function POST(request: Request) {
       details: `Created new task '${title}' in status '${status || "To Do"}'`,
     });
 
+    const taskLinkUrl = `/dashboard/projects?projectId=${projectId}&taskId=${newTask._id}&tab=kanban`;
+
     // Real-time Notification for Assignee
     if (assignee) {
       await notify(session.tenantId, assignee, {
         title: "New Task Assigned",
         message: `${session.userName} assigned you task: '${title}'`,
         type: "task",
-        linkUrl: "/dashboard/projects",
+        linkUrl: taskLinkUrl,
       });
     }
 
@@ -206,7 +221,7 @@ export async function POST(request: Request) {
       title: "Task Created",
       message: `${session.userName} created task: '${title}' (${status || "To Do"})`,
       type: "task",
-      linkUrl: "/dashboard/projects",
+      linkUrl: taskLinkUrl,
     });
 
     return NextResponse.json({ success: true, task: newTask }, { status: 201 });
@@ -321,13 +336,16 @@ export async function PUT(request: Request) {
         targetName: task.title,
         details: `Assigned task '${task.title}' to ${assigneeName}`,
       });
+      const taskProjId = task.projectId?._id?.toString() || task.projectId?.toString() || "";
+      const taskLinkUrl = `/dashboard/projects?projectId=${taskProjId}&taskId=${task._id}&tab=kanban`;
+
       // Notify the newly assigned user
       if (assignee) {
         await notify(session.tenantId, assignee, {
           title: "Task Assigned to You",
           message: `${session.userName} assigned you task: '${task.title}'`,
           type: "task",
-          linkUrl: "/dashboard/projects",
+          linkUrl: taskLinkUrl,
         });
       }
     }
@@ -358,6 +376,9 @@ export async function PUT(request: Request) {
       });
     }
 
+    const taskProjId = task.projectId?._id?.toString() || task.projectId?.toString() || "";
+    const taskLinkUrl = `/dashboard/projects?projectId=${taskProjId}&taskId=${task._id}&tab=kanban`;
+
     // Notify the task assignee if updated by someone else (e.g., Admin or Manager)
     const taskAssigneeId = task.assignee ? task.assignee.toString() : null;
     if (taskAssigneeId && taskAssigneeId !== session.userId) {
@@ -382,7 +403,7 @@ export async function PUT(request: Request) {
         title: notifTitle,
         message: notifMessage,
         type: "task",
-        linkUrl: "/dashboard/projects",
+        linkUrl: taskLinkUrl,
       });
     }
 
@@ -401,7 +422,7 @@ export async function PUT(request: Request) {
         title: "Task Updated",
         message: `${session.userName} ${updateSummary} for task: '${task.title}'`,
         type: "task",
-        linkUrl: "/dashboard/projects",
+        linkUrl: taskLinkUrl,
       },
       ["Admin"],
       session.userId

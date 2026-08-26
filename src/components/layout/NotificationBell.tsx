@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { cn } from "@/lib/utils";
+import { cn, getNotificationTargetUrl } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
 
 interface NotifItem {
@@ -247,21 +247,22 @@ export function NotificationBell() {
     }
   };
 
-  const handleMarkSingleRead = async (id: string, linkUrl?: string) => {
+  const handleMarkSingleRead = async (n: NotifItem) => {
     try {
       await fetch("/api/notifications", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ notificationId: id }),
+        body: JSON.stringify({ notificationId: n._id }),
       });
-      setNotifications((prev) => prev.map((n) => (n._id === id ? { ...n, read: true } : n)));
+      setNotifications((prev) => prev.map((item) => (item._id === n._id ? { ...item, read: true } : item)));
       setUnreadCount((prev) => Math.max(0, prev - 1));
     } catch (err) {
       console.error("Mark single read error:", err);
     }
-    if (linkUrl) {
+    const targetUrl = getNotificationTargetUrl(n);
+    if (targetUrl) {
       setOpen(false);
-      router.push(linkUrl);
+      router.push(targetUrl);
     }
   };
 
@@ -535,7 +536,7 @@ export function NotificationBell() {
                       return (
                         <div
                           key={n._id}
-                          onClick={() => handleMarkSingleRead(n._id, n.linkUrl)}
+                          onClick={() => handleMarkSingleRead(n)}
                           className={cn(
                             "p-3.5 transition-colors cursor-pointer hover:bg-accent/50 group relative flex items-start gap-3",
                             !n.read ? "bg-primary/5" : "opacity-75"
