@@ -269,6 +269,8 @@ export default function OperationsPage() {
   const [showModal, setShowModal] = useState(false);
   const [showBulkImportModal, setShowBulkImportModal] = useState(false);
   const [editingProject, setEditingProject] = useState<ClientData | null>(null);
+  const [deleteConfirmTarget, setDeleteConfirmTarget] = useState<{ type: "project" | "deal" | "allocation"; id: string; title: string } | null>(null);
+  const [isDeletingTarget, setIsDeletingTarget] = useState(false);
 
   const [formData, setFormData] = useState({
     projectId: "",
@@ -455,10 +457,11 @@ export default function OperationsPage() {
   };
 
   const handleDeleteProject = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this project?")) return;
     try {
+      setIsDeletingTarget(true);
       const res = await fetch(`/api/clients/${id}`, { method: "DELETE" });
       if (res.ok) {
+        setDeleteConfirmTarget(null);
         fetchProjects();
       } else {
         const err = await res.json();
@@ -466,6 +469,8 @@ export default function OperationsPage() {
       }
     } catch (err) {
       console.error("Delete project error:", err);
+    } finally {
+      setIsDeletingTarget(false);
     }
   };
 
@@ -739,12 +744,20 @@ export default function OperationsPage() {
   };
 
   const handleDeleteSalesDeal = async (dealId: string) => {
-    if (!confirm("Delete this deal?")) return;
     try {
+      setIsDeletingTarget(true);
       const res = await fetch(`/api/operations/sales-deals/${dealId}`, { method: "DELETE" });
-      if (res.ok) setSalesDeals((prev) => prev.filter((d) => d._id !== dealId));
-      else alert("Failed to delete deal.");
-    } catch { alert("Failed to delete deal."); }
+      if (res.ok) {
+        setSalesDeals((prev) => prev.filter((d) => d._id !== dealId));
+        setDeleteConfirmTarget(null);
+      } else {
+        alert("Failed to delete deal.");
+      }
+    } catch {
+      alert("Failed to delete deal.");
+    } finally {
+      setIsDeletingTarget(false);
+    }
   };
 
   const handleEditSalesDeal = (deal: SalesDeal) => {
@@ -809,12 +822,20 @@ export default function OperationsPage() {
   };
 
   const handleDeleteHrAllocation = async (allocId: string) => {
-    if (!confirm("Remove this resource allocation?")) return;
     try {
+      setIsDeletingTarget(true);
       const res = await fetch(`/api/operations/hr-workdesk/${allocId}`, { method: "DELETE" });
-      if (res.ok) setHrAllocations((prev) => prev.filter((a) => a._id !== allocId));
-      else alert("Failed to delete allocation.");
-    } catch { alert("Failed to delete allocation."); }
+      if (res.ok) {
+        setHrAllocations((prev) => prev.filter((a) => a._id !== allocId));
+        setDeleteConfirmTarget(null);
+      } else {
+        alert("Failed to delete allocation.");
+      }
+    } catch {
+      alert("Failed to delete allocation.");
+    } finally {
+      setIsDeletingTarget(false);
+    }
   };
 
   const handleEditHrAllocation = (alloc: ResourceAllocation) => {
@@ -3910,6 +3931,59 @@ export default function OperationsPage() {
                 ) : (
                   <>
                     <i className="fa-solid fa-trash mr-1.5" /> Delete Member
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Unified In-App Delete Confirmation Modal Popup */}
+      {deleteConfirmTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in">
+          <div className="w-full max-w-md bg-card border border-border rounded-2xl p-6 shadow-2xl space-y-5 animate-in zoom-in-95" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-start gap-3.5">
+              <div className="w-10 h-10 rounded-full bg-rose-500/10 text-rose-500 flex items-center justify-center shrink-0 border border-rose-500/20">
+                <i className="fa-solid fa-triangle-exclamation text-lg" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-base font-bold text-foreground">
+                  Delete {deleteConfirmTarget.type === "project" ? "Project" : deleteConfirmTarget.type === "deal" ? "Sales Deal" : "Resource Allocation"}
+                </h3>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Are you sure you want to delete <strong className="text-foreground">{deleteConfirmTarget.title}</strong>? This action cannot be undone.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2.5 pt-2 border-t border-border/60">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setDeleteConfirmTarget(null)}
+                disabled={isDeletingTarget}
+              >
+                Cancel
+              </Button>
+              <Button
+                color="destructive"
+                size="sm"
+                onClick={() => {
+                  if (deleteConfirmTarget.type === "project") handleDeleteProject(deleteConfirmTarget.id);
+                  else if (deleteConfirmTarget.type === "deal") handleDeleteSalesDeal(deleteConfirmTarget.id);
+                  else if (deleteConfirmTarget.type === "allocation") handleDeleteHrAllocation(deleteConfirmTarget.id);
+                }}
+                disabled={isDeletingTarget}
+                className="gap-2 font-semibold cursor-pointer"
+              >
+                {isDeletingTarget ? (
+                  <>
+                    <i className="fa-solid fa-spinner fa-spin text-xs" /> Deleting...
+                  </>
+                ) : (
+                  <>
+                    <i className="fa-solid fa-trash-can text-xs" /> Confirm Delete
                   </>
                 )}
               </Button>

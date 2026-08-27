@@ -91,6 +91,7 @@ function SettingsPageContent() {
   const [companySlug, setCompanySlug] = useState("");
   const [totalCompanyUsers, setTotalCompanyUsers] = useState<number | null>(null);
   const [updatingCompany, setUpdatingCompany] = useState(false);
+  const [showRemovePhotoModal, setShowRemovePhotoModal] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -340,7 +341,6 @@ function SettingsPageContent() {
 
   const handleRemovePhoto = async () => {
     if (!user || !user.photoUrl) return;
-    if (!confirm("Are you sure you want to remove your profile photo?")) return;
 
     setUploadingPhoto(true);
     try {
@@ -356,6 +356,7 @@ function SettingsPageContent() {
       }
 
       await refreshUser();
+      setShowRemovePhotoModal(false);
       showToast("Profile photo removed.", "success");
     } catch (err: any) {
       console.error(err);
@@ -918,7 +919,7 @@ function SettingsPageContent() {
                         variant="outline"
                         size="sm"
                         disabled={uploadingPhoto}
-                        onClick={handleRemovePhoto}
+                        onClick={() => setShowRemovePhotoModal(true)}
                         className="gap-1.5 text-xs text-rose-500 border-rose-500/30 hover:bg-rose-500/10 hover:text-rose-600 cursor-pointer"
                       >
                         <i className="fa-solid fa-trash-can text-xs" />
@@ -1519,6 +1520,53 @@ function SettingsPageContent() {
               </div>
             </CardContent>
           </Card>
+        </div>
+      )}
+
+      {/* Remove Profile Photo Confirmation Modal */}
+      {showRemovePhotoModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in">
+          <div className="w-full max-w-md bg-card border border-border rounded-2xl p-6 shadow-2xl space-y-5 animate-in zoom-in-95" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-start gap-3.5">
+              <div className="w-10 h-10 rounded-full bg-rose-500/10 text-rose-500 flex items-center justify-center shrink-0 border border-rose-500/20">
+                <i className="fa-solid fa-triangle-exclamation text-lg" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-base font-bold text-foreground">Remove Profile Photo</h3>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Are you sure you want to remove your profile photo? Your avatar will revert to your name initials.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2.5 pt-2 border-t border-border/60">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowRemovePhotoModal(false)}
+                disabled={uploadingPhoto}
+              >
+                Cancel
+              </Button>
+              <Button
+                color="destructive"
+                size="sm"
+                onClick={handleRemovePhoto}
+                disabled={uploadingPhoto}
+                className="gap-2 font-semibold cursor-pointer"
+              >
+                {uploadingPhoto ? (
+                  <>
+                    <i className="fa-solid fa-spinner fa-spin text-xs" /> Removing...
+                  </>
+                ) : (
+                  <>
+                    <i className="fa-solid fa-trash-can text-xs" /> Remove Photo
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
         </div>
       )}
     </div>

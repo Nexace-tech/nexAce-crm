@@ -160,6 +160,7 @@ export default function ProjectsPage() {
   const [taskDueSoonOnly, setTaskDueSoonOnly] = useState<boolean>(false);
   const [selectedTask, setSelectedTask] = useState<any | null>(null);
   const [isDeletingTask, setIsDeletingTask] = useState<boolean>(false);
+  const [taskToDelete, setTaskToDelete] = useState<{ id: string; title: string } | null>(null);
 
   const columns = ["To Do", "In Progress", "Review", "Done"];
 
@@ -780,17 +781,18 @@ export default function ProjectsPage() {
   };
 
   const handleDeleteTask = async (taskId: string) => {
-    if (!confirm("Are you sure you want to delete this task?")) return;
     setIsDeletingTask(true);
     try {
       const res = await fetch(`/api/tasks?taskId=${taskId}`, { method: "DELETE" });
+      const data = await res.json();
       if (res.ok) {
         showToast("Task deleted successfully", "success");
+        setTaskToDelete(null);
         setSelectedTask(null);
-        await fetchTasks();
-        await fetchActivityLogs();
+        await fetchTasks(selectedProjectId || "all");
+        await fetchActivityLogs(selectedProjectId || "all");
       } else {
-        showToast("Failed to delete task", "error");
+        showToast(data.error || "Failed to delete task", "error");
       }
     } catch (e) {
       console.error(e);
@@ -3335,15 +3337,62 @@ export default function ProjectsPage() {
                 variant="outline"
                 size="sm"
                 disabled={isDeletingTask}
-                onClick={() => handleDeleteTask(selectedTask._id)}
-                className="gap-1.5 text-xs text-rose-500 border-rose-500/30 hover:bg-rose-500/10 hover:text-rose-600"
+                onClick={() => setTaskToDelete({ id: selectedTask._id, title: selectedTask.title })}
+                className="gap-1.5 text-xs text-rose-500 border-rose-500/30 hover:bg-rose-500/10 hover:text-rose-600 cursor-pointer"
               >
                 <i className="fa-solid fa-trash-can text-xs" />
-                {isDeletingTask ? "Deleting..." : "Delete Task"}
+                Delete Task
               </Button>
 
               <Button color="primary" size="sm" onClick={handleCloseTaskModal} className="font-semibold text-xs px-4">
                 Done
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Sleek In-App Delete Task Confirmation Modal */}
+      {taskToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in">
+          <div className="w-full max-w-md bg-card border border-border rounded-2xl p-6 shadow-2xl space-y-5 animate-in zoom-in-95" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-start gap-3.5">
+              <div className="w-10 h-10 rounded-full bg-rose-500/10 text-rose-500 flex items-center justify-center shrink-0 border border-rose-500/20">
+                <i className="fa-solid fa-triangle-exclamation text-lg" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-base font-bold text-foreground">Delete Task</h3>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Are you sure you want to permanently delete <strong className="text-foreground">{taskToDelete.title}</strong>? This action cannot be undone.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2.5 pt-2 border-t border-border/60">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setTaskToDelete(null)}
+                disabled={isDeletingTask}
+              >
+                Cancel
+              </Button>
+              <Button
+                color="destructive"
+                size="sm"
+                onClick={() => handleDeleteTask(taskToDelete.id)}
+                disabled={isDeletingTask}
+                className="gap-2 font-semibold cursor-pointer"
+              >
+                {isDeletingTask ? (
+                  <>
+                    <i className="fa-solid fa-spinner fa-spin text-xs" /> Deleting...
+                  </>
+                ) : (
+                  <>
+                    <i className="fa-solid fa-trash-can text-xs" /> Delete Task
+                  </>
+                )}
               </Button>
             </div>
           </div>

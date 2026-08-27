@@ -263,6 +263,7 @@ export function RoleDataControlTab({ isAdmin, showToast }: RoleDataControlTabPro
   const [showAddRoleModal, setShowAddRoleModal] = useState(false);
   const [newRoleName, setNewRoleName] = useState("");
   const [cloneFromRole, setCloneFromRole] = useState("Employee");
+  const [roleToDelete, setRoleToDelete] = useState<string | null>(null);
 
   const fetchPermissions = async () => {
     try {
@@ -402,9 +403,6 @@ export function RoleDataControlTab({ isAdmin, showToast }: RoleDataControlTabPro
   };
 
   const handleDeleteCustomRole = async (roleName: string) => {
-    if (!confirm(`Are you sure you want to delete the custom role '${roleName}'?`)) {
-      return;
-    }
     try {
       setDeleting(true);
       const res = await fetch(`/api/settings/permissions?role=${encodeURIComponent(roleName)}`, {
@@ -413,6 +411,7 @@ export function RoleDataControlTab({ isAdmin, showToast }: RoleDataControlTabPro
       if (res.ok) {
         showToast(`Custom role '${roleName}' deleted`, "success");
         setSelectedRole("OPS");
+        setRoleToDelete(null);
         await fetchPermissions();
       } else {
         const err = await res.json();
@@ -525,11 +524,12 @@ export function RoleDataControlTab({ isAdmin, showToast }: RoleDataControlTabPro
                 {!currentRoleCfg.isBuiltIn && (
                   <Button
                     variant="outline"
-                    onClick={() => handleDeleteCustomRole(selectedRole)}
-                    disabled={deleting || saving}
-                    className="gap-1.5 text-xs text-red-500 border-red-500/30 hover:bg-red-500/10 cursor-pointer"
+                    size="sm"
+                    onClick={() => setRoleToDelete(selectedRole)}
+                    disabled={deleting}
+                    className="text-xs text-destructive hover:bg-destructive/10 border-destructive/30 gap-1.5 cursor-pointer"
                   >
-                    <i className="fa-solid fa-trash-can text-xs" /> Delete Role
+                    <i className="fa-solid fa-trash-can text-xs" /> Delete Custom Role
                   </Button>
                 )}
                 <Button
@@ -1054,6 +1054,53 @@ export function RoleDataControlTab({ isAdmin, showToast }: RoleDataControlTabPro
                 className="text-xs font-semibold gap-1.5"
               >
                 <i className="fa-solid fa-check text-xs" /> {saving ? "Creating..." : "Create Role"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Custom Role Confirmation Modal */}
+      {roleToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in">
+          <div className="w-full max-w-md bg-card border border-border rounded-2xl p-6 shadow-2xl space-y-5 animate-in zoom-in-95" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-start gap-3.5">
+              <div className="w-10 h-10 rounded-full bg-rose-500/10 text-rose-500 flex items-center justify-center shrink-0 border border-rose-500/20">
+                <i className="fa-solid fa-triangle-exclamation text-lg" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-base font-bold text-foreground">Delete Custom Role</h3>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Are you sure you want to delete the custom role <strong className="text-foreground">{roleToDelete}</strong>? Permissions configured for this role will be removed.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2.5 pt-2 border-t border-border/60">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setRoleToDelete(null)}
+                disabled={deleting}
+              >
+                Cancel
+              </Button>
+              <Button
+                color="destructive"
+                size="sm"
+                onClick={() => handleDeleteCustomRole(roleToDelete)}
+                disabled={deleting}
+                className="gap-2 font-semibold cursor-pointer"
+              >
+                {deleting ? (
+                  <>
+                    <i className="fa-solid fa-spinner fa-spin text-xs" /> Deleting...
+                  </>
+                ) : (
+                  <>
+                    <i className="fa-solid fa-trash-can text-xs" /> Delete Role
+                  </>
+                )}
               </Button>
             </div>
           </div>

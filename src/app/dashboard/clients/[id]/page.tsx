@@ -83,6 +83,10 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   const [editFormData, setEditFormData] = useState<Partial<ClientData>>({});
   const [editSubmitting, setEditSubmitting] = useState(false);
 
+  // Delete Modal State
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
   const fetchProjectDetails = async () => {
     try {
       setLoading(true);
@@ -225,14 +229,17 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
 
   const handleDeleteProject = async () => {
     if (!project) return;
-    if (!confirm(`Are you sure you want to delete project ${project.projectId}?`)) return;
 
     try {
+      setIsDeleting(true);
       const res = await fetch(`/api/clients/${project._id}`, { method: "DELETE" });
       if (!res.ok) throw new Error("Failed to delete project");
+      setShowDeleteModal(false);
       router.push("/dashboard/clients");
     } catch (err) {
       alert(err instanceof Error ? err.message : "Error deleting project");
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -349,7 +356,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
             <i className="fa-solid fa-pen-to-square text-xs" /> Edit Project
           </Button>
           {isAdmin && (
-            <Button color="destructive" size="sm" onClick={handleDeleteProject} className="gap-2 text-xs font-bold cursor-pointer h-9 shadow-2xs">
+            <Button color="destructive" size="sm" onClick={() => setShowDeleteModal(true)} className="gap-2 text-xs font-bold cursor-pointer h-9 shadow-2xs">
               <i className="fa-solid fa-trash text-xs" /> Delete
             </Button>
           )}
@@ -764,6 +771,52 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                 <Button color="primary" size="sm" type="submit" disabled={editSubmitting}>{editSubmitting ? "Saving..." : "Save Changes"}</Button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* In-App Delete Project Confirmation Modal Popup */}
+      {showDeleteModal && project && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in">
+          <div className="w-full max-w-md bg-card border border-border rounded-2xl p-6 shadow-2xl space-y-5 animate-in zoom-in-95" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-start gap-3.5">
+              <div className="w-10 h-10 rounded-full bg-rose-500/10 text-rose-500 flex items-center justify-center shrink-0 border border-rose-500/20">
+                <i className="fa-solid fa-triangle-exclamation text-lg" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-base font-bold text-foreground">Delete Client Project</h3>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Are you sure you want to delete project <strong className="text-foreground">{project.projectId} - {project.projectName}</strong>? All associated logs and timelines will be removed.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2.5 pt-2 border-t border-border/60">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowDeleteModal(false)}
+                disabled={isDeleting}
+              >
+                Cancel
+              </Button>
+              <Button
+                color="destructive"
+                size="sm"
+                onClick={handleDeleteProject}
+                disabled={isDeleting}
+                className="gap-2 font-semibold cursor-pointer"
+              >
+                {isDeleting ? (
+                  <>
+                    <i className="fa-solid fa-spinner fa-spin text-xs" /> Deleting...
+                  </>
+                ) : (
+                  <>
+                    <i className="fa-solid fa-trash-can text-xs" /> Confirm Delete
+                  </>
+                )}
+              </Button>
+            </div>
           </div>
         </div>
       )}

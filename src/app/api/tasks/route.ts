@@ -480,26 +480,59 @@ export async function DELETE(request: Request) {
     const { searchParams } = new URL(request.url);
     const taskId = searchParams.get("taskId");
 
-    if (!taskId) {
-      return NextResponse.json({ error: "Task ID is required" }, { status: 400 });
-    }
-
-    // Authorization: only privileged roles may delete tasks
-    if (session.role !== "Admin" && session.role !== "Manager") {
-      return NextResponse.json({ error: "Forbidden: Admins or Managers only" }, { status: 403 });
+    if (!taskId || !mongoose.Types.ObjectId.isValid(taskId)) {
+      return NextResponse.json({ error: "Valid Task ID is required" }, { status: 400 });
     }
 
     await connectToDatabase();
 
+    const tenantObjectId = new mongoose.Types.ObjectId(session.tenantId);
+
     const task = await Task.findOne({
-      _id: taskId,
-      tenantId: new mongoose.Types.ObjectId(session.tenantId),
+      _id: new mongoose.Types.ObjectId(taskId),
+      tenantId: tenantObjectId,
     });
     if (!task) {
       return NextResponse.json({ error: "Task not found" }, { status: 404 });
     }
 
-    await task.deleteOne();
+    const dataScope = await getUserDataScope(session);
+    const isAdminOrManager =
+      session.role === "Admin" ||
+      session.role === "Manager" ||
+      session.role === "OPS" ||
+      session.role === "Sub Admin" ||
+      dataScope.canViewFeature("deleteTasks");
+
+    // If not admin/manager/OPS, allow if user is the assignee or project member
+    if (!isAdminOrManager) {
+      const isAssignee = task.assignee && task.assignee.toString() === session.userId;
+
+      const project = await Project.findOne({
+        _id: task.projectId,
+        tenantId: tenantObjectId,
+      }).lean();
+
+      const isProjectMember = project?.members?.some((m: any) => m.toString() === session.userId);
+
+      if (!isAssignee && !isProjectMember) {
+        return NextResponse.json({ error: "Forbidden: You do not have permission to delete this task" }, { status: 403 });
+      }
+    }
+
+    await Task.deleteOne({ _id: task._id });
+
+    // Record Activity Log
+    await ActivityLog.create({
+      tenantId: tenantObjectId,
+      projectId: task.projectId,
+      userId: new mongoose.Types.ObjectId(session.userId),
+      userName: session.userName,
+      userRole: session.role,
+      action: "TASK_DELETED",
+      targetName: task.title,
+      details: `Deleted task '${task.title}'`,
+    });
 
     // Notify Admins on task deletion
     await notifyAdmins(session.tenantId, {

@@ -73,6 +73,14 @@ export default function ReferralsPage() {
   // Selected Candidate for Drawer / Detail Modal
   const [selectedReferral, setSelectedReferral] = useState<ReferralData | null>(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
+  const [referralToDelete, setReferralToDelete] = useState<{ id: string; name: string } | null>(null);
+  const [isDeletingReferral, setIsDeletingReferral] = useState(false);
+  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
+
+  const showToast = (message: string, type: "success" | "error" = "success") => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 4000);
+  };
 
   // Submit Modal State
   const [showModal, setShowModal] = useState(false);
@@ -168,29 +176,36 @@ export default function ReferralsPage() {
           setSelectedReferral(data.referral);
         }
         fetchReferrals();
+        showToast("Referral stage updated successfully", "success");
       } else {
         const err = await res.json();
-        alert(err.error || "Failed to update referral stage.");
+        showToast(err.error || "Failed to update referral stage.", "error");
       }
     } catch (err) {
       console.error("Update stage error:", err);
+      showToast("Failed to update referral stage.", "error");
     }
   };
 
   const handleDeleteReferral = async (id: string) => {
-    if (!confirm("Are you sure you want to remove this candidate referral?")) return;
     try {
+      setIsDeletingReferral(true);
       const res = await fetch(`/api/referrals/${id}`, { method: "DELETE" });
       if (res.ok) {
         setShowDetailModal(false);
         setSelectedReferral(null);
+        setReferralToDelete(null);
         fetchReferrals();
+        showToast("Candidate referral removed successfully.", "success");
       } else {
         const err = await res.json();
-        alert(err.error || "Failed to delete referral.");
+        showToast(err.error || "Failed to delete referral.", "error");
       }
     } catch (err) {
       console.error("Delete referral error:", err);
+      showToast("Error deleting candidate referral.", "error");
+    } finally {
+      setIsDeletingReferral(false);
     }
   };
 
@@ -871,7 +886,7 @@ export default function ReferralsPage() {
                 <div className="flex items-center justify-between pt-4 border-t border-border">
                   <Button
                     variant="ghost"
-                    onClick={() => handleDeleteReferral(selectedReferral._id)}
+                    onClick={() => setReferralToDelete({ id: selectedReferral._id, name: selectedReferral.candidateName })}
                     className="text-xs text-rose-500 hover:text-rose-600 hover:bg-rose-500/10 cursor-pointer gap-1.5"
                   >
                     <i className="fa-solid fa-trash-can" /> Delete Referral
@@ -887,6 +902,67 @@ export default function ReferralsPage() {
                   </Button>
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Toast Notification */}
+      {toast && (
+        <div
+          className={cn(
+            "fixed top-4 right-4 z-50 px-4 py-3 rounded-lg shadow-lg border text-sm font-medium flex items-center gap-2 animate-in fade-in slide-in-from-top-2",
+            toast.type === "success"
+              ? "bg-emerald-500/90 text-white border-emerald-600"
+              : "bg-destructive/90 text-white border-destructive"
+          )}
+        >
+          {toast.type === "success" ? <i className="fa-solid fa-circle-check text-base" /> : <i className="fa-solid fa-circle-exclamation text-base" />}
+          {toast.message}
+        </div>
+      )}
+
+      {/* Delete Referral Confirmation Modal */}
+      {referralToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in">
+          <div className="w-full max-w-md bg-card border border-border rounded-2xl p-6 shadow-2xl space-y-5 animate-in zoom-in-95" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-start gap-3.5">
+              <div className="w-10 h-10 rounded-full bg-rose-500/10 text-rose-500 flex items-center justify-center shrink-0 border border-rose-500/20">
+                <i className="fa-solid fa-triangle-exclamation text-lg" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-base font-bold text-foreground">Delete Candidate Referral</h3>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Are you sure you want to remove <strong className="text-foreground">{referralToDelete.name}</strong> from the pipeline? This action cannot be undone.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2.5 pt-2 border-t border-border/60">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setReferralToDelete(null)}
+                disabled={isDeletingReferral}
+              >
+                Cancel
+              </Button>
+              <Button
+                color="destructive"
+                size="sm"
+                onClick={() => handleDeleteReferral(referralToDelete.id)}
+                disabled={isDeletingReferral}
+                className="gap-2 font-semibold cursor-pointer"
+              >
+                {isDeletingReferral ? (
+                  <>
+                    <i className="fa-solid fa-spinner fa-spin text-xs" /> Deleting...
+                  </>
+                ) : (
+                  <>
+                    <i className="fa-solid fa-trash-can text-xs" /> Delete Referral
+                  </>
+                )}
+              </Button>
             </div>
           </div>
         </div>
