@@ -5,8 +5,10 @@ import Link from "next/link";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { usePermissions } from "@/hooks/usePermissions";
 
 export function EmployeeDashboard({ user }: { user: any }) {
+  const { can } = usePermissions();
   const [clockedIn, setClockedIn] = useState(false);
   const [clockTime, setClockTime] = useState<string | null>(null);
   const [clockInIso, setClockInIso] = useState<string | null>(null);
@@ -15,6 +17,8 @@ export function EmployeeDashboard({ user }: { user: any }) {
   const [tasks, setTasks] = useState<any[]>([]);
   const [timesheets, setTimesheets] = useState<any[]>([]);
   const [sprints, setSprints] = useState<any[]>([]);
+  const [teamLeaves, setTeamLeaves] = useState<any[]>([]);
+  const [announcements, setAnnouncements] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchAttendanceStatus = async () => {
@@ -61,10 +65,12 @@ export function EmployeeDashboard({ user }: { user: any }) {
     async function fetchEmployeeData() {
       try {
         await fetchAttendanceStatus();
-        const [taskRes, tsRes, sprintRes] = await Promise.all([
+        const [taskRes, tsRes, sprintRes, leaveRes, annRes] = await Promise.all([
           fetch("/api/tasks"),
           fetch("/api/timesheets"),
           fetch("/api/sprints"),
+          fetch("/api/hr/leaves"),
+          fetch("/api/chat/announcements"),
         ]);
 
         if (taskRes.ok) {
@@ -79,8 +85,16 @@ export function EmployeeDashboard({ user }: { user: any }) {
           const sData = await sprintRes.json();
           setSprints(sData.sprints || []);
         }
+        if (leaveRes.ok) {
+          const lData = await leaveRes.json();
+          setTeamLeaves(lData.leaves || []);
+        }
+        if (annRes.ok) {
+          const aData = await annRes.json();
+          setAnnouncements(aData.announcements || []);
+        }
       } catch (err) {
-        console.error("Failed to fetch employee tasks/timesheets/sprints:", err);
+        console.error("Failed to fetch employee tasks/timesheets/sprints/announcements:", err);
       } finally {
         setLoading(false);
       }
@@ -190,17 +204,20 @@ export function EmployeeDashboard({ user }: { user: any }) {
         <Card className="hover:shadow-md transition-all border-l-4 border-l-sky-500">
           <CardContent className="p-5 flex items-center justify-between">
             <div className="space-y-1">
-              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">My Leave Balance</p>
-              <p className="text-2xl font-bold text-foreground">14 Days</p>
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Approved Leaves</p>
+              <p className="text-2xl font-bold text-foreground">
+                {loading ? "..." : `${teamLeaves.filter((l) => l.status === "Approved").length} Approved`}
+              </p>
               <p className="text-xs text-sky-500 font-medium flex items-center gap-1 mt-1">
-                Paid Time Off & Casual
+                From your leave requests
               </p>
             </div>
             <div className="p-3 bg-sky-500/10 text-sky-500 rounded-xl flex items-center justify-center w-12 h-12">
-              <i className="fa-solid fa-wand-magic-sparkles text-xl" />
+              <i className="fa-solid fa-calendar-check text-xl" />
             </div>
           </CardContent>
         </Card>
+
       </div>
 
       {/* Employee Main Grid */}
@@ -428,7 +445,7 @@ export function EmployeeDashboard({ user }: { user: any }) {
           </Card>
         </div>
 
-        {/* Right Column (1 span): Announcements & Team Workspace */}
+        {/* Right Column (1 span): Announcements & Team Leave Requests */}
         <div className="space-y-6">
           <Card>
             <CardHeader className="pb-4">
@@ -437,28 +454,88 @@ export function EmployeeDashboard({ user }: { user: any }) {
               </CardTitle>
               <CardDescription>Company notices and team updates</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="p-3 bg-muted/40 rounded-lg border border-border space-y-1">
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold text-xs text-foreground">✦ Q3 All-Hands Meeting</span>
-                  <span className="text-[10px] text-muted-foreground">Today, 4:00 PM</span>
+            <CardContent className="space-y-3">
+              {loading ? (
+                <p className="text-xs text-muted-foreground py-2 text-center">Loading announcements...</p>
+              ) : announcements.length === 0 ? (
+                <div className="text-center py-4 text-muted-foreground">
+                  <i className="fa-solid fa-bullhorn text-2xl mb-1 opacity-25 block" />
+                  <p className="text-xs font-semibold text-foreground">No announcements yet</p>
+                  <p className="text-[11px] mt-0.5">Company notices will appear here.</p>
                 </div>
-                <p className="text-xs text-muted-foreground leading-relaxed">
-                  Join the quarterly all-hands meeting in the main conference room or via video link.
-                </p>
-              </div>
-
-              <div className="p-3 bg-muted/40 rounded-lg border border-border space-y-1">
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold text-xs text-foreground">✦ Holiday Schedule Notice</span>
-                  <span className="text-[10px] text-muted-foreground">2 days ago</span>
-                </div>
-                <p className="text-xs text-muted-foreground leading-relaxed">
-                  Please submit your upcoming holiday leave requests before Friday for manager approval.
-                </p>
-              </div>
+              ) : (
+                announcements.slice(0, 3).map((a) => (
+                  <div key={a._id} className="p-3 bg-muted/40 rounded-lg border border-border space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-xs text-foreground flex items-center gap-1">
+                        {a.pinned && <i className="fa-solid fa-thumbtack text-amber-500 text-[10px]" />}
+                        {a.title}
+                      </span>
+                      <span className="text-[10px] text-muted-foreground">
+                        {a.createdAt ? new Date(a.createdAt).toLocaleDateString() : ""}
+                      </span>
+                    </div>
+                    <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2">
+                      {a.content}
+                    </p>
+                  </div>
+                ))
+              )}
             </CardContent>
           </Card>
+
+          {/* My Leave Requests — visible when viewTeamLeave permission is granted */}
+          {can("viewTeamLeave") && (
+            <Card className="border border-border">
+              <CardHeader className="flex flex-row items-center justify-between pb-3">
+                <div>
+                  <CardTitle className="text-base font-bold flex items-center gap-2">
+                    <i className="fa-solid fa-calendar-week text-sky-500 text-base" /> My Leave Requests
+                  </CardTitle>
+                  <CardDescription>Your submitted leave history &amp; statuses</CardDescription>
+                </div>
+                <Button asChild variant="outline" size="sm" className="h-7 text-xs">
+                  <Link href="/dashboard/hr" className="gap-1 text-primary">
+                    View All <i className="fa-solid fa-arrow-up-right-from-square text-[10px]" />
+                  </Link>
+                </Button>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {loading ? (
+                  <p className="text-xs text-muted-foreground py-3 text-center">Loading team leaves...</p>
+                ) : teamLeaves.length === 0 ? (
+                  <div className="text-center py-5 text-muted-foreground">
+                    <i className="fa-solid fa-calendar-check text-3xl mb-2 opacity-30 block" />
+                    <p className="text-xs font-semibold text-foreground">No leave requests yet</p>
+                    <p className="text-[11px] mt-0.5">Team leave requests will appear here.</p>
+                  </div>
+                ) : (
+                  teamLeaves.slice(0, 6).map((l) => (
+                    <div key={l._id} className="flex items-center justify-between p-3 rounded-lg border border-border bg-card hover:bg-accent/30 transition-colors">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="h-7 w-7 rounded-full bg-sky-500/20 text-sky-500 font-bold flex items-center justify-center text-xs border border-sky-500/30 shrink-0">
+                          {l.userName?.charAt(0) || "?"}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-semibold text-xs text-foreground truncate">{l.userName}</p>
+                          <p className="text-[10px] text-muted-foreground">
+                            {l.type} · {new Date(l.startDate).toLocaleDateString()} – {new Date(l.endDate).toLocaleDateString()}
+                          </p>
+                        </div>
+                      </div>
+                      <Badge
+                        color={l.status === "Approved" ? "success" : l.status === "Rejected" ? "destructive" : "warning"}
+                        variant="soft"
+                        className="text-[10px] shrink-0 ml-2"
+                      >
+                        {l.status}
+                      </Badge>
+                    </div>
+                  ))
+                )}
+              </CardContent>
+            </Card>
+          )}
         </div>
       </div>
     </div>

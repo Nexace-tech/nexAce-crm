@@ -7,13 +7,15 @@ export async function GET() {
   try {
     const authResult = await requireTenantSession();
     if (isAuthError(authResult)) return authResult;
-    const { tenantObjectId, session } = authResult;
+    const { tenantObjectId, session, userObjectId } = authResult;
     await connectToDatabase();
 
     const filter: any = { tenantId: tenantObjectId };
-    // Employees only see their own; Managers/Admins see all
-    if (session.role === "Employee") {
-      filter.userId = authResult.userObjectId;
+
+    // Employees only see their own leaves; Managers/Admins/OPS see all
+    const isAdminOrManager = session.role === "Admin" || session.role === "Manager" || session.role === "OPS";
+    if (!isAdminOrManager) {
+      filter.userId = userObjectId;
     }
 
     const leaves = await LeaveRequest.find(filter).sort({ createdAt: -1 }).lean();

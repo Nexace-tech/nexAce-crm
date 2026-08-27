@@ -565,71 +565,79 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
         </div>
       </div>
 
-      {/* Stats Row - Interactive Clickable Tab Shortcuts */}
+      {/* Stats Row - Interactive Clickable Tab Shortcuts (only shown for permitted tabs) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-        <Card 
-          onClick={() => setActiveTab("directory")} 
-          className={cn(
-            "border-l-4 border-l-primary hover:shadow-md hover:translate-y-[-2px] transition-all cursor-pointer",
-            activeTab === "directory" ? "bg-primary/5 ring-1 ring-primary/30" : ""
-          )}
-        >
-          <CardContent className="p-5 flex items-center justify-between">
-            <div className="space-y-1">
-              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Total Workforce</p>
-              <p className="text-2xl font-bold text-foreground">{directoryUsers.length} Employees</p>
-            </div>
-            <div className="p-3 bg-primary/10 text-primary rounded-xl"><i className="fa-solid fa-users text-xl" /></div>
-          </CardContent>
-        </Card>
+        {(isManagerOrAdmin || can("viewHRDirectory")) && (
+          <Card 
+            onClick={() => setActiveTab("directory")} 
+            className={cn(
+              "border-l-4 border-l-primary hover:shadow-md hover:translate-y-[-2px] transition-all cursor-pointer",
+              activeTab === "directory" ? "bg-primary/5 ring-1 ring-primary/30" : ""
+            )}
+          >
+            <CardContent className="p-5 flex items-center justify-between">
+              <div className="space-y-1">
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Total Workforce</p>
+                <p className="text-2xl font-bold text-foreground">{directoryUsers.length} Employees</p>
+              </div>
+              <div className="p-3 bg-primary/10 text-primary rounded-xl"><i className="fa-solid fa-users text-xl" /></div>
+            </CardContent>
+          </Card>
+        )}
 
-        <Card 
-          onClick={() => setActiveTab("checklists")} 
-          className={cn(
-            "border-l-4 border-l-emerald-500 hover:shadow-md hover:translate-y-[-2px] transition-all cursor-pointer",
-            activeTab === "checklists" ? "bg-emerald-500/5 ring-1 ring-emerald-500/30" : ""
-          )}
-        >
-          <CardContent className="p-5 flex items-center justify-between">
-            <div className="space-y-1">
-              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Active Checklists</p>
-              <p className="text-2xl font-bold text-foreground">{checklists.filter((c) => c.status === "In Progress").length} Ongoing</p>
-            </div>
-            <div className="p-3 bg-emerald-500/10 text-emerald-500 rounded-xl"><i className="fa-solid fa-clipboard-check text-xl" /></div>
-          </CardContent>
-        </Card>
+        {(isManagerOrAdmin || can("viewHROnboarding")) && (
+          <Card 
+            onClick={() => setActiveTab("checklists")} 
+            className={cn(
+              "border-l-4 border-l-emerald-500 hover:shadow-md hover:translate-y-[-2px] transition-all cursor-pointer",
+              activeTab === "checklists" ? "bg-emerald-500/5 ring-1 ring-emerald-500/30" : ""
+            )}
+          >
+            <CardContent className="p-5 flex items-center justify-between">
+              <div className="space-y-1">
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Active Checklists</p>
+                <p className="text-2xl font-bold text-foreground">{checklists.filter((c) => c.status === "In Progress").length} Ongoing</p>
+              </div>
+              <div className="p-3 bg-emerald-500/10 text-emerald-500 rounded-xl"><i className="fa-solid fa-clipboard-check text-xl" /></div>
+            </CardContent>
+          </Card>
+        )}
 
-        <Card 
-          onClick={() => setActiveTab("leaves")} 
-          className={cn(
-            "border-l-4 border-l-amber-500 hover:shadow-md hover:translate-y-[-2px] transition-all cursor-pointer",
-            activeTab === "leaves" ? "bg-amber-500/5 ring-1 ring-amber-500/30" : ""
-          )}
-        >
-          <CardContent className="p-5 flex items-center justify-between">
-            <div className="space-y-1">
-              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Pending Leaves</p>
-              <p className="text-2xl font-bold text-foreground">{leaves.filter((l) => l.status === "Pending").length} Requests</p>
-            </div>
-            <div className="p-3 bg-amber-500/10 text-amber-500 rounded-xl"><i className="fa-solid fa-calendar-days text-xl" /></div>
-          </CardContent>
-        </Card>
+        {(isManagerOrAdmin || can("applyLeave") || can("viewOwnLeaveStatus") || can("viewTeamLeave")) && (
+          <Card 
+            onClick={() => setActiveTab("leaves")} 
+            className={cn(
+              "border-l-4 border-l-amber-500 hover:shadow-md hover:translate-y-[-2px] transition-all cursor-pointer",
+              activeTab === "leaves" ? "bg-amber-500/5 ring-1 ring-amber-500/30" : ""
+            )}
+          >
+            <CardContent className="p-5 flex items-center justify-between">
+              <div className="space-y-1">
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Pending Leaves</p>
+                <p className="text-2xl font-bold text-foreground">{leaves.filter((l) => l.status === "Pending").length} Requests</p>
+              </div>
+              <div className="p-3 bg-amber-500/10 text-amber-500 rounded-xl"><i className="fa-solid fa-calendar-days text-xl" /></div>
+            </CardContent>
+          </Card>
+        )}
 
-        <Card 
-          onClick={() => setActiveTab("cases")} 
-          className={cn(
-            "border-l-4 border-l-sky-500 hover:shadow-md hover:translate-y-[-2px] transition-all cursor-pointer",
-            activeTab === "cases" ? "bg-sky-500/5 ring-1 ring-sky-500/30" : ""
-          )}
-        >
-          <CardContent className="p-5 flex items-center justify-between">
-            <div className="space-y-1">
-              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Open HR Cases</p>
-              <p className="text-2xl font-bold text-foreground">{cases.filter((c) => c.status === "Open" || c.status === "In Progress").length} Open</p>
-            </div>
-            <div className="p-3 bg-sky-500/10 text-sky-500 rounded-xl"><i className="fa-solid fa-circle-question text-xl" /></div>
-          </CardContent>
-        </Card>
+        {(isManagerOrAdmin || can("viewHRCases") || can("createHRCases")) && (
+          <Card 
+            onClick={() => setActiveTab("cases")} 
+            className={cn(
+              "border-l-4 border-l-sky-500 hover:shadow-md hover:translate-y-[-2px] transition-all cursor-pointer",
+              activeTab === "cases" ? "bg-sky-500/5 ring-1 ring-sky-500/30" : ""
+            )}
+          >
+            <CardContent className="p-5 flex items-center justify-between">
+              <div className="space-y-1">
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Open HR Cases</p>
+                <p className="text-2xl font-bold text-foreground">{cases.filter((c) => c.status === "Open" || c.status === "In Progress").length} Open</p>
+              </div>
+              <div className="p-3 bg-sky-500/10 text-sky-500 rounded-xl"><i className="fa-solid fa-circle-question text-xl" /></div>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       {/* Interactive Tab Navigation Bar with Smooth Scroll Controls */}
@@ -647,54 +655,79 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
         </button>
 
         <div id="hr-tab-bar" className="flex-1 flex space-x-1 overflow-x-auto no-scrollbar scroll-smooth py-0.5 px-1">
-          <button onClick={() => setActiveTab("directory")} className={cn(
-            "px-4 py-2 text-xs font-semibold rounded-lg transition-all flex items-center gap-2 cursor-pointer shrink-0",
-            activeTab === "directory" ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
-          )}>
-            <i className="fa-solid fa-address-book text-xs" /> Employee Directory
-          </button>
-          <button onClick={() => setActiveTab("tasks")} className={cn(
-            "px-4 py-2 text-xs font-semibold rounded-lg transition-all flex items-center gap-2 cursor-pointer shrink-0",
-            activeTab === "tasks" ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
-          )}>
-            <i className="fa-solid fa-list-check text-xs text-indigo-400" /> HR Tasks & Workflows
-          </button>
-          <button onClick={() => setActiveTab("checklists")} className={cn(
-            "px-4 py-2 text-xs font-semibold rounded-lg transition-all flex items-center gap-2 cursor-pointer shrink-0",
-            activeTab === "checklists" ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
-          )}>
-            <i className="fa-solid fa-list-check text-xs" /> Onboarding / Offboarding
-          </button>
-          <button onClick={() => setActiveTab("leaves")} className={cn(
-            "px-4 py-2 text-xs font-semibold rounded-lg transition-all flex items-center gap-2 cursor-pointer shrink-0",
-            activeTab === "leaves" ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
-          )}>
-            <i className="fa-solid fa-calendar-days text-xs" /> Leave Management
-          </button>
-          <button onClick={() => setActiveTab("vault")} className={cn(
-            "px-4 py-2 text-xs font-semibold rounded-lg transition-all flex items-center gap-2 cursor-pointer shrink-0",
-            activeTab === "vault" ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
-          )}>
-            <i className="fa-solid fa-shield-halved text-xs text-emerald-500" /> Document Vault
-          </button>
-          <button onClick={() => setActiveTab("cases")} className={cn(
-            "px-4 py-2 text-xs font-semibold rounded-lg transition-all flex items-center gap-2 cursor-pointer shrink-0",
-            activeTab === "cases" ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
-          )}>
-            <i className="fa-solid fa-circle-question text-xs text-amber-500" /> Help Desk
-          </button>
-          <button onClick={() => setActiveTab("appraisals")} className={cn(
-            "px-4 py-2 text-xs font-semibold rounded-lg transition-all flex items-center gap-2 cursor-pointer shrink-0",
-            activeTab === "appraisals" ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
-          )}>
-            <i className="fa-solid fa-award text-xs text-indigo-500" /> Appraisals & KRAs
-          </button>
-          <button onClick={() => setActiveTab("probation")} className={cn(
-            "px-4 py-2 text-xs font-semibold rounded-lg transition-all flex items-center gap-2 cursor-pointer shrink-0",
-            activeTab === "probation" ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
-          )}>
-            <i className="fa-solid fa-clock text-xs text-sky-500" /> Review Cycle & Probation
-          </button>
+          {/* Employee Directory — guarded */}
+          {(isManagerOrAdmin || can("viewHRDirectory")) && (
+            <button onClick={() => setActiveTab("directory")} className={cn(
+              "px-4 py-2 text-xs font-semibold rounded-lg transition-all flex items-center gap-2 cursor-pointer shrink-0",
+              activeTab === "directory" ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+            )}>
+              <i className="fa-solid fa-address-book text-xs" /> Employee Directory
+            </button>
+          )}
+          {/* HR Tasks & Workflows — manager/admin only */}
+          {isManagerOrAdmin && (
+            <button onClick={() => setActiveTab("tasks")} className={cn(
+              "px-4 py-2 text-xs font-semibold rounded-lg transition-all flex items-center gap-2 cursor-pointer shrink-0",
+              activeTab === "tasks" ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+            )}>
+              <i className="fa-solid fa-list-check text-xs text-indigo-400" /> HR Tasks & Workflows
+            </button>
+          )}
+          {/* Onboarding / Offboarding — guarded */}
+          {(isManagerOrAdmin || can("viewHROnboarding")) && (
+            <button onClick={() => setActiveTab("checklists")} className={cn(
+              "px-4 py-2 text-xs font-semibold rounded-lg transition-all flex items-center gap-2 cursor-pointer shrink-0",
+              activeTab === "checklists" ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+            )}>
+              <i className="fa-solid fa-list-check text-xs" /> Onboarding / Offboarding
+            </button>
+          )}
+          {/* Leave Management — guarded */}
+          {(isManagerOrAdmin || can("applyLeave") || can("viewOwnLeaveStatus") || can("viewTeamLeave")) && (
+            <button onClick={() => setActiveTab("leaves")} className={cn(
+              "px-4 py-2 text-xs font-semibold rounded-lg transition-all flex items-center gap-2 cursor-pointer shrink-0",
+              activeTab === "leaves" ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+            )}>
+              <i className="fa-solid fa-calendar-days text-xs" /> Leave Management
+            </button>
+          )}
+          {/* Document Vault — guarded */}
+          {(isManagerOrAdmin || can("viewHRVault")) && (
+            <button onClick={() => setActiveTab("vault")} className={cn(
+              "px-4 py-2 text-xs font-semibold rounded-lg transition-all flex items-center gap-2 cursor-pointer shrink-0",
+              activeTab === "vault" ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+            )}>
+              <i className="fa-solid fa-shield-halved text-xs text-emerald-500" /> Document Vault
+            </button>
+          )}
+          {/* Help Desk — guarded */}
+          {(isManagerOrAdmin || can("viewHRCases") || can("createHRCases")) && (
+            <button onClick={() => setActiveTab("cases")} className={cn(
+              "px-4 py-2 text-xs font-semibold rounded-lg transition-all flex items-center gap-2 cursor-pointer shrink-0",
+              activeTab === "cases" ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+            )}>
+              <i className="fa-solid fa-circle-question text-xs text-amber-500" /> Help Desk
+            </button>
+          )}
+          {/* Appraisals & KRAs — guarded */}
+          {(isManagerOrAdmin || can("viewAppraisals")) && (
+            <button onClick={() => setActiveTab("appraisals")} className={cn(
+              "px-4 py-2 text-xs font-semibold rounded-lg transition-all flex items-center gap-2 cursor-pointer shrink-0",
+              activeTab === "appraisals" ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+            )}>
+              <i className="fa-solid fa-award text-xs text-indigo-500" /> Appraisals & KRAs
+            </button>
+          )}
+          {/* Review Cycle & Probation — guarded */}
+          {(isManagerOrAdmin || can("viewProbation")) && (
+            <button onClick={() => setActiveTab("probation")} className={cn(
+              "px-4 py-2 text-xs font-semibold rounded-lg transition-all flex items-center gap-2 cursor-pointer shrink-0",
+              activeTab === "probation" ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+            )}>
+              <i className="fa-solid fa-clock text-xs text-sky-500" /> Review Cycle & Probation
+            </button>
+          )}
+          {/* HR Sandbox — manager/admin only */}
           {isManagerOrAdmin && (
             <button onClick={() => setActiveTab("sandbox")} className={cn(
               "px-4 py-2 text-xs font-semibold rounded-lg transition-all flex items-center gap-2 cursor-pointer shrink-0",
@@ -718,11 +751,11 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
         </button>
       </div>
 
-      {/* TAB: HR TASKS & WORKFLOWS */}
-      {activeTab === "tasks" && <HRTasksTab />}
+      {/* TAB: HR TASKS & WORKFLOWS — manager/admin only */}
+      {activeTab === "tasks" && isManagerOrAdmin && <HRTasksTab />}
 
-      {/* TAB 1: EMPLOYEE DIRECTORY */}
-      {activeTab === "directory" && (
+      {/* TAB 1: EMPLOYEE DIRECTORY — guarded */}
+      {activeTab === "directory" && (isManagerOrAdmin || can("viewHRDirectory")) && (
         <div className="space-y-4">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-muted/20 p-3 rounded-lg border border-border">
             <div className="flex items-center gap-2 w-full sm:w-auto">
@@ -799,8 +832,8 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
         </div>
       )}
 
-      {/* TAB 2: ONBOARDING / OFFBOARDING */}
-      {activeTab === "checklists" && (
+      {/* TAB 2: ONBOARDING / OFFBOARDING — guarded */}
+      {activeTab === "checklists" && (isManagerOrAdmin || can("viewHROnboarding")) && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex gap-2">
@@ -878,8 +911,8 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
         </div>
       )}
 
-      {/* TAB 3: LEAVE MANAGEMENT */}
-      {activeTab === "leaves" && (
+      {/* TAB 3: LEAVE MANAGEMENT — guarded */}
+      {activeTab === "leaves" && (isManagerOrAdmin || can("applyLeave") || can("viewOwnLeaveStatus") || can("viewTeamLeave")) && (
         <div className="space-y-4">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-muted/20 p-3 rounded-lg border border-border">
             <div className="flex items-center gap-2 w-full sm:w-auto">
@@ -947,19 +980,25 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
             </div>
           </div>
 
-          {/* Leave Balances Header Cards */}
+          {/* Leave Summary Cards — all dynamic from real leave records */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <Card className="p-4 text-center">
-              <p className="text-xs text-muted-foreground font-semibold uppercase">Casual Leave Balance</p>
-              <p className="text-2xl font-bold text-primary mt-1">12 Days</p>
+              <p className="text-xs text-muted-foreground font-semibold uppercase">Casual Leave Taken</p>
+              <p className="text-2xl font-bold text-primary mt-1">
+                {leaves.filter((l) => l.type === "Casual" && l.status === "Approved").length} Day(s)
+              </p>
             </Card>
             <Card className="p-4 text-center">
-              <p className="text-xs text-muted-foreground font-semibold uppercase">Sick Leave Balance</p>
-              <p className="text-2xl font-bold text-emerald-500 mt-1">8 Days</p>
+              <p className="text-xs text-muted-foreground font-semibold uppercase">Sick Leave Taken</p>
+              <p className="text-2xl font-bold text-emerald-500 mt-1">
+                {leaves.filter((l) => l.type === "Sick" && l.status === "Approved").length} Day(s)
+              </p>
             </Card>
             <Card className="p-4 text-center">
-              <p className="text-xs text-muted-foreground font-semibold uppercase">Earned Leave Balance</p>
-              <p className="text-2xl font-bold text-amber-500 mt-1">15 Days</p>
+              <p className="text-xs text-muted-foreground font-semibold uppercase">Earned Leave Taken</p>
+              <p className="text-2xl font-bold text-amber-500 mt-1">
+                {leaves.filter((l) => l.type === "Earned" && l.status === "Approved").length} Day(s)
+              </p>
             </Card>
             <Card className="p-4 text-center">
               <p className="text-xs text-muted-foreground font-semibold uppercase">Total Approved Leaves</p>
@@ -1119,8 +1158,8 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
         </div>
       )}
 
-      {/* TAB 4: DOCUMENT VAULT */}
-      {activeTab === "vault" && (
+      {/* TAB 4: DOCUMENT VAULT — guarded */}
+      {activeTab === "vault" && (isManagerOrAdmin || can("viewHRVault")) && (
         <div className="space-y-4">
           <div className="flex justify-between items-center">
             <p className="text-xs text-muted-foreground">Restricted vault containing NDAs, Offer Letters, KRA Sign-offs, and KPI Agreements.</p>
@@ -1163,8 +1202,8 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
         </div>
       )}
 
-      {/* TAB 5: HELP DESK / CASES */}
-      {activeTab === "cases" && (
+      {/* TAB 5: HELP DESK / CASES — guarded */}
+      {activeTab === "cases" && (isManagerOrAdmin || can("viewHRCases") || can("createHRCases")) && (
         <div className="space-y-4">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-muted/20 p-3 rounded-lg border border-border">
             <div className="flex items-center gap-2 w-full sm:w-auto">
@@ -1289,8 +1328,8 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
         </div>
       )}
 
-      {/* TAB 6: APPRAISALS & KRAS */}
-      {activeTab === "appraisals" && (
+      {/* TAB 6: APPRAISALS & KRAS — guarded */}
+      {activeTab === "appraisals" && (isManagerOrAdmin || can("viewAppraisals")) && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <p className="text-xs text-muted-foreground">Competency reviews, Key Result Areas (KRAs), and self/manager performance scoring.</p>
@@ -1333,8 +1372,8 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
         </div>
       )}
 
-      {/* TAB 7: PROBATION & REVIEW CYCLE */}
-      {activeTab === "probation" && (
+      {/* TAB 7: PROBATION & REVIEW CYCLE — guarded */}
+      {activeTab === "probation" && (isManagerOrAdmin || can("viewProbation")) && (
         <div className="space-y-4">
           <Card className="p-5 space-y-4">
             <h3 className="font-bold text-base text-foreground flex items-center gap-2">
