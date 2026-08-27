@@ -77,8 +77,8 @@ export default function CalendarPage() {
   });
 
   const [timesheetRows, setTimesheetRows] = useState<any[]>([
-    { project: "NexAce CRM Implementation", taskName: "UI/UX Development", mon: 0, tue: 0, wed: 0, thu: 0, fri: 0, isBillable: true },
-    { project: "Client Portal Integration", taskName: "API endpoints integration", mon: 0, tue: 0, wed: 0, thu: 0, fri: 0, isBillable: true },
+    { project: "NexAce CRM Implementation", taskName: "UI/UX Development", comment: "", mon: 0, tue: 0, wed: 0, thu: 0, fri: 0, isBillable: true },
+    { project: "Client Portal Integration", taskName: "API endpoints integration", comment: "", mon: 0, tue: 0, wed: 0, thu: 0, fri: 0, isBillable: true },
   ]);
 
   // Attendance States
@@ -113,6 +113,19 @@ export default function CalendarPage() {
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [summaryPage, setSummaryPage] = useState(1);
   const [summaryView, setSummaryView] = useState<"records" | "users">("records");
+
+  const getLogHours = (log: any) => {
+    let reg = log.regularHours || 0;
+    let ot = log.overtimeHours || 0;
+    if (reg === 0 && ot === 0 && log.clockIn) {
+      const endMs = log.clockOut && log.clockOut !== "Active" ? new Date(log.clockOut).getTime() : Date.now();
+      const startMs = new Date(log.clockIn).getTime();
+      const diffHours = Math.max(0, (endMs - startMs) / (1000 * 60 * 60));
+      reg = Math.min(diffHours, 8.0);
+      ot = Math.max(0, diffHours - 8.0);
+    }
+    return { reg, ot, total: reg + ot };
+  };
 
   const fetchLoginHoursSummary = async (from?: string, to?: string) => {
     if (!isAdmin && !isOPS) return;
@@ -274,10 +287,13 @@ export default function CalendarPage() {
               rowsMap[key] = {
                 project: entry.project,
                 taskName: entry.taskName,
+                comment: entry.comment || "",
                 mon: 0, tue: 0, wed: 0, thu: 0, fri: 0,
                 isBillable: entry.isBillable,
                 status: entry.status
               };
+            } else if (!rowsMap[key].comment && entry.comment) {
+              rowsMap[key].comment = entry.comment;
             }
             
             if (dayIndex === 0) rowsMap[key].mon = entry.hours;
@@ -289,8 +305,8 @@ export default function CalendarPage() {
           setTimesheetRows(Object.values(rowsMap));
         } else {
           setTimesheetRows([
-            { project: projectsList[0] || "NexAce CRM Implementation", taskName: "UI/UX Development", mon: 0, tue: 0, wed: 0, thu: 0, fri: 0, isBillable: true },
-            { project: projectsList[1] || "Client Portal Integration", taskName: "API endpoints integration", mon: 0, tue: 0, wed: 0, thu: 0, fri: 0, isBillable: true },
+            { project: projectsList[0] || "NexAce CRM Implementation", taskName: "UI/UX Development", comment: "", mon: 0, tue: 0, wed: 0, thu: 0, fri: 0, isBillable: true },
+            { project: projectsList[1] || "Client Portal Integration", taskName: "API endpoints integration", comment: "", mon: 0, tue: 0, wed: 0, thu: 0, fri: 0, isBillable: true },
           ]);
         }
       }
@@ -554,7 +570,7 @@ export default function CalendarPage() {
   const handleAddTimesheetRow = () => {
     setTimesheetRows([
       ...timesheetRows,
-      { project: projectsList[0], taskName: "", mon: 0, tue: 0, wed: 0, thu: 0, fri: 0, isBillable: true },
+      { project: projectsList[0] || "NexAce CRM Implementation", taskName: "", comment: "", mon: 0, tue: 0, wed: 0, thu: 0, fri: 0, isBillable: true },
     ]);
   };
 
@@ -573,6 +589,7 @@ export default function CalendarPage() {
           entryPayload.push({
             project: row.project,
             taskName: row.taskName || "General Tasks",
+            comment: row.comment ? String(row.comment).trim() : "",
             hours: hoursVal,
             date: entryDate,
             isBillable: row.isBillable,
@@ -1379,20 +1396,22 @@ export default function CalendarPage() {
                   <table className="w-full text-sm text-left border-collapse">
                     <thead>
                       <tr className="border-b border-border text-muted-foreground text-xs font-semibold uppercase">
-                        <th className="py-2.5 pr-4 min-w-[180px]">Project</th>
-                        <th className="py-2.5 px-2 min-w-[140px]">Task Description</th>
-                        <th className="py-2.5 px-2 text-center w-16">Mon</th>
-                        <th className="py-2.5 px-2 text-center w-16">Tue</th>
-                        <th className="py-2.5 px-2 text-center w-16">Wed</th>
-                        <th className="py-2.5 px-2 text-center w-16">Thu</th>
-                        <th className="py-2.5 px-2 text-center w-16">Fri</th>
-                        <th className="py-2.5 pl-4 text-center w-20">Billable</th>
+                        <th className="py-2.5 pr-3 min-w-[160px]">Project</th>
+                        <th className="py-2.5 px-2 min-w-[130px]">Task Description</th>
+                        <th className="py-2.5 px-2 min-w-[160px]">Comment / Notes</th>
+                        <th className="py-2.5 px-2 text-center w-14">Mon</th>
+                        <th className="py-2.5 px-2 text-center w-14">Tue</th>
+                        <th className="py-2.5 px-2 text-center w-14">Wed</th>
+                        <th className="py-2.5 px-2 text-center w-14">Thu</th>
+                        <th className="py-2.5 px-2 text-center w-14">Fri</th>
+                        <th className="py-2.5 px-2 text-center w-16">Billable</th>
+                        <th className="py-2.5 pl-2 pr-1 text-center w-8"></th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border/60">
                       {timesheetRows.map((row, idx) => (
                         <tr key={idx} className="hover:bg-accent/10 transition-colors">
-                          <td className="py-3 pr-4">
+                          <td className="py-3 pr-3">
                             <select
                               value={row.project}
                               onChange={(e) => handleRowChange(idx, "project", e.target.value)}
@@ -1408,6 +1427,14 @@ export default function CalendarPage() {
                               value={row.taskName}
                               onChange={(e) => handleRowChange(idx, "taskName", e.target.value)}
                               placeholder="e.g. Code Review"
+                              className="h-9 text-xs"
+                            />
+                          </td>
+                          <td className="py-3 px-2">
+                            <Input
+                              value={row.comment || ""}
+                              onChange={(e) => handleRowChange(idx, "comment", e.target.value)}
+                              placeholder="Add work notes / comment..."
                               className="h-9 text-xs"
                             />
                           </td>
@@ -1427,13 +1454,27 @@ export default function CalendarPage() {
                               />
                             </td>
                           ))}
-                          <td className="py-3 pl-4 text-center">
+                          <td className="py-3 px-2 text-center">
                             <input
                               type="checkbox"
                               checked={row.isBillable}
                               onChange={(e) => handleRowChange(idx, "isBillable", e.target.checked)}
                               className="rounded border-border text-primary w-4 h-4 cursor-pointer"
                             />
+                          </td>
+                          <td className="py-3 pl-2 pr-1 text-center">
+                            {timesheetRows.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setTimesheetRows(timesheetRows.filter((_, i) => i !== idx));
+                                }}
+                                className="text-muted-foreground hover:text-destructive transition-colors p-1"
+                                title="Remove Row"
+                              >
+                                <i className="fa-solid fa-trash-can text-xs" />
+                              </button>
+                            )}
                           </td>
                         </tr>
                       ))}
@@ -1505,6 +1546,12 @@ export default function CalendarPage() {
                             <div>
                               <strong className="text-foreground">{entry.userId?.name || "Team Member"}</strong>
                               <p className="text-muted-foreground mt-0.5">{entry.project} - {entry.taskName}</p>
+                              {entry.comment && (
+                                <p className="text-[11px] text-muted-foreground italic bg-accent/40 px-2 py-1 rounded border border-border/40 mt-1 flex items-start gap-1.5">
+                                  <i className="fa-solid fa-comment-dots text-primary text-[10px] mt-0.5 shrink-0" />
+                                  <span>{entry.comment}</span>
+                                </p>
+                              )}
                             </div>
                             <Badge color="primary">{entry.hours} hrs</Badge>
                           </div>
@@ -1733,8 +1780,8 @@ export default function CalendarPage() {
                   : attendanceHistory;
 
                 const totalStaff = targetLogs.length;
-                const totalRegHours = targetLogs.reduce((acc: number, log: any) => acc + (log.regularHours || 0), 0);
-                const totalOtHours = targetLogs.reduce((acc: number, log: any) => acc + (log.overtimeHours || 0), 0);
+                const totalRegHours = targetLogs.reduce((acc: number, log: any) => acc + getLogHours(log).reg, 0);
+                const totalOtHours = targetLogs.reduce((acc: number, log: any) => acc + getLogHours(log).ot, 0);
 
                 return (
                   <div className="flex items-center gap-3 text-xs flex-wrap">
@@ -1844,10 +1891,10 @@ export default function CalendarPage() {
                                   {log.clockOut ? new Date(log.clockOut).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }) : (log.clockIn ? "Active" : "--")}
                                 </td>
                                 <td className="py-3 px-3 text-right font-mono font-bold text-foreground">
-                                  {log.regularHours || 0} hrs
+                                  {getLogHours(log).reg.toFixed(1)} hrs
                                 </td>
                                 <td className="py-3 px-3 text-right font-mono font-semibold text-amber-500">
-                                  {log.overtimeHours ? `+${log.overtimeHours} hrs` : "0 hrs"}
+                                  {getLogHours(log).ot > 0 ? `+${getLogHours(log).ot.toFixed(1)} hrs` : "0 hrs"}
                                 </td>
                               </tr>
                             );
@@ -2036,8 +2083,8 @@ export default function CalendarPage() {
 
                   // Aggregate totals for summary pills
                   const totalPresent = filteredRecs.length;
-                  const totalRegHrs = filteredRecs.reduce((s: number, r: any) => s + (r.regularHours ?? 0), 0);
-                  const totalOtHrs  = filteredRecs.reduce((s: number, r: any) => s + (r.overtimeHours ?? 0), 0);
+                  const totalRegHrs = filteredRecs.reduce((s: number, r: any) => s + getLogHours(r).reg, 0);
+                  const totalOtHrs  = filteredRecs.reduce((s: number, r: any) => s + getLogHours(r).ot, 0);
                   const uniqueEmps  = new Set(filteredRecs.map((r: any) => r.userId?._id?.toString() ?? r.userId?.toString())).size;
 
                   // Pagination for records view
@@ -2151,8 +2198,8 @@ export default function CalendarPage() {
                                       <td className="py-2.5 px-3 text-center">
                                         <span className={cn("font-mono font-semibold text-[11px]", isActive ? "text-emerald-500" : "text-foreground")}>{dur}</span>
                                       </td>
-                                      <td className="py-2.5 px-3 text-right font-mono font-bold text-foreground">{fmtHrs(r.regularHours ?? 0)}</td>
-                                      <td className="py-2.5 px-3 text-right font-mono font-semibold text-amber-500">{r.overtimeHours ? `+${fmtHrs(r.overtimeHours)}` : "—"}</td>
+                                      <td className="py-2.5 px-3 text-right font-mono font-bold text-foreground">{fmtHrs(getLogHours(r).reg)}</td>
+                                      <td className="py-2.5 px-3 text-right font-mono font-semibold text-amber-500">{getLogHours(r).ot > 0 ? `+${fmtHrs(getLogHours(r).ot)}` : "—"}</td>
                                       <td className="py-2.5 px-3 text-right">
                                         <span className={cn(
                                           "inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full border whitespace-nowrap",
@@ -2581,16 +2628,15 @@ export default function CalendarPage() {
                 return `${h} ${h === 1 ? "hr" : "hrs"} ${m} mins`;
               };
 
-              const totalEmpHours = empLogs.reduce((acc, h) => {
-                let hrs = h.regularHours || 0;
-                if (hrs === 0 && h.clockIn && (!h.clockOut || h.clockOut === "Active")) {
-                  const elapsedMs = Math.max(0, new Date().getTime() - new Date(h.clockIn).getTime());
-                  hrs = elapsedMs / (1000 * 60 * 60);
-                }
-                return acc + hrs;
+              const totalEmpWorked = empLogs.reduce((acc, h) => {
+                const { total } = getLogHours(h);
+                return acc + total;
               }, 0);
 
-              const totalEmpOvertime = empLogs.reduce((acc, h) => acc + (h.overtimeHours || 0), 0);
+              const totalEmpOvertime = empLogs.reduce((acc, h) => {
+                const { ot } = getLogHours(h);
+                return acc + ot;
+              }, 0);
               const empType = empObj?.employmentType || "Permanent";
 
               return (
@@ -2629,7 +2675,7 @@ export default function CalendarPage() {
                     </div>
                     <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 space-y-0.5">
                       <span className="text-[10px] uppercase font-bold text-emerald-600 dark:text-emerald-400 tracking-wider">All-Time Worked</span>
-                      <p className="text-lg font-extrabold text-emerald-600 dark:text-emerald-400">{formatDuration(totalEmpHours)}</p>
+                      <p className="text-lg font-extrabold text-emerald-600 dark:text-emerald-400">{formatDuration(totalEmpWorked)}</p>
                     </div>
                     <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 space-y-0.5">
                       <span className="text-[10px] uppercase font-bold text-amber-600 dark:text-amber-400 tracking-wider">All-Time Overtime</span>
@@ -2683,11 +2729,7 @@ export default function CalendarPage() {
                           </thead>
                           <tbody className="divide-y divide-border/40">
                             {empLogs.map((h) => {
-                              let rowRegHrs = h.regularHours || 0;
-                              if (rowRegHrs === 0 && h.clockIn && (!h.clockOut || h.clockOut === "Active")) {
-                                const elapsedMs = Math.max(0, new Date().getTime() - new Date(h.clockIn).getTime());
-                                rowRegHrs = elapsedMs / (1000 * 60 * 60);
-                              }
+                              const { reg, ot } = getLogHours(h);
                               return (
                                 <tr key={h._id} className="hover:bg-accent/20">
                                   <td className="p-2 font-medium text-foreground">
@@ -2699,8 +2741,8 @@ export default function CalendarPage() {
                                   <td className="p-2 font-mono text-muted-foreground">
                                     {h.clockOut ? new Date(h.clockOut).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }) : (h.clockIn ? "Active" : "--")}
                                   </td>
-                                  <td className="p-2 font-mono font-bold text-foreground text-right">{formatDuration(rowRegHrs)}</td>
-                                  <td className="p-2 font-mono font-semibold text-amber-500 text-right">{h.overtimeHours ? `+${formatDuration(h.overtimeHours)}` : "0 mins"}</td>
+                                  <td className="p-2 font-mono font-bold text-foreground text-right">{formatDuration(reg)}</td>
+                                  <td className="p-2 font-mono font-semibold text-amber-500 text-right">{ot > 0 ? `+${formatDuration(ot)}` : "0 mins"}</td>
                                 </tr>
                               );
                             })}

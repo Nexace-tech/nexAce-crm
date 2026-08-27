@@ -7,6 +7,7 @@ export interface ITimeEntry extends Document {
   hours: number;
   date: Date;
   isBillable: boolean;
+  comment?: string;
   status: "Draft" | "Pending" | "Approved" | "Rejected";
   approvedBy?: mongoose.Types.ObjectId;
   tenantId: mongoose.Types.ObjectId;
@@ -22,6 +23,7 @@ const TimeEntrySchema = new Schema<ITimeEntry>(
     hours: { type: Number, required: true, min: 0.1, max: 24 },
     date: { type: Date, required: true },
     isBillable: { type: Boolean, default: true },
+    comment: { type: String, trim: true, default: "" },
     status: {
       type: String,
       enum: ["Draft", "Pending", "Approved", "Rejected"],

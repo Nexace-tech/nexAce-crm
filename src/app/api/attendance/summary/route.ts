@@ -1,4 +1,4 @@
-﻿import { NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
 import { connectToDatabase } from "@/lib/db";
 import { Attendance } from "@/models/Attendance";
@@ -88,8 +88,19 @@ export async function GET(request: Request) {
         };
       }
       userAggMap[uid].daysPresent += 1;
-      userAggMap[uid].totalRegular += r.regularHours ?? 0;
-      userAggMap[uid].totalOvertime += r.overtimeHours ?? 0;
+
+      let reg = r.regularHours ?? 0;
+      let ot = r.overtimeHours ?? 0;
+      if (reg === 0 && ot === 0 && r.clockIn) {
+        const endMs = r.clockOut && r.clockOut !== "Active" ? new Date(r.clockOut).getTime() : Date.now();
+        const startMs = new Date(r.clockIn).getTime();
+        const total = Math.max(0, (endMs - startMs) / (1000 * 60 * 60));
+        reg = Math.min(total, 8.0);
+        ot = Math.max(0, total - 8.0);
+      }
+
+      userAggMap[uid].totalRegular += reg;
+      userAggMap[uid].totalOvertime += ot;
       if (r.clockIn) {
         const ci = new Date(r.clockIn);
         if (!userAggMap[uid].lastLogin || ci > (userAggMap[uid].lastLogin as Date)) {

@@ -135,6 +135,7 @@ export async function POST(request: Request) {
             $set: {
               hours: Number(entry.hours),
               isBillable: entry.isBillable !== false,
+              comment: entry.comment ? String(entry.comment).trim() : "",
               status: (entry.status as "Draft" | "Pending" | "Approved" | "Rejected") || "Draft",
             }
           },
@@ -146,7 +147,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: true, count: result.upsertedCount + result.modifiedCount });
     } else {
       // Single entry log/submit
-      const { project, taskName, hours, date, isBillable, status } = body;
+      const { project, taskName, hours, date, isBillable, status, comment } = body;
 
       if (!project || !taskName || !hours || !date || Number(hours) <= 0) {
         return NextResponse.json({ error: "Project, taskName, hours (> 0), and date are required" }, { status: 400 });
@@ -159,6 +160,7 @@ export async function POST(request: Request) {
         hours: Number(hours),
         date: new Date(date),
         isBillable: isBillable !== false,
+        comment: comment ? String(comment).trim() : "",
         status: status || "Draft",
         tenantId: new mongoose.Types.ObjectId(session.tenantId),
       });
