@@ -162,19 +162,44 @@ export async function POST(request: Request) {
 
     await connectToDatabase();
 
-    // Authorization: non-privileged users must be a member of the target project
-    if (session.role !== "Admin" && session.role !== "Manager") {
-      if (!mongoose.Types.ObjectId.isValid(projectId)) {
-        return NextResponse.json({ error: "Invalid project ID" }, { status: 400 });
-      }
-      const userObjId = new mongoose.Types.ObjectId(session.userId);
+    if (!mongoose.Types.ObjectId.isValid(projectId)) {
+      return NextResponse.json({ error: "Invalid project ID" }, { status: 400 });
+    }
+
+    const tenantObjectId = new mongoose.Types.ObjectId(session.tenantId);
+    const userObjId = new mongoose.Types.ObjectId(session.userId);
+    const isAdminOrManager =
+      session.role === "Admin" ||
+      session.role === "Manager" ||
+      session.role === "OPS" ||
+      session.role === "Sub Admin";
+
+    // Authorization check
+    if (!isAdminOrManager) {
       const project = await Project.findOne({
         _id: new mongoose.Types.ObjectId(projectId),
-        tenantId: new mongoose.Types.ObjectId(session.tenantId),
-        members: userObjId,
-      });
+        tenantId: tenantObjectId,
+      }).lean();
+
       if (!project) {
-        return NextResponse.json({ error: "Forbidden: you are not a member of this project" }, { status: 403 });
+        return NextResponse.json({ error: "Project not found" }, { status: 404 });
+      }
+
+      // Check if user is an explicit member, or in matching department, or open project, or self-assigning
+      const isMember = project.members?.some((m: any) => m.toString() === session.userId);
+      const isSelfAssign = assignee && assignee.toString() === session.userId;
+      const isOpenProject = !project.members || project.members.length === 0;
+
+      let isDeptMember = false;
+      if (project.assignType === "Department" && project.assignedDepartment) {
+        const currentUserDoc = await User.findById(userObjId).select("department").lean();
+        if (currentUserDoc?.department === project.assignedDepartment) {
+          isDeptMember = true;
+        }
+      }
+
+      if (!isMember && !isDeptMember && !isOpenProject && !isSelfAssign) {
+        return NextResponse.json({ error: "Forbidden: You are not assigned to this project" }, { status: 403 });
       }
     }
 

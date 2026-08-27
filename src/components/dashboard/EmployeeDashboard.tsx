@@ -156,68 +156,75 @@ export function EmployeeDashboard({ user }: { user: any }) {
 
       {/* Employee Personal KPI Metric Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-        <Card className="hover:shadow-md transition-all border-l-4 border-l-emerald-500">
-          <CardContent className="p-5 flex items-center justify-between">
-            <div className="space-y-1">
-              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">My Shift Schedule</p>
-              <p className="text-lg font-bold text-foreground">{user?.shiftName || "Standard Day Shift"}</p>
-              <p className="text-xs text-emerald-500 font-mono font-semibold flex items-center gap-1 mt-1">
-                <i className="fa-solid fa-sun text-amber-500 text-xs" /> {user?.shiftTime || "09:00 AM - 05:00 PM"}
-              </p>
-            </div>
-            <div className="p-3 bg-emerald-500/10 text-emerald-500 rounded-xl flex items-center justify-center w-12 h-12">
-              <i className="fa-solid fa-clock text-xl" />
-            </div>
-          </CardContent>
-        </Card>
+        <Link href="/dashboard/calendar" className="block group">
+          <Card className="hover:shadow-md transition-all border-l-4 border-l-emerald-500 h-full group-hover:border-emerald-400 group-hover:bg-accent/20 cursor-pointer">
+            <CardContent className="p-5 flex items-center justify-between">
+              <div className="space-y-1">
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground group-hover:text-foreground transition-colors">My Shift Schedule</p>
+                <p className="text-lg font-bold text-foreground">{user?.shiftName || "Standard Day Shift"}</p>
+                <p className="text-xs text-emerald-500 font-mono font-semibold flex items-center gap-1 mt-1">
+                  <i className="fa-solid fa-sun text-amber-500 text-xs" /> {user?.shiftTime || "09:00 AM - 05:00 PM"}
+                </p>
+              </div>
+              <div className="p-3 bg-emerald-500/10 text-emerald-500 rounded-xl flex items-center justify-center w-12 h-12 group-hover:scale-110 transition-transform">
+                <i className="fa-solid fa-clock text-xl" />
+              </div>
+            </CardContent>
+          </Card>
+        </Link>
 
-        <Card className="hover:shadow-md transition-all border-l-4 border-l-primary">
-          <CardContent className="p-5 flex items-center justify-between">
-            <div className="space-y-1">
-              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">My Timesheet Hours</p>
-              <p className="text-2xl font-bold text-foreground">{loading ? "..." : `${totalLoggedHours} Hrs`}</p>
-              <p className="text-xs text-primary font-medium flex items-center gap-1 mt-1">
-                Target: 40.0 Hrs this week
-              </p>
-            </div>
-            <div className="p-3 bg-primary/10 text-primary rounded-xl flex items-center justify-center w-12 h-12">
-              <i className="fa-solid fa-calendar-days text-xl" />
-            </div>
-          </CardContent>
-        </Card>
+        <Link href="/dashboard/calendar?tab=timesheets" className="block group">
+          <Card className="hover:shadow-md transition-all border-l-4 border-l-primary h-full group-hover:border-primary/80 group-hover:bg-accent/20 cursor-pointer">
+            <CardContent className="p-5 flex items-center justify-between">
+              <div className="space-y-1">
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground group-hover:text-foreground transition-colors">My Timesheet Hours</p>
+                <p className="text-2xl font-bold text-foreground">{loading ? "..." : `${totalLoggedHours} Hrs`}</p>
+                <p className="text-xs text-primary font-medium flex items-center gap-1 mt-1">
+                  Target: 40.0 Hrs this week
+                </p>
+              </div>
+              <div className="p-3 bg-primary/10 text-primary rounded-xl flex items-center justify-center w-12 h-12 group-hover:scale-110 transition-transform">
+                <i className="fa-solid fa-calendar-days text-xl" />
+              </div>
+            </CardContent>
+          </Card>
+        </Link>
 
-        <Card className="hover:shadow-md transition-all border-l-4 border-l-amber-500">
-          <CardContent className="p-5 flex items-center justify-between">
-            <div className="space-y-1">
-              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Assigned Tasks</p>
-              <p className="text-2xl font-bold text-foreground">{loading ? "..." : `${tasks.length} Active`}</p>
-              <p className="text-xs text-amber-500 font-medium flex items-center gap-1 mt-1">
-                Tasks assigned to you
-              </p>
-            </div>
-            <div className="p-3 bg-amber-500/10 text-amber-500 rounded-xl flex items-center justify-center w-12 h-12">
-              <i className="fa-solid fa-list-check text-xl" />
-            </div>
-          </CardContent>
-        </Card>
+        <Link href="/dashboard/projects" className="block group">
+          <Card className="hover:shadow-md transition-all border-l-4 border-l-amber-500 h-full group-hover:border-amber-400 group-hover:bg-accent/20 cursor-pointer">
+            <CardContent className="p-5 flex items-center justify-between">
+              <div className="space-y-1">
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground group-hover:text-foreground transition-colors">Assigned Tasks</p>
+                <p className="text-2xl font-bold text-foreground">{loading ? "..." : `${tasks.length} Active`}</p>
+                <p className="text-xs text-amber-500 font-medium flex items-center gap-1 mt-1">
+                  Tasks assigned to you
+                </p>
+              </div>
+              <div className="p-3 bg-amber-500/10 text-amber-500 rounded-xl flex items-center justify-center w-12 h-12 group-hover:scale-110 transition-transform">
+                <i className="fa-solid fa-list-check text-xl" />
+              </div>
+            </CardContent>
+          </Card>
+        </Link>
 
-        <Card className="hover:shadow-md transition-all border-l-4 border-l-sky-500">
-          <CardContent className="p-5 flex items-center justify-between">
-            <div className="space-y-1">
-              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Approved Leaves</p>
-              <p className="text-2xl font-bold text-foreground">
-                {loading ? "..." : `${teamLeaves.filter((l) => l.status === "Approved").length} Approved`}
-              </p>
-              <p className="text-xs text-sky-500 font-medium flex items-center gap-1 mt-1">
-                From your leave requests
-              </p>
-            </div>
-            <div className="p-3 bg-sky-500/10 text-sky-500 rounded-xl flex items-center justify-center w-12 h-12">
-              <i className="fa-solid fa-calendar-check text-xl" />
-            </div>
-          </CardContent>
-        </Card>
-
+        <Link href="/dashboard/hr" className="block group">
+          <Card className="hover:shadow-md transition-all border-l-4 border-l-sky-500 h-full group-hover:border-sky-400 group-hover:bg-accent/20 cursor-pointer">
+            <CardContent className="p-5 flex items-center justify-between">
+              <div className="space-y-1">
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground group-hover:text-foreground transition-colors">Approved Leaves</p>
+                <p className="text-2xl font-bold text-foreground">
+                  {loading ? "..." : `${teamLeaves.filter((l) => l.status === "Approved").length} Approved`}
+                </p>
+                <p className="text-xs text-sky-500 font-medium flex items-center gap-1 mt-1">
+                  From your leave requests
+                </p>
+              </div>
+              <div className="p-3 bg-sky-500/10 text-sky-500 rounded-xl flex items-center justify-center w-12 h-12 group-hover:scale-110 transition-transform">
+                <i className="fa-solid fa-calendar-check text-xl" />
+              </div>
+            </CardContent>
+          </Card>
+        </Link>
       </div>
 
       {/* Employee Main Grid */}
@@ -291,7 +298,7 @@ export function EmployeeDashboard({ user }: { user: any }) {
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center text-xs">
                 <div className="p-3 rounded-lg bg-card border border-border space-y-0.5">
                   <span className="text-muted-foreground">Shift Type</span>
-                  <p className="font-semibold text-foreground">Regular Full-Time</p>
+                  <p className="font-semibold text-foreground">{user?.employmentType || "Regular Full-Time"}</p>
                 </div>
                 <div className="p-3 rounded-lg bg-card border border-border space-y-0.5">
                   <span className="text-muted-foreground">Lunch Break</span>
@@ -299,7 +306,7 @@ export function EmployeeDashboard({ user }: { user: any }) {
                 </div>
                 <div className="p-3 rounded-lg bg-card border border-border space-y-0.5">
                   <span className="text-muted-foreground">Workplace</span>
-                  <p className="font-semibold text-emerald-500">Hybrid / Office</p>
+                  <p className="font-semibold text-emerald-500">{user?.workplace || user?.location || "Hybrid / Office"}</p>
                 </div>
                 <div className="p-3 rounded-lg bg-card border border-border space-y-0.5">
                   <span className="text-muted-foreground">Department</span>
@@ -428,17 +435,19 @@ export function EmployeeDashboard({ user }: { user: any }) {
                 <p className="text-xs text-muted-foreground py-4 text-center">No tasks assigned yet.</p>
               ) : (
                 tasks.slice(0, 5).map((t) => (
-                  <div key={t._id} className="flex items-center justify-between p-3.5 rounded-lg border border-border bg-card hover:bg-accent/40 transition-colors">
-                    <div className="space-y-0.5">
-                      <p className="font-semibold text-sm text-foreground">{t.title}</p>
-                      <p className="text-xs text-muted-foreground">
-                        Priority: {t.priority} {t.dueDate ? `| Due: ${new Date(t.dueDate).toLocaleDateString()}` : ""}
-                      </p>
+                  <Link key={t._id} href="/dashboard/projects" className="block group">
+                    <div className="flex items-center justify-between p-3.5 rounded-lg border border-border bg-card hover:bg-accent/40 transition-colors cursor-pointer group-hover:border-primary/50">
+                      <div className="space-y-0.5">
+                        <p className="font-semibold text-sm text-foreground group-hover:text-primary transition-colors">{t.title}</p>
+                        <p className="text-xs text-muted-foreground">
+                          Priority: {t.priority} {t.dueDate ? `| Due: ${new Date(t.dueDate).toLocaleDateString()}` : ""}
+                        </p>
+                      </div>
+                      <Badge color={t.priority === "High" || t.priority === "Urgent" ? "destructive" : t.status === "Done" ? "success" : "primary"}>
+                        {t.status}
+                      </Badge>
                     </div>
-                    <Badge color={t.priority === "High" || t.priority === "Urgent" ? "destructive" : t.status === "Done" ? "success" : "primary"}>
-                      {t.status}
-                    </Badge>
-                  </div>
+                  </Link>
                 ))
               )}
             </CardContent>
@@ -448,11 +457,18 @@ export function EmployeeDashboard({ user }: { user: any }) {
         {/* Right Column (1 span): Announcements & Team Leave Requests */}
         <div className="space-y-6">
           <Card>
-            <CardHeader className="pb-4">
-              <CardTitle className="text-lg font-semibold flex items-center gap-2">
-                <i className="fa-solid fa-bullhorn text-amber-500 text-lg" /> Workspace Announcements
-              </CardTitle>
-              <CardDescription>Company notices and team updates</CardDescription>
+            <CardHeader className="flex flex-row items-center justify-between pb-3">
+              <div>
+                <CardTitle className="text-base font-bold flex items-center gap-2">
+                  <i className="fa-solid fa-bullhorn text-amber-500 text-base" /> Workspace Announcements
+                </CardTitle>
+                <CardDescription>Company notices and team updates</CardDescription>
+              </div>
+              <Button asChild variant="outline" size="sm" className="h-7 text-xs">
+                <Link href="/dashboard/chat" className="gap-1 text-primary">
+                  View Board <i className="fa-solid fa-arrow-up-right-from-square text-[10px]" />
+                </Link>
+              </Button>
             </CardHeader>
             <CardContent className="space-y-3">
               {loading ? (
@@ -465,20 +481,22 @@ export function EmployeeDashboard({ user }: { user: any }) {
                 </div>
               ) : (
                 announcements.slice(0, 3).map((a) => (
-                  <div key={a._id} className="p-3 bg-muted/40 rounded-lg border border-border space-y-1">
-                    <div className="flex items-center justify-between">
-                      <span className="font-semibold text-xs text-foreground flex items-center gap-1">
-                        {a.pinned && <i className="fa-solid fa-thumbtack text-amber-500 text-[10px]" />}
-                        {a.title}
-                      </span>
-                      <span className="text-[10px] text-muted-foreground">
-                        {a.createdAt ? new Date(a.createdAt).toLocaleDateString() : ""}
-                      </span>
+                  <Link key={a._id} href="/dashboard/chat" className="block group">
+                    <div className="p-3 bg-muted/40 rounded-lg border border-border space-y-1 hover:bg-accent/40 transition-colors group-hover:border-primary/50 cursor-pointer">
+                      <div className="flex items-center justify-between">
+                        <span className="font-semibold text-xs text-foreground flex items-center gap-1 group-hover:text-primary transition-colors">
+                          {a.pinned && <i className="fa-solid fa-thumbtack text-amber-500 text-[10px]" />}
+                          {a.title}
+                        </span>
+                        <span className="text-[10px] text-muted-foreground">
+                          {a.createdAt ? new Date(a.createdAt).toLocaleDateString() : ""}
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2">
+                        {a.content}
+                      </p>
                     </div>
-                    <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2">
-                      {a.content}
-                    </p>
-                  </div>
+                  </Link>
                 ))
               )}
             </CardContent>
@@ -511,26 +529,28 @@ export function EmployeeDashboard({ user }: { user: any }) {
                   </div>
                 ) : (
                   teamLeaves.slice(0, 6).map((l) => (
-                    <div key={l._id} className="flex items-center justify-between p-3 rounded-lg border border-border bg-card hover:bg-accent/30 transition-colors">
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <div className="h-7 w-7 rounded-full bg-sky-500/20 text-sky-500 font-bold flex items-center justify-center text-xs border border-sky-500/30 shrink-0">
-                          {l.userName?.charAt(0) || "?"}
+                    <Link key={l._id} href="/dashboard/hr" className="block group">
+                      <div className="flex items-center justify-between p-3 rounded-lg border border-border bg-card hover:bg-accent/40 transition-colors group-hover:border-primary/50 cursor-pointer">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="h-7 w-7 rounded-full bg-sky-500/20 text-sky-500 font-bold flex items-center justify-center text-xs border border-sky-500/30 shrink-0">
+                            {l.userName?.charAt(0) || "?"}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="font-semibold text-xs text-foreground truncate group-hover:text-primary transition-colors">{l.userName}</p>
+                            <p className="text-[10px] text-muted-foreground">
+                              {l.type} · {new Date(l.startDate).toLocaleDateString()} – {new Date(l.endDate).toLocaleDateString()}
+                            </p>
+                          </div>
                         </div>
-                        <div className="min-w-0">
-                          <p className="font-semibold text-xs text-foreground truncate">{l.userName}</p>
-                          <p className="text-[10px] text-muted-foreground">
-                            {l.type} · {new Date(l.startDate).toLocaleDateString()} – {new Date(l.endDate).toLocaleDateString()}
-                          </p>
-                        </div>
+                        <Badge
+                          color={l.status === "Approved" ? "success" : l.status === "Rejected" ? "destructive" : "warning"}
+                          variant="soft"
+                          className="text-[10px] shrink-0 ml-2"
+                        >
+                          {l.status}
+                        </Badge>
                       </div>
-                      <Badge
-                        color={l.status === "Approved" ? "success" : l.status === "Rejected" ? "destructive" : "warning"}
-                        variant="soft"
-                        className="text-[10px] shrink-0 ml-2"
-                      >
-                        {l.status}
-                      </Badge>
-                    </div>
+                    </Link>
                   ))
                 )}
               </CardContent>

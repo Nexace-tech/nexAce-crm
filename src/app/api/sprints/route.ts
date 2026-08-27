@@ -22,6 +22,13 @@ export async function GET() {
     const tenantObjectId = new mongoose.Types.ObjectId(session.tenantId);
     const userObjectId = new mongoose.Types.ObjectId(session.userId);
 
+    const isElevatedSprintUser =
+      session.role === "Admin" ||
+      session.role === "OPS" ||
+      session.role === "Manager" ||
+      dataScope.canViewFeature("createSprints") ||
+      dataScope.canViewFeature("viewTeamProjects");
+
     const rawSprints = await Sprint.find({
       tenantId: tenantObjectId,
     }).sort({ startDate: -1 }).lean();
@@ -34,8 +41,8 @@ export async function GET() {
           sprintId: sprintDoc._id,
         };
 
-        // Employees with own data scope only see their assigned tasks
-        if (dataScope.scope === "own") {
+        // Employees without sprint management permissions only see their assigned tasks
+        if (!isElevatedSprintUser) {
           taskQuery.assignee = userObjectId;
         }
 
@@ -62,11 +69,11 @@ export async function GET() {
       })
     );
 
-    // If user is restricted to own scope, show active sprint or sprints containing their assigned tasks
+    // If user is not elevated, strictly show sprints that have tasks assigned to them
     let visibleSprints = sprintsWithStats;
-    if (dataScope.scope === "own") {
+    if (!isElevatedSprintUser) {
       visibleSprints = sprintsWithStats.filter(
-        (s) => s.status === "Active" || s.totalTasks > 0
+        (s) => s.totalTasks > 0
       );
     }
 

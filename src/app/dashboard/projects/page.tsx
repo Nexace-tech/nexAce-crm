@@ -91,6 +91,8 @@ export default function ProjectsPage() {
   const [newTaskPriority, setNewTaskPriority] = useState("Medium");
   const [newTaskDueDate, setNewTaskDueDate] = useState("");
   const [newTaskSprint, setNewTaskSprint] = useState("");
+  const [newTaskProject, setNewTaskProject] = useState("");
+  const [isCreatingTask, setIsCreatingTask] = useState(false);
 
   const [wikiArticles, setWikiArticles] = useState<any[]>([
     {
@@ -684,16 +686,28 @@ export default function ProjectsPage() {
 
   const handleCreateTask = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newTaskTitle || !selectedProjectId) return;
+    const targetProjId =
+      newTaskProject ||
+      (selectedProjectId && selectedProjectId !== "all" ? selectedProjectId : projects[0]?._id);
+
+    if (!newTaskTitle.trim()) {
+      showToast("Please enter a task title.", "error");
+      return;
+    }
+    if (!targetProjId) {
+      showToast("Please select a project for this task.", "error");
+      return;
+    }
 
     try {
+      setIsCreatingTask(true);
       const res = await fetch("/api/tasks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          title: newTaskTitle,
-          description: newTaskDesc,
-          projectId: selectedProjectId,
+          title: newTaskTitle.trim(),
+          description: newTaskDesc.trim(),
+          projectId: targetProjId,
           assignee: newTaskAssignee || undefined,
           priority: newTaskPriority,
           dueDate: newTaskDueDate || undefined,
@@ -701,11 +715,16 @@ export default function ProjectsPage() {
         }),
       });
 
+      const data = await res.json();
       if (res.ok) {
-        await fetchTasks();
+        await fetchTasks(selectedProjectId || "all");
         setShowTaskForm(false);
         setNewTaskTitle("");
         setNewTaskDesc("");
+        setNewTaskDueDate("");
+        setNewTaskAssignee("");
+        setNewTaskSprint("");
+        setNewTaskProject("");
         showToast("Task created successfully!", "success");
 
         // Log history
@@ -713,17 +732,21 @@ export default function ProjectsPage() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            projectId: selectedProjectId,
+            projectId: targetProjId,
             action: "Task Created",
             targetName: newTaskTitle,
             details: `Task "${newTaskTitle}" created with priority ${newTaskPriority}`
           })
         });
-        fetchActivityLogs();
+        fetchActivityLogs(selectedProjectId || "all");
+      } else {
+        showToast(data.error || "Failed to create task.", "error");
       }
     } catch (e) {
       console.error(e);
       showToast("Failed to create task.", "error");
+    } finally {
+      setIsCreatingTask(false);
     }
   };
 
@@ -2959,13 +2982,29 @@ export default function ProjectsPage() {
 
             <form onSubmit={handleCreateTask} className="space-y-4 text-xs">
               <div className="space-y-1.5">
-                <label className="font-semibold text-foreground">Task Title</label>
+                <label className="font-semibold text-foreground">Task Title <span className="text-rose-500">*</span></label>
                 <Input
                   value={newTaskTitle}
                   onChange={(e) => setNewTaskTitle(e.target.value)}
                   placeholder="e.g. Implement OAuth Authentication API"
                   required
                 />
+              </div>
+
+              {/* Project Selection */}
+              <div className="space-y-1.5">
+                <label className="font-semibold text-foreground">Target Project <span className="text-rose-500">*</span></label>
+                <select
+                  value={newTaskProject || (selectedProjectId !== "all" ? selectedProjectId : (projects[0]?._id || ""))}
+                  onChange={(e) => setNewTaskProject(e.target.value)}
+                  required
+                  className="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                >
+                  <option value="" disabled>Select a Project</option>
+                  {projects.map((p) => (
+                    <option key={p._id} value={p._id}>{p.name}</option>
+                  ))}
+                </select>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -3034,11 +3073,17 @@ export default function ProjectsPage() {
               </div>
 
               <div className="flex justify-end gap-2 pt-3 border-t border-border">
-                <Button variant="outline" size="sm" type="button" onClick={() => setShowTaskForm(false)}>
+                <Button variant="outline" size="sm" type="button" onClick={() => setShowTaskForm(false)} disabled={isCreatingTask}>
                   Cancel
                 </Button>
-                <Button color="primary" size="sm" type="submit" className="font-semibold">
-                  Add Task to Sprint
+                <Button color="primary" size="sm" type="submit" className="font-semibold" disabled={isCreatingTask}>
+                  {isCreatingTask ? (
+                    <>
+                      <i className="fa-solid fa-spinner fa-spin mr-1.5" /> Adding...
+                    </>
+                  ) : (
+                    "Add Task to Sprint"
+                  )}
                 </Button>
               </div>
             </form>
