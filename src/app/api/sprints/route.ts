@@ -18,7 +18,9 @@ export async function GET() {
 
     await connectToDatabase();
 
+    const dataScope = await getUserDataScope(session);
     const tenantObjectId = new mongoose.Types.ObjectId(session.tenantId);
+    const userObjectId = new mongoose.Types.ObjectId(session.userId);
 
     const rawSprints = await Sprint.find({
       tenantId: tenantObjectId,
@@ -27,11 +29,19 @@ export async function GET() {
     // Populate burndown stats and linked tasks for each sprint
     const sprintsWithStats = await Promise.all(
       rawSprints.map(async (sprintDoc) => {
-        const sprint = sprintDoc;
-        const linkedTasks = await Task.find({
+        const taskQuery: Record<string, unknown> = {
           tenantId: tenantObjectId,
           sprintId: sprintDoc._id,
-        }).populate("assignee", "name photoUrl role department").lean();
+        };
+
+        // Employees with own data scope only see their assigned tasks
+        if (dataScope.scope === "own") {
+          taskQuery.assignee = userObjectId;
+        }
+
+        const linkedTasks = await Task.find(taskQuery)
+          .populate("assignee", "name photoUrl role department")
+          .lean();
 
         const totalTasks = linkedTasks.length;
         const completedTasks = linkedTasks.filter((t) => t.status === "Done").length;
@@ -41,7 +51,7 @@ export async function GET() {
         const burndownProgress = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
 
         return {
-          ...sprint,
+          ...sprintDoc,
           totalTasks,
           completedTasks,
           inProgressTasks,
@@ -52,7 +62,15 @@ export async function GET() {
       })
     );
 
-    return NextResponse.json({ sprints: sprintsWithStats });
+    // If user is restricted to own scope, show active sprint or sprints containing their assigned tasks
+    let visibleSprints = sprintsWithStats;
+    if (dataScope.scope === "own") {
+      visibleSprints = sprintsWithStats.filter(
+        (s) => s.status === "Active" || s.totalTasks > 0
+      );
+    }
+
+    return NextResponse.json({ sprints: visibleSprints });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Internal Server Error";
     console.error("API GET Sprints error:", error);

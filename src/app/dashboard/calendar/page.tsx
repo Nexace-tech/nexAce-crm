@@ -56,8 +56,12 @@ export default function CalendarPage() {
   const [newEvtStart, setNewEvtStart] = useState("");
   const [newEvtEnd, setNewEvtEnd] = useState("");
 
-  // Sprints States
+  // Sprints state
   const [sprints, setSprints] = useState<any[]>([]);
+  const [sprintLoading, setSprintLoading] = useState(false);
+  const [showCreateSprintModal, setShowCreateSprintModal] = useState(false);
+  const [sprintToDelete, setSprintToDelete] = useState<{ id: string; name: string } | null>(null);
+  const [deletingSprint, setDeletingSprint] = useState(false);
   const [showSprintModal, setShowSprintModal] = useState(false);
   const [newSprintName, setNewSprintName] = useState("");
   const [newSprintGoal, setNewSprintGoal] = useState("");
@@ -77,8 +81,8 @@ export default function CalendarPage() {
   });
 
   const [timesheetRows, setTimesheetRows] = useState<any[]>([
-    { project: "NexAce CRM Implementation", taskName: "UI/UX Development", comment: "", mon: 0, tue: 0, wed: 0, thu: 0, fri: 0, isBillable: true },
-    { project: "Client Portal Integration", taskName: "API endpoints integration", comment: "", mon: 0, tue: 0, wed: 0, thu: 0, fri: 0, isBillable: true },
+    { project: "NexAce CRM Implementation", taskName: "UI/UX Development", comment: "", mon: 0, tue: 0, wed: 0, thu: 0, fri: 0, sat: 0, isBillable: true },
+    { project: "Client Portal Integration", taskName: "API endpoints integration", comment: "", mon: 0, tue: 0, wed: 0, thu: 0, fri: 0, sat: 0, isBillable: true },
   ]);
 
   // Attendance States
@@ -288,7 +292,7 @@ export default function CalendarPage() {
                 project: entry.project,
                 taskName: entry.taskName,
                 comment: entry.comment || "",
-                mon: 0, tue: 0, wed: 0, thu: 0, fri: 0,
+                mon: 0, tue: 0, wed: 0, thu: 0, fri: 0, sat: 0,
                 isBillable: entry.isBillable,
                 status: entry.status
               };
@@ -301,12 +305,13 @@ export default function CalendarPage() {
             else if (dayIndex === 2) rowsMap[key].wed = entry.hours;
             else if (dayIndex === 3) rowsMap[key].thu = entry.hours;
             else if (dayIndex === 4) rowsMap[key].fri = entry.hours;
+            else if (dayIndex === 5) rowsMap[key].sat = entry.hours;
           });
           setTimesheetRows(Object.values(rowsMap));
         } else {
           setTimesheetRows([
-            { project: projectsList[0] || "NexAce CRM Implementation", taskName: "UI/UX Development", comment: "", mon: 0, tue: 0, wed: 0, thu: 0, fri: 0, isBillable: true },
-            { project: projectsList[1] || "Client Portal Integration", taskName: "API endpoints integration", comment: "", mon: 0, tue: 0, wed: 0, thu: 0, fri: 0, isBillable: true },
+            { project: projectsList[0] || "NexAce CRM Implementation", taskName: "UI/UX Development", comment: "", mon: 0, tue: 0, wed: 0, thu: 0, fri: 0, sat: 0, isBillable: true },
+            { project: projectsList[1] || "Client Portal Integration", taskName: "API endpoints integration", comment: "", mon: 0, tue: 0, wed: 0, thu: 0, fri: 0, sat: 0, isBillable: true },
           ]);
         }
       }
@@ -516,13 +521,14 @@ export default function CalendarPage() {
   };
 
   const handleDeleteSprint = async (sprintId: string) => {
-    if (!confirm("Are you sure you want to delete this sprint? Linked tasks will be unassigned from this sprint.")) return;
     try {
+      setDeletingSprint(true);
       const res = await fetch(`/api/sprints?sprintId=${sprintId}`, {
         method: "DELETE",
       });
       if (res.ok) {
         await fetchSprints();
+        setSprintToDelete(null);
         showToast("Sprint deleted successfully!", "success");
       } else {
         const data = await res.json();
@@ -531,6 +537,8 @@ export default function CalendarPage() {
     } catch (err) {
       console.error(err);
       showToast("Failed to delete sprint.", "error");
+    } finally {
+      setDeletingSprint(false);
     }
   };
 
@@ -570,16 +578,16 @@ export default function CalendarPage() {
   const handleAddTimesheetRow = () => {
     setTimesheetRows([
       ...timesheetRows,
-      { project: projectsList[0] || "NexAce CRM Implementation", taskName: "", comment: "", mon: 0, tue: 0, wed: 0, thu: 0, fri: 0, isBillable: true },
+      { project: projectsList[0] || "NexAce CRM Implementation", taskName: "", comment: "", mon: 0, tue: 0, wed: 0, thu: 0, fri: 0, sat: 0, isBillable: true },
     ]);
   };
 
   const handleSaveTimesheet = async (submitStatus: "Draft" | "Pending") => {
     const entryPayload: any[] = [];
-    const weekdaysOffset = [0, 1, 2, 3, 4];
+    const weekdaysOffset = [0, 1, 2, 3, 4, 5];
 
     timesheetRows.forEach((row) => {
-      const days = ["mon", "tue", "wed", "thu", "fri"];
+      const days = ["mon", "tue", "wed", "thu", "fri", "sat"];
       days.forEach((day, index) => {
         const hoursVal = Number(row[day]);
         if (hoursVal > 0) {
@@ -1333,7 +1341,7 @@ export default function CalendarPage() {
                         {(isAdmin || isOPS || can("deleteSprints")) && (
                           <button
                             type="button"
-                            onClick={() => handleDeleteSprint(sprint._id)}
+                            onClick={() => setSprintToDelete({ id: sprint._id, name: sprint.name })}
                             className="px-2 py-1 text-[10px] font-semibold text-rose-500 bg-rose-500/10 hover:bg-rose-500/20 rounded-md transition-colors cursor-pointer"
                             title="Delete Sprint"
                           >
@@ -1396,22 +1404,23 @@ export default function CalendarPage() {
                   <table className="w-full text-sm text-left border-collapse">
                     <thead>
                       <tr className="border-b border-border text-muted-foreground text-xs font-semibold uppercase">
-                        <th className="py-2.5 pr-3 min-w-[160px]">Project</th>
-                        <th className="py-2.5 px-2 min-w-[130px]">Task Description</th>
-                        <th className="py-2.5 px-2 min-w-[160px]">Comment / Notes</th>
-                        <th className="py-2.5 px-2 text-center w-14">Mon</th>
-                        <th className="py-2.5 px-2 text-center w-14">Tue</th>
-                        <th className="py-2.5 px-2 text-center w-14">Wed</th>
-                        <th className="py-2.5 px-2 text-center w-14">Thu</th>
-                        <th className="py-2.5 px-2 text-center w-14">Fri</th>
-                        <th className="py-2.5 px-2 text-center w-16">Billable</th>
-                        <th className="py-2.5 pl-2 pr-1 text-center w-8"></th>
+                        <th className="py-2.5 pr-2 min-w-[150px]">Project</th>
+                        <th className="py-2.5 px-1.5 min-w-[120px]">Task Description</th>
+                        <th className="py-2.5 px-1.5 min-w-[150px]">Comment / Notes</th>
+                        <th className="py-2.5 px-1 text-center w-12">Mon</th>
+                        <th className="py-2.5 px-1 text-center w-12">Tue</th>
+                        <th className="py-2.5 px-1 text-center w-12">Wed</th>
+                        <th className="py-2.5 px-1 text-center w-12">Thu</th>
+                        <th className="py-2.5 px-1 text-center w-12">Fri</th>
+                        <th className="py-2.5 px-1 text-center w-12">Sat</th>
+                        <th className="py-2.5 px-1 text-center w-14">Billable</th>
+                        <th className="py-2.5 pl-1 pr-1 text-center w-7"></th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border/60">
                       {timesheetRows.map((row, idx) => (
                         <tr key={idx} className="hover:bg-accent/10 transition-colors">
-                          <td className="py-3 pr-3">
+                          <td className="py-3 pr-2">
                             <select
                               value={row.project}
                               onChange={(e) => handleRowChange(idx, "project", e.target.value)}
@@ -1422,7 +1431,7 @@ export default function CalendarPage() {
                               ))}
                             </select>
                           </td>
-                          <td className="py-3 px-2">
+                          <td className="py-3 px-1.5">
                             <Input
                               value={row.taskName}
                               onChange={(e) => handleRowChange(idx, "taskName", e.target.value)}
@@ -1430,7 +1439,7 @@ export default function CalendarPage() {
                               className="h-9 text-xs"
                             />
                           </td>
-                          <td className="py-3 px-2">
+                          <td className="py-3 px-1.5">
                             <Input
                               value={row.comment || ""}
                               onChange={(e) => handleRowChange(idx, "comment", e.target.value)}
@@ -1438,8 +1447,8 @@ export default function CalendarPage() {
                               className="h-9 text-xs"
                             />
                           </td>
-                          {["mon", "tue", "wed", "thu", "fri"].map((day) => (
-                            <td key={day} className="py-3 px-2">
+                          {["mon", "tue", "wed", "thu", "fri", "sat"].map((day) => (
+                            <td key={day} className="py-3 px-1">
                               <Input
                                 type="number"
                                 min="0"
@@ -1450,11 +1459,11 @@ export default function CalendarPage() {
                                   const val = parseFloat(e.target.value);
                                   handleRowChange(idx, day, isNaN(val) ? 0 : val);
                                 }}
-                                className="h-9 w-14 text-center text-xs p-1"
+                                className="h-9 w-12 text-center text-xs p-1"
                               />
                             </td>
                           ))}
-                          <td className="py-3 px-2 text-center">
+                          <td className="py-3 px-1 text-center">
                             <input
                               type="checkbox"
                               checked={row.isBillable}
@@ -1462,7 +1471,7 @@ export default function CalendarPage() {
                               className="rounded border-border text-primary w-4 h-4 cursor-pointer"
                             />
                           </td>
-                          <td className="py-3 pl-2 pr-1 text-center">
+                          <td className="py-3 pl-1 pr-1 text-center">
                             {timesheetRows.length > 1 && (
                               <button
                                 type="button"
@@ -1509,19 +1518,19 @@ export default function CalendarPage() {
                   <div className="flex justify-between py-1.5 border-b border-border/50">
                     <span className="text-muted-foreground">Total Hours Logged</span>
                     <span className="font-bold text-foreground">
-                      {timesheetRows.reduce((acc, row) => acc + (Number(row.mon) || 0) + (Number(row.tue) || 0) + (Number(row.wed) || 0) + (Number(row.thu) || 0) + (Number(row.fri) || 0), 0)} hrs
+                      {timesheetRows.reduce((acc, row) => acc + (Number(row.mon) || 0) + (Number(row.tue) || 0) + (Number(row.wed) || 0) + (Number(row.thu) || 0) + (Number(row.fri) || 0) + (Number(row.sat) || 0), 0)} hrs
                     </span>
                   </div>
                   <div className="flex justify-between py-1.5 border-b border-border/50">
                     <span className="text-muted-foreground">Billable Hours</span>
                     <span className="font-semibold text-emerald-500">
-                      {timesheetRows.reduce((acc, row) => row.isBillable ? acc + (Number(row.mon) || 0) + (Number(row.tue) || 0) + (Number(row.wed) || 0) + (Number(row.thu) || 0) + (Number(row.fri) || 0) : acc, 0)} hrs
+                      {timesheetRows.reduce((acc, row) => row.isBillable ? acc + (Number(row.mon) || 0) + (Number(row.tue) || 0) + (Number(row.wed) || 0) + (Number(row.thu) || 0) + (Number(row.fri) || 0) + (Number(row.sat) || 0) : acc, 0)} hrs
                     </span>
                   </div>
                   <div className="flex justify-between py-1.5">
                     <span className="text-muted-foreground">Non-Billable Hours</span>
                     <span className="font-semibold text-amber-500">
-                      {timesheetRows.reduce((acc, row) => !row.isBillable ? acc + (Number(row.mon) || 0) + (Number(row.tue) || 0) + (Number(row.wed) || 0) + (Number(row.thu) || 0) + (Number(row.fri) || 0) : acc, 0)} hrs
+                      {timesheetRows.reduce((acc, row) => !row.isBillable ? acc + (Number(row.mon) || 0) + (Number(row.tue) || 0) + (Number(row.wed) || 0) + (Number(row.thu) || 0) + (Number(row.fri) || 0) + (Number(row.sat) || 0) : acc, 0)} hrs
                     </span>
                   </div>
                 </CardContent>
@@ -2760,6 +2769,53 @@ export default function CalendarPage() {
                 </>
               );
             })()}
+          </div>
+        </div>
+      )}
+
+      {/* Sleek In-App Sprint Delete Confirmation Modal */}
+      {sprintToDelete && (
+        <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-card border border-border rounded-2xl max-w-md w-full p-6 space-y-5 shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="flex items-start gap-3.5">
+              <div className="w-10 h-10 rounded-full bg-rose-500/10 text-rose-500 flex items-center justify-center shrink-0 border border-rose-500/20">
+                <i className="fa-solid fa-triangle-exclamation text-lg" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-base font-bold text-foreground">Delete Sprint</h3>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Are you sure you want to delete <strong className="text-foreground">{sprintToDelete.name}</strong>? Any linked tasks will be automatically unassigned from this sprint cycle.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2.5 pt-2 border-t border-border/60">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setSprintToDelete(null)}
+                disabled={deletingSprint}
+              >
+                Cancel
+              </Button>
+              <Button
+                color="destructive"
+                size="sm"
+                onClick={() => handleDeleteSprint(sprintToDelete.id)}
+                disabled={deletingSprint}
+                className="gap-2 font-semibold"
+              >
+                {deletingSprint ? (
+                  <>
+                    <i className="fa-solid fa-spinner fa-spin text-xs" /> Deleting...
+                  </>
+                ) : (
+                  <>
+                    <i className="fa-solid fa-trash-can text-xs" /> Delete Sprint
+                  </>
+                )}
+              </Button>
+            </div>
           </div>
         </div>
       )}
