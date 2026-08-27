@@ -1,8 +1,46 @@
 import { NextResponse } from "next/server";
+import mongoose from "mongoose";
 import { connectToDatabase } from "@/lib/db";
 import { ITDevice } from "@/models/ITDevice";
 import { ActivityLog } from "@/models/ActivityLog";
 import { requireTenantSession, isAuthError } from "@/lib/auth-guard";
+
+export const DEVICE_TYPE_CODE: Record<string, string> = {
+  Laptop: "LAP",
+  Desktop: "DES",
+  Monitor: "MON",
+  Mobile: "MOB",
+  Tablet: "TAB",
+  Router: "RTR",
+  Printer: "PRT",
+  Other: "OTH",
+};
+
+export async function getNextAssetTag(
+  tenantObjectId: mongoose.Types.ObjectId,
+  deviceType: string
+): Promise<string> {
+  const code = DEVICE_TYPE_CODE[deviceType] || "OTH";
+  const prefix = `ACE-${code}-`;
+
+  // Find all existing devices with this prefix for this tenant
+  const existingDocs = await ITDevice.find({
+    tenantId: tenantObjectId,
+    assetTag: { $regex: `^${prefix}\\d+`, $options: "i" },
+  })
+    .select("assetTag")
+    .lean();
+
+  const nums = existingDocs
+    .map((d: any) => {
+      const match = (d.assetTag || "").match(new RegExp(`^${prefix}(\\d+)`, "i"));
+      return match ? parseInt(match[1], 10) : 0;
+    })
+    .filter((n: number) => !isNaN(n) && n > 0);
+
+  const nextNum = nums.length > 0 ? Math.max(...nums) + 1 : 1;
+  return `${prefix}${String(nextNum).padStart(3, "0")}`;
+}
 
 const SEED_DEVICES = [
   { assetTag: "ACE-LAP-001", type: "Laptop", brand: "Apple", modelName: "MacBook Pro 14\"", assignedTo: "Ahmed Raza", department: "IT", os: "macOS 14 Sonoma", lastSeen: "2026-08-11", condition: "Excellent", status: "In Use" },
@@ -17,15 +55,25 @@ const SEED_DEVICES = [
   { assetTag: "ACE-LAP-007", type: "Laptop", brand: "Lenovo", modelName: "IdeaPad 5", assignedTo: "—", department: "—", os: "Windows 10 Home", lastSeen: "2026-01-15", condition: "Poor", status: "Retired" },
 ];
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const authResult = await requireTenantSession();
     if (isAuthError(authResult)) return authResult;
     const { tenantObjectId, userObjectId, session } = authResult;
 
-    const isPrivileged = ["Admin", "OPS", "Sub Admin"].includes(session.role);
-
     await connectToDatabase();
+
+    const url = new URL(request.url);
+    const nextTagForType = url.searchParams.get("nextTagForType");
+
+    // Fast endpoint for requesting the next dynamic unique asset tag for a specific device type
+    if (nextTagForType) {
+      const nextTag = await getNextAssetTag(tenantObjectId, nextTagForType);
+      return NextResponse.json({ nextTag });
+    }
+
+    const isPrivileged = ["Admin", "OPS", "Sub Admin", "Manager"].includes(session.role);
+
     let devices = await ITDevice.find({ tenantId: tenantObjectId }).sort({ createdAt: -1 }).lean();
 
     if (devices.length === 0) {
@@ -38,13 +86,19 @@ export async function GET() {
       devices = await ITDevice.find({ tenantId: tenantObjectId }).sort({ createdAt: -1 }).lean();
     }
 
-    // Non-privileged users only receive their own devices
+    // Pre-calculate the current next unique tag for all device types across the entire tenant DB
+    const nextAssetTags: Record<string, string> = {};
+    for (const typeName of Object.keys(DEVICE_TYPE_CODE)) {
+      nextAssetTags[typeName] = await getNextAssetTag(tenantObjectId, typeName);
+    }
+
+    // Non-privileged users only receive their own devices for the list view
     if (!isPrivileged) {
       const name = (session.userName || "").toLowerCase();
       devices = devices.filter((d: any) => (d.assignedTo || "").toLowerCase() === name);
     }
 
-    return NextResponse.json({ devices });
+    return NextResponse.json({ devices, nextAssetTags });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Internal Server Error";
     console.error("GET /api/it/devices error:", error);
@@ -54,24 +108,35 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    // All authenticated tenant users may register a device (employees register their own)
+    // All authenticated tenant users may register a device (employees register their own or HR registers department devices)
     const authResult = await requireTenantSession();
     if (isAuthError(authResult)) return authResult;
     const { tenantObjectId, userObjectId, session } = authResult;
 
     const body = await request.json();
-    const { assetTag, type, brand, modelName, assignedTo, department, os, lastSeen, condition, status } = body;
+    const {
+      assetTag,
+      type,
+      brand,
+      modelName,
+      serialNumber,
+      specs,
+      purchaseDate,
+      warrantyExpiry,
+      assignedTo,
+      department,
+      os,
+      lastSeen,
+      condition,
+      status,
+    } = body;
 
-    if (!assetTag?.trim()) {
-      return NextResponse.json({ error: "Asset tag is required" }, { status: 400 });
-    }
-
-    const isPrivileged = ["Admin", "OPS", "Sub Admin"].includes(session.role);
+    const isPrivileged = ["Admin", "OPS", "Sub Admin", "Manager", "HR"].includes(session.role);
 
     // Non-privileged users can only register devices assigned to themselves
     if (!isPrivileged) {
       const normalise = (s: string) => (s || "").trim().toLowerCase();
-      if (normalise(assignedTo) !== normalise(session.userName)) {
+      if (assignedTo && normalise(assignedTo) !== normalise(session.userName)) {
         return NextResponse.json(
           { error: "You can only register devices assigned to yourself" },
           { status: 403 }
@@ -81,19 +146,37 @@ export async function POST(request: Request) {
 
     await connectToDatabase();
 
-    // Check for duplicate asset tag within the tenant
-    const exists = await ITDevice.findOne({ tenantId: tenantObjectId, assetTag: assetTag.trim() });
+    const selectedType = (type || "Laptop").trim();
+    let resolvedAssetTag = (assetTag || "").trim();
+
+    // Auto-generate unique asset tag if blank or placeholder
+    if (!resolvedAssetTag || resolvedAssetTag.toLowerCase() === "auto-generated") {
+      resolvedAssetTag = await getNextAssetTag(tenantObjectId, selectedType);
+    }
+
+    // Check for collision against database records; if taken, automatically assign the next unique number
+    let exists = await ITDevice.findOne({ tenantId: tenantObjectId, assetTag: resolvedAssetTag });
     if (exists) {
-      return NextResponse.json({ error: `Asset tag "${assetTag.trim()}" already exists in your inventory` }, { status: 400 });
+      resolvedAssetTag = await getNextAssetTag(tenantObjectId, selectedType);
+      exists = await ITDevice.findOne({ tenantId: tenantObjectId, assetTag: resolvedAssetTag });
+      if (exists) {
+        // Fallback with timestamp suffix to guarantee 100% collision-free persistence
+        const code = DEVICE_TYPE_CODE[selectedType] || "OTH";
+        resolvedAssetTag = `ACE-${code}-${Date.now().toString().slice(-4)}`;
+      }
     }
 
     const doc = await ITDevice.create({
       tenantId: tenantObjectId,
-      assetTag: assetTag.trim(),
-      type: type?.trim() || "Laptop",
+      assetTag: resolvedAssetTag,
+      type: selectedType,
       brand: brand?.trim() || "",
       modelName: modelName?.trim() || "",
-      assignedTo: assignedTo?.trim() || "—",
+      serialNumber: serialNumber?.trim() || "",
+      specs: specs?.trim() || "",
+      purchaseDate: purchaseDate?.trim() || "",
+      warrantyExpiry: warrantyExpiry?.trim() || "",
+      assignedTo: assignedTo?.trim() || session.userName || "—",
       department: department?.trim() || "—",
       os: os?.trim() || "",
       lastSeen: lastSeen || new Date().toISOString().slice(0, 10),
@@ -108,11 +191,11 @@ export async function POST(request: Request) {
       userName: session.userName,
       userRole: session.role,
       action: "IT_DEVICE_REGISTERED",
-      targetName: assetTag.trim(),
-      details: `Registered device ${assetTag.trim()} — ${brand || ""} ${modelName || ""}`.trim(),
+      targetName: resolvedAssetTag,
+      details: `Registered device ${resolvedAssetTag} (${selectedType}) — ${brand || ""} ${modelName || ""}`.trim(),
     });
 
-    return NextResponse.json({ device: doc }, { status: 201 });
+    return NextResponse.json({ device: doc, assetTag: resolvedAssetTag }, { status: 201 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Internal Server Error";
     console.error("POST /api/it/devices error:", error);

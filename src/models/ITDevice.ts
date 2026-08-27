@@ -6,6 +6,10 @@ export interface IITDevice extends Document {
   type: string;
   brand: string;
   modelName: string;
+  serialNumber?: string;
+  specs?: string;
+  purchaseDate?: string;
+  warrantyExpiry?: string;
   assignedTo: string;
   department: string;
   os: string;
@@ -24,6 +28,10 @@ const ITDeviceSchema = new Schema<IITDevice>(
     type: { type: String, trim: true, default: "Laptop" },
     brand: { type: String, trim: true, default: "" },
     modelName: { type: String, trim: true, default: "" },
+    serialNumber: { type: String, trim: true, default: "" },
+    specs: { type: String, trim: true, default: "" },
+    purchaseDate: { type: String, trim: true, default: "" },
+    warrantyExpiry: { type: String, trim: true, default: "" },
     assignedTo: { type: String, trim: true, default: "—" },
     department: { type: String, trim: true, default: "—" },
     os: { type: String, trim: true, default: "" },
@@ -45,6 +53,7 @@ const ITDeviceSchema = new Schema<IITDevice>(
 
 ITDeviceSchema.index({ tenantId: 1, status: 1 });
 ITDeviceSchema.index({ tenantId: 1, assetTag: 1 }, { unique: true, sparse: true });
+ITDeviceSchema.index({ tenantId: 1, serialNumber: 1 }, { sparse: true });
 ITDeviceSchema.index({ tenantId: 1, createdAt: -1 });
 
 export const ITDevice: Model<IITDevice> =

@@ -54,6 +54,10 @@ interface Device {
   type: string;
   brand: string;
   modelName: string;
+  serialNumber?: string;
+  specs?: string;
+  purchaseDate?: string;
+  warrantyExpiry?: string;
   assignedTo: string;
   department: string;
   os: string;
@@ -1278,12 +1282,45 @@ function SubscriptionsTab({ subs, loading, onAdd, onEdit, onDelete, autoOpenAdd,
   );
 }
 
-// ─── Devices Tab ──────────────────────────────────────────────────────────────
-
-// ─── Asset Tag Generator ─────────────────────────────────────────────────────
+// ─── Asset Tag Generator & Smart Presets ──────────────────────────────────────
 const TYPE_CODE: Record<string, string> = {
   Laptop: "LAP", Desktop: "DES", Monitor: "MON", Mobile: "MOB",
   Tablet: "TAB", Router: "RTR", Printer: "PRT", Other: "OTH",
+};
+
+const BRAND_PRESETS: Record<string, { brands: string[]; osDefaults: Record<string, string> }> = {
+  Laptop: {
+    brands: ["Apple", "Dell", "Lenovo", "HP", "Asus", "Acer", "Microsoft"],
+    osDefaults: { Apple: "macOS 15 Sequoia", Dell: "Windows 11 Pro", Lenovo: "Ubuntu 24.04", HP: "Windows 11 Pro", Asus: "Windows 11 Pro" },
+  },
+  Desktop: {
+    brands: ["Dell", "HP", "Apple", "Lenovo", "Custom Build"],
+    osDefaults: { Apple: "macOS 15 Sequoia", Dell: "Windows 11 Pro", HP: "Windows 11 Pro" },
+  },
+  Monitor: {
+    brands: ["LG", "Dell", "Samsung", "BenQ", "ASUS", "ViewSonic"],
+    osDefaults: {},
+  },
+  Mobile: {
+    brands: ["Apple", "Samsung", "Google", "OnePlus", "Xiaomi"],
+    osDefaults: { Apple: "iOS 18", Samsung: "Android 15", Google: "Android 15" },
+  },
+  Tablet: {
+    brands: ["Apple", "Samsung", "Microsoft", "Lenovo"],
+    osDefaults: { Apple: "iPadOS 18", Microsoft: "Windows 11" },
+  },
+  Router: {
+    brands: ["Cisco", "TP-Link", "Ubiquiti", "MikroTik", "Netgear"],
+    osDefaults: {},
+  },
+  Printer: {
+    brands: ["HP", "Canon", "Epson", "Brother"],
+    osDefaults: {},
+  },
+  Other: {
+    brands: ["Logitech", "Sony", "Jabra", "Anker"],
+    osDefaults: {},
+  },
 };
 
 function generateAssetTag(type: string, existingDevices: Device[]): string {
@@ -1299,7 +1336,20 @@ function generateAssetTag(type: string, existingDevices: Device[]): string {
 }
 
 const makeEmptyDevice = (assignedTo = "", department = "", assetTag = ""): Omit<Device, "id"> => ({
-  assetTag, type: "Laptop", brand: "", modelName: "", assignedTo, department, os: "", lastSeen: "", condition: "Good", status: "In Use",
+  assetTag,
+  type: "Laptop",
+  brand: "",
+  modelName: "",
+  serialNumber: "",
+  specs: "",
+  purchaseDate: "",
+  warrantyExpiry: "",
+  assignedTo,
+  department,
+  os: "",
+  lastSeen: new Date().toISOString().slice(0, 10),
+  condition: "Good",
+  status: "In Use",
 });
 
 function DeviceModal({
@@ -1311,6 +1361,7 @@ function DeviceModal({
   lockedDepartment,
   isEditing,
   teamMembers = [],
+  nextAssetTags = {},
 }: {
   initial: Omit<Device, "id">;
   onSave: (d: Omit<Device, "id">) => void;
@@ -1320,11 +1371,65 @@ function DeviceModal({
   lockedDepartment?: string;
   isEditing?: boolean;
   teamMembers?: TeamMemberOption[];
+  nextAssetTags?: Record<string, string>;
 }) {
   const [form, setForm] = useState(initial);
+  const [isGeneratingTag, setIsGeneratingTag] = useState(false);
+  const [showSpecs, setShowSpecs] = useState(Boolean(initial.serialNumber || initial.specs || initial.purchaseDate));
   const set = (k: keyof typeof form, v: string) => setForm((p) => ({ ...p, [k]: v }));
 
-  // When type changes on a new device, regenerate tag prefix hint
+  const currentPresets = BRAND_PRESETS[form.type] || BRAND_PRESETS.Other;
+
+  const handleTypeChange = async (newType: string) => {
+    set("type", newType);
+    if (!isEditing) {
+      if (nextAssetTags[newType]) {
+        set("assetTag", nextAssetTags[newType]);
+      }
+      setIsGeneratingTag(true);
+      try {
+        const res = await fetch(`/api/it/devices?nextTagForType=${encodeURIComponent(newType)}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.nextTag) {
+            setForm((p) => ({ ...p, type: newType, assetTag: data.nextTag }));
+          }
+        }
+      } catch {
+        // keep preloaded tag
+      } finally {
+        setIsGeneratingTag(false);
+      }
+    }
+  };
+
+  const handleBrandSelect = (brandName: string) => {
+    const defaultOS = currentPresets.osDefaults[brandName] || form.os;
+    setForm((p) => ({
+      ...p,
+      brand: brandName,
+      os: p.os ? p.os : defaultOS,
+    }));
+  };
+
+  const handleRefreshTag = async () => {
+    if (isEditing) return;
+    setIsGeneratingTag(true);
+    try {
+      const res = await fetch(`/api/it/devices?nextTagForType=${encodeURIComponent(form.type)}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.nextTag) {
+          set("assetTag", data.nextTag);
+        }
+      }
+    } catch {
+      // keep current
+    } finally {
+      setIsGeneratingTag(false);
+    }
+  };
+
   const fieldCls = "w-full h-8 rounded-lg border border-border bg-muted/60 text-xs px-3 focus:outline-none focus:ring-1 focus:ring-primary text-foreground placeholder:text-muted-foreground";
   const readonlyCls = "w-full h-8 rounded-lg border border-border bg-muted/40 text-xs px-3 text-foreground font-semibold flex items-center cursor-not-allowed opacity-80";
 
@@ -1337,31 +1442,122 @@ function DeviceModal({
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={!saving ? onClose : undefined} />
-      <div className="relative bg-card border border-border rounded-2xl shadow-2xl w-full max-w-lg animate-in fade-in zoom-in-95 duration-150 overflow-hidden">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-          <h3 className="text-sm font-bold text-foreground flex items-center gap-2"><i className="fa-solid fa-laptop text-emerald-500" />{isEditing ? "Edit Device" : "Register Device"}</h3>
-          <button onClick={onClose} disabled={saving} className="text-muted-foreground hover:text-foreground cursor-pointer disabled:opacity-50"><i className="fa-solid fa-xmark" /></button>
+      <div className="relative bg-card border border-border rounded-2xl shadow-2xl w-full max-w-lg animate-in fade-in zoom-in-95 duration-150 overflow-hidden max-h-[90vh] flex flex-col">
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border shrink-0 bg-muted/20">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-500 flex items-center justify-center border border-emerald-500/20">
+              <i className="fa-solid fa-laptop text-sm" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-foreground">
+                {isEditing ? "Edit Hardware Asset" : "Register New Hardware Asset"}
+              </h3>
+              <p className="text-[11px] text-muted-foreground">
+                {isEditing ? `Updating asset tag: ${form.assetTag}` : "Auto-assigned unique asset identifier guaranteed by database"}
+              </p>
+            </div>
+          </div>
+          <button onClick={onClose} disabled={saving} className="text-muted-foreground hover:text-foreground cursor-pointer disabled:opacity-50">
+            <i className="fa-solid fa-xmark text-sm" />
+          </button>
         </div>
-        <div className="p-5 space-y-3">
+
+        {/* Scrollable Form Body */}
+        <div className="p-5 space-y-3.5 overflow-y-auto">
           <div className="grid grid-cols-2 gap-3">
             {/* Asset Tag — auto-generated, read-only */}
             <div>
-              <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Asset Tag</label>
+              <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide flex items-center justify-between mb-1">
+                <span>Asset Tag</span>
+                <span className="text-[9px] text-emerald-500 font-semibold flex items-center gap-1">
+                  <i className="fa-solid fa-shield-halved text-[8px]" /> Auto-generated
+                </span>
+              </label>
               <div className="relative">
-                <input className={cn(fieldCls, "pr-8 font-mono")} value={form.assetTag} readOnly placeholder="Auto-generated" />
-                <i className="fa-solid fa-lock-keyhole absolute right-2.5 top-1/2 -translate-y-1/2 text-[9px] text-muted-foreground" />
+                <input
+                  className={cn(fieldCls, "pr-8 font-mono font-bold text-primary tracking-wider")}
+                  value={isGeneratingTag ? "Generating tag..." : form.assetTag}
+                  readOnly
+                  placeholder="Auto-generated"
+                />
+                {!isEditing ? (
+                  <button
+                    type="button"
+                    onClick={handleRefreshTag}
+                    disabled={isGeneratingTag || saving}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-primary transition-colors cursor-pointer disabled:opacity-50"
+                    title="Sync next available asset tag from database"
+                  >
+                    <i className={cn("fa-solid fa-arrows-rotate text-[10px]", isGeneratingTag && "fa-spin")} />
+                  </button>
+                ) : (
+                  <i className="fa-solid fa-lock absolute right-2.5 top-1/2 -translate-y-1/2 text-[9px] text-muted-foreground" />
+                )}
               </div>
             </div>
+
+            {/* Device Type */}
             <div>
               <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Type</label>
-              <select className={cn(fieldCls, "cursor-pointer")} value={form.type} onChange={(e) => set("type", e.target.value)}>
+              <select className={cn(fieldCls, "cursor-pointer")} value={form.type} onChange={(e) => handleTypeChange(e.target.value)}>
                 {["Laptop", "Desktop", "Monitor", "Mobile", "Tablet", "Router", "Printer", "Other"].map((t) => <option key={t}>{t}</option>)}
               </select>
             </div>
-            <div><label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Brand</label><input className={fieldCls} value={form.brand} onChange={(e) => set("brand", e.target.value)} placeholder="Apple, Dell, Lenovo…" /></div>
 
+            {/* Brand with Quick Presets */}
+            <div className="col-span-2 space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block">Brand</label>
+                <div className="flex items-center gap-1 overflow-x-auto no-scrollbar">
+                  {currentPresets.brands.map((b) => (
+                    <button
+                      key={b}
+                      type="button"
+                      onClick={() => handleBrandSelect(b)}
+                      className={cn(
+                        "px-1.5 py-0.5 text-[9px] font-semibold rounded-md border transition-all cursor-pointer",
+                        form.brand === b
+                          ? "bg-primary text-primary-foreground border-primary"
+                          : "bg-muted/60 text-muted-foreground border-border hover:border-primary/50"
+                      )}
+                    >
+                      {b}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <input
+                className={fieldCls}
+                value={form.brand}
+                onChange={(e) => set("brand", e.target.value)}
+                placeholder="e.g. Apple, Dell, Lenovo, HP…"
+              />
+            </div>
 
-            {/* Assigned To — locked for employees */}
+            {/* Model Name */}
+            <div>
+              <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Model Name</label>
+              <input
+                className={fieldCls}
+                value={form.modelName}
+                onChange={(e) => set("modelName", e.target.value)}
+                placeholder="e.g. MacBook Pro 14, XPS 15…"
+              />
+            </div>
+
+            {/* Operating System */}
+            <div>
+              <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Operating System</label>
+              <input
+                className={fieldCls}
+                value={form.os}
+                onChange={(e) => set("os", e.target.value)}
+                placeholder="e.g. macOS 15, Windows 11 Pro, Ubuntu 24.04…"
+              />
+            </div>
+
+            {/* Assigned To */}
             <div>
               <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1 mb-1">
                 Assigned To {lockedAssignedTo && <i className="fa-solid fa-circle-user text-primary text-[9px]" />}
@@ -1385,7 +1581,7 @@ function DeviceModal({
                         department: (!lockedDepartment && found?.department) ? found.department : p.department,
                       }));
                     }}
-                    placeholder="Full name"
+                    placeholder="Search or enter full name"
                   />
                   <datalist id="device-assignees-datalist">
                     {teamMembers.map((m) => (
@@ -1398,7 +1594,7 @@ function DeviceModal({
               )}
             </div>
 
-            {/* Department — locked for employees */}
+            {/* Department */}
             <div>
               <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1 mb-1">
                 Department {lockedDepartment && <i className="fa-solid fa-building text-primary text-[9px]" />}
@@ -1414,7 +1610,7 @@ function DeviceModal({
                     className={fieldCls}
                     value={form.department}
                     onChange={(e) => set("department", e.target.value)}
-                    placeholder="IT, Design, Operations…"
+                    placeholder="IT, Design, Operations, HR…"
                   />
                   <datalist id="device-departments-datalist">
                     {departmentOptions.map((d) => <option key={d} value={d} />)}
@@ -1423,14 +1619,15 @@ function DeviceModal({
               )}
             </div>
 
-            <div><label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">OS</label><input className={fieldCls} value={form.os} onChange={(e) => set("os", e.target.value)} placeholder="macOS 14, Windows 11, Ubuntu…" /></div>
-
+            {/* Condition */}
             <div>
               <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Condition</label>
               <select className={cn(fieldCls, "cursor-pointer")} value={form.condition} onChange={(e) => set("condition", e.target.value as Device["condition"])}>
                 {["Excellent", "Good", "Fair", "Poor"].map((c) => <option key={c}>{c}</option>)}
               </select>
             </div>
+
+            {/* Status */}
             <div>
               <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Status</label>
               <select className={cn(fieldCls, "cursor-pointer")} value={form.status} onChange={(e) => set("status", e.target.value as Device["status"])}>
@@ -1438,9 +1635,66 @@ function DeviceModal({
               </select>
             </div>
           </div>
+
+          {/* Toggle Hardware Specs & Warranty Section */}
+          <div className="pt-2 border-t border-border/60">
+            <button
+              type="button"
+              onClick={() => setShowSpecs(!showSpecs)}
+              className="text-xs text-primary font-semibold flex items-center gap-1.5 hover:underline cursor-pointer"
+            >
+              <i className={cn("fa-solid fa-chevron-right text-[9px] transition-transform", showSpecs && "rotate-90")} />
+              {showSpecs ? "Hide Hardware Specs & Warranty" : "+ Add Hardware Specs, Serial No. & Warranty"}
+            </button>
+
+            {showSpecs && (
+              <div className="grid grid-cols-2 gap-3 mt-3 animate-in fade-in slide-in-from-top-2">
+                <div>
+                  <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Serial / IMEI Number</label>
+                  <input
+                    className={fieldCls}
+                    value={form.serialNumber || ""}
+                    onChange={(e) => set("serialNumber", e.target.value)}
+                    placeholder="e.g. FVFG90J4Q05D"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Hardware Specs</label>
+                  <input
+                    className={fieldCls}
+                    value={form.specs || ""}
+                    onChange={(e) => set("specs", e.target.value)}
+                    placeholder="e.g. 16GB RAM, 512GB SSD, M3"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Purchase Date</label>
+                  <input
+                    type="date"
+                    className={fieldCls}
+                    value={form.purchaseDate || ""}
+                    onChange={(e) => set("purchaseDate", e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Warranty Expiry</label>
+                  <input
+                    type="date"
+                    className={fieldCls}
+                    value={form.warrantyExpiry || ""}
+                    onChange={(e) => set("warrantyExpiry", e.target.value)}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
         </div>
-        <div className="flex gap-2 px-5 py-4 border-t border-border">
-          <button onClick={onClose} disabled={saving} className="flex-1 h-9 rounded-lg border border-border bg-muted/60 text-xs font-semibold text-muted-foreground hover:bg-muted cursor-pointer disabled:opacity-50">Cancel</button>
+
+        {/* Modal Actions Footer */}
+        <div className="flex gap-2 px-5 py-4 border-t border-border shrink-0 bg-muted/10">
+          <button onClick={onClose} disabled={saving} className="flex-1 h-9 rounded-lg border border-border bg-muted/60 text-xs font-semibold text-muted-foreground hover:bg-muted cursor-pointer disabled:opacity-50">
+            Cancel
+          </button>
           <button
             onClick={() => {
               const finalForm = {
@@ -1451,8 +1705,8 @@ function DeviceModal({
               if (finalForm.assetTag.trim()) onSave(finalForm);
             }}
             disabled={!form.assetTag.trim() || saving}
-            className="flex-1 h-9 rounded-lg bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 disabled:opacity-50 cursor-pointer flex items-center justify-center gap-1.5">
-            {saving ? <><i className="fa-solid fa-circle-notch fa-spin text-[10px]" />Saving…</> : "Save"}
+            className="flex-1 h-9 rounded-lg bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 disabled:opacity-50 cursor-pointer flex items-center justify-center gap-1.5 shadow-sm">
+            {saving ? <><i className="fa-solid fa-circle-notch fa-spin text-[10px]" />Saving…</> : <><i className="fa-solid fa-check text-[10px]" />Save Device</>}
           </button>
         </div>
       </div>
@@ -1460,9 +1714,10 @@ function DeviceModal({
   );
 }
 
-function DevicesTab({ devices, allDevices, loading, onAdd, onEdit, onDelete, autoOpenAdd, userName, userDepartment, isPrivileged, teamMembers = [] }: {
+function DevicesTab({ devices, allDevices, nextAssetTags = {}, loading, onAdd, onEdit, onDelete, autoOpenAdd, userName, userDepartment, isPrivileged, teamMembers = [] }: {
   devices: Device[];        // filtered (user-scoped) — for display
   allDevices: Device[];     // full list — for asset tag generation
+  nextAssetTags?: Record<string, string>;
   loading: boolean;
   onAdd: (d: Omit<Device, "id">) => Promise<void>;
   onEdit: (id: string, d: Omit<Device, "id">) => Promise<void>;
@@ -1478,8 +1733,10 @@ function DevicesTab({ devices, allDevices, loading, onAdd, onEdit, onDelete, aut
   const [filterStatus, setFilterStatus] = useState("All");
   const [modal, setModal] = useState<{ mode: "add" } | { mode: "edit"; item: Device } | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [badgeDevice, setBadgeDevice] = useState<Device | null>(null);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [copiedTag, setCopiedTag] = useState(false);
 
   useEffect(() => {
     if (autoOpenAdd) {
@@ -1490,7 +1747,7 @@ function DevicesTab({ devices, allDevices, loading, onAdd, onEdit, onDelete, aut
   const types = useMemo(() => ["All", ...Array.from(new Set(devices.map((d) => d.type).filter(Boolean)))], [devices]);
   const filtered = useMemo(() => devices.filter((d) => {
     const q = search.toLowerCase();
-    return (!q || d.assetTag.toLowerCase().includes(q) || d.brand?.toLowerCase().includes(q) || d.modelName?.toLowerCase().includes(q) || d.assignedTo?.toLowerCase().includes(q))
+    return (!q || d.assetTag.toLowerCase().includes(q) || d.brand?.toLowerCase().includes(q) || d.modelName?.toLowerCase().includes(q) || d.assignedTo?.toLowerCase().includes(q) || (d.serialNumber && d.serialNumber.toLowerCase().includes(q)))
       && (filterType === "All" || d.type === filterType)
       && (filterStatus === "All" || d.status === filterStatus);
   }), [devices, search, filterType, filterStatus]);
@@ -1510,6 +1767,20 @@ function DevicesTab({ devices, allDevices, loading, onAdd, onEdit, onDelete, aut
     try { await onDelete(deleteId); setDeleteId(null); } finally { setDeleting(false); }
   };
 
+  const handleQuickStatusChange = async (device: Device, newStatus: Device["status"]) => {
+    try {
+      await onEdit(device.id, { ...device, status: newStatus });
+    } catch {
+      // handled by parent toast
+    }
+  };
+
+  const copyAssetTag = (tag: string) => {
+    navigator.clipboard.writeText(tag);
+    setCopiedTag(true);
+    setTimeout(() => setCopiedTag(false), 2500);
+  };
+
   return (
     <div className="space-y-4">
       {modal && (
@@ -1517,7 +1788,7 @@ function DevicesTab({ devices, allDevices, loading, onAdd, onEdit, onDelete, aut
           initial={modal.mode === "edit" ? modal.item : makeEmptyDevice(
             isPrivileged ? "" : (userName || ""),
             isPrivileged ? "" : (userDepartment || ""),
-            modal.mode === "add" ? generateAssetTag("Laptop", allDevices) : ""
+            modal.mode === "add" ? (nextAssetTags["Laptop"] || generateAssetTag("Laptop", allDevices)) : ""
           )}
           isEditing={modal.mode === "edit"}
           lockedAssignedTo={(!isPrivileged && modal.mode === "add") ? (userName || undefined) : undefined}
@@ -1526,10 +1797,91 @@ function DevicesTab({ devices, allDevices, loading, onAdd, onEdit, onDelete, aut
           onClose={() => !saving && setModal(null)}
           saving={saving}
           teamMembers={teamMembers}
+          nextAssetTags={nextAssetTags}
         />
       )}
       {deleteId && <ConfirmDialog title="Remove Device" message="Permanently remove this device from inventory?" onConfirm={handleDelete} onCancel={() => !deleting && setDeleteId(null)} loading={deleting} />}
 
+      {/* Printable Asset Badge / QR Modal */}
+      {badgeDevice && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in">
+          <div className="w-full max-w-sm bg-card border border-border rounded-2xl p-6 shadow-2xl space-y-4 animate-in zoom-in-95" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between border-b border-border pb-3">
+              <div className="flex items-center gap-2">
+                <i className="fa-solid fa-qrcode text-primary text-base" />
+                <h4 className="text-sm font-bold text-foreground">Hardware Asset Tag</h4>
+              </div>
+              <button onClick={() => setBadgeDevice(null)} className="text-muted-foreground hover:text-foreground cursor-pointer">
+                <i className="fa-solid fa-xmark" />
+              </button>
+            </div>
+
+            {/* Virtual Barcode & Asset Badge Card */}
+            <div className="p-4 rounded-xl bg-muted/40 border-2 border-dashed border-primary/30 text-center space-y-3 print:border-solid">
+              <div className="flex items-center justify-between text-[10px] text-muted-foreground uppercase font-bold tracking-wider">
+                <span>NexAce IT Asset</span>
+                <span>{badgeDevice.type}</span>
+              </div>
+              
+              <div className="bg-background py-3 px-2 rounded-lg border border-border flex flex-col items-center justify-center">
+                <div className="font-mono text-xl font-black text-primary tracking-widest">
+                  {badgeDevice.assetTag}
+                </div>
+                {/* Barcode Visual Strip Simulation */}
+                <div className="flex gap-[2px] h-6 items-end mt-2 opacity-80">
+                  {Array.from({ length: 32 }).map((_, i) => (
+                    <div
+                      key={i}
+                      className={cn(
+                        "bg-foreground",
+                        i % 4 === 0 ? "w-1 h-6" : i % 2 === 0 ? "w-[1px] h-5" : "w-[2px] h-6"
+                      )}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              <div className="text-left space-y-1 text-xs pt-1">
+                <p className="font-bold text-foreground truncate">{badgeDevice.brand} {badgeDevice.modelName}</p>
+                <p className="text-muted-foreground text-[11px]">
+                  Assigned: <strong className="text-foreground font-semibold">{badgeDevice.assignedTo || "Unassigned"}</strong> ({badgeDevice.department || "General"})
+                </p>
+                {badgeDevice.serialNumber && (
+                  <p className="text-[10px] font-mono text-muted-foreground">
+                    S/N: <span className="text-foreground">{badgeDevice.serialNumber}</span>
+                  </p>
+                )}
+                {badgeDevice.specs && (
+                  <p className="text-[10px] text-muted-foreground italic">
+                    Specs: {badgeDevice.specs}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <div className="flex gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => copyAssetTag(badgeDevice.assetTag)}
+                className="flex-1 h-8 rounded-lg border border-border bg-muted/60 text-xs font-semibold text-foreground hover:bg-muted cursor-pointer flex items-center justify-center gap-1.5"
+              >
+                <i className={cn(copiedTag ? "fa-solid fa-check text-emerald-500" : "fa-solid fa-copy text-xs")} />
+                {copiedTag ? "Tag Copied!" : "Copy Tag"}
+              </button>
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="flex-1 h-8 rounded-lg bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 cursor-pointer flex items-center justify-center gap-1.5 shadow-sm"
+              >
+                <i className="fa-solid fa-print text-xs" />
+                Print Label
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* KPI Inventory Chips */}
       <div className="flex flex-wrap gap-3 items-center">
         {[
           { label: "In Use", count: devices.filter((d) => d.status === "In Use").length, cls: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20" },
@@ -1547,13 +1899,13 @@ function DevicesTab({ devices, allDevices, loading, onAdd, onEdit, onDelete, aut
       <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between flex-wrap">
         <div className="relative flex-1 max-w-xs">
           <i className="fa-solid fa-magnifying-glass absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground" />
-          <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search asset tag, model, user…" className="pl-8 h-8 text-xs" />
+          <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search asset tag, model, serial, user…" className="pl-8 h-8 text-xs" />
         </div>
         <div className="flex flex-wrap gap-2 items-center">
           <select className={SELECT_CLS} value={filterType} onChange={(e) => setFilterType(e.target.value)}>{types.map((t) => <option key={t}>{t}</option>)}</select>
           <select className={SELECT_CLS} value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>{["All", "In Use", "Available", "In Repair", "Retired"].map((s) => <option key={s}>{s}</option>)}</select>
           <span className="text-xs text-muted-foreground">{filtered.length} device{filtered.length !== 1 ? "s" : ""}</span>
-          <button onClick={() => setModal({ mode: "add" })} className="flex items-center gap-1.5 h-8 px-3 rounded-lg bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-colors cursor-pointer">
+          <button onClick={() => setModal({ mode: "add" })} className="flex items-center gap-1.5 h-8 px-3 rounded-lg bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-colors cursor-pointer shadow-sm">
             <i className="fa-solid fa-plus text-[10px]" /> Register Device
           </button>
         </div>
@@ -1575,17 +1927,46 @@ function DevicesTab({ devices, allDevices, loading, onAdd, onEdit, onDelete, aut
               ) : (
                 filtered.map((row, idx) => (
                   <tr key={row.id} className={cn("border-b border-border/60 hover:bg-muted/30 transition-colors group", idx % 2 === 0 ? "" : "bg-muted/10")}>
-                    <td className="px-3 py-2.5 font-mono font-semibold text-primary whitespace-nowrap">{row.assetTag}</td>
+                    <td className="px-3 py-2.5 whitespace-nowrap">
+                      <button
+                        onClick={() => setBadgeDevice(row)}
+                        className="font-mono font-bold text-primary hover:underline flex items-center gap-1.5 cursor-pointer text-xs"
+                        title="Click to view & print hardware asset label"
+                      >
+                        <i className="fa-solid fa-qrcode text-[10px] opacity-70 group-hover:opacity-100" />
+                        {row.assetTag}
+                      </button>
+                    </td>
                     <td className="px-3 py-2.5 whitespace-nowrap"><span className="flex items-center gap-1.5 text-muted-foreground"><i className={cn(deviceIcon(row.type), "text-xs")} />{row.type}</span></td>
-                    <td className="px-3 py-2.5 text-foreground whitespace-nowrap font-medium">{row.brand} {row.modelName}</td>
-                    <td className="px-3 py-2.5 text-muted-foreground whitespace-nowrap">{row.assignedTo || "—"}</td>
+                    <td className="px-3 py-2.5 text-foreground whitespace-nowrap font-medium">
+                      <div>{row.brand} {row.modelName}</div>
+                      {row.specs && <div className="text-[10px] text-muted-foreground font-normal truncate max-w-[140px]">{row.specs}</div>}
+                    </td>
+                    <td className="px-3 py-2.5 text-muted-foreground whitespace-nowrap font-medium text-foreground">{row.assignedTo || "—"}</td>
                     <td className="px-3 py-2.5 text-muted-foreground whitespace-nowrap">{row.department || "—"}</td>
                     <td className="px-3 py-2.5 text-muted-foreground whitespace-nowrap">{row.os || "—"}</td>
                     <td className="px-3 py-2.5 text-muted-foreground whitespace-nowrap">{row.lastSeen || "—"}</td>
                     <td className="px-3 py-2.5 whitespace-nowrap"><span className={statusBadge(row.condition)}>{row.condition}</span></td>
-                    <td className="px-3 py-2.5 whitespace-nowrap"><span className={statusBadge(row.status)}>{row.status}</span></td>
+                    <td className="px-3 py-2.5 whitespace-nowrap">
+                      <select
+                        value={row.status}
+                        onChange={(e) => handleQuickStatusChange(row, e.target.value as Device["status"])}
+                        className={cn(
+                          "h-6 text-[10px] font-bold rounded-full px-2 py-0.5 border cursor-pointer focus:outline-none transition-all",
+                          row.status === "In Use" ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30" :
+                          row.status === "Available" ? "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30" :
+                          row.status === "In Repair" ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30" :
+                          "bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/30"
+                        )}
+                      >
+                        {["In Use", "Available", "In Repair", "Retired"].map((s) => (
+                          <option key={s} value={s}>{s}</option>
+                        ))}
+                      </select>
+                    </td>
                     <td className="px-3 py-2.5 whitespace-nowrap">
                       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button onClick={() => setBadgeDevice(row)} className="w-6 h-6 rounded-md bg-muted hover:bg-accent flex items-center justify-center text-muted-foreground hover:text-foreground cursor-pointer" title="View Asset Badge"><i className="fa-solid fa-qrcode text-[9px]" /></button>
                         <button onClick={() => setModal({ mode: "edit", item: row })} className="w-6 h-6 rounded-md bg-muted hover:bg-accent flex items-center justify-center text-muted-foreground hover:text-foreground cursor-pointer" title="Edit"><i className="fa-solid fa-pen text-[9px]" /></button>
                         <button onClick={() => setDeleteId(row.id)} className="w-6 h-6 rounded-md bg-muted hover:bg-red-500/10 flex items-center justify-center text-muted-foreground hover:text-red-500 cursor-pointer" title="Delete"><i className="fa-solid fa-trash text-[9px]" /></button>
                       </div>
@@ -2160,10 +2541,15 @@ export default function ITCommandCenterPage() {
     finally { setLoadingSubs(false); }
   }, [showToast]);
 
+  const [nextAssetTags, setNextAssetTags] = useState<Record<string, string>>({});
+
   const loadDevices = useCallback(async () => {
     try {
       const data = await apiFetch("/api/it/devices");
       setDevices((data.devices || []).map((d: any) => ({ ...normalise(d), id: d._id?.toString() || d.id })));
+      if (data.nextAssetTags) {
+        setNextAssetTags(data.nextAssetTags);
+      }
     } catch (e: any) { showToast(e.message || "Failed to load devices", "error"); }
     finally { setLoadingDevices(false); }
   }, [showToast]);
@@ -2290,7 +2676,8 @@ export default function ITCommandCenterPage() {
     const res = await apiFetch("/api/it/devices", { method: "POST", body: JSON.stringify(data) });
     const doc = res.device;
     setDevices((p) => [{ ...doc, id: doc._id?.toString() || doc.id }, ...p]);
-    showToast("Device registered", "success");
+    await loadDevices();
+    showToast(`Device registered (${doc.assetTag || res.assetTag})`, "success");
   };
 
   const editDevice = async (id: string, data: Omit<Device, "id">) => {
@@ -2455,7 +2842,7 @@ export default function ITCommandCenterPage() {
         {activeTab === "drive" && <DriveLinksTab links={links} loading={loadingLinks} onAdd={addLink} onEdit={editLink} onDelete={deleteLink} autoOpenAdd={autoOpenAddTab === "drive"} teamMembers={teamMembers} />}
         {activeTab === "access" && <AccessTab access={access} loading={loadingAccess} onAdd={addAccess} onEdit={editAccess} onDelete={deleteAccess} onToggleStatus={toggleAccessStatus} autoOpenAdd={autoOpenAddTab === "access"} teamMembers={teamMembers} />}
         {activeTab === "subscriptions" && <SubscriptionsTab subs={subs} loading={loadingSubs} onAdd={addSub} onEdit={editSub} onDelete={deleteSub} autoOpenAdd={autoOpenAddTab === "subscriptions"} teamMembers={teamMembers} />}
-        {activeTab === "devices" && <DevicesTab devices={devices} allDevices={devices} loading={loadingDevices} onAdd={addDevice} onEdit={editDevice} onDelete={deleteDevice} autoOpenAdd={autoOpenAddTab === "devices"} userName={user?.name} userDepartment={user?.department} isPrivileged={isPrivileged} teamMembers={teamMembers} />}
+        {activeTab === "devices" && <DevicesTab devices={devices} allDevices={devices} nextAssetTags={nextAssetTags} loading={loadingDevices} onAdd={addDevice} onEdit={editDevice} onDelete={deleteDevice} autoOpenAdd={autoOpenAddTab === "devices"} userName={user?.name} userDepartment={user?.department} isPrivileged={isPrivileged} teamMembers={teamMembers} />}
         {activeTab === "invoices" && isPrivileged && <InvoicesTab invoices={invoices} loading={loadingInvoices} onAdd={addInvoice} onEdit={editInvoice} onDelete={deleteInvoice} autoOpenAdd={autoOpenAddTab === "invoices"} />}
       </div>
     </div>

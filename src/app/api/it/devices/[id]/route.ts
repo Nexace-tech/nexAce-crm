@@ -24,7 +24,7 @@ export async function PATCH(
 
     await connectToDatabase();
 
-    const isPrivileged = PRIVILEGED.includes(session.role);
+    const isPrivileged = ["Admin", "OPS", "Sub Admin", "Manager", "HR"].includes(session.role);
 
     // Fetch the existing record first
     const existing = await ITDevice.findOne({ _id: id, tenantId: tenantObjectId }).lean() as any;
@@ -45,19 +45,38 @@ export async function PATCH(
     }
 
     const body = await request.json();
-    const { type, brand, modelName, assignedTo, department, os, lastSeen, condition, status, assetTag } = body;
+    const {
+      type,
+      brand,
+      modelName,
+      serialNumber,
+      specs,
+      purchaseDate,
+      warrantyExpiry,
+      assignedTo,
+      department,
+      os,
+      lastSeen,
+      condition,
+      status,
+      assetTag,
+    } = body;
 
     const updatePayload: Record<string, unknown> = { updatedAt: new Date() };
     if (type !== undefined) updatePayload.type = type;
     if (brand !== undefined) updatePayload.brand = brand;
     if (modelName !== undefined) updatePayload.modelName = modelName;
+    if (serialNumber !== undefined) updatePayload.serialNumber = serialNumber;
+    if (specs !== undefined) updatePayload.specs = specs;
+    if (purchaseDate !== undefined) updatePayload.purchaseDate = purchaseDate;
+    if (warrantyExpiry !== undefined) updatePayload.warrantyExpiry = warrantyExpiry;
     if (os !== undefined) updatePayload.os = os;
     if (lastSeen !== undefined) updatePayload.lastSeen = lastSeen;
     if (condition !== undefined) updatePayload.condition = condition;
     if (status !== undefined) updatePayload.status = status;
     if (assetTag !== undefined) updatePayload.assetTag = assetTag;
 
-    // Non-privileged users cannot reassign the device to someone else
+    // Privileged users (Admin, OPS, HR, Manager) can reassign the device
     if (isPrivileged) {
       if (assignedTo !== undefined) updatePayload.assignedTo = assignedTo;
       if (department !== undefined) updatePayload.department = department;
