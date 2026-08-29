@@ -29,29 +29,30 @@ export async function GET(request: Request) {
     const dataScope = await getUserDataScope(session);
 
     if (pending) {
-      if (!dataScope.canViewFeature("approveTimesheets") && session.role !== "Admin" && session.role !== "OPS") {
+      const isPrivileged = session.role === "Admin" || session.role === "OPS" || dataScope.scope === "all";
+      if (!isPrivileged && !dataScope.canViewFeature("approveTimesheets") && session.role !== "Manager") {
         return NextResponse.json({ error: "Forbidden: Timesheet approval permission required" }, { status: 403 });
       }
 
       const query: Record<string, unknown> = {
         tenantId: new mongoose.Types.ObjectId(session.tenantId),
-        status: "Pending",
+        status: { $in: ["Pending", "Submitted"] },
       };
 
-      if (dataScope.scope === "department") {
+      if (!isPrivileged && dataScope.scope === "department") {
         const loggedUser = await User.findById(session.userId).lean();
         const userDept = loggedUser?.department;
         const reports = await User.find({
           tenantId: new mongoose.Types.ObjectId(session.tenantId),
           $or: [
             { managerId: new mongoose.Types.ObjectId(session.userId) },
-            { department: userDept },
+            ...(userDept ? [{ department: userDept }] : []),
           ]
         }).select("_id");
         
         const reportIds = reports.map((r) => r._id);
         query.userId = { $in: reportIds };
-      } else if (dataScope.scope === "own") {
+      } else if (!isPrivileged && dataScope.scope === "own") {
         query.userId = new mongoose.Types.ObjectId(session.userId);
       }
 
@@ -114,37 +115,53 @@ export async function POST(request: Request) {
     await connectToDatabase();
 
     if (Array.isArray(body)) {
-      // Validate BEFORE building bulkOps to prevent partial writes of invalid entries
+      // Validate entries
       for (const e of body) {
-        if (!e.project || !e.date || isNaN(Number(e.hours)) || Number(e.hours) <= 0) {
-          return NextResponse.json({ error: "Each entry requires project, date, and hours > 0" }, { status: 400 });
+        if (!e.project || !e.date || isNaN(Number(e.hours)) || Number(e.hours) < 0) {
+          return NextResponse.json({ error: "Each entry requires project, date, and valid hours (>= 0)" }, { status: 400 });
         }
       }
 
-      // Batch upsert to prevent duplicate entries for the same date/project/task
-      const bulkOps: mongoose.mongo.AnyBulkWriteOperation<any>[] = body.map((entry: Record<string, unknown>) => ({
-        updateOne: {
-          filter: {
-            userId: new mongoose.Types.ObjectId(session.userId),
-            tenantId: new mongoose.Types.ObjectId(session.tenantId),
-            date: new Date(entry.date as string),
-            project: entry.project,
-            taskName: entry.taskName || "General Tasks",
-          },
-          update: {
-            $set: {
-              hours: Number(entry.hours),
-              isBillable: entry.isBillable !== false,
-              comment: entry.comment ? String(entry.comment).trim() : "",
-              status: (entry.status as "Draft" | "Pending" | "Approved" | "Rejected") || "Draft",
-            }
-          },
-          upsert: true
+      // Batch upsert for hours > 0, and deleteOne for hours == 0 (to clean up cleared cells)
+      const bulkOps: mongoose.mongo.AnyBulkWriteOperation<any>[] = body.map((entry: Record<string, unknown>) => {
+        const hoursNum = Number(entry.hours);
+        const filter = {
+          userId: new mongoose.Types.ObjectId(session.userId),
+          tenantId: new mongoose.Types.ObjectId(session.tenantId),
+          date: new Date(entry.date as string),
+          project: entry.project,
+          taskName: entry.taskName || "General Tasks",
+        };
+
+        if (hoursNum > 0) {
+          return {
+            updateOne: {
+              filter,
+              update: {
+                $set: {
+                  hours: hoursNum,
+                  isBillable: entry.isBillable !== false,
+                  comment: entry.comment ? String(entry.comment).trim() : "",
+                  status: (entry.status as "Draft" | "Pending" | "Approved" | "Rejected") || "Draft",
+                },
+              },
+              upsert: true,
+            },
+          };
+        } else {
+          return {
+            deleteOne: {
+              filter,
+            },
+          };
         }
-      }));
+      });
 
       const result = await TimeEntry.bulkWrite(bulkOps as any);
-      return NextResponse.json({ success: true, count: result.upsertedCount + result.modifiedCount });
+      return NextResponse.json({
+        success: true,
+        count: (result.upsertedCount || 0) + (result.modifiedCount || 0) + (result.deletedCount || 0),
+      });
     } else {
       // Single entry log/submit
       const { project, taskName, hours, date, isBillable, status, comment } = body;
@@ -272,3 +289,70 @@ export async function PUT(request: Request) {
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
+
+/**
+ * DELETE: Delete timesheet entries.
+ * Can delete by:
+ * 1. Specific IDs: { entryIds: string[] } or ?id=...
+ * 2. Project + task + date range: { project: string, taskName: string, start?: string, end?: string }
+ */
+export async function DELETE(request: Request) {
+  try {
+    const session = await getSession();
+    if (!session) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { searchParams } = new URL(request.url);
+    const idParam = searchParams.get("id");
+
+    let body: any = {};
+    try {
+      body = await request.json();
+    } catch {
+      // Body may be empty if params passed via URL
+    }
+
+    await connectToDatabase();
+
+    const query: Record<string, unknown> = {
+      tenantId: new mongoose.Types.ObjectId(session.tenantId),
+    };
+
+    // Non-admin / non-ops can only delete their own entries
+    const isPrivileged = session.role === "Admin" || session.role === "OPS";
+    if (!isPrivileged) {
+      query.userId = new mongoose.Types.ObjectId(session.userId);
+    }
+
+    const entryIds = body.entryIds || body.ids || (idParam ? [idParam] : (body.id ? [body.id] : null));
+
+    if (entryIds && Array.isArray(entryIds) && entryIds.length > 0) {
+      query._id = { $in: entryIds.map((id: string) => new mongoose.Types.ObjectId(id)) };
+    } else if (body.project || searchParams.get("project")) {
+      const proj = body.project || searchParams.get("project");
+      const task = body.taskName !== undefined ? body.taskName : searchParams.get("taskName");
+      const start = body.start || searchParams.get("start");
+      const end = body.end || searchParams.get("end");
+
+      query.project = proj;
+      if (task !== null && task !== undefined) {
+        query.taskName = task;
+      }
+      if (start && end) {
+        query.date = { $gte: new Date(start), $lte: new Date(end) };
+      }
+    } else {
+      return NextResponse.json({ error: "Missing delete criteria (entryIds or project/task/dates)" }, { status: 400 });
+    }
+
+    const result = await TimeEntry.deleteMany(query);
+
+    return NextResponse.json({ success: true, deletedCount: result.deletedCount });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Internal Server Error";
+    console.error("API DELETE Timesheets error:", error);
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+

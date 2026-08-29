@@ -30,7 +30,7 @@ export async function GET() {
     const results = await Promise.allSettled([
       Project.find({ tenantId: tenantObjectId }).select("name description status priority startDate dueDate createdAt").sort({ createdAt: -1 }).limit(20).lean(),
       Client.find({ tenantId: tenantObjectId }).select("projectId clientAccount venture projectName deliveryOwner phase priority startDate targetEndDate health billingType estHours actualHours progressPercent monthlyValue createdAt status").lean(),
-      TimeEntry.find({ tenantId: tenantObjectId }).select("date hours project taskName status").sort({ date: -1 }).limit(50).lean(),
+      TimeEntry.find({ tenantId: tenantObjectId }).populate("userId", "name role department photoUrl").sort({ date: -1 }).limit(50).lean(),
       ChatMessage.find({ tenantId: tenantObjectId, channel: "general" }).select("senderName content createdAt").sort({ createdAt: -1 }).limit(20).lean(),
       OKR.find({ tenantId: tenantObjectId }).select("title description progress category targetDate").sort({ createdAt: -1 }).lean(),
       ActivityLog.find({ tenantId: tenantObjectId }).select("userName action details createdAt").sort({ createdAt: -1 }).limit(15).lean(),

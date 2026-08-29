@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef, startTransition } from "react";
+import React, { useState, useEffect, useRef, useMemo, startTransition } from "react";
 import Link from "next/link";
 import { useAuth } from "@/hooks/useAuth";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -84,6 +84,8 @@ export default function CalendarPage() {
     { project: "NexAce CRM Implementation", taskName: "UI/UX Development", comment: "", mon: 0, tue: 0, wed: 0, thu: 0, fri: 0, sat: 0, isBillable: true },
     { project: "Client Portal Integration", taskName: "API endpoints integration", comment: "", mon: 0, tue: 0, wed: 0, thu: 0, fri: 0, sat: 0, isBillable: true },
   ]);
+  const [timesheetRowToDelete, setTimesheetRowToDelete] = useState<{ index: number; project: string; taskName: string } | null>(null);
+  const [deletingTimesheetRow, setDeletingTimesheetRow] = useState<boolean>(false);
 
   // Attendance States
   const [attendanceToday, setAttendanceToday] = useState<any>(null);
@@ -226,7 +228,15 @@ export default function CalendarPage() {
 
   const [projectsList, setProjectsList] = useState<string[]>(["General Administration"]);
 
-  const isManagerOrAdmin = currentUser?.role === "Admin" || currentUser?.role === "Manager";
+  const isManagerOrAdmin = Boolean(
+    isAdmin ||
+    isOPS ||
+    currentUser?.role === "Admin" ||
+    currentUser?.role === "OPS" ||
+    currentUser?.role === "Manager" ||
+    can("approveTimesheets") ||
+    can("viewTeamTimesheets")
+  );
 
   const fetchEvents = async () => {
     try {
@@ -258,7 +268,13 @@ export default function CalendarPage() {
       const res = await fetch("/api/projects");
       if (res.ok) {
         const data = await res.json();
-        const names = data.projects.map((p: any) => p.name);
+        const names: string[] = Array.from(
+          new Set(
+            (data.projects || [])
+              .map((p: any) => (p?.name ? String(p.name).trim() : ""))
+              .filter(Boolean)
+          )
+        );
         if (names.length > 0) {
           setProjectsList(names);
         }
@@ -316,7 +332,7 @@ export default function CalendarPage() {
         }
       }
 
-      if (can("approveTimesheets") || isOPS || isAdmin) {
+      if (can("approveTimesheets") || isOPS || isAdmin || currentUser?.role === "Admin" || currentUser?.role === "OPS" || currentUser?.role === "Manager" || can("viewTeamTimesheets")) {
         const pendingRes = await fetch("/api/timesheets?pending=true");
         if (pendingRes.ok) {
           const pendingData = await pendingRes.json();
@@ -360,7 +376,7 @@ export default function CalendarPage() {
       setLoading(false);
     };
     loadData();
-  }, [activeTab, timesheetWeekStart, mounted]);
+  }, [activeTab, timesheetWeekStart, mounted, isAdmin, isOPS, currentUser?.role]);
 
   useEffect(() => {
     if (!mounted) return;
@@ -582,33 +598,111 @@ export default function CalendarPage() {
     ]);
   };
 
+  const handleDeleteTimesheetRow = (idx: number) => {
+    const targetRow = timesheetRows[idx];
+    if (!targetRow) return;
+
+    // Check if this row has any logged hours or saved content
+    const rowHours = (Number(targetRow.mon) || 0) + (Number(targetRow.tue) || 0) + (Number(targetRow.wed) || 0) + (Number(targetRow.thu) || 0) + (Number(targetRow.fri) || 0) + (Number(targetRow.sat) || 0);
+
+    // If it's a completely empty unsaved draft row, delete immediately without prompting modal
+    if (rowHours === 0 && (!targetRow.taskName || targetRow.taskName.trim() === "")) {
+      const updated = timesheetRows.filter((_, i) => i !== idx);
+      if (updated.length === 0) {
+        setTimesheetRows([
+          { project: projectsList[0] || "NexAce CRM Implementation", taskName: "", comment: "", mon: 0, tue: 0, wed: 0, thu: 0, fri: 0, sat: 0, isBillable: true },
+        ]);
+      } else {
+        setTimesheetRows(updated);
+      }
+      return;
+    }
+
+    setTimesheetRowToDelete({
+      index: idx,
+      project: targetRow.project,
+      taskName: targetRow.taskName || "General Tasks",
+    });
+  };
+
+  const handleConfirmDeleteTimesheetRow = async () => {
+    if (!timesheetRowToDelete) return;
+    const { index, project, taskName } = timesheetRowToDelete;
+    const targetRow = timesheetRows[index];
+
+    setDeletingTimesheetRow(true);
+
+    const start = new Date(timesheetWeekStart);
+    const end = new Date(timesheetWeekStart);
+    end.setDate(end.getDate() + 6);
+    end.setHours(23, 59, 59, 999);
+
+    try {
+      if (project) {
+        await fetch("/api/timesheets", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            project,
+            taskName: targetRow?.taskName || taskName || "",
+            start: start.toISOString(),
+            end: end.toISOString(),
+          }),
+        });
+      }
+    } catch (err) {
+      console.error("Error deleting timesheet row from DB:", err);
+    } finally {
+      setDeletingTimesheetRow(false);
+      setTimesheetRowToDelete(null);
+    }
+
+    setTimesheetRows((prevRows) => {
+      const updated = prevRows.filter((_, i) => i !== index);
+      if (updated.length === 0) {
+        return [
+          { project: projectsList[0] || "NexAce CRM Implementation", taskName: "", comment: "", mon: 0, tue: 0, wed: 0, thu: 0, fri: 0, sat: 0, isBillable: true },
+        ];
+      }
+      return updated;
+    });
+
+    setTimesheetEntries((prevEntries) =>
+      prevEntries.filter((e) => !(e.project === project && (e.taskName === (targetRow?.taskName || taskName) || !targetRow?.taskName)))
+    );
+
+    showToast("Timesheet row deleted!", "success");
+  };
+
   const handleSaveTimesheet = async (submitStatus: "Draft" | "Pending") => {
     const entryPayload: any[] = [];
     const weekdaysOffset = [0, 1, 2, 3, 4, 5];
+    let hasAnyPositiveHours = false;
 
     timesheetRows.forEach((row) => {
       const days = ["mon", "tue", "wed", "thu", "fri", "sat"];
       days.forEach((day, index) => {
-        const hoursVal = Number(row[day]);
+        const hoursVal = Number(row[day]) || 0;
         if (hoursVal > 0) {
-          const entryDate = new Date(timesheetWeekStart);
-          entryDate.setDate(entryDate.getDate() + weekdaysOffset[index]);
-          
-          entryPayload.push({
-            project: row.project,
-            taskName: row.taskName || "General Tasks",
-            comment: row.comment ? String(row.comment).trim() : "",
-            hours: hoursVal,
-            date: entryDate,
-            isBillable: row.isBillable,
-            status: submitStatus,
-          });
+          hasAnyPositiveHours = true;
         }
+        const entryDate = new Date(timesheetWeekStart);
+        entryDate.setDate(entryDate.getDate() + weekdaysOffset[index]);
+        
+        entryPayload.push({
+          project: row.project,
+          taskName: row.taskName || "General Tasks",
+          comment: row.comment ? String(row.comment).trim() : "",
+          hours: hoursVal,
+          date: entryDate,
+          isBillable: row.isBillable !== false,
+          status: submitStatus,
+        });
       });
     });
 
-    if (entryPayload.length === 0) {
-      showToast("Please log at least one hour before saving!", "error");
+    if (submitStatus === "Pending" && !hasAnyPositiveHours) {
+      showToast("Please log at least one hour before submitting!", "error");
       return;
     }
 
@@ -645,6 +739,104 @@ export default function CalendarPage() {
       showToast("Failed to process timesheet entry.", "error");
     }
   };
+
+  const handleDuplicateTimesheetRow = (idx: number) => {
+    const row = timesheetRows[idx];
+    if (!row) return;
+    const newRow = {
+      ...row,
+      mon: 0,
+      tue: 0,
+      wed: 0,
+      thu: 0,
+      fri: 0,
+      sat: 0,
+      comment: "",
+    };
+    const updated = [...timesheetRows];
+    updated.splice(idx + 1, 0, newRow);
+    setTimesheetRows(updated);
+    showToast("Timesheet row duplicated!", "success");
+  };
+
+  const handleAutoFillStandardHours = (targetRowIndex: number = 0) => {
+    if (timesheetRows.length === 0) return;
+    const updated = [...timesheetRows];
+    const idx = Math.min(targetRowIndex, updated.length - 1);
+    if (updated[idx]) {
+      updated[idx] = {
+        ...updated[idx],
+        mon: 8,
+        tue: 8,
+        wed: 8,
+        thu: 8,
+        fri: 8,
+        sat: 0,
+      };
+      setTimesheetRows(updated);
+      showToast("Filled standard 40-hour work week (8h Mon–Fri)!", "success");
+    }
+  };
+
+  const exportTimesheetToCSV = () => {
+    if (timesheetRows.length === 0) {
+      showToast("No timesheet entries to export.", "error");
+      return;
+    }
+    const weekLabel = timesheetWeekStart.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+    let csv = `Week of,${weekLabel}\n`;
+    csv += `Project,Task Description,Comment / Notes,Mon,Tue,Wed,Thu,Fri,Sat,Total Hours,Billable,Status\n`;
+
+    timesheetRows.forEach((row) => {
+      const total = (Number(row.mon) || 0) + (Number(row.tue) || 0) + (Number(row.wed) || 0) + (Number(row.thu) || 0) + (Number(row.fri) || 0) + (Number(row.sat) || 0);
+      const escapeCsv = (val: string) => `"${(val || "").replace(/"/g, '""')}"`;
+      csv += `${escapeCsv(row.project)},${escapeCsv(row.taskName)},${escapeCsv(row.comment)},${row.mon || 0},${row.tue || 0},${row.wed || 0},${row.thu || 0},${row.fri || 0},${row.sat || 0},${total},${row.isBillable ? "Yes" : "No"},${row.status || "Draft"}\n`;
+    });
+
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `timesheet_week_${timesheetWeekStart.toISOString().split("T")[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    showToast("Timesheet exported to CSV successfully!", "success");
+  };
+
+  const currentWeekStatus = useMemo(() => {
+    if (timesheetEntries.length === 0) return "Draft";
+    const statuses = timesheetEntries.map((e: any) => e.status);
+    if (statuses.some((s: string) => s === "Pending")) return "Pending";
+    if (statuses.every((s: string) => s === "Approved")) return "Approved";
+    if (statuses.some((s: string) => s === "Rejected")) return "Rejected";
+    return "Draft";
+  }, [timesheetEntries]);
+
+  const timesheetDailyTotals = useMemo(() => {
+    const totals = { mon: 0, tue: 0, wed: 0, thu: 0, fri: 0, sat: 0, grand: 0, billable: 0, nonBillable: 0 };
+    timesheetRows.forEach((row) => {
+      const m = Number(row.mon) || 0;
+      const tu = Number(row.tue) || 0;
+      const w = Number(row.wed) || 0;
+      const th = Number(row.thu) || 0;
+      const f = Number(row.fri) || 0;
+      const sa = Number(row.sat) || 0;
+      totals.mon += m;
+      totals.tue += tu;
+      totals.wed += w;
+      totals.thu += th;
+      totals.fri += f;
+      totals.sat += sa;
+      const rowTotal = m + tu + w + th + f + sa;
+      totals.grand += rowTotal;
+      if (row.isBillable) totals.billable += rowTotal;
+      else totals.nonBillable += rowTotal;
+    });
+    return totals;
+  }, [timesheetRows]);
+
 
   const getDaysInMonth = () => {
     const year = currentDate.getFullYear();
@@ -1365,37 +1557,88 @@ export default function CalendarPage() {
             {/* Timesheet Entry Card */}
             <Card className="lg:col-span-2">
               <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-3">
-                <div>
-                  <CardTitle className="text-lg font-bold flex items-center gap-2">
-                    <i className="fa-solid fa-file-csv text-primary text-base" /> Log Weekly Hours
-                  </CardTitle>
-                  <CardDescription>Record your daily work hours on projects</CardDescription>
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2.5 flex-wrap">
+                    <CardTitle className="text-lg font-bold flex items-center gap-2">
+                      <i className="fa-solid fa-file-csv text-primary text-base" /> Log Weekly Hours
+                    </CardTitle>
+                    {/* Week Status Badge */}
+                    <span
+                      className={cn(
+                        "text-[11px] font-semibold px-2.5 py-0.5 rounded-full border inline-flex items-center gap-1.5",
+                        currentWeekStatus === "Approved" && "bg-emerald-500/10 text-emerald-500 border-emerald-500/20",
+                        currentWeekStatus === "Pending" && "bg-amber-500/10 text-amber-500 border-amber-500/20",
+                        currentWeekStatus === "Rejected" && "bg-rose-500/10 text-rose-500 border-rose-500/20",
+                        currentWeekStatus === "Draft" && "bg-muted text-muted-foreground border-border"
+                      )}
+                    >
+                      {currentWeekStatus === "Approved" && <i className="fa-solid fa-circle-check text-[10px]" />}
+                      {currentWeekStatus === "Pending" && <i className="fa-solid fa-clock-rotate-left text-[10px]" />}
+                      {currentWeekStatus === "Rejected" && <i className="fa-solid fa-circle-xmark text-[10px]" />}
+                      {currentWeekStatus === "Draft" && <i className="fa-solid fa-pen-ruler text-[10px]" />}
+                      {currentWeekStatus === "Pending" ? "Pending Approval" : currentWeekStatus}
+                    </span>
+                  </div>
+                  <CardDescription>Record daily project hours with billable tracking and approvals</CardDescription>
                 </div>
-                <div className="flex items-center gap-2">
+                
+                {/* Week Selector & Quick Tools */}
+                <div className="flex items-center gap-2 flex-wrap">
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => {
-                      const prev = new Date(timesheetWeekStart);
-                      prev.setDate(prev.getDate() - 7);
-                      setTimesheetWeekStart(prev);
+                      const d = new Date();
+                      const day = d.getDay();
+                      const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+                      const mon = new Date(d.setDate(diff));
+                      mon.setHours(0, 0, 0, 0);
+                      setTimesheetWeekStart(mon);
                     }}
+                    className="text-xs h-8 px-2.5"
+                    title="Jump to current week"
                   >
-                    <i className="fa-solid fa-chevron-left text-xs" />
+                    This Week
                   </Button>
-                  <span className="text-xs font-semibold">
-                    Week of {timesheetWeekStart.toLocaleDateString(undefined, { month: "short", day: "numeric" })}
-                  </span>
+                  <div className="flex items-center bg-muted/40 rounded-lg p-0.5 border border-border">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 w-7 p-0"
+                      onClick={() => {
+                        const prev = new Date(timesheetWeekStart);
+                        prev.setDate(prev.getDate() - 7);
+                        setTimesheetWeekStart(prev);
+                      }}
+                      title="Previous Week"
+                    >
+                      <i className="fa-solid fa-chevron-left text-xs" />
+                    </Button>
+                    <span className="text-xs font-semibold px-2 select-none">
+                      Week of {timesheetWeekStart.toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                    </span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 w-7 p-0"
+                      onClick={() => {
+                        const next = new Date(timesheetWeekStart);
+                        next.setDate(next.getDate() + 7);
+                        setTimesheetWeekStart(next);
+                      }}
+                      title="Next Week"
+                    >
+                      <i className="fa-solid fa-chevron-right text-xs" />
+                    </Button>
+                  </div>
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => {
-                      const next = new Date(timesheetWeekStart);
-                      next.setDate(next.getDate() + 7);
-                      setTimesheetWeekStart(next);
-                    }}
+                    onClick={exportTimesheetToCSV}
+                    className="text-xs h-8 gap-1.5"
+                    title="Download Week Timesheet as CSV"
                   >
-                    <i className="fa-solid fa-chevron-right text-xs" />
+                    <i className="fa-solid fa-file-csv text-primary text-xs" /> CSV
                   </Button>
                 </div>
               </CardHeader>
@@ -1404,103 +1647,125 @@ export default function CalendarPage() {
                   <table className="w-full text-sm text-left border-collapse">
                     <thead>
                       <tr className="border-b border-border text-muted-foreground text-xs font-semibold uppercase">
-                        <th className="py-2.5 pr-2 min-w-[150px]">Project</th>
+                        <th className="py-2.5 pr-2 min-w-[140px]">Project</th>
                         <th className="py-2.5 px-1.5 min-w-[120px]">Task Description</th>
-                        <th className="py-2.5 px-1.5 min-w-[150px]">Comment / Notes</th>
+                        <th className="py-2.5 px-1.5 min-w-[130px]">Comment / Notes</th>
                         <th className="py-2.5 px-1 text-center w-12">Mon</th>
                         <th className="py-2.5 px-1 text-center w-12">Tue</th>
                         <th className="py-2.5 px-1 text-center w-12">Wed</th>
                         <th className="py-2.5 px-1 text-center w-12">Thu</th>
                         <th className="py-2.5 px-1 text-center w-12">Fri</th>
                         <th className="py-2.5 px-1 text-center w-12">Sat</th>
+                        <th className="py-2.5 px-1 text-center w-14">Total</th>
                         <th className="py-2.5 px-1 text-center w-14">Billable</th>
-                        <th className="py-2.5 pl-1 pr-1 text-center w-7"></th>
+                        <th className="py-2.5 pl-1 pr-1 text-center w-14">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border/60">
-                      {timesheetRows.map((row, idx) => (
-                        <tr key={idx} className="hover:bg-accent/10 transition-colors">
-                          <td className="py-3 pr-2">
-                            <select
-                              value={row.project}
-                              onChange={(e) => handleRowChange(idx, "project", e.target.value)}
-                              className="w-full h-9 px-2 text-xs bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-                            >
-                              {projectsList.map((proj) => (
-                                <option key={proj} value={proj}>{proj}</option>
-                              ))}
-                            </select>
-                          </td>
-                          <td className="py-3 px-1.5">
-                            <Input
-                              value={row.taskName}
-                              onChange={(e) => handleRowChange(idx, "taskName", e.target.value)}
-                              placeholder="e.g. Code Review"
-                              className="h-9 text-xs"
-                            />
-                          </td>
-                          <td className="py-3 px-1.5">
-                            <Input
-                              value={row.comment || ""}
-                              onChange={(e) => handleRowChange(idx, "comment", e.target.value)}
-                              placeholder="Add work notes / comment..."
-                              className="h-9 text-xs"
-                            />
-                          </td>
-                          {["mon", "tue", "wed", "thu", "fri", "sat"].map((day) => (
-                            <td key={day} className="py-3 px-1">
+                      {timesheetRows.map((row, idx) => {
+                        const rowTotal = (Number(row.mon) || 0) + (Number(row.tue) || 0) + (Number(row.wed) || 0) + (Number(row.thu) || 0) + (Number(row.fri) || 0) + (Number(row.sat) || 0);
+                        return (
+                          <tr key={idx} className="hover:bg-accent/10 transition-colors">
+                            <td className="py-3 pr-2">
+                              <select
+                                value={row.project}
+                                onChange={(e) => handleRowChange(idx, "project", e.target.value)}
+                                className="w-full h-9 px-2 text-xs bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                              >
+                                {Array.from(new Set(projectsList)).map((proj, pIdx) => (
+                                  <option key={`${proj}-${pIdx}`} value={proj}>{proj}</option>
+                                ))}
+                              </select>
+                            </td>
+                            <td className="py-3 px-1.5">
                               <Input
-                                type="number"
-                                min="0"
-                                max="24"
-                                step="0.5"
-                                value={row[day] || ""}
-                                onChange={(e) => {
-                                  const val = parseFloat(e.target.value);
-                                  handleRowChange(idx, day, isNaN(val) ? 0 : val);
-                                }}
-                                className="h-9 w-12 text-center text-xs p-1"
+                                value={row.taskName}
+                                onChange={(e) => handleRowChange(idx, "taskName", e.target.value)}
+                                placeholder="e.g. Code Review"
+                                className="h-9 text-xs"
                               />
                             </td>
-                          ))}
-                          <td className="py-3 px-1 text-center">
-                            <input
-                              type="checkbox"
-                              checked={row.isBillable}
-                              onChange={(e) => handleRowChange(idx, "isBillable", e.target.checked)}
-                              className="rounded border-border text-primary w-4 h-4 cursor-pointer"
-                            />
-                          </td>
-                          <td className="py-3 pl-1 pr-1 text-center">
-                            {timesheetRows.length > 1 && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setTimesheetRows(timesheetRows.filter((_, i) => i !== idx));
-                                }}
-                                className="text-muted-foreground hover:text-destructive transition-colors p-1"
-                                title="Remove Row"
-                              >
-                                <i className="fa-solid fa-trash-can text-xs" />
-                              </button>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
+                            <td className="py-3 px-1.5">
+                              <Input
+                                value={row.comment || ""}
+                                onChange={(e) => handleRowChange(idx, "comment", e.target.value)}
+                                placeholder="Add work notes / comment..."
+                                className="h-9 text-xs"
+                              />
+                            </td>
+                            {["mon", "tue", "wed", "thu", "fri", "sat"].map((day) => (
+                              <td key={day} className="py-3 px-1">
+                                <Input
+                                  type="number"
+                                  min="0"
+                                  max="24"
+                                  step="0.5"
+                                  placeholder="0"
+                                  value={row[day] || ""}
+                                  onChange={(e) => {
+                                    const val = parseFloat(e.target.value);
+                                    handleRowChange(idx, day, isNaN(val) ? 0 : val);
+                                  }}
+                                  className="h-9 w-12 text-center text-xs p-1 no-spinner font-medium"
+                                />
+                              </td>
+                            ))}
+                            <td className="py-3 px-1 text-center">
+                              <span className={cn(
+                                "text-xs font-semibold px-1.5 py-0.5 rounded border inline-block",
+                                rowTotal > 0 ? "bg-primary/10 text-primary border-primary/20" : "text-muted-foreground border-transparent"
+                              )}>
+                                {rowTotal > 0 ? `${rowTotal}h` : "—"}
+                              </span>
+                            </td>
+                            <td className="py-3 px-1 text-center">
+                              <input
+                                type="checkbox"
+                                checked={row.isBillable}
+                                onChange={(e) => handleRowChange(idx, "isBillable", e.target.checked)}
+                                className="rounded border-border text-primary w-4 h-4 cursor-pointer"
+                                title={row.isBillable ? "Billable task" : "Non-billable internal task"}
+                              />
+                            </td>
+                            <td className="py-3 pl-1 pr-1 text-center">
+                              <div className="flex items-center justify-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => handleDuplicateTimesheetRow(idx)}
+                                  className="text-muted-foreground hover:text-primary transition-colors p-1"
+                                  title="Duplicate Row"
+                                >
+                                  <i className="fa-solid fa-copy text-xs" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteTimesheetRow(idx)}
+                                  className="text-muted-foreground hover:text-destructive transition-colors p-1"
+                                  title="Delete Row"
+                                >
+                                  <i className="fa-solid fa-trash-can text-xs" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
 
-                <div className="flex flex-col sm:flex-row justify-between gap-4 pt-4 border-t border-border/65">
-                  <Button variant="outline" size="sm" onClick={handleAddTimesheetRow} className="gap-1.5 self-start">
-                    <i className="fa-solid fa-plus text-xs" /> Add Row
-                  </Button>
-                  <div className="flex gap-2 self-end">
-                    <Button variant="outline" size="sm" onClick={() => handleSaveTimesheet("Draft")}>
-                      Save Draft
+                <div className="flex flex-col sm:flex-row justify-between items-center gap-4 pt-4 border-t border-border/65">
+                  <div className="flex items-center gap-2 w-full sm:w-auto">
+                    <Button variant="outline" size="sm" onClick={handleAddTimesheetRow} className="gap-1.5">
+                      <i className="fa-solid fa-plus text-xs" /> Add New Entry
                     </Button>
-                    <Button color="primary" size="sm" onClick={() => handleSaveTimesheet("Pending")}>
-                      Submit Timesheet
+                  </div>
+                  <div className="flex gap-2 w-full sm:w-auto justify-end">
+                    <Button variant="outline" size="sm" onClick={() => handleSaveTimesheet("Draft")} className="gap-1.5">
+                      <i className="fa-solid fa-floppy-disk text-xs" /> Save Draft
+                    </Button>
+                    <Button color="primary" size="sm" onClick={() => handleSaveTimesheet("Pending")} className="gap-1.5 font-semibold">
+                      <i className="fa-solid fa-paper-plane text-xs" /> Submit Timesheet
                     </Button>
                   </div>
                 </div>
@@ -1511,27 +1776,87 @@ export default function CalendarPage() {
             <div className="space-y-6">
               {/* Timesheet Summary Card */}
               <Card>
-                <CardHeader>
-                  <CardTitle className="text-base font-bold">Week Summary</CardTitle>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base font-bold flex items-center justify-between">
+                    <span>Week Summary</span>
+                    <span className="text-xs font-mono text-muted-foreground">
+                      {timesheetDailyTotals.grand} / 40 hrs
+                    </span>
+                  </CardTitle>
+                  <CardDescription>Track weekly target and billable allocations</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4 text-sm">
-                  <div className="flex justify-between py-1.5 border-b border-border/50">
-                    <span className="text-muted-foreground">Total Hours Logged</span>
-                    <span className="font-bold text-foreground">
-                      {timesheetRows.reduce((acc, row) => acc + (Number(row.mon) || 0) + (Number(row.tue) || 0) + (Number(row.wed) || 0) + (Number(row.thu) || 0) + (Number(row.fri) || 0) + (Number(row.sat) || 0), 0)} hrs
-                    </span>
+                  {/* Progress Bar towards 40 hrs target */}
+                  <div className="space-y-1.5 p-3 rounded-lg bg-muted/30 border border-border/50">
+                    <div className="flex justify-between text-xs font-semibold">
+                      <span className="text-foreground">Weekly Target (40 hrs)</span>
+                      <span className={cn(
+                        timesheetDailyTotals.grand >= 40 ? "text-emerald-500 font-bold" : "text-primary"
+                      )}>
+                        {Math.min(100, Math.round((timesheetDailyTotals.grand / 40) * 100))}%
+                      </span>
+                    </div>
+                    <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
+                      <div
+                        className={cn(
+                          "h-full transition-all duration-300 rounded-full",
+                          timesheetDailyTotals.grand >= 40
+                            ? "bg-emerald-500"
+                            : timesheetDailyTotals.grand >= 20
+                            ? "bg-primary"
+                            : "bg-amber-500"
+                        )}
+                        style={{ width: `${Math.min(100, (timesheetDailyTotals.grand / 40) * 100)}%` }}
+                      />
+                    </div>
+                    <div className="flex justify-between text-[11px] text-muted-foreground pt-0.5">
+                      <span>
+                        {timesheetDailyTotals.grand >= 40
+                          ? "Target reached!"
+                          : `${(40 - timesheetDailyTotals.grand).toFixed(1)}h remaining`}
+                      </span>
+                      <span>Avg: {(timesheetDailyTotals.grand / 5).toFixed(1)}h/day</span>
+                    </div>
                   </div>
-                  <div className="flex justify-between py-1.5 border-b border-border/50">
-                    <span className="text-muted-foreground">Billable Hours</span>
-                    <span className="font-semibold text-emerald-500">
-                      {timesheetRows.reduce((acc, row) => row.isBillable ? acc + (Number(row.mon) || 0) + (Number(row.tue) || 0) + (Number(row.wed) || 0) + (Number(row.thu) || 0) + (Number(row.fri) || 0) + (Number(row.sat) || 0) : acc, 0)} hrs
-                    </span>
-                  </div>
-                  <div className="flex justify-between py-1.5">
-                    <span className="text-muted-foreground">Non-Billable Hours</span>
-                    <span className="font-semibold text-amber-500">
-                      {timesheetRows.reduce((acc, row) => !row.isBillable ? acc + (Number(row.mon) || 0) + (Number(row.tue) || 0) + (Number(row.wed) || 0) + (Number(row.thu) || 0) + (Number(row.fri) || 0) + (Number(row.sat) || 0) : acc, 0)} hrs
-                    </span>
+
+                  <div className="divide-y divide-border/50">
+                    <div className="flex justify-between py-2">
+                      <span className="text-muted-foreground flex items-center gap-1.5">
+                        <i className="fa-solid fa-clock text-xs text-primary" /> Total Hours Logged
+                      </span>
+                      <span className="font-bold text-foreground font-mono">
+                        {timesheetDailyTotals.grand} hrs
+                      </span>
+                    </div>
+                    <div className="flex justify-between py-2">
+                      <span className="text-muted-foreground flex items-center gap-1.5">
+                        <i className="fa-solid fa-sack-dollar text-xs text-emerald-500" /> Billable Hours
+                      </span>
+                      <span className="font-semibold text-emerald-500 font-mono">
+                        {timesheetDailyTotals.billable} hrs
+                        {timesheetDailyTotals.grand > 0 && (
+                          <span className="text-[10px] text-muted-foreground ml-1">
+                            ({Math.round((timesheetDailyTotals.billable / timesheetDailyTotals.grand) * 100)}%)
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                    <div className="flex justify-between py-2">
+                      <span className="text-muted-foreground flex items-center gap-1.5">
+                        <i className="fa-solid fa-briefcase text-xs text-amber-500" /> Non-Billable Hours
+                      </span>
+                      <span className="font-semibold text-amber-500 font-mono">
+                        {timesheetDailyTotals.nonBillable} hrs
+                      </span>
+                    </div>
+                    <div className="flex justify-between py-2">
+                      <span className="text-muted-foreground flex items-center gap-1.5">
+                        <i className="fa-solid fa-list-check text-xs text-muted-foreground" /> Active Task Rows
+                      </span>
+                      <span className="font-semibold text-foreground font-mono">
+                        {timesheetRows.filter((r) => r.taskName || r.mon > 0 || r.tue > 0).length} tasks
+                      </span>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -1597,7 +1922,7 @@ export default function CalendarPage() {
         </div>
       )}
 
-      {/* Tab 3: Shift Clock & Attendance */}
+      {/* Tab 4: Shift Clock & Attendance */}
       {activeTab === "attendance" && (
         <div className="space-y-6">
           {!isAdmin && !isOPS && (
@@ -2812,6 +3137,53 @@ export default function CalendarPage() {
                 ) : (
                   <>
                     <i className="fa-solid fa-trash-can text-xs" /> Delete Sprint
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Sleek In-App Timesheet Row Delete Confirmation Modal */}
+      {timesheetRowToDelete && (
+        <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-card border border-border rounded-2xl max-w-md w-full p-6 space-y-5 shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="flex items-start gap-3.5">
+              <div className="w-10 h-10 rounded-full bg-rose-500/10 text-rose-500 flex items-center justify-center shrink-0 border border-rose-500/20">
+                <i className="fa-solid fa-trash-can text-lg" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-base font-bold text-foreground">Delete Timesheetseeing </h3>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Are you sure you want to delete <strong className="text-foreground">{timesheetRowToDelete.project}</strong> ({timesheetRowToDelete.taskName || "General Tasks"})? All logged hours for this week will be permanently deleted from the database.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2.5 pt-2 border-t border-border/60">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setTimesheetRowToDelete(null)}
+                disabled={deletingTimesheetRow}
+              >
+                Cancel
+              </Button>
+              <Button
+                color="destructive"
+                size="sm"
+                onClick={handleConfirmDeleteTimesheetRow}
+                disabled={deletingTimesheetRow}
+                className="gap-2 font-semibold"
+              >
+                {deletingTimesheetRow ? (
+                  <>
+                    <i className="fa-solid fa-spinner fa-spin text-xs" /> Deleting...
+                  </>
+                ) : (
+                  <>
+                    <i className="fa-solid fa-trash-can text-xs" /> Delete
                   </>
                 )}
               </Button>

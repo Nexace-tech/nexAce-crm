@@ -427,3 +427,21 @@ button:focus:not(:focus-visible),
 a:focus:not(:focus-visible) {
   outline: none;
 }
+
+/* ========================================================================= */
+/* Hide number input spinners / steppers                                     */
+/* ========================================================================= */
+.no-spinner::-webkit-outer-spin-button,
+.no-spinner::-webkit-inner-spin-button,
+input[type="number"].no-spinner::-webkit-outer-spin-button,
+input[type="number"].no-spinner::-webkit-inner-spin-button {
+  -webkit-appearance: none !important;
+  margin: 0 !important;
+}
+
+.no-spinner,
+input[type="number"].no-spinner {
+  -moz-appearance: textfield !important;
+  appearance: textfield !important;
+}
+

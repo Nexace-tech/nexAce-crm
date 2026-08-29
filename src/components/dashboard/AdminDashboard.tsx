@@ -251,11 +251,11 @@ export function AdminDashboard({ user }: { user: any }) {
     document.body.removeChild(link);
   };
 
-  // Real Feature Arrays from MongoDB
   const projectsList = summaryData?.projects || [];
   const okrsList = summaryData?.okrs || [];
   const timesheetsList = summaryData?.timesheets || [];
   const activityLogsList = summaryData?.logs || [];
+  const pendingTimesheetsCount = timesheetsList.filter((ts: any) => ts.status === "Pending" || ts.status === "Submitted").length;
 
   return (
     <div className="space-y-6">
@@ -746,6 +746,11 @@ export function AdminDashboard({ user }: { user: any }) {
             >
               <i className="fa-solid fa-calendar-days text-[11px]" />
               <span>Timesheets ({timesheetsList.length})</span>
+              {pendingTimesheetsCount > 0 && (
+                <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-500 text-white animate-pulse">
+                  {pendingTimesheetsCount} Pending
+                </span>
+              )}
             </button>
             <button
               onClick={() => setFeatureTab("activity")}
@@ -849,28 +854,63 @@ export function AdminDashboard({ user }: { user: any }) {
             <table className="w-full text-xs">
               <thead>
                 <tr className="border-b border-slate-200 dark:border-[#232d3b] text-slate-500 dark:text-slate-400">
-                  {["Task / Activity", "Project", "Hours Logged", "Date", "Status"].map((h) => (
+                  {["Employee", "Task / Activity", "Project", "Hours Logged", "Date", "Status", "Action"].map((h) => (
                     <th key={h} className="text-left py-2.5 px-3.5 font-semibold whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-[#232d3b]">
-                {timesheetsList.slice(0, 5).map((ts: any, idx: number) => (
-                  <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-[#1e2632]/50 transition-colors">
-                    <td className="py-3 px-3.5 font-semibold text-slate-900 dark:text-white">{ts.taskName || "Client Project Work"}</td>
-                    <td className="py-3 px-3.5 text-slate-500 dark:text-slate-400">{ts.project || "Internal Workspace"}</td>
-                    <td className="py-3 px-3.5 font-extrabold text-[#00c5a0]">{ts.hours || 0} hrs</td>
-                    <td className="py-3 px-3.5 text-slate-500 dark:text-slate-400">{ts.date ? new Date(ts.date).toLocaleDateString() : "Today"}</td>
-                    <td className="py-3 px-3.5">
-                      <span className={cn(
-                        "px-2.5 py-0.5 rounded-full text-[11px] font-semibold",
-                        ts.status === "Approved" ? "bg-[#00c5a0]/15 text-[#00c5a0]" : "bg-amber-500/15 text-amber-500 dark:text-amber-400"
-                      )}>
-                        {ts.status || "Submitted"}
-                      </span>
+                {timesheetsList.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="py-6 text-center text-slate-400">
+                      No timesheets logged yet.
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  timesheetsList.slice(0, 8).map((ts: any, idx: number) => {
+                    const emp = typeof ts.userId === "object" ? ts.userId : null;
+                    const isPending = ts.status === "Pending" || ts.status === "Submitted";
+                    return (
+                      <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-[#1e2632]/50 transition-colors">
+                        <td className="py-3 px-3.5 font-semibold text-slate-900 dark:text-white">
+                          <div className="flex items-center gap-2">
+                            <span className="w-7 h-7 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-xs shrink-0">
+                              {(emp?.name || "E").charAt(0).toUpperCase()}
+                            </span>
+                            <div>
+                              <p className="m-0 font-bold text-slate-900 dark:text-white">{emp?.name || "Team Member"}</p>
+                              <p className="m-0 text-[10px] text-slate-500 dark:text-slate-400">{emp?.department || emp?.role || "Staff"}</p>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="py-3 px-3.5 font-medium text-slate-800 dark:text-slate-200">{ts.taskName || "General Tasks"}</td>
+                        <td className="py-3 px-3.5 text-slate-500 dark:text-slate-400">{ts.project || "Internal Workspace"}</td>
+                        <td className="py-3 px-3.5 font-extrabold text-[#00c5a0]">{ts.hours || 0} hrs</td>
+                        <td className="py-3 px-3.5 text-slate-500 dark:text-slate-400">{ts.date ? new Date(ts.date).toLocaleDateString() : "Today"}</td>
+                        <td className="py-3 px-3.5">
+                          <span className={cn(
+                            "px-2.5 py-0.5 rounded-full text-[11px] font-semibold inline-flex items-center gap-1",
+                            ts.status === "Approved" ? "bg-[#00c5a0]/15 text-[#00c5a0]" :
+                            isPending ? "bg-amber-500/15 text-amber-500 dark:text-amber-400" :
+                            ts.status === "Rejected" ? "bg-red-500/15 text-red-500" :
+                            "bg-slate-500/15 text-slate-500"
+                          )}>
+                            {isPending && <i className="fa-solid fa-clock text-[9px]" />}
+                            {ts.status || "Pending"}
+                          </span>
+                        </td>
+                        <td className="py-3 px-3.5">
+                          <Link
+                            href="/dashboard/calendar"
+                            className="text-[#00c5a0] font-semibold hover:underline inline-flex items-center gap-1"
+                          >
+                            Review <i className="fa-solid fa-arrow-right text-[10px]" />
+                          </Link>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
               </tbody>
             </table>
           </div>
