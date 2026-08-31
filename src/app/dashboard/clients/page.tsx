@@ -11,6 +11,7 @@ import { Pagination } from "@/components/ui/pagination";
 import { usePermissions } from "@/hooks/usePermissions";
 import { BulkImportModal } from "@/components/operations/BulkImportModal";
 import { SalesWorkdeskDashboard } from "@/components/operations/SalesWorkdeskDashboard";
+import HrWorkdeskDashboard from "@/components/operations/HrWorkdeskDashboard";
 import { cn } from "@/lib/utils";
 
 interface ClientData {
@@ -1659,331 +1660,30 @@ export default function OperationsPage() {
           onRefresh={fetchSalesDeals}
         />
       )}
-
-      {/* HR Workdesk Tab View */}
+      {/* HR Workdesk Tab View - Redesigned to exact Kleon HR Standard */}
       {activeTab === "hr" && (
-        <div className="space-y-6 animate-in fade-in duration-300">
-          {/* HR Metrics Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-            <Card className="border-l-4 border-l-primary">
-              <CardContent className="p-5 flex items-center justify-between">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Total Allocated Staff</p>
-                  <p className="text-2xl font-bold text-foreground">{hrAllocations.length}</p>
-                </div>
-                <div className="p-3 bg-primary/10 text-primary rounded-xl">
-                  <i className="fa-solid fa-users text-xl" />
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="border-l-4 border-l-emerald-500">
-              <CardContent className="p-5 flex items-center justify-between">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Deployed on Projects</p>
-                  <p className="text-2xl font-bold text-foreground">
-                    {hrAllocations.filter((r) => r.status === "Deployed").length}
-                  </p>
-                </div>
-                <div className="p-3 bg-emerald-500/10 text-emerald-500 rounded-xl">
-                  <i className="fa-solid fa-user-check text-xl" />
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="border-l-4 border-l-amber-500">
-              <CardContent className="p-5 flex items-center justify-between">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Bench (Available Staff)</p>
-                  <p className="text-2xl font-bold text-foreground">
-                    {hrAllocations.filter((r) => r.status === "Bench").length}
-                  </p>
-                </div>
-                <div className="p-3 bg-amber-500/10 text-amber-500 rounded-xl">
-                  <i className="fa-solid fa-user-clock text-xl" />
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="border-l-4 border-l-sky-500">
-              <CardContent className="p-5 flex items-center justify-between">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Avg Utilization Rate</p>
-                  <p className="text-2xl font-bold text-foreground">
-                    {hrAllocations.length === 0
-                      ? 0
-                      : Math.round(hrAllocations.reduce((sum, r) => sum + r.utilizationRate, 0) / hrAllocations.length)}
-                    %
-                  </p>
-                </div>
-                <div className="p-3 bg-sky-500/10 text-sky-500 rounded-xl">
-                  <i className="fa-solid fa-gauge-high text-xl" />
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* HR Charts Row */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-            {/* Utilization by Department */}
-            <Card className="border border-border shadow-sm">
-              <CardHeader className="pb-2 border-b border-border">
-                <CardTitle className="text-sm font-bold flex items-center gap-2">
-                  <i className="fa-solid fa-building text-primary" /> Avg Utilization by Department
-                </CardTitle>
-                <CardDescription className="text-xs">Average utilization rate per department</CardDescription>
-              </CardHeader>
-              <CardContent className="p-5">
-                {(() => {
-                  const deptMap: Record<string, number[]> = {};
-                  hrAllocations.forEach((r) => {
-                    if (!deptMap[r.department]) deptMap[r.department] = [];
-                    deptMap[r.department].push(r.utilizationRate);
-                  });
-                  const depts = Object.entries(deptMap).map(([dept, rates]) => ({
-                    dept,
-                    avg: Math.round(rates.reduce((a, b) => a + b, 0) / rates.length),
-                    count: rates.length,
-                  })).sort((a, b) => b.avg - a.avg);
-                  const DEPT_COLORS = ["hsl(220 70% 60%)", "hsl(142 60% 50%)", "hsl(40 90% 55%)", "hsl(270 70% 60%)", "hsl(200 80% 55%)", "hsl(0 65% 55%)"];
-                  return depts.length === 0 ? (
-                    <div className="flex items-center justify-center h-32 text-muted-foreground text-xs">No data yet</div>
-                  ) : (
-                    <div className="space-y-2.5">
-                      {depts.map(({ dept, avg, count }, i) => (
-                        <div key={dept} className="flex items-center gap-3">
-                          <span className="text-[10px] font-semibold text-muted-foreground w-24 shrink-0 truncate">{dept}</span>
-                          <div className="flex-1 h-6 bg-muted/40 rounded-md overflow-hidden relative">
-                            <div
-                              className="h-full rounded-md flex items-center px-2 transition-all duration-500"
-                              style={{ width: `${avg}%`, backgroundColor: DEPT_COLORS[i % DEPT_COLORS.length] }}
-                            >
-                              {avg > 5 && <span className="text-[10px] font-bold text-white">{avg}%</span>}
-                            </div>
-                          </div>
-                          <span className="text-[10px] font-mono text-muted-foreground w-12 text-right shrink-0">{count} staff</span>
-                        </div>
-                      ))}
-                    </div>
-                  );
-                })()}
-              </CardContent>
-            </Card>
-
-            {/* Status Distribution */}
-            <Card className="border border-border shadow-sm">
-              <CardHeader className="pb-2 border-b border-border">
-                <CardTitle className="text-sm font-bold flex items-center gap-2">
-                  <i className="fa-solid fa-chart-pie text-primary" /> Staff Status Distribution
-                </CardTitle>
-                <CardDescription className="text-xs">Headcount breakdown by deployment status</CardDescription>
-              </CardHeader>
-              <CardContent className="p-5">
-                {(() => {
-                  const STATUS_CFG = [
-                    { key: "Deployed", color: "hsl(142 60% 50%)", label: "Deployed" },
-                    { key: "Partially Allocated", color: "hsl(40 90% 55%)", label: "Partial" },
-                    { key: "Bench", color: "hsl(220 70% 60%)", label: "Bench" },
-                    { key: "On Leave", color: "hsl(0 65% 55%)", label: "On Leave" },
-                  ];
-                  const total = hrAllocations.length;
-                  return total === 0 ? (
-                    <div className="flex items-center justify-center h-32 text-muted-foreground text-xs">No data yet</div>
-                  ) : (
-                    <div className="space-y-3">
-                      {STATUS_CFG.map(({ key, color, label }) => {
-                        const count = hrAllocations.filter((r) => r.status === key).length;
-                        const pct = Math.round((count / total) * 100);
-                        return (
-                          <div key={key} className="flex items-center gap-3">
-                            <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: color }} />
-                            <span className="text-[10px] font-semibold text-muted-foreground w-24 shrink-0">{label}</span>
-                            <div className="flex-1 h-5 bg-muted/40 rounded-full overflow-hidden">
-                              <div
-                                className="h-full rounded-full transition-all duration-500 flex items-center px-2"
-                                style={{ width: `${pct}%`, backgroundColor: color }}
-                              >
-                                {pct > 10 && <span className="text-[10px] font-bold text-white">{pct}%</span>}
-                              </div>
-                            </div>
-                            <span className="text-[10px] font-mono font-bold text-foreground w-8 text-right shrink-0">{count}</span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  );
-                })()}
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* HR Search & Status Filter Bar */}
-          <Card className="p-4 border border-border">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full sm:w-auto flex-1">
-                <div className="relative w-full sm:w-72">
-                  <i className="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground" />
-                  <Input
-                    type="text"
-                    placeholder="Search staff, role or project..."
-                    value={hrSearch}
-                    onChange={(e) => setHrSearch(e.target.value)}
-                    className="pl-9"
-                  />
-                </div>
-
-                <select
-                  value={hrStatusFilter}
-                  onChange={(e) => setHrStatusFilter(e.target.value)}
-                  className="h-9 px-3 text-sm bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary w-full sm:w-auto cursor-pointer"
-                >
-                  <option value="All">All Statuses</option>
-                  <option value="Deployed">Deployed</option>
-                  <option value="Partially Allocated">Partially Allocated</option>
-                  <option value="Bench">Bench</option>
-                  <option value="On Leave">On Leave</option>
-                </select>
-
-                <select
-                  value={hrDeptFilter}
-                  onChange={(e) => setHrDeptFilter(e.target.value)}
-                  className="h-9 px-3 text-sm bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary w-full sm:w-auto cursor-pointer"
-                >
-                  <option value="All">All Departments</option>
-                  {[...new Set(hrAllocations.map((r) => r.department).filter(Boolean))].sort().map((d) => (
-                    <option key={d} value={d}>{d}</option>
-                  ))}
-                </select>
-
-                {(hrSearch || hrStatusFilter !== "All" || hrDeptFilter !== "All") && (
-                  <button
-                    onClick={() => { setHrSearch(""); setHrStatusFilter("All"); setHrDeptFilter("All"); }}
-                    className="text-xs text-primary hover:underline shrink-0 flex items-center gap-1 cursor-pointer"
-                  >
-                    <i className="fa-solid fa-xmark" /> Clear
-                  </button>
-                )}
-              </div>
-
-              <Button
-                color="primary"
-                size="sm"
-                onClick={() => setShowHrModal(true)}
-                className="gap-2 font-semibold h-9 shrink-0 cursor-pointer"
-              >
-                <i className="fa-solid fa-user-plus text-xs" /> Allocate Staff
-              </Button>
-            </div>
-          </Card>
-
-          {/* HR Resource Matrix Table */}
-          <Card className="border border-border shadow-sm overflow-hidden">
-            <CardHeader className="pb-3 border-b border-border bg-muted/20">
-              <CardTitle className="text-base font-bold flex items-center gap-2">
-                <i className="fa-solid fa-users-gear text-primary" /> Staff Deployment & Resource Allocation Matrix
-              </CardTitle>
-              <CardDescription>
-                Manage departmental staffing allocations, billable weekly hours, and project assignments.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="p-0 overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-muted/40 border-b border-border font-bold text-muted-foreground uppercase">
-                  <tr>
-                    <th className="py-3 px-4">Employee & Role</th>
-                    <th className="py-3 px-3">Department</th>
-                    <th className="py-3 px-3">Assigned Project</th>
-                    <th className="py-3 px-3 text-center">Allocated Hours</th>
-                    <th className="py-3 px-3 text-center">Utilization</th>
-                    <th className="py-3 px-3 text-center">Status</th>
-                    <th className="py-3 px-3">Start Date</th>
-                    <th className="py-3 px-4 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {hrLoading ? (
-                    <tr>
-                      <td colSpan={8} className="py-12 text-center text-muted-foreground">
-                        <i className="fa-solid fa-spinner fa-spin mr-2" /> Loading staff allocations...
-                      </td>
-                    </tr>
-                  ) : filteredHrAllocations.length === 0 ? (
-                    <tr>
-                      <td colSpan={8} className="py-12 text-center text-muted-foreground">
-                        No resource allocations found matching your filter criteria.
-                      </td>
-                    </tr>
-                  ) : (
-                    filteredHrAllocations.map((res) => {
-                      return (
-                        <tr key={res._id} className="hover:bg-muted/20 transition-colors">
-                          <td className="py-3 px-4">
-                            <div className="font-bold text-foreground">{res.employeeName}</div>
-                            <div className="text-muted-foreground text-[11px] font-medium">{res.role}</div>
-                          </td>
-                          <td className="py-3 px-3 font-semibold text-foreground">{res.department}</td>
-                          <td className="py-3 px-3 font-medium text-foreground">{res.assignedProject}</td>
-                          <td className="py-3 px-3 text-center font-mono font-bold">{res.allocatedHoursPerWeek} hrs/wk</td>
-                          <td className="py-3 px-3">
-                            <div className="flex items-center gap-1.5 justify-center">
-                              <div className="w-12 h-1.5 bg-muted rounded-full overflow-hidden">
-                                <div
-                                  className={cn("h-full rounded-full", res.utilizationRate >= 100 ? "bg-emerald-500" : "bg-primary")}
-                                  style={{ width: `${res.utilizationRate}%` }}
-                                />
-                              </div>
-                              <span className="text-[10px] font-bold font-mono">{res.utilizationRate}%</span>
-                            </div>
-                          </td>
-                          <td className="py-3 px-3 text-center">
-                            {(() => {
-                              const hrBadgeColors: Record<string, string> = {
-                                "Deployed": "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20",
-                                "Partially Allocated": "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20",
-                                "Bench": "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20",
-                                "On Leave": "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20",
-                              };
-                              return (
-                                <span className={cn("inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-bold border", hrBadgeColors[res.status] || "bg-muted text-muted-foreground")}>
-                                  {res.status}
-                                </span>
-                              );
-                            })()}
-                          </td>
-                          <td className="py-3 px-3 text-muted-foreground font-mono">{res.startDate}</td>
-                          <td className="py-3 px-4 text-right">
-                            <div className="flex items-center justify-end gap-1">
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handleEditHrAllocation(res)}
-                                className="gap-1 text-xs font-semibold h-7 px-2 cursor-pointer"
-                                title="Edit Allocation"
-                              >
-                                <i className="fa-solid fa-pen text-[10px] text-primary" /> Edit
-                              </Button>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handleDeleteHrAllocation(res._id)}
-                                className="gap-1 text-xs font-semibold h-7 px-2 cursor-pointer text-destructive hover:text-destructive"
-                                title="Remove Allocation"
-                              >
-                                <i className="fa-solid fa-trash text-[10px]" />
-                              </Button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
-            </CardContent>
-          </Card>
-        </div>
+        <HrWorkdeskDashboard
+          allocations={hrAllocations}
+          loading={hrLoading}
+          onNewAllocation={() => {
+            setEditingHrAllocation(null);
+            setHrFormData({
+              employeeName: "",
+              role: "",
+              department: "Engineering",
+              assignedProject: "",
+              allocatedHoursPerWeek: 40,
+              utilizationRate: 0,
+              status: "Deployed",
+              startDate: "",
+              notes: "",
+            });
+            setShowHrModal(true);
+          }}
+          onEditAllocation={(item) => handleEditHrAllocation(item)}
+          onDeleteAllocation={(id) => handleDeleteHrAllocation(id)}
+          onRefresh={fetchHrAllocations}
+        />
       )}
 
       {/* External Teams Tab View */}
