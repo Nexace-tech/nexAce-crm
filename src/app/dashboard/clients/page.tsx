@@ -949,12 +949,6 @@ export default function OperationsPage() {
             </>
           )}
 
-          {activeTab === "sales" && (isAdmin || isOPS || can("manageDeals")) && (
-            <Button color="primary" size="sm" onClick={() => setShowSalesModal(true)} className="gap-2 font-semibold h-8 cursor-pointer">
-              <i className="fa-solid fa-plus text-xs" /> New Sales Deal
-            </Button>
-          )}
-
           {activeTab === "hr" && (
             <Button color="primary" size="sm" onClick={() => setShowHrModal(true)} className="gap-2 font-semibold h-8 cursor-pointer">
               <i className="fa-solid fa-user-plus text-xs" /> Allocate Staff Resource
