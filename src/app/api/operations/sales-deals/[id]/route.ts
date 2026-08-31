@@ -18,17 +18,17 @@ export async function PATCH(
     const body = await request.json();
     await connectToDatabase();
 
-    const { dealName, clientName, value, stage, probability, owner, expectedCloseDate, notes, priority } = body;
+    const { dealName, clientAccount, clientName, dealValue, value, stage, probability, owner, expectedClose, expectedCloseDate, notes, priority, venture } = body;
     const updatePayload: Record<string, unknown> = {};
     if (dealName !== undefined) updatePayload.dealName = dealName;
-    if (clientName !== undefined) updatePayload.clientName = clientName;
-    if (value !== undefined) updatePayload.value = Number(value);
+    if (clientAccount !== undefined || clientName !== undefined) updatePayload.clientAccount = clientAccount || clientName;
+    if (dealValue !== undefined || value !== undefined) updatePayload.dealValue = Number(dealValue !== undefined ? dealValue : value);
     if (stage !== undefined) updatePayload.stage = stage;
     if (probability !== undefined) updatePayload.probability = Number(probability);
     if (owner !== undefined) updatePayload.owner = owner;
-    if (expectedCloseDate !== undefined) updatePayload.expectedCloseDate = expectedCloseDate ? new Date(expectedCloseDate) : null;
+    if (expectedClose !== undefined || expectedCloseDate !== undefined) updatePayload.expectedClose = String(expectedClose || expectedCloseDate || "");
+    if (venture !== undefined) updatePayload.venture = venture;
     if (notes !== undefined) updatePayload.notes = notes;
-    if (priority !== undefined) updatePayload.priority = priority;
 
     const deal = await SalesDeal.findOneAndUpdate(
       { _id: new mongoose.Types.ObjectId(id), tenantId: tenantObjectId },

@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Pagination } from "@/components/ui/pagination";
 import { usePermissions } from "@/hooks/usePermissions";
 import { BulkImportModal } from "@/components/operations/BulkImportModal";
+import { SalesWorkdeskDashboard } from "@/components/operations/SalesWorkdeskDashboard";
 import { cn } from "@/lib/utils";
 
 interface ClientData {
@@ -701,8 +702,9 @@ export default function OperationsPage() {
   };
 
   const [salesSubmitting, setSalesSubmitting] = useState(false);
+  const savingSalesDeal = salesSubmitting;
 
-  const handleAddSalesDeal = async (e: React.FormEvent) => {
+  const handleSaveSalesDeal = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!salesFormData.clientAccount || !salesFormData.dealName) return;
     setSalesSubmitting(true);
@@ -742,6 +744,7 @@ export default function OperationsPage() {
       setSalesSubmitting(false);
     }
   };
+  const handleAddSalesDeal = handleSaveSalesDeal;
 
   const handleDeleteSalesDeal = async (dealId: string) => {
     try {
@@ -769,11 +772,31 @@ export default function OperationsPage() {
       stage: deal.stage,
       probability: deal.probability,
       owner: deal.owner,
-      expectedClose: deal.expectedClose,
+      expectedClose: deal.expectedClose ? deal.expectedClose.split("T")[0] : "",
       venture: deal.venture,
       notes: deal.notes || "",
     });
     setShowSalesModal(true);
+  };
+
+  const handleOpenSalesModal = (deal?: SalesDeal) => {
+    if (deal) {
+      handleEditSalesDeal(deal);
+    } else {
+      setEditingSalesDeal(null);
+      setSalesFormData({
+        clientAccount: "",
+        dealName: "",
+        dealValue: "",
+        stage: "Prospecting",
+        probability: 50,
+        owner: "",
+        expectedClose: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+        venture: "Ace Consultancys",
+        notes: "",
+      });
+      setShowSalesModal(true);
+    }
   };
 
   const [hrSubmitting, setHrSubmitting] = useState(false);
@@ -1631,563 +1654,16 @@ export default function OperationsPage() {
         </div>
       )}
 
-      {/* Sales Workdesk Tab View */}
+      {/* Sales Workdesk Tab View - Redesigned to exact CRMS standard */}
       {activeTab === "sales" && (
-        <div className="space-y-6 animate-in fade-in duration-300">
-          {/* Sales Metrics Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-            <Card className="border-l-4 border-l-primary">
-              <CardContent className="p-5 flex items-center justify-between">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Total Pipeline Value</p>
-                  <p className="text-2xl font-bold text-foreground">
-                    ${salesDeals.reduce((sum, d) => sum + d.dealValue, 0).toLocaleString()}
-                  </p>
-                </div>
-                <div className="p-3 bg-primary/10 text-primary rounded-xl">
-                  <i className="fa-solid fa-sack-dollar text-xl" />
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="border-l-4 border-l-sky-500">
-              <CardContent className="p-5 flex items-center justify-between">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Active Deals</p>
-                  <p className="text-2xl font-bold text-foreground">
-                    {salesDeals.filter((d) => d.stage !== "Closed Lost" && d.stage !== "Closed Won").length}
-                  </p>
-                </div>
-                <div className="p-3 bg-sky-500/10 text-sky-500 rounded-xl">
-                  <i className="fa-solid fa-handshake text-xl" />
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="border-l-4 border-l-amber-500">
-              <CardContent className="p-5 flex items-center justify-between">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Weighted Expected Revenue</p>
-                  <p className="text-2xl font-bold text-foreground">
-                    ${Math.round(salesDeals.reduce((sum, d) => sum + (d.dealValue * d.probability) / 100, 0)).toLocaleString()}
-                  </p>
-                </div>
-                <div className="p-3 bg-amber-500/10 text-amber-500 rounded-xl">
-                  <i className="fa-solid fa-chart-line text-xl" />
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="border-l-4 border-l-emerald-500">
-              <CardContent className="p-5 flex items-center justify-between">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Closed Won Revenue</p>
-                  <p className="text-2xl font-bold text-foreground">
-                    ${salesDeals.filter((d) => d.stage === "Closed Won").reduce((sum, d) => sum + d.dealValue, 0).toLocaleString()}
-                  </p>
-                </div>
-                <div className="p-3 bg-emerald-500/10 text-emerald-500 rounded-xl">
-                  <i className="fa-solid fa-trophy text-xl" />
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Charts Row */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-            {/* Pipeline Funnel by Stage */}
-            <Card className="border border-border shadow-sm">
-              <CardHeader className="pb-2 border-b border-border">
-                <CardTitle className="text-sm font-bold flex items-center gap-2">
-                  <i className="fa-solid fa-filter text-primary" /> Pipeline Funnel by Stage
-                </CardTitle>
-                <CardDescription className="text-xs">Deal count and total value per stage</CardDescription>
-              </CardHeader>
-              <CardContent className="p-5">
-                {(() => {
-                  const STAGES = ["Prospecting", "Discovery", "Proposal Sent", "Negotiation", "Closed Won", "Closed Lost"] as const;
-                  const STAGE_COLORS: Record<string, string> = {
-                    "Prospecting": "hsl(220 70% 60%)",
-                    "Discovery": "hsl(200 80% 55%)",
-                    "Proposal Sent": "hsl(40 90% 55%)",
-                    "Negotiation": "hsl(270 70% 60%)",
-                    "Closed Won": "hsl(142 60% 50%)",
-                    "Closed Lost": "hsl(0 65% 55%)",
-                  };
-                  const data = STAGES.map((stage) => {
-                    const deals = salesDeals.filter((d) => d.stage === stage);
-                    return { stage, count: deals.length, value: deals.reduce((s, d) => s + d.dealValue, 0) };
-                  });
-                  const maxCount = Math.max(...data.map((d) => d.count), 1);
-                  return (
-                    <div className="space-y-2.5">
-                      {data.map(({ stage, count, value }) => (
-                        <div key={stage} className="flex items-center gap-3">
-                          <span className="text-[10px] font-semibold text-muted-foreground w-24 shrink-0 truncate">{stage}</span>
-                          <div className="flex-1 h-6 bg-muted/40 rounded-md overflow-hidden relative">
-                            <div
-                              className="h-full rounded-md flex items-center px-2 transition-all duration-500"
-                              style={{ width: `${(count / maxCount) * 100}%`, backgroundColor: STAGE_COLORS[stage] }}
-                            >
-                              {count > 0 && <span className="text-[10px] font-bold text-white">{count}</span>}
-                            </div>
-                          </div>
-                          <span className="text-[10px] font-mono font-bold text-foreground w-20 text-right shrink-0">
-                            ${value.toLocaleString()}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  );
-                })()}
-              </CardContent>
-            </Card>
-
-            {/* Deal Value by Owner */}
-            <Card className="border border-border shadow-sm">
-              <CardHeader className="pb-2 border-b border-border">
-                <CardTitle className="text-sm font-bold flex items-center gap-2">
-                  <i className="fa-solid fa-user-tie text-primary" /> Deal Value by Owner
-                </CardTitle>
-                <CardDescription className="text-xs">Top deal owners by total pipeline value</CardDescription>
-              </CardHeader>
-              <CardContent className="p-5">
-                {(() => {
-                  const ownerMap: Record<string, number> = {};
-                  salesDeals.forEach((d) => {
-                    ownerMap[d.owner] = (ownerMap[d.owner] || 0) + d.dealValue;
-                  });
-                  const sorted = Object.entries(ownerMap).sort((a, b) => b[1] - a[1]).slice(0, 6);
-                  const maxVal = Math.max(...sorted.map(([, v]) => v), 1);
-                  const OWNER_COLORS = ["hsl(220 70% 60%)", "hsl(270 70% 60%)", "hsl(40 90% 55%)", "hsl(142 60% 50%)", "hsl(200 80% 55%)", "hsl(0 65% 55%)"];
-                  return sorted.length === 0 ? (
-                    <div className="flex items-center justify-center h-32 text-muted-foreground text-xs">No data yet</div>
-                  ) : (
-                    <div className="space-y-2.5">
-                      {sorted.map(([owner, val], i) => (
-                        <div key={owner} className="flex items-center gap-3">
-                          <span className="text-[10px] font-semibold text-muted-foreground w-24 shrink-0 truncate">{owner}</span>
-                          <div className="flex-1 h-6 bg-muted/40 rounded-md overflow-hidden">
-                            <div
-                              className="h-full rounded-md flex items-center px-2 transition-all duration-500"
-                              style={{ width: `${(val / maxVal) * 100}%`, backgroundColor: OWNER_COLORS[i % OWNER_COLORS.length] }}
-                            >
-                              <span className="text-[10px] font-bold text-white hidden sm:block">
-                                ${(val / 1000).toFixed(0)}k
-                              </span>
-                            </div>
-                          </div>
-                          <span className="text-[10px] font-mono font-bold text-foreground w-20 text-right shrink-0">
-                            ${val.toLocaleString()}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  );
-                })()}
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Recent Sales Activities & Quick Leads Feed */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-            <Card className="lg:col-span-2 border border-border shadow-sm">
-              <CardHeader className="pb-3 border-b border-border flex flex-row items-center justify-between">
-                <div>
-                  <CardTitle className="text-sm font-bold flex items-center gap-2">
-                    <i className="fa-solid fa-bolt text-amber-500" /> Recent Sales Activities & Pipeline Events
-                  </CardTitle>
-                  <CardDescription className="text-xs">Real-time log of client calls, contract proposals, and deal status changes</CardDescription>
-                </div>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    const title = prompt("Enter Activity Title (e.g., Client Meeting Completed):");
-                    if (title) {
-                      alert(`New sales activity logged: ${title}`);
-                    }
-                  }}
-                  className="h-7 text-xs font-semibold gap-1 cursor-pointer shrink-0"
-                >
-                  <i className="fa-solid fa-plus text-[10px]" /> Log Activity
-                </Button>
-              </CardHeader>
-              <CardContent className="p-4 space-y-3">
-                {[
-                  { title: "Contract Proposal Sent", client: "Enterprise Software Corp", owner: "Ahmed Raza", value: "$95,000", time: "10 mins ago", icon: "fa-solid fa-file-signature text-purple-500", bg: "bg-purple-500/10" },
-                  { title: "Discovery Call Completed", client: "Apex Tech Labs", owner: "Bilal Hassan", value: "$67,000", time: "1 hour ago", icon: "fa-solid fa-headset text-sky-500", bg: "bg-sky-500/10" },
-                  { title: "Deal Closed & Won 🎉", client: "Global Logistics Ltd", owner: "Ayesha Qureshi", value: "$31,000", time: "3 hours ago", icon: "fa-solid fa-trophy text-emerald-500", bg: "bg-emerald-500/10" },
-                  { title: "Negotiation Meeting Scheduled", client: "Metro Finance Systems", owner: "Omar Malik", value: "$22,000", time: "Yesterday", icon: "fa-solid fa-handshake text-amber-500", bg: "bg-amber-500/10" },
-                ].map((act, idx) => (
-                  <div key={idx} className="flex items-center justify-between p-3 rounded-lg border border-border/60 bg-muted/20 hover:bg-muted/40 transition-colors text-xs">
-                    <div className="flex items-center gap-3">
-                      <div className={cn("w-9 h-9 rounded-lg flex items-center justify-center shrink-0 border border-border/40", act.bg)}>
-                        <i className={cn("text-sm", act.icon)} />
-                      </div>
-                      <div>
-                        <h4 className="font-bold text-foreground">{act.title}</h4>
-                        <p className="text-muted-foreground text-[11px]">
-                          {act.client} • Assigned to <span className="font-medium text-foreground">{act.owner}</span>
-                        </p>
-                      </div>
-                    </div>
-                    <div className="text-right shrink-0">
-                      <div className="font-mono font-bold text-primary">{act.value}</div>
-                      <div className="text-[10px] text-muted-foreground">{act.time}</div>
-                    </div>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-
-            <Card className="border border-border shadow-sm">
-              <CardHeader className="pb-3 border-b border-border">
-                <CardTitle className="text-sm font-bold flex items-center gap-2">
-                  <i className="fa-solid fa-bullseye text-primary" /> Key Sales Performance Targets
-                </CardTitle>
-                <CardDescription className="text-xs">Monthly sales quota & target completion</CardDescription>
-              </CardHeader>
-              <CardContent className="p-4 space-y-4">
-                <div className="space-y-1.5">
-                  <div className="flex justify-between text-xs font-semibold">
-                    <span>Monthly Quota ($250k)</span>
-                    <span className="font-mono text-emerald-600 dark:text-emerald-400 font-bold">91.7%</span>
-                  </div>
-                  <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
-                    <div className="h-full bg-emerald-500 rounded-full" style={{ width: "91.7%" }} />
-                  </div>
-                  <p className="text-[10px] text-muted-foreground">$229,400 of $250,000 target achieved</p>
-                </div>
-
-                <div className="space-y-1.5 pt-2 border-t border-border/60">
-                  <div className="flex justify-between text-xs font-semibold">
-                    <span>Win Rate Goal (65%)</span>
-                    <span className="font-mono text-sky-600 dark:text-sky-400 font-bold">75.0%</span>
-                  </div>
-                  <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
-                    <div className="h-full bg-sky-500 rounded-full" style={{ width: "75%" }} />
-                  </div>
-                  <p className="text-[10px] text-muted-foreground">3 of 4 active proposals in closing stage</p>
-                </div>
-
-                <div className="p-3 bg-primary/10 rounded-lg border border-primary/20 space-y-1 mt-2">
-                  <span className="text-[11px] font-bold text-primary flex items-center gap-1.5">
-                    <i className="fa-solid fa-lightbulb" /> Sales Pro-Tip
-                  </span>
-                  <p className="text-[10px] text-muted-foreground">
-                    High-value proposals above $50k have a 45% faster closing velocity when follow-ups are logged within 48 hours.
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Sales Search & Filter Bar */}
-          <Card className="p-4 border border-border">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full sm:w-auto flex-1">
-                <div className="relative w-full sm:w-72">
-                  <i className="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground" />
-                  <Input
-                    type="text"
-                    placeholder="Search deals, clients or owners..."
-                    value={salesSearch}
-                    onChange={(e) => setSalesSearch(e.target.value)}
-                    className="pl-9"
-                  />
-                </div>
-
-                <select
-                  value={salesStageFilter}
-                  onChange={(e) => setSalesStageFilter(e.target.value)}
-                  className="h-9 px-3 text-sm bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary w-full sm:w-auto cursor-pointer"
-                >
-                  <option value="All">All Stages</option>
-                  <option value="Prospecting">Prospecting</option>
-                  <option value="Discovery">Discovery</option>
-                  <option value="Proposal Sent">Proposal Sent</option>
-                  <option value="Negotiation">Negotiation</option>
-                  <option value="Closed Won">Closed Won</option>
-                  <option value="Closed Lost">Closed Lost</option>
-                </select>
-
-                <select
-                  value={salesOwnerFilter}
-                  onChange={(e) => setSalesOwnerFilter(e.target.value)}
-                  className="h-9 px-3 text-sm bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary w-full sm:w-auto cursor-pointer"
-                >
-                  <option value="All">All Owners</option>
-                  {[...new Set(salesDeals.map((d) => d.owner).filter(Boolean))].sort().map((o) => (
-                    <option key={o} value={o}>{o}</option>
-                  ))}
-                </select>
-
-                {(salesSearch || salesStageFilter !== "All" || salesOwnerFilter !== "All") && (
-                  <button
-                    onClick={() => { setSalesSearch(""); setSalesStageFilter("All"); setSalesOwnerFilter("All"); }}
-                    className="text-xs text-primary hover:underline shrink-0 flex items-center gap-1 cursor-pointer"
-                  >
-                    <i className="fa-solid fa-xmark" /> Clear
-                  </button>
-                )}
-              </div>
-
-              <div className="flex items-center gap-2 shrink-0">
-                {/* View Mode Switcher */}
-                <div className="flex items-center gap-0.5 bg-muted/60 p-0.5 rounded-lg border border-border/60">
-                  <button
-                    type="button"
-                    onClick={() => setSalesViewMode("table")}
-                    title="Table View"
-                    className={cn(
-                      "p-1.5 rounded-md transition-all cursor-pointer text-xs flex items-center gap-1 font-semibold",
-                      salesViewMode === "table" ? "bg-background text-foreground shadow-xs" : "text-muted-foreground hover:text-foreground"
-                    )}
-                  >
-                    <i className="fa-solid fa-table-list" /> Table
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setSalesViewMode("kanban")}
-                    title="Kanban Board View"
-                    className={cn(
-                      "p-1.5 rounded-md transition-all cursor-pointer text-xs flex items-center gap-1 font-semibold",
-                      salesViewMode === "kanban" ? "bg-background text-foreground shadow-xs" : "text-muted-foreground hover:text-foreground"
-                    )}
-                  >
-                    <i className="fa-solid fa-kanban-board" /> Kanban
-                  </button>
-                </div>
-
-                <Button
-                  color="primary"
-                  size="sm"
-                  onClick={() => setShowSalesModal(true)}
-                  className="gap-2 font-semibold h-9 cursor-pointer"
-                >
-                  <i className="fa-solid fa-plus text-xs" /> New Sales Deal
-                </Button>
-              </div>
-            </div>
-          </Card>
-
-          {/* Sales Deals View */}
-          {salesViewMode === "kanban" ? (
-            /* Kanban Board View */
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 overflow-x-auto pb-4">
-              {(["Prospecting", "Discovery", "Proposal Sent", "Negotiation", "Closed Won", "Closed Lost"] as const).map((stage) => {
-                const stageDeals = filteredSalesDeals.filter((d) => d.stage === stage);
-                const stageTotalVal = stageDeals.reduce((sum, d) => sum + d.dealValue, 0);
-                const STAGE_HEADER_COLORS: Record<string, string> = {
-                  "Prospecting": "border-t-blue-500",
-                  "Discovery": "border-t-sky-500",
-                  "Proposal Sent": "border-t-amber-500",
-                  "Negotiation": "border-t-purple-500",
-                  "Closed Won": "border-t-emerald-500",
-                  "Closed Lost": "border-t-red-500",
-                };
-                return (
-                  <div key={stage} className={cn("bg-card border border-border rounded-xl p-3 space-y-3 border-t-4 flex flex-col justify-between min-w-[220px]", STAGE_HEADER_COLORS[stage])}>
-                    <div>
-                      <div className="flex items-center justify-between pb-2 border-b border-border/60">
-                        <span className="text-xs font-bold text-foreground">{stage}</span>
-                        <Badge variant="soft" color="primary" className="text-[10px] px-1.5 py-0.2">
-                          {stageDeals.length}
-                        </Badge>
-                      </div>
-                      <div className="py-1 text-[11px] font-mono font-semibold text-muted-foreground">
-                        ${stageTotalVal.toLocaleString()}
-                      </div>
-                      
-                      <div className="space-y-2.5 mt-2">
-                        {stageDeals.length === 0 ? (
-                          <div className="text-[11px] text-muted-foreground text-center py-6 border border-dashed border-border/60 rounded-lg">
-                            No deals
-                          </div>
-                        ) : (
-                          stageDeals.map((deal) => (
-                            <div key={deal._id} className="p-3 bg-muted/30 hover:bg-muted/60 border border-border/80 rounded-lg space-y-2 transition-all shadow-2xs group">
-                              <div className="flex justify-between items-start">
-                                <div>
-                                  <h4 className="text-xs font-bold text-foreground line-clamp-1">{deal.clientAccount}</h4>
-                                  <p className="text-[10px] text-muted-foreground line-clamp-1">{deal.dealName}</p>
-                                </div>
-                                <span className="text-xs font-mono font-extrabold text-primary shrink-0 ml-1">
-                                  ${deal.dealValue.toLocaleString()}
-                                </span>
-                              </div>
-
-                              <div className="flex items-center justify-between text-[10px] text-muted-foreground pt-1 border-t border-border/40">
-                                <span className="flex items-center gap-1 font-medium">
-                                  <i className="fa-solid fa-user-tie text-[9px] text-primary" /> {deal.owner}
-                                </span>
-                                <span className="font-mono">{deal.probability}% win</span>
-                              </div>
-
-                              <div className="flex items-center justify-between pt-1 opacity-90 group-hover:opacity-100">
-                                <span className="text-[10px] font-mono text-muted-foreground">
-                                  <i className="fa-solid fa-calendar text-[9px] mr-1" /> {deal.expectedClose}
-                                </span>
-                                <div className="flex items-center gap-1">
-                                  <button
-                                    onClick={() => handleEditSalesDeal(deal)}
-                                    className="p-1 rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-                                    title="Edit Deal"
-                                  >
-                                    <i className="fa-solid fa-pen text-[10px]" />
-                                  </button>
-                                  <button
-                                    onClick={() => handleDeleteSalesDeal(deal._id)}
-                                    className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors cursor-pointer"
-                                    title="Delete Deal"
-                                  >
-                                    <i className="fa-solid fa-trash text-[10px]" />
-                                  </button>
-                                </div>
-                              </div>
-                            </div>
-                          ))
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            /* Sales Deals Table View */
-            <Card className="border border-border shadow-sm overflow-hidden">
-              <CardHeader className="pb-3 border-b border-border bg-muted/20">
-                <CardTitle className="text-base font-bold flex items-center gap-2">
-                  <i className="fa-solid fa-handshake text-primary" /> Active Sales Deal Pipeline
-                  <span className="ml-auto text-xs font-normal text-muted-foreground">
-                    {filteredSalesDeals.length} of {salesDeals.length} deals
-                  </span>
-                </CardTitle>
-                <CardDescription>
-                  Track client leads, negotiation stages, contract valuations, and estimated closing timelines.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="p-0 overflow-x-auto">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-muted/40 border-b border-border font-bold text-muted-foreground uppercase">
-                    <tr>
-                      <th className="py-3 px-4">Client Account & Deal</th>
-                      <th className="py-3 px-3">Venture</th>
-                      <th className="py-3 px-3 text-center">Stage</th>
-                      <th className="py-3 px-3 text-right">Deal Value</th>
-                      <th className="py-3 px-3 text-center">Win Probability</th>
-                      <th className="py-3 px-3">Owner</th>
-                      <th className="py-3 px-3">Expected Close</th>
-                      <th className="py-3 px-4 text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border">
-                    {salesLoading ? (
-                      <tr>
-                        <td colSpan={8} className="py-12 text-center text-muted-foreground">
-                          <i className="fa-solid fa-spinner fa-spin mr-2" /> Loading sales deals...
-                        </td>
-                      </tr>
-                    ) : filteredSalesDeals.length === 0 ? (
-                      <tr>
-                        <td colSpan={8} className="py-12 text-center text-muted-foreground">
-                          No sales deals found matching your filter criteria.
-                        </td>
-                      </tr>
-                    ) : (
-                      filteredSalesDeals.map((deal) => {
-                        const stageColors: Record<string, string> = {
-                          "Prospecting": "bg-blue-500/10 text-blue-600 dark:text-blue-400",
-                          "Discovery": "bg-sky-500/10 text-sky-600 dark:text-sky-400",
-                          "Proposal Sent": "bg-amber-500/10 text-amber-600 dark:text-amber-400",
-                          "Negotiation": "bg-purple-500/10 text-purple-600 dark:text-purple-400",
-                          "Closed Won": "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
-                          "Closed Lost": "bg-red-500/10 text-red-600 dark:text-red-400",
-                        };
-                        return (
-                          <tr key={deal._id} className="hover:bg-muted/20 transition-colors">
-                            <td className="py-3 px-4">
-                              <div className="font-bold text-foreground">{deal.clientAccount}</div>
-                              <div className="text-muted-foreground text-[11px] font-medium">{deal.dealName}</div>
-                            </td>
-                            <td className="py-3 px-3 font-semibold text-foreground">{deal.venture}</td>
-                            <td className="py-3 px-3 text-center">
-                              <span className={cn("inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-bold border", stageColors[deal.stage] || "bg-muted text-muted-foreground")}>
-                                {deal.stage}
-                              </span>
-                            </td>
-                            <td className="py-3 px-3 text-right font-mono font-bold text-foreground">
-                              ${deal.dealValue.toLocaleString()}
-                            </td>
-                            <td className="py-3 px-3">
-                              <div className="flex items-center gap-1.5 justify-center">
-                                <div className="w-12 h-1.5 bg-muted rounded-full overflow-hidden">
-                                  <div
-                                    className={cn("h-full rounded-full", deal.probability >= 80 ? "bg-emerald-500" : "bg-primary")}
-                                    style={{ width: `${deal.probability}%` }}
-                                  />
-                                </div>
-                                <span className="text-[10px] font-bold font-mono">{deal.probability}%</span>
-                              </div>
-                            </td>
-                            <td className="py-3 px-3 text-foreground font-medium">{deal.owner}</td>
-                            <td className="py-3 px-3 text-muted-foreground font-mono">{deal.expectedClose}</td>
-                            <td className="py-3 px-4 text-right">
-                              <div className="flex items-center justify-end gap-1">
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => handleEditSalesDeal(deal)}
-                                  className="gap-1 text-xs font-semibold h-7 px-2 cursor-pointer"
-                                  title="Edit Deal"
-                                >
-                                  <i className="fa-solid fa-pen text-[10px] text-primary" /> Edit
-                                </Button>
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => {
-                                    setFormData((prev) => ({
-                                      ...prev,
-                                      clientAccount: deal.clientAccount,
-                                      projectName: deal.dealName,
-                                      venture: deal.venture,
-                                      deliveryOwner: deal.owner
-                                    }));
-                                    setActiveTab("operations");
-                                    handleOpenModal();
-                                  }}
-                                  className="gap-1 text-xs font-semibold h-7 px-2 cursor-pointer"
-                                  title="Convert Sales Deal to Operations Project"
-                                >
-                                  <i className="fa-solid fa-arrows-split-up-and-left text-[10px] text-primary" /> Convert
-                                </Button>
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => handleDeleteSalesDeal(deal._id)}
-                                  className="gap-1 text-xs font-semibold h-7 px-2 cursor-pointer text-destructive hover:text-destructive"
-                                  title="Delete Deal"
-                                >
-                                  <i className="fa-solid fa-trash text-[10px]" />
-                                </Button>
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })
-                    )}
-                  </tbody>
-                </table>
-              </CardContent>
-            </Card>
-          )}
-        </div>
+        <SalesWorkdeskDashboard
+          deals={salesDeals}
+          loading={salesLoading}
+          onNewDeal={() => handleOpenSalesModal()}
+          onEditDeal={(deal) => handleOpenSalesModal(deal)}
+          onDeleteDeal={(id, title) => setDeleteConfirmTarget({ type: "deal", id, title })}
+          onRefresh={fetchSalesDeals}
+        />
       )}
 
       {/* HR Workdesk Tab View */}
@@ -3935,6 +3411,171 @@ export default function OperationsPage() {
                 )}
               </Button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add / Edit Sales Deal Modal */}
+      {showSalesModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in"
+          onClick={() => {
+            setShowSalesModal(false);
+            setEditingSalesDeal(null);
+          }}
+        >
+          <div
+            className="w-full max-w-lg bg-card border border-border rounded-xl shadow-xl p-6 space-y-4 max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between pb-3 border-b border-border">
+              <h3 className="text-base font-bold text-foreground flex items-center gap-2">
+                <i className="fa-solid fa-handshake text-rose-500" />
+                {editingSalesDeal ? "Edit Sales Opportunity" : "Create New Sales Deal"}
+              </h3>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowSalesModal(false);
+                  setEditingSalesDeal(null);
+                }}
+                className="text-muted-foreground hover:text-foreground cursor-pointer text-sm"
+              >
+                <i className="fa-solid fa-xmark" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveSalesDeal} className="space-y-4 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="font-semibold text-foreground">Client Account / Company *</label>
+                  <Input
+                    required
+                    placeholder="e.g. Apex Digital Labs"
+                    value={salesFormData.clientAccount}
+                    onChange={(e) => setSalesFormData((prev) => ({ ...prev, clientAccount: e.target.value }))}
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="font-semibold text-foreground">Deal Name / Scope *</label>
+                  <Input
+                    required
+                    placeholder="e.g. Enterprise Migration"
+                    value={salesFormData.dealName}
+                    onChange={(e) => setSalesFormData((prev) => ({ ...prev, dealName: e.target.value }))}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="space-y-1.5">
+                  <label className="font-semibold text-foreground">Deal Value ($) *</label>
+                  <Input
+                    required
+                    type="number"
+                    min="0"
+                    placeholder="e.g. 50000"
+                    value={salesFormData.dealValue}
+                    onChange={(e) => setSalesFormData((prev) => ({ ...prev, dealValue: e.target.value }))}
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="font-semibold text-foreground">Pipeline Stage</label>
+                  <select
+                    value={salesFormData.stage}
+                    onChange={(e) => setSalesFormData((prev) => ({ ...prev, stage: e.target.value as any }))}
+                    className="w-full h-9 px-3 bg-background border border-input rounded-md text-foreground focus:outline-hidden focus:ring-1 focus:ring-primary"
+                  >
+                    <option value="Prospecting">Prospecting</option>
+                    <option value="Discovery">Discovery</option>
+                    <option value="Proposal Sent">Proposal Sent</option>
+                    <option value="Negotiation">Negotiation</option>
+                    <option value="Closed Won">Closed Won</option>
+                    <option value="Closed Lost">Closed Lost</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="font-semibold text-foreground">Win Probability (%)</label>
+                  <Input
+                    type="number"
+                    min="0"
+                    max="100"
+                    placeholder="50"
+                    value={salesFormData.probability}
+                    onChange={(e) => setSalesFormData((prev) => ({ ...prev, probability: Number(e.target.value) }))}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="font-semibold text-foreground">Deal Owner / Assignee</label>
+                  <Input
+                    placeholder="e.g. Sara Khan"
+                    value={salesFormData.owner}
+                    onChange={(e) => setSalesFormData((prev) => ({ ...prev, owner: e.target.value }))}
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="font-semibold text-foreground">Expected Close Date</label>
+                  <Input
+                    type="date"
+                    value={salesFormData.expectedClose}
+                    onChange={(e) => setSalesFormData((prev) => ({ ...prev, expectedClose: e.target.value }))}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="font-semibold text-foreground">Venture Name</label>
+                <Input
+                  placeholder="e.g. Ace Consultancys"
+                  value={salesFormData.venture}
+                  onChange={(e) => setSalesFormData((prev) => ({ ...prev, venture: e.target.value }))}
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="font-semibold text-foreground">Deal Notes & Background</label>
+                <textarea
+                  rows={3}
+                  placeholder="Key requirements, client decision makers, budget notes..."
+                  value={salesFormData.notes}
+                  onChange={(e) => setSalesFormData((prev) => ({ ...prev, notes: e.target.value }))}
+                  className="w-full p-2.5 bg-background border border-input rounded-md text-foreground focus:outline-hidden focus:ring-1 focus:ring-primary"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-border">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setShowSalesModal(false);
+                    setEditingSalesDeal(null);
+                  }}
+                  className="cursor-pointer"
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" color="primary" size="sm" disabled={savingSalesDeal} className="cursor-pointer bg-rose-600 hover:bg-rose-700 text-white">
+                  {savingSalesDeal ? (
+                    <>
+                      <i className="fa-solid fa-spinner fa-spin mr-1.5" /> Saving...
+                    </>
+                  ) : (
+                    <>
+                      <i className="fa-solid fa-check mr-1.5" /> {editingSalesDeal ? "Update Deal" : "Save Sales Deal"}
+                    </>
+                  )}
+                </Button>
+              </div>
+            </form>
           </div>
         </div>
       )}

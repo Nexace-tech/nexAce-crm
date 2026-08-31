@@ -1,11 +1,13 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { usePermissions } from "@/hooks/usePermissions";
+import { cn, formatISTDate, formatISTTime, getISTDateString } from "@/lib/utils";
+import { generateAndDownloadPDF } from "@/lib/pdfReportGenerator";
 
 export function EmployeeDashboard({ user }: { user: any }) {
   const { can } = usePermissions();
@@ -20,6 +22,30 @@ export function EmployeeDashboard({ user }: { user: any }) {
   const [teamLeaves, setTeamLeaves] = useState<any[]>([]);
   const [announcements, setAnnouncements] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Export & Toast State
+  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
+  const [exportingReport, setExportingReport] = useState<string | null>(null);
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const exportMenuRef = useRef<HTMLDivElement>(null);
+
+  const showToast = (message: string, type: "success" | "error" = "success") => {
+    setToast({ message, type });
+    setTimeout(() => {
+      setToast(null);
+    }, 3500);
+  };
+
+  // Close export menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (exportMenuRef.current && !exportMenuRef.current.contains(event.target as Node)) {
+        setShowExportMenu(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   const fetchAttendanceStatus = async () => {
     try {
@@ -125,24 +151,400 @@ export function EmployeeDashboard({ user }: { user: any }) {
     }
   };
 
+  // --- Export 1: Project Tasks (with details) ---
+  const handleExportTasksReport = async () => {
+    try {
+      setExportingReport("tasks");
+      let currentTasks = tasks;
+      if (currentTasks.length === 0) {
+        const res = await fetch("/api/tasks");
+        if (res.ok) {
+          const data = await res.json();
+          currentTasks = data.tasks || [];
+        }
+      }
+      if (currentTasks.length === 0) {
+        showToast("No assigned tasks found to export.", "error");
+        return;
+      }
+
+      const headers = [
+        "Task ID",
+        "Task Title",
+        "Project",
+        "Priority",
+        "Status",
+        "Due Date (IST)",
+        "Estimated Hours",
+        "Subtasks Progress",
+        "Description",
+        "Assigned / Created Date (IST)"
+      ];
+
+      const rows = currentTasks.map((t) => {
+        const subtasksTotal = Array.isArray(t.subtasks) ? t.subtasks.length : 0;
+        const subtasksDone = Array.isArray(t.subtasks) ? t.subtasks.filter((s: any) => s.completed).length : 0;
+        const subtaskStr = subtasksTotal > 0 ? `${subtasksDone}/${subtasksTotal} Completed` : "No subtasks";
+        const projName = t.projectId?.name || t.project || "General";
+        const dueDateStr = t.dueDate ? formatISTDate(t.dueDate) : "No due date";
+        const createdDateStr = t.createdAt ? formatISTDate(t.createdAt) : "";
+        const descClean = (t.description || "").replace(/[\r\n]+/g, " ").trim();
+
+        return [
+          `"${t._id || ""}"`,
+          `"${(t.title || "").replace(/"/g, '""')}"`,
+          `"${projName.replace(/"/g, '""')}"`,
+          `"${t.priority || "Medium"}"`,
+          `"${t.status || "To Do"}"`,
+          `"${dueDateStr}"`,
+          t.estimatedHours || 0,
+          `"${subtaskStr}"`,
+          `"${descClean.replace(/"/g, '""')}"`,
+          `"${createdDateStr}"`
+        ].join(",");
+      });
+
+      const csvContent = "\uFEFF" + [headers.join(","), ...rows].join("\n");
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `My_Project_Tasks_Report_${getISTDateString()}_IST.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      showToast("Detailed project tasks exported successfully!", "success");
+    } catch (err) {
+      console.error("Failed to export tasks report:", err);
+      showToast("Failed to export tasks report.", "error");
+    } finally {
+      setExportingReport(null);
+      setShowExportMenu(false);
+    }
+  };
+
+  // --- Export 2: Timesheet Report ---
+  const handleExportTimesheetsReport = async () => {
+    try {
+      setExportingReport("timesheets");
+      let currentEntries = timesheets;
+      if (currentEntries.length === 0) {
+        const res = await fetch("/api/timesheets");
+        if (res.ok) {
+          const data = await res.json();
+          currentEntries = data.entries || [];
+        }
+      }
+      if (currentEntries.length === 0) {
+        showToast("No logged timesheet records found to export.", "error");
+        return;
+      }
+
+      const headers = [
+        "Date (IST)",
+        "Project Name",
+        "Task / Work Description",
+        "Hours Logged",
+        "Billable Status",
+        "Approval Status",
+        "Notes / Comments"
+      ];
+
+      const rows = currentEntries.map((e) => {
+        const dateStr = e.date ? formatISTDate(e.date) : "";
+        const proj = (e.project || "General").replace(/"/g, '""');
+        const task = (e.taskName || "General Development").replace(/"/g, '""');
+        const billable = e.isBillable ? "Billable" : "Non-Billable";
+        const status = e.status || "Draft";
+        const comment = (e.comment || "").replace(/[\r\n]+/g, " ").replace(/"/g, '""').trim();
+
+        return [
+          `"${dateStr}"`,
+          `"${proj}"`,
+          `"${task}"`,
+          e.hours || 0,
+          `"${billable}"`,
+          `"${status}"`,
+          `"${comment}"`
+        ].join(",");
+      });
+
+      const csvContent = "\uFEFF" + [headers.join(","), ...rows].join("\n");
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `My_Timesheet_Report_${getISTDateString()}_IST.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      showToast("Timesheet report exported successfully!", "success");
+    } catch (err) {
+      console.error("Failed to export timesheets report:", err);
+      showToast("Failed to export timesheets report.", "error");
+    } finally {
+      setExportingReport(null);
+      setShowExportMenu(false);
+    }
+  };
+
+  // --- Export 3: Shift Log (Attendance) ---
+  const handleExportShiftLogsReport = async () => {
+    try {
+      setExportingReport("shifts");
+      const res = await fetch("/api/attendance?limit=all");
+      if (!res.ok) throw new Error("Failed to fetch shift records");
+      const data = await res.json();
+      const logs = data.history || (data.attendance ? [data.attendance] : []);
+
+      if (logs.length === 0) {
+        showToast("No shift attendance logs found to export.", "error");
+        return;
+      }
+
+      const headers = [
+        "Date (IST)",
+        "Employee Name",
+        "Shift Name",
+        "Shift Timing",
+        "Clock In (IST)",
+        "Clock Out (IST)",
+        "Duration (Hours)",
+        "Regular Hours",
+        "Overtime Hours",
+        "Attendance Status"
+      ];
+
+      const getLogHours = (log: any) => {
+        let reg = log.regularHours || 0;
+        let ot = log.overtimeHours || 0;
+        if ((reg === 0 && ot === 0 && log.clockIn) || !log.clockOut || log.clockOut === "Active") {
+          if (log.clockIn) {
+            const startMs = new Date(log.clockIn).getTime();
+            const endMs = log.clockOut && log.clockOut !== "Active" ? new Date(log.clockOut).getTime() : Date.now();
+            const diffHours = Math.max(0, (endMs - startMs) / (1000 * 60 * 60));
+            reg = Math.min(diffHours, 8.0);
+            ot = Math.max(0, diffHours - 8.0);
+          }
+        }
+        return { reg, ot, total: reg + ot };
+      };
+
+      const rows = logs.map((log: any) => {
+        const empName = user?.name || "Employee";
+        const shiftName = user?.shiftName || "Standard Day Shift";
+        const shiftTime = user?.shiftTime || "09:00 AM - 05:00 PM";
+        const dateStr = log.date ? formatISTDate(log.date) : "";
+        const clockInStr = log.clockIn ? formatISTTime(log.clockIn) : "--";
+        const clockOutStr = log.clockOut && log.clockOut !== "Active" ? formatISTTime(log.clockOut) : (log.clockIn ? "Active Shift" : "--");
+
+        const { reg, ot, total } = getLogHours(log);
+        const status = log.status || (log.clockIn && !log.clockOut ? "Active" : "Present");
+
+        return [
+          `"${dateStr}"`,
+          `"${empName}"`,
+          `"${shiftName}"`,
+          `"${shiftTime}"`,
+          `"${clockInStr}"`,
+          `"${clockOutStr}"`,
+          total.toFixed(2),
+          reg.toFixed(2),
+          ot.toFixed(2),
+          `"${status}"`
+        ].join(",");
+      });
+
+      const csvContent = "\uFEFF" + [headers.join(","), ...rows].join("\n");
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `My_Shift_Attendance_Log_${getISTDateString()}_IST.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      showToast("Shift logs exported successfully!", "success");
+    } catch (err) {
+      console.error("Failed to export shift logs:", err);
+      showToast("Failed to export shift logs.", "error");
+    } finally {
+      setExportingReport(null);
+      setShowExportMenu(false);
+    }
+  };
+
+  // Export 4: Unified Combined PDF Report (Direct File Download)
+  const handleExportCombinedPDFReport = async () => {
+    setExportingReport("pdf");
+    try {
+      // Fetch latest datasets in parallel
+      const [tsRes, attRes] = await Promise.all([
+        fetch("/api/timesheets"),
+        fetch("/api/attendance?limit=all"),
+      ]);
+
+      const tsData = tsRes.ok ? await tsRes.json() : { entries: [] };
+      const attData = attRes.ok ? await attRes.json() : { history: [] };
+
+      const currentTasks = tasks || [];
+      const currentTimesheets = tsData.entries || timesheets || [];
+      const currentShiftLogs = attData.history || (attData.attendance ? [attData.attendance] : []);
+
+      generateAndDownloadPDF({
+        user: {
+          name: user?.name,
+          role: user?.role,
+          department: user?.department,
+          shiftName: user?.shiftName,
+          shiftTime: user?.shiftTime,
+          tenantName: user?.tenantId?.name,
+        },
+        tasks: currentTasks,
+        timesheets: currentTimesheets,
+        shiftLogs: currentShiftLogs,
+        includeKpis: true,
+        includeTasks: true,
+        includeTimesheets: true,
+        includeShifts: true,
+        includeSignoff: true,
+      });
+
+      showToast("Downloaded Comprehensive PDF Report successfully!", "success");
+    } catch (err) {
+      console.error("Failed to generate combined PDF report:", err);
+      showToast("Failed to download PDF report.", "error");
+    } finally {
+      setExportingReport(null);
+      setShowExportMenu(false);
+    }
+  };
+
   const totalLoggedHours = timesheets.reduce((acc, t) => acc + (t.hours || 0), 0);
 
   return (
     <div className="space-y-8 animate-in fade-in">
-      {/* Welcome Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gradient-to-r from-emerald-500/10 via-emerald-500/5 to-transparent p-6 rounded-2xl border border-emerald-500/20">
+      {/* Toast Notification */}
+      {toast && (
+        <div
+          className={cn(
+            "fixed top-4 right-4 z-50 px-4 py-3 rounded-lg shadow-lg border text-sm font-medium flex items-center gap-2 animate-in fade-in slide-in-from-top-2",
+            toast.type === "success"
+              ? "bg-emerald-500/90 text-white border-emerald-600"
+              : "bg-destructive/90 text-white border-destructive"
+          )}
+        >
+          {toast.type === "success" ? <i className="fa-solid fa-circle-check text-base" /> : <i className="fa-solid fa-circle-exclamation text-base" />}
+          {toast.message}
+        </div>
+      )}
+
+      {/* Hero Welcome Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gradient-to-r from-emerald-500/10 via-primary/5 to-transparent p-6 rounded-2xl border border-emerald-500/20">
         <div>
           <div className="flex items-center gap-2 text-xs font-bold text-emerald-500 tracking-wider uppercase mb-1">
-            <i className="fa-solid fa-user-check text-emerald-500 text-sm" /> Employee Portal
+            <i className="fa-solid fa-id-badge text-emerald-500 text-sm" /> Employee Workspace
           </div>
           <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground flex items-center gap-2">
-            Hello, <span className="text-emerald-500">{user?.name || "Employee"}</span> <i className="fa-solid fa-hand-sparkles text-amber-400 ml-1.5 inline-block" />
+            Welcome back, {user?.name?.split(" ")[0] || "Team Member"}! 👋
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Welcome to your personal workspace portal. Here are your shift details, active tasks, and attendance.
+            Here is your daily pulse, assigned sprint deliverables, and shift attendance record.
           </p>
         </div>
-        <div className="flex items-center gap-3">
+
+        {/* Header Action Buttons */}
+        <div className="flex items-center gap-2.5 flex-wrap">
+          {/* Export Reports Dropdown */}
+          <div className="relative">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowExportMenu(!showExportMenu)}
+              className="gap-2 font-semibold shadow-xs cursor-pointer border-emerald-500/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10"
+            >
+              {exportingReport ? (
+                <>
+                  <i className="fa-solid fa-spinner fa-spin text-xs" /> Exporting...
+                </>
+              ) : (
+                <>
+                  <i className="fa-solid fa-file-arrow-down text-xs" /> Export Reports
+                  <i className={cn("fa-solid text-[10px] transition-transform", showExportMenu ? "fa-chevron-up" : "fa-chevron-down")} />
+                </>
+              )}
+            </Button>
+
+            {showExportMenu && (
+              <div className="absolute right-0 mt-2 w-72 rounded-xl bg-card border border-border shadow-xl z-50 p-1.5 space-y-1 animate-in fade-in slide-in-from-top-2">
+                <div className="px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-muted-foreground border-b border-border/50 flex items-center justify-between">
+                  <span>Select Report Type</span>
+                  <span className="text-[10px] text-emerald-500 font-semibold">PDF &amp; CSV</span>
+                </div>
+
+                {/* Combined PDF Button */}
+                <button
+                  onClick={handleExportCombinedPDFReport}
+                  disabled={Boolean(exportingReport)}
+                  className="w-full text-left px-3 py-2.5 rounded-lg text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 transition-colors flex items-center gap-2.5 cursor-pointer disabled:opacity-50 shadow-xs mb-1"
+                >
+                  <div className="w-7 h-7 rounded-md bg-white/20 text-white flex items-center justify-center shrink-0">
+                    <i className="fa-solid fa-file-pdf text-xs" />
+                  </div>
+                  <div>
+                    <p className="font-bold text-white">Download Combined PDF</p>
+                    <p className="text-[10px] text-rose-100">Direct PDF file download</p>
+                  </div>
+                </button>
+
+                <button
+                  onClick={handleExportTasksReport}
+                  disabled={Boolean(exportingReport)}
+                  className="w-full text-left px-3 py-2 rounded-lg text-xs font-medium text-foreground hover:bg-accent/60 transition-colors flex items-center gap-2.5 cursor-pointer disabled:opacity-50"
+                >
+                  <div className="w-7 h-7 rounded-md bg-amber-500/10 text-amber-500 flex items-center justify-center shrink-0">
+                    <i className="fa-solid fa-list-check text-xs" />
+                  </div>
+                  <div>
+                    <p className="font-bold text-foreground">Project Tasks (CSV)</p>
+                    <p className="text-[10px] text-muted-foreground">Priority, due dates &amp; subtasks</p>
+                  </div>
+                </button>
+
+                <button
+                  onClick={handleExportTimesheetsReport}
+                  disabled={Boolean(exportingReport)}
+                  className="w-full text-left px-3 py-2 rounded-lg text-xs font-medium text-foreground hover:bg-accent/60 transition-colors flex items-center gap-2.5 cursor-pointer disabled:opacity-50"
+                >
+                  <div className="w-7 h-7 rounded-md bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                    <i className="fa-solid fa-calendar-days text-xs" />
+                  </div>
+                  <div>
+                    <p className="font-bold text-foreground">My Timesheet (CSV)</p>
+                    <p className="text-[10px] text-muted-foreground">Logged hours &amp; billable status</p>
+                  </div>
+                </button>
+
+                <button
+                  onClick={handleExportShiftLogsReport}
+                  disabled={Boolean(exportingReport)}
+                  className="w-full text-left px-3 py-2 rounded-lg text-xs font-medium text-foreground hover:bg-accent/60 transition-colors flex items-center gap-2.5 cursor-pointer disabled:opacity-50"
+                >
+                  <div className="w-7 h-7 rounded-md bg-emerald-500/10 text-emerald-500 flex items-center justify-center shrink-0">
+                    <i className="fa-solid fa-clock-rotate-left text-xs" />
+                  </div>
+                  <div>
+                    <p className="font-bold text-foreground">Shift Attendance Logs (CSV)</p>
+                    <p className="text-[10px] text-muted-foreground">Clock in/out timings &amp; duration</p>
+                  </div>
+                </button>
+              </div>
+            )}
+          </div>
+
           <Button asChild color="primary" size="sm">
             <Link href="/dashboard/calendar">
               <i className="fa-solid fa-calendar-days text-xs mr-2" /> My Shift Calendar
@@ -150,6 +552,11 @@ export function EmployeeDashboard({ user }: { user: any }) {
           </Button>
           <Button asChild variant="outline" size="sm">
             <Link href="/dashboard/projects">My Tasks</Link>
+          </Button>
+          <Button asChild variant="outline" size="sm">
+            <Link href="/dashboard/reports" className="gap-1 text-emerald-600 dark:text-emerald-400">
+              <i className="fa-solid fa-file-lines text-xs mr-1" /> Report
+            </Link>
           </Button>
         </div>
       </div>
@@ -231,7 +638,6 @@ export function EmployeeDashboard({ user }: { user: any }) {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Left Column (2 span): Shift Schedule & Assigned Deliverables */}
         <div className="lg:col-span-2 space-y-6">
-          {/* Shift Details & Attendance Action Widget */}
           <Card className="border border-border">
             <CardHeader className="flex flex-row items-center justify-between pb-4">
               <div>
@@ -241,27 +647,41 @@ export function EmployeeDashboard({ user }: { user: any }) {
                 <CardDescription>Your assigned shift schedule & real-time punch status</CardDescription>
               </div>
 
-              <Button
-                color={clockedIn ? "destructive" : "primary"}
-                size="sm"
-                onClick={handleToggleClock}
-                disabled={clocking}
-                className="gap-2 font-semibold shadow-md cursor-pointer"
-              >
-                {clocking ? (
-                  <>
-                    <i className="fa-solid fa-spinner fa-spin text-xs" /> Syncing...
-                  </>
-                ) : clockedIn ? (
-                  <>
-                    <i className="fa-solid fa-square text-xs" /> Clock Out
-                  </>
-                ) : (
-                  <>
-                    <i className="fa-solid fa-play text-xs" /> Clock In Now
-                  </>
-                )}
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleExportShiftLogsReport}
+                  disabled={exportingReport === "shifts"}
+                  className="h-9 text-xs gap-1.5 font-semibold text-emerald-600 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10 cursor-pointer shadow-xs"
+                  title="Download My Shift Attendance Logs CSV"
+                >
+                  <i className={cn("fa-solid text-xs", exportingReport === "shifts" ? "fa-spinner fa-spin" : "fa-file-csv")} />
+                  <span className="hidden sm:inline">Export Shift Logs</span>
+                </Button>
+
+                <Button
+                  color={clockedIn ? "destructive" : "primary"}
+                  size="sm"
+                  onClick={handleToggleClock}
+                  disabled={clocking}
+                  className="gap-2 font-semibold shadow-md cursor-pointer h-9"
+                >
+                  {clocking ? (
+                    <>
+                      <i className="fa-solid fa-spinner fa-spin text-xs" /> Syncing...
+                    </>
+                  ) : clockedIn ? (
+                    <>
+                      <i className="fa-solid fa-square text-xs" /> Clock Out
+                    </>
+                  ) : (
+                    <>
+                      <i className="fa-solid fa-play text-xs" /> Clock In Now
+                    </>
+                  )}
+                </Button>
+              </div>
             </CardHeader>
 
             <CardContent className="space-y-4">
@@ -422,11 +842,24 @@ export function EmployeeDashboard({ user }: { user: any }) {
                 </CardTitle>
                 <CardDescription>Deliverables assigned to you</CardDescription>
               </div>
-              <Button asChild variant="ghost" size="sm">
-                <Link href="/dashboard/projects" className="gap-1 text-primary">
-                  View All Tasks <i className="fa-solid fa-arrow-up-right-from-square text-xs" />
-                </Link>
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleExportTasksReport}
+                  disabled={exportingReport === "tasks"}
+                  className="h-8 text-xs gap-1.5 font-semibold text-amber-600 dark:text-amber-400 border-amber-500/30 hover:bg-amber-500/10 cursor-pointer shadow-xs"
+                  title="Download Project Tasks Detailed CSV Report"
+                >
+                  <i className={cn("fa-solid text-xs", exportingReport === "tasks" ? "fa-spinner fa-spin" : "fa-file-csv")} />
+                  Export Tasks
+                </Button>
+                <Button asChild variant="ghost" size="sm">
+                  <Link href="/dashboard/projects" className="gap-1 text-primary">
+                    View All Tasks <i className="fa-solid fa-arrow-up-right-from-square text-xs" />
+                  </Link>
+                </Button>
+              </div>
             </CardHeader>
             <CardContent className="space-y-3">
               {loading ? (

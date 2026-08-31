@@ -86,8 +86,17 @@ export function usePermissions() {
       return Boolean(modulePermissions[moduleKey]);
     }
     if (isSubAdminRole(user.role)) return true;
-    // Fail-closed: deny access to any module not explicitly granted
-    return false;
+
+    // Default fallback access for modules before explicit customization in settings
+    const defaultModulesByRole: Record<string, string[]> = {
+      Employee: ["overview", "team", "calendar", "projects", "reports", "chat", "hr", "referrals", "settings"],
+      HR: ["overview", "team", "calendar", "projects", "reports", "chat", "hr", "goals", "settings"],
+      Manager: ["overview", "team", "calendar", "projects", "reports", "chat", "hr", "goals", "referrals", "settings"],
+      OPS: ["overview", "team", "calendar", "projects", "reports", "chat", "hr", "goals", "analytics", "clients", "it", "referrals", "settings"],
+    };
+    const roleKey = normalizeRoleKey(user.role);
+    const allowedDefaults = defaultModulesByRole[roleKey] || defaultModulesByRole[user.role] || ["overview", "team", "calendar", "projects", "reports", "chat", "settings"];
+    return allowedDefaults.includes(moduleKey);
   };
 
   return {

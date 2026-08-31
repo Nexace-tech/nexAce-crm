@@ -15,6 +15,11 @@ interface UserProfile {
     slug: string;
   };
   department?: string;
+  shiftName?: string;
+  shiftTime?: string;
+  employmentType?: string;
+  workplace?: string;
+  location?: string;
   status?: string;
   skills?: string[];
   bio?: string;

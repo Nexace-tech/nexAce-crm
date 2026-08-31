@@ -18,6 +18,7 @@ const MODULES: ModuleMeta[] = [
   { key: "team", name: "My Team Directory", description: "Organization employee listing, org structure, and profiles", icon: "fa-solid fa-users" },
   { key: "calendar", name: "Calendar & Timesheets", description: "Work log entry, shift scheduling, and time tracking", icon: "fa-solid fa-calendar-days" },
   { key: "projects", name: "Projects, Sprints & Drive", description: "Agile kanban board, drive file storage, and project wiki", icon: "fa-solid fa-folder-tree" },
+  { key: "reports", name: "Reports & Data Exports", description: "Project tasks, timesheets, and shift attendance CSV reports", icon: "fa-solid fa-file-lines" },
   { key: "chat", name: "Chat & Messaging", description: "Realtime workspace channels and direct team chat", icon: "fa-solid fa-comments" },
   { key: "hr", name: "HR Management Portal", description: "Leave requests, appraisals, onboarding, and case tracking", icon: "fa-solid fa-briefcase" },
   { key: "goals", name: "Goals, OKRs & Surveys", description: "Strategic goal tracking, kudos, and team pulse surveys", icon: "fa-solid fa-bullseye" },

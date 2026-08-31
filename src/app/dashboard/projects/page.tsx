@@ -814,18 +814,40 @@ export default function ProjectsPage() {
       showToast("No tasks available to export", "info");
       return;
     }
-    const headers = ["Task ID", "Title", "Status", "Priority", "Project", "Assignee", "Due Date", "Created At"];
-    const rows = tasks.map((t) => [
-      t._id,
-      t.title || "",
-      t.status || "To Do",
-      t.priority || "Medium",
-      t.projectId?.name || "General",
-      t.assignee?.name || "Unassigned",
-      t.dueDate ? new Date(t.dueDate).toLocaleDateString() : "No date",
-      t.createdAt ? new Date(t.createdAt).toLocaleString() : "",
-    ]);
-    const csvContent = [
+    const headers = [
+      "Task ID",
+      "Title",
+      "Project",
+      "Priority",
+      "Status",
+      "Assignee",
+      "Due Date",
+      "Estimated Hours",
+      "Subtasks Progress",
+      "Description",
+      "Created At"
+    ];
+    const rows = tasks.map((t) => {
+      const subtasksTotal = Array.isArray(t.subtasks) ? t.subtasks.length : 0;
+      const subtasksDone = Array.isArray(t.subtasks) ? t.subtasks.filter((s: any) => s.completed).length : 0;
+      const subtaskStr = subtasksTotal > 0 ? `${subtasksDone}/${subtasksTotal} Completed` : "No subtasks";
+      const descClean = (t.description || "").replace(/[\r\n]+/g, " ").trim();
+
+      return [
+        t._id,
+        t.title || "",
+        t.projectId?.name || t.project || "General",
+        t.priority || "Medium",
+        t.status || "To Do",
+        t.assignee?.name || "Unassigned",
+        t.dueDate ? new Date(t.dueDate).toLocaleDateString() : "No date",
+        t.estimatedHours || 0,
+        subtaskStr,
+        descClean,
+        t.createdAt ? new Date(t.createdAt).toLocaleString() : "",
+      ];
+    });
+    const csvContent = "\uFEFF" + [
       headers.map((h) => `"${h}"`).join(","),
       ...rows.map((r) => r.map((c) => `"${(c || "").toString().replace(/"/g, '""')}"`).join(",")),
     ].join("\n");
@@ -833,11 +855,11 @@ export default function ProjectsPage() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
-    link.setAttribute("download", `tasks_${new Date().toISOString().split("T")[0]}.csv`);
+    link.setAttribute("download", `project_tasks_detailed_${new Date().toISOString().split("T")[0]}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    showToast("Exported tasks CSV successfully", "success");
+    showToast("Exported detailed tasks CSV successfully", "success");
   };
 
   const handleExportHistoryCSV = () => {

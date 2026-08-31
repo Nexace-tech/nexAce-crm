@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useMemo, startTransition } from "react";
+import React, { useState, useEffect, useRef, useMemo, Suspense, startTransition } from "react";
 import Link from "next/link";
 import { useAuth } from "@/hooks/useAuth";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -14,7 +14,7 @@ import { cn, formatISTDate, formatISTTime, getISTDateString } from "@/lib/utils"
 import { useTabPersistence } from "@/hooks/useTabPersistence";
 import { TeamShiftOverviewCard } from "@/components/dashboard/TeamShiftOverviewCard";
 
-export default function CalendarPage() {
+function CalendarPageContent() {
   const { user: currentUser, loading: authLoading } = useAuth();
   const { can, isAdmin, isOPS } = usePermissions();
   const [activeTab, setActiveTab] = useTabPersistence<"calendar" | "sprints" | "timesheets" | "attendance">(
@@ -330,8 +330,7 @@ export default function CalendarPage() {
             { project: projectsList[1] || "Client Portal Integration", taskName: "API endpoints integration", comment: "", mon: 0, tue: 0, wed: 0, thu: 0, fri: 0, sat: 0, isBillable: true },
           ]);
         }
-      }
-
+      }  
       if (can("approveTimesheets") || isOPS || isAdmin || currentUser?.role === "Admin" || currentUser?.role === "OPS" || currentUser?.role === "Manager" || can("viewTeamTimesheets")) {
         const pendingRes = await fetch("/api/timesheets?pending=true");
         if (pendingRes.ok) {
@@ -366,14 +365,19 @@ export default function CalendarPage() {
     if (!mounted) return;
     const loadData = async () => {
       setLoading(true);
-      if (activeTab === "calendar") await fetchEvents();
-      else if (activeTab === "sprints") await fetchSprints();
-      else if (activeTab === "timesheets") {
-        await fetchProjects();
-        await fetchTimesheets();
+      try {
+        if (activeTab === "calendar") await fetchEvents();
+        else if (activeTab === "sprints") await fetchSprints();
+        else if (activeTab === "timesheets") {
+          await fetchProjects();
+          await fetchTimesheets();
+        }
+        else if (activeTab === "attendance") await fetchAttendance();
+      } catch (err) {
+        console.error("Error loading calendar tab data:", err);
+      } finally {
+        setLoading(false);
       }
-      else if (activeTab === "attendance") await fetchAttendance();
-      setLoading(false);
     };
     loadData();
   }, [activeTab, timesheetWeekStart, mounted, isAdmin, isOPS, currentUser?.role]);
@@ -3192,5 +3196,13 @@ export default function CalendarPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function CalendarPage() {
+  return (
+    <Suspense fallback={<Preloader label="Loading Calendar & Operations..." />}>
+      <CalendarPageContent />
+    </Suspense>
   );
 }
