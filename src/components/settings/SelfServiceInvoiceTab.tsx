@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
+import { InvoiceDetailsView } from "@/components/finance/InvoiceDetailsView";
 
 interface InvoiceItem {
   description: string;
@@ -51,11 +52,19 @@ interface SelfServiceInvoiceTabProps {
   showToast: (message: string, type?: "success" | "error") => void;
 }
 
+function toLocalDateString(d: Date): string {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps) {
   const { user } = useAuth();
-  const [invoiceSubmitting, setInvoiceSubmitting] = useState(false);
+  const [activeSubTab, setActiveSubTab] = useState<"history" | "generate">("history");
   const [myInvoices, setMyInvoices] = useState<Invoice[]>([]);
-  const [loadingHistory, setLoadingHistory] = useState(true);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+  const [invoiceSubmitting, setInvoiceSubmitting] = useState(false);
   const [viewInvoice, setViewInvoice] = useState<Invoice | null>(null);
 
   // Filter & Pagination States
@@ -63,21 +72,224 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 5;
 
+  // Shift & Timesheet Sync States
+  const [syncingTimeData, setSyncingTimeData] = useState(false);
+  const [attachShiftLogs, setAttachShiftLogs] = useState(true);
+  const [attachTimesheetLogs, setAttachTimesheetLogs] = useState(true);
+  const [showSyncDetails, setShowSyncDetails] = useState(false);
+  const [shiftData, setShiftData] = useState<{
+    totalHours: number;
+    daysWorked: number;
+    overtimeHours: number;
+    records: Array<{ date: string; clockIn?: string; clockOut?: string; totalHours?: number; status?: string }>;
+  }>({
+    totalHours: 0,
+    daysWorked: 0,
+    overtimeHours: 0,
+    records: [],
+  });
+  const [timesheetData, setTimesheetData] = useState<{
+    totalHours: number;
+    totalEntries: number;
+    records: Array<{ date: string; hours: number; projectName?: string; taskDescription?: string; billable?: boolean }>;
+  }>({
+    totalHours: 0,
+    totalEntries: 0,
+    records: [],
+  });
+
+  const now = new Date();
+  const initialStart = toLocalDateString(new Date(now.getFullYear(), now.getMonth(), 1));
+  const initialEnd = toLocalDateString(new Date(now.getFullYear(), now.getMonth() + 1, 0));
+
+  const generateDefaultDescription = (role?: string, dept?: string, start?: string, end?: string) => {
+    const title = dept ? `${dept} - ${role || "Professional"}` : role || "Professional Consulting";
+    return `${title} Services & Technical Deliverables (${start || initialStart} to ${end || initialEnd})`;
+  };
+
+  const generateDefaultNotes = (start?: string, end?: string) => {
+    return `Verified shift attendance and project timesheets attached for billing cycle ${start || initialStart} to ${end || initialEnd}. Standard Net 14 payment terms.`;
+  };
+
   const [invoiceFormData, setInvoiceFormData] = useState({
     employeeName: user?.name || "",
     role: user?.role || "Consultant",
+    rateType: "hourly" as "hourly" | "daily" | "project",
+    // Hourly
     hourlyRate: 50,
-    hoursWorked: 160,
+    hoursWorked: 0,
     overtimeHours: 0,
+    // Daily Rate
+    dailyRate: 400,
+    daysWorked: 0,
+    // Project-Based Fixed Fee
+    projectName: "Fullstack Architecture & Feature Delivery",
+    projectFixedAmount: 5000,
+    // Common
     taxRate: 0,
     currency: "INR",
-    period: new Date().toISOString().slice(0, 7), // YYYY-MM
-    description: "Professional Services & Consulting Fee",
-    billedToName: "Ace Consultancys",
+    periodPreset: "this_month" as "this_month" | "last_month" | "first_half" | "second_half" | "custom",
+    startDate: initialStart,
+    endDate: initialEnd,
+    period: `${initialStart} to ${initialEnd}`,
+    description: generateDefaultDescription(user?.role, user?.department, initialStart, initialEnd),
+    billedToName: user?.tenantId?.name || "NexAce Technologies CRM",
     billedToAddress: "Headquarters - 100 Innovation Way, Suite 400",
-    billedToEmail: "finance@aceconsultancys.com",
-    notes: "",
+    billedToEmail: user?.tenantId?.slug ? `finance@${user.tenantId.slug}.com` : "finance@nexace.com",
+    notes: generateDefaultNotes(initialStart, initialEnd),
   });
+
+  const fetchShiftAndTimesheetData = async (startDate: string, endDate: string) => {
+    try {
+      setSyncingTimeData(true);
+
+      // 1. Fetch Attendance / Shift Clock
+      let calculatedShiftHrs = 0;
+      let calculatedDaysCount = 0;
+      let calculatedOtHrs = 0;
+
+      const attRes = await fetch(`/api/attendance?limit=all`);
+      if (attRes.ok) {
+        const attJson = await attRes.json();
+        const allAtt: any[] = attJson.history || [];
+        // Filter records within target date range (inclusive)
+        const periodAtt = allAtt.filter((r) => {
+          const recDate = r.date ? toLocalDateString(new Date(r.date)) : "";
+          return recDate >= startDate && recDate <= endDate;
+        });
+
+        calculatedShiftHrs = periodAtt.reduce((sum, r) => {
+          let hrs = Number(r.totalHours) || 0;
+          if (hrs === 0 && r.clockIn && !r.clockOut) {
+            const diffMs = Math.max(0, Date.now() - new Date(r.clockIn).getTime());
+            hrs = Math.round((diffMs / (1000 * 60 * 60)) * 10) / 10;
+          }
+          return sum + hrs;
+        }, 0);
+
+        calculatedDaysCount = periodAtt.filter((r) => (Number(r.totalHours) || 0) > 0 || r.clockIn).length;
+        const standardCap = calculatedDaysCount * 8;
+        calculatedOtHrs = Math.max(0, calculatedShiftHrs - standardCap);
+
+        setShiftData({
+          totalHours: Math.round(calculatedShiftHrs * 10) / 10,
+          daysWorked: calculatedDaysCount,
+          overtimeHours: Math.round(calculatedOtHrs * 10) / 10,
+          records: periodAtt.map((r) => {
+            let recordHrs = Number(r.totalHours) || 0;
+            if (recordHrs === 0 && r.clockIn && !r.clockOut) {
+              const diffMs = Math.max(0, Date.now() - new Date(r.clockIn).getTime());
+              recordHrs = Math.round((diffMs / (1000 * 60 * 60)) * 10) / 10;
+            }
+            return {
+              date: r.date ? toLocalDateString(new Date(r.date)) : "",
+              clockIn: r.clockIn ? new Date(r.clockIn).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—",
+              clockOut: r.clockOut ? new Date(r.clockOut).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : (r.clockIn ? "Working..." : "—"),
+              totalHours: Math.round(recordHrs * 10) / 10,
+              status: r.status || "Present",
+            };
+          }),
+        });
+      }
+
+      // 2. Fetch Detailed Timesheets
+      let calculatedTsHrs = 0;
+      let projectNamesList: string[] = [];
+
+      const tsRes = await fetch(`/api/timesheets?start=${startDate}&end=${endDate}`);
+      if (tsRes.ok) {
+        const tsJson = await tsRes.json();
+        const entries: any[] = tsJson.entries || [];
+        calculatedTsHrs = entries.reduce((sum, e) => sum + (Number(e.hours) || 0), 0);
+        projectNamesList = Array.from(new Set(entries.map((e) => e.projectName).filter(Boolean))) as string[];
+
+        setTimesheetData({
+          totalHours: Math.round(calculatedTsHrs * 10) / 10,
+          totalEntries: entries.length,
+          records: entries.map((e) => ({
+            date: e.date ? toLocalDateString(new Date(e.date)) : "",
+            hours: Number(e.hours) || 0,
+            projectName: e.projectName || "General Project",
+            taskDescription: e.taskDescription || "",
+            billable: Boolean(e.billable),
+          })),
+        });
+      }
+
+      // 3. Auto-fill the invoice form fields directly with the verified values
+      const roundedShiftHrs = Math.round(calculatedShiftHrs * 10) / 10;
+      const roundedTsHrs = Math.round(calculatedTsHrs * 10) / 10;
+      const roundedOt = Math.round(calculatedOtHrs * 10) / 10;
+      const effectiveTotalHrs = roundedShiftHrs > 0 ? roundedShiftHrs : roundedTsHrs;
+      const regularHrs = Math.max(0, Math.round((effectiveTotalHrs - roundedOt) * 10) / 10);
+
+      setInvoiceFormData((prev) => ({
+        ...prev,
+        hoursWorked: regularHrs,
+        daysWorked: calculatedDaysCount,
+        overtimeHours: roundedOt,
+        projectName: projectNamesList.length > 0 ? projectNamesList.join(", ") : prev.projectName,
+      }));
+
+      showToast(`Fetched & synced ${effectiveTotalHrs} hours (${calculatedDaysCount} days) for ${startDate} to ${endDate}!`, "success");
+    } catch (err) {
+      console.error("Error fetching shift & timesheet data:", err);
+      showToast("Could not fetch shift/timesheet records", "error");
+    } finally {
+      setSyncingTimeData(false);
+    }
+  };
+
+  const handleSelectPreset = (preset: "this_month" | "last_month" | "first_half" | "second_half" | "custom") => {
+    const cur = new Date();
+    const curYear = cur.getFullYear();
+    const curMonth = cur.getMonth();
+
+    let start = invoiceFormData.startDate;
+    let end = invoiceFormData.endDate;
+
+    if (preset === "this_month") {
+      start = toLocalDateString(new Date(curYear, curMonth, 1));
+      end = toLocalDateString(new Date(curYear, curMonth + 1, 0));
+    } else if (preset === "last_month") {
+      start = toLocalDateString(new Date(curYear, curMonth - 1, 1));
+      end = toLocalDateString(new Date(curYear, curMonth, 0));
+    } else if (preset === "first_half") {
+      start = toLocalDateString(new Date(curYear, curMonth, 1));
+      end = toLocalDateString(new Date(curYear, curMonth, 15));
+    } else if (preset === "second_half") {
+      start = toLocalDateString(new Date(curYear, curMonth, 16));
+      end = toLocalDateString(new Date(curYear, curMonth + 1, 0));
+    }
+
+    setInvoiceFormData((prev) => ({
+      ...prev,
+      periodPreset: preset,
+      startDate: start,
+      endDate: end,
+      period: `${start} to ${end}`,
+      description: generateDefaultDescription(user?.role, user?.department, start, end),
+      notes: generateDefaultNotes(start, end),
+    }));
+
+    fetchShiftAndTimesheetData(start, end);
+  };
+
+  const applySyncedValuesToForm = () => {
+    const effectiveHours = shiftData.totalHours > 0 ? shiftData.totalHours : timesheetData.totalHours;
+    const effectiveDays = shiftData.daysWorked > 0 ? shiftData.daysWorked : Math.ceil(effectiveHours / 8);
+    const effectiveOT = shiftData.overtimeHours;
+    const regHrs = Math.max(0, Math.round((effectiveHours - effectiveOT) * 10) / 10);
+
+    setInvoiceFormData((prev) => ({
+      ...prev,
+      hoursWorked: regHrs,
+      overtimeHours: effectiveOT,
+      daysWorked: effectiveDays,
+    }));
+
+    showToast(`Applied ${effectiveHours} verified hours & ${effectiveDays} days to invoice!`, "success");
+  };
 
   const fetchMyInvoiceHistory = async () => {
     if (!user?.email) return;
@@ -87,13 +299,23 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
       if (res.ok) {
         const data = await res.json();
         const allInvoices: Invoice[] = data.invoices || [];
-        // Filter by current logged-in employee's email or name match
-        const filtered = allInvoices.filter(
-          (inv) =>
-            inv.businessEmail?.trim().toLowerCase() === user.email?.trim().toLowerCase() ||
-            inv.customerNo?.trim().toLowerCase().includes(user.name?.replace(/\s+/g, "").toLowerCase() || "")
-        );
-        setMyInvoices(filtered);
+        const userEmail = user.email?.trim().toLowerCase();
+        const userName = user.name?.trim().toLowerCase();
+        const userCleanName = userName?.replace(/\s+/g, "");
+
+        const filtered = allInvoices.filter((inv) => {
+          const invEmail = inv.businessEmail?.trim().toLowerCase();
+          const invBusinessName = inv.businessName?.trim().toLowerCase();
+          const invCustNo = inv.customerNo?.trim().toLowerCase();
+
+          return (
+            (userEmail && invEmail === userEmail) ||
+            (userCleanName && invCustNo && invCustNo.includes(userCleanName)) ||
+            (userName && invBusinessName === userName)
+          );
+        });
+
+        setMyInvoices(filtered.length > 0 ? filtered : allInvoices);
       }
     } catch (err) {
       console.error("Error fetching personal invoices:", err);
@@ -109,11 +331,44 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
   // Sync state dynamically when user profile finishes loading from useAuth()
   useEffect(() => {
     if (user) {
+      const start = toLocalDateString(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
+      const end = toLocalDateString(new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0));
+      const companyName = user.tenantId?.name || "NexAce Technologies CRM";
+
+      // 1. Set baseline defaults
       setInvoiceFormData((prev) => ({
         ...prev,
-        employeeName: prev.employeeName || user.name || "",
-        role: prev.role === "Consultant" && user.role ? user.role : prev.role || user.role || "Consultant",
+        employeeName: user.name || prev.employeeName || "",
+        role: user.role || prev.role || "Employee",
+        billedToName: companyName,
+        billedToEmail: user.tenantId?.slug ? `finance@${user.tenantId.slug}.com` : "finance@nexace.com",
+        description: generateDefaultDescription(user.role, user.department, start, end),
+        notes: generateDefaultNotes(start, end),
       }));
+
+      // 2. Fetch latest saved company profile details (address, official email, currency)
+      fetch("/api/settings/company")
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (data?.company) {
+            const comp = data.company;
+            const fullAddress = [comp.address, comp.city, comp.state, comp.postalCode, comp.country]
+              .filter(Boolean)
+              .join(", ");
+
+            setInvoiceFormData((prev) => ({
+              ...prev,
+              billedToName: comp.name || prev.billedToName,
+              billedToAddress: fullAddress || prev.billedToAddress,
+              billedToEmail: comp.billingEmail || comp.email || prev.billedToEmail,
+              currency: comp.currency || prev.currency,
+            }));
+          }
+        })
+        .catch((err) => console.error("Error loading company details for invoice:", err));
+
+      // 3. Fetch verified shift clock & project timesheets
+      fetchShiftAndTimesheetData(start, end);
     }
   }, [user]);
 
@@ -133,30 +388,62 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
     try {
       const regHours = Number(invoiceFormData.hoursWorked) || 0;
       const otHours = Number(invoiceFormData.overtimeHours) || 0;
-      const unitPrice = Number(invoiceFormData.hourlyRate) || 0;
-      const subtotalVal = regHours * unitPrice + otHours * (unitPrice * 1.5);
+      const hRate = Number(invoiceFormData.hourlyRate) || 0;
+      const dRate = Number(invoiceFormData.dailyRate) || 0;
+      const dWorked = Number(invoiceFormData.daysWorked) || 0;
+      const projAmount = Number(invoiceFormData.projectFixedAmount) || 0;
+
+      let subtotalVal = 0;
+      const items: InvoiceItem[] = [];
+
+      if (invoiceFormData.rateType === "hourly") {
+        subtotalVal = regHours * hRate + otHours * (hRate * 1.5);
+        items.push({
+          description: `${invoiceFormData.description} (Regular Hours) [${invoiceFormData.period}]`,
+          quantity: regHours,
+          unitPrice: hRate,
+          amount: regHours * hRate,
+        });
+        if (otHours > 0) {
+          items.push({
+            description: `Overtime Hours (1.5x Rate) [${invoiceFormData.period}]`,
+            quantity: otHours,
+            unitPrice: hRate * 1.5,
+            amount: otHours * (hRate * 1.5),
+          });
+        }
+      } else if (invoiceFormData.rateType === "daily") {
+        subtotalVal = dWorked * dRate;
+        items.push({
+          description: `${invoiceFormData.description} (Daily Billing: ${dWorked} days @ ${invoiceFormData.currency} ${dRate}/day) [${invoiceFormData.period}]`,
+          quantity: dWorked,
+          unitPrice: dRate,
+          amount: dWorked * dRate,
+        });
+      } else {
+        subtotalVal = projAmount;
+        items.push({
+          description: `${invoiceFormData.projectName || invoiceFormData.description} (Project Fixed Milestone) [${invoiceFormData.period}]`,
+          quantity: 1,
+          unitPrice: projAmount,
+          amount: projAmount,
+        });
+      }
+
       const taxRateVal = Number(invoiceFormData.taxRate) || 0;
       const taxAmountVal = (subtotalVal * taxRateVal) / 100;
       const totalVal = subtotalVal + taxAmountVal;
       const invoiceNo = `INV-EMP-${Date.now().toString().slice(-6)}`;
 
-      const items = [
-        {
-          description: `${invoiceFormData.description} (Regular Hours) [${invoiceFormData.period}]`,
-          quantity: regHours,
-          unitPrice,
-          amount: regHours * unitPrice,
-        },
-      ];
-
-      if (otHours > 0) {
-        items.push({
-          description: `Overtime Hours (1.5x Rate) [${invoiceFormData.period}]`,
-          quantity: otHours,
-          unitPrice: unitPrice * 1.5,
-          amount: otHours * (unitPrice * 1.5),
-        });
+      let attachmentsSummary = "";
+      if (attachShiftLogs && shiftData.daysWorked > 0) {
+        attachmentsSummary += `\n[Attached Shift Clock Attendance]: ${shiftData.totalHours} hrs logged over ${shiftData.daysWorked} days (Overtime: ${shiftData.overtimeHours} hrs)`;
       }
+      if (attachTimesheetLogs && timesheetData.totalEntries > 0) {
+        attachmentsSummary += `\n[Attached Project Timesheets]: ${timesheetData.totalHours} hrs logged across ${timesheetData.totalEntries} entries`;
+      }
+
+      const combinedNotes = (invoiceFormData.notes ? `${invoiceFormData.notes}\n` : "") + attachmentsSummary.trim();
 
       const res = await fetch("/api/it/invoices", {
         method: "POST",
@@ -179,7 +466,7 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
           total: totalVal,
           currency: invoiceFormData.currency,
           status: "Pending",
-          notes: invoiceFormData.notes,
+          notes: combinedNotes,
         }),
       });
 
@@ -222,6 +509,17 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
     const grandTotalVal = isDraft ? grandTotal : invoiceToPrint.total;
     const notesVal = isDraft ? invoiceFormData.notes : invoiceToPrint.notes || "";
 
+    let draftAttachmentsSummary = "";
+    if (isDraft) {
+      if (attachShiftLogs && shiftData.daysWorked > 0) {
+        draftAttachmentsSummary += `\n[Attached Shift Clock Attendance]: ${shiftData.totalHours} hrs logged over ${shiftData.daysWorked} days (Overtime: ${shiftData.overtimeHours} hrs)`;
+      }
+      if (attachTimesheetLogs && timesheetData.totalEntries > 0) {
+        draftAttachmentsSummary += `\n[Attached Project Timesheets]: ${timesheetData.totalHours} hrs logged across ${timesheetData.totalEntries} entries`;
+      }
+    }
+    const finalNotesToPrint = (notesVal ? `${notesVal}\n` : "") + draftAttachmentsSummary.trim();
+
     const printWindow = window.open("", "_blank");
     if (!printWindow) {
       showToast("Pop-up blocker is preventing export. Please allow popups.", "error");
@@ -229,26 +527,44 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
     }
 
     const itemsListHtml = isDraft
-      ? `
-        <tr>
-          <td>${invoiceFormData.description} (Regular Hours) [${invoiceFormData.period}]</td>
-          <td class="text-center">${regHours}</td>
-          <td class="text-right">${symbol}${rate.toLocaleString()}</td>
-          <td class="text-right" style="font-weight: bold;">${symbol}${(regHours * rate).toLocaleString()}</td>
-        </tr>
-        ${
-          otHours > 0
-            ? `
+      ? invoiceFormData.rateType === "hourly"
+        ? `
           <tr>
-            <td>Overtime Hours (1.5x Rate) [${invoiceFormData.period}]</td>
-            <td class="text-center">${otHours}</td>
-            <td class="text-right">${symbol}${(rate * 1.5).toLocaleString()}</td>
-            <td class="text-right" style="font-weight: bold;">${symbol}${(otHours * rate * 1.5).toLocaleString()}</td>
+            <td>${invoiceFormData.description} (Regular Hours) [${invoiceFormData.period}]</td>
+            <td class="text-center">${regHours}</td>
+            <td class="text-right">${symbol}${hRate.toLocaleString()}</td>
+            <td class="text-right" style="font-weight: bold;">${symbol}${(regHours * hRate).toLocaleString()}</td>
+          </tr>
+          ${
+            otHours > 0
+              ? `
+            <tr>
+              <td>Overtime Hours (1.5x Rate) [${invoiceFormData.period}]</td>
+              <td class="text-center">${otHours}</td>
+              <td class="text-right">${symbol}${(hRate * 1.5).toLocaleString()}</td>
+              <td class="text-right" style="font-weight: bold;">${symbol}${(otHours * hRate * 1.5).toLocaleString()}</td>
+            </tr>
+          `
+              : ""
+          }
+        `
+        : invoiceFormData.rateType === "daily"
+        ? `
+          <tr>
+            <td>${invoiceFormData.description} (Daily Rate: ${dWorked} days) [${invoiceFormData.period}]</td>
+            <td class="text-center">${dWorked}</td>
+            <td class="text-right">${symbol}${dRate.toLocaleString()}</td>
+            <td class="text-right" style="font-weight: bold;">${symbol}${(dWorked * dRate).toLocaleString()}</td>
           </tr>
         `
-            : ""
-        }
-      `
+        : `
+          <tr>
+            <td>${invoiceFormData.projectName || invoiceFormData.description} (Project Fixed Fee) [${invoiceFormData.period}]</td>
+            <td class="text-center">1</td>
+            <td class="text-right">${symbol}${projAmount.toLocaleString()}</td>
+            <td class="text-right" style="font-weight: bold;">${symbol}${projAmount.toLocaleString()}</td>
+          </tr>
+        `
       : invoiceToPrint.items
           .map(
             (item) => `
@@ -444,11 +760,11 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
         </div>
 
         ${
-          notesVal
+          finalNotesToPrint
             ? `
           <div class="notes-section">
-            <strong>Additional Notes:</strong>
-            <p style="margin-top: 5px; white-space: pre-wrap;">${notesVal}</p>
+            <strong>Notes &amp; Attachments:</strong>
+            <p style="margin-top: 5px; white-space: pre-wrap;">${finalNotesToPrint}</p>
           </div>
         `
             : ""
@@ -469,8 +785,18 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
 
   const regHours = Number(invoiceFormData.hoursWorked) || 0;
   const otHours = Number(invoiceFormData.overtimeHours) || 0;
-  const rate = Number(invoiceFormData.hourlyRate) || 0;
-  const subtotal = regHours * rate + otHours * (rate * 1.5);
+  const hRate = Number(invoiceFormData.hourlyRate) || 0;
+  const dRate = Number(invoiceFormData.dailyRate) || 0;
+  const dWorked = Number(invoiceFormData.daysWorked) || 0;
+  const projAmount = Number(invoiceFormData.projectFixedAmount) || 0;
+
+  const subtotal =
+    invoiceFormData.rateType === "hourly"
+      ? regHours * hRate + otHours * (hRate * 1.5)
+      : invoiceFormData.rateType === "daily"
+      ? dWorked * dRate
+      : projAmount;
+
   const taxPct = Number(invoiceFormData.taxRate) || 0;
   const taxVal = (subtotal * taxPct) / 100;
   const grandTotal = subtotal + taxVal;
@@ -511,6 +837,15 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
     );
   };
 
+  if (viewInvoice) {
+    return (
+      <InvoiceDetailsView
+        invoice={viewInvoice}
+        onClose={() => setViewInvoice(null)}
+      />
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
@@ -528,15 +863,15 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
             <form onSubmit={handleGenerateInvoiceSubmit} className="space-y-5 text-xs">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <label className="font-semibold text-foreground">Employee Name *</label>
+                  <label className="font-semibold text-foreground">Full Name *</label>
                   <Input
                     type="text"
                     required
-                    placeholder="e.g. David Kim"
-                    value={invoiceFormData.employeeName}
                     readOnly
                     disabled
-                    className="opacity-70 cursor-not-allowed"
+                    placeholder="Auto-filled Full Name"
+                    value={invoiceFormData.employeeName}
+                    className="opacity-75 cursor-not-allowed bg-muted/40 font-medium select-none"
                   />
                 </div>
 
@@ -544,107 +879,545 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
                   <label className="font-semibold text-foreground">Role / Designation</label>
                   <Input
                     type="text"
-                    placeholder="e.g. Senior Fullstack Engineer"
-                    value={invoiceFormData.role}
                     readOnly
                     disabled
-                    className="opacity-70 cursor-not-allowed"
+                    placeholder="Auto-filled Role"
+                    value={invoiceFormData.role}
+                    className="opacity-75 cursor-not-allowed bg-muted/40 font-medium select-none"
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-                <div className="space-y-1 sm:col-span-1">
-                  <label className="font-semibold text-foreground">Currency</label>
-                  <select
-                    value={invoiceFormData.currency}
-                    onChange={(e) => setInvoiceFormData((prev) => ({ ...prev, currency: e.target.value }))}
-                    className="w-full h-9 px-3 text-xs bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer font-medium"
+              {/* Rate Type / Billing Model Selector */}
+              <div className="space-y-1.5 p-3.5 bg-muted/30 rounded-xl border border-border">
+                <label className="font-bold text-foreground flex items-center gap-1.5 text-xs">
+                  <i className="fa-solid fa-sliders text-primary" /> Billing Model / Rate Structure
+                </label>
+                <div className="grid grid-cols-3 gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setInvoiceFormData((prev) => ({ ...prev, rateType: "hourly" }))}
+                    className={cn(
+                      "py-2 px-3 rounded-lg border text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer",
+                      invoiceFormData.rateType === "hourly"
+                        ? "bg-primary text-primary-foreground border-primary shadow-xs"
+                        : "bg-background hover:bg-muted text-muted-foreground border-border"
+                    )}
                   >
-                    <option value="INR">INR (₹ - Indian Rupee)</option>
-                    <option value="USD">USD ($ - US Dollar)</option>
-                    <option value="EUR">EUR (€ - Euro)</option>
-                    <option value="GBP">GBP (£ - British Pound)</option>
-                    <option value="AED">AED (Dh - UAE Dirham)</option>
-                  </select>
-                </div>
+                    <i className="fa-solid fa-clock" /> Hourly Rate
+                  </button>
 
-                <div className="space-y-1 sm:col-span-1">
-                  <label className="font-semibold text-foreground">Hourly Rate</label>
-                  <Input
-                    type="number"
-                    required
-                    min="0"
-                    placeholder="50"
-                    value={invoiceFormData.hourlyRate}
-                    onChange={(e) => setInvoiceFormData((prev) => ({ ...prev, hourlyRate: Number(e.target.value) }))}
-                  />
-                </div>
+                  <button
+                    type="button"
+                    onClick={() => setInvoiceFormData((prev) => ({ ...prev, rateType: "daily" }))}
+                    className={cn(
+                      "py-2 px-3 rounded-lg border text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer",
+                      invoiceFormData.rateType === "daily"
+                        ? "bg-primary text-primary-foreground border-primary shadow-xs"
+                        : "bg-background hover:bg-muted text-muted-foreground border-border"
+                    )}
+                  >
+                    <i className="fa-solid fa-calendar-day" /> Day Rate
+                  </button>
 
-                <div className="space-y-1 sm:col-span-1">
-                  <label className="font-semibold text-foreground">Regular Hours</label>
-                  <Input
-                    type="number"
-                    required
-                    min="1"
-                    placeholder="160"
-                    value={invoiceFormData.hoursWorked}
-                    onChange={(e) => setInvoiceFormData((prev) => ({ ...prev, hoursWorked: Number(e.target.value) }))}
-                  />
-                </div>
-
-                <div className="space-y-1 sm:col-span-1">
-                  <label className="font-semibold text-foreground">Overtime Hrs (1.5x)</label>
-                  <Input
-                    type="number"
-                    min="0"
-                    placeholder="0"
-                    value={invoiceFormData.overtimeHours}
-                    onChange={(e) => setInvoiceFormData((prev) => ({ ...prev, overtimeHours: Number(e.target.value) }))}
-                  />
+                  <button
+                    type="button"
+                    onClick={() => setInvoiceFormData((prev) => ({ ...prev, rateType: "project" }))}
+                    className={cn(
+                      "py-2 px-3 rounded-lg border text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer",
+                      invoiceFormData.rateType === "project"
+                        ? "bg-primary text-primary-foreground border-primary shadow-xs"
+                        : "bg-background hover:bg-muted text-muted-foreground border-border"
+                    )}
+                  >
+                    <i className="fa-solid fa-briefcase" /> Project-Based
+                  </button>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="font-semibold text-foreground">Tax Rate (%)</label>
-                  <Input
-                    type="number"
-                    min="0"
-                    max="100"
-                    placeholder="0"
-                    value={invoiceFormData.taxRate}
-                    onChange={(e) => setInvoiceFormData((prev) => ({ ...prev, taxRate: Number(e.target.value) }))}
-                  />
+              {/* Conditional Rate Inputs */}
+              {invoiceFormData.rateType === "hourly" && (
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                  <div className="space-y-1 sm:col-span-1">
+                    <label className="font-semibold text-foreground">Currency</label>
+                    <select
+                      value={invoiceFormData.currency}
+                      onChange={(e) => setInvoiceFormData((prev) => ({ ...prev, currency: e.target.value }))}
+                      className="w-full h-9 px-3 text-xs bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer font-medium"
+                    >
+                      <option value="INR">INR (₹ - Indian Rupee)</option>
+                      <option value="USD">USD ($ - US Dollar)</option>
+                      <option value="EUR">EUR (€ - Euro)</option>
+                      <option value="GBP">GBP (£ - British Pound)</option>
+                      <option value="AED">AED (Dh - UAE Dirham)</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-1 sm:col-span-1">
+                    <label className="font-semibold text-foreground">Hourly Rate</label>
+                    <Input
+                      type="number"
+                      required
+                      min="0"
+                      placeholder="50"
+                      value={invoiceFormData.hourlyRate}
+                      onChange={(e) => setInvoiceFormData((prev) => ({ ...prev, hourlyRate: Number(e.target.value) }))}
+                    />
+                  </div>
+
+                  <div className="space-y-1 sm:col-span-1">
+                    <div className="flex items-center justify-between">
+                      <label className="font-semibold text-foreground">Regular Hours</label>
+                      <span className="text-[10px] text-primary flex items-center gap-1">
+                        <i className="fa-solid fa-lock text-[9px]" /> Verified Log
+                      </span>
+                    </div>
+                    <Input
+                      type="number"
+                      required
+                      readOnly
+                      disabled
+                      placeholder="0"
+                      value={invoiceFormData.hoursWorked}
+                      className="opacity-85 cursor-not-allowed bg-muted/40 font-mono font-bold select-none"
+                    />
+                  </div>
+
+                  <div className="space-y-1 sm:col-span-1">
+                    <div className="flex items-center justify-between">
+                      <label className="font-semibold text-foreground">Overtime Hrs (1.5x)</label>
+                      <span className="text-[10px] text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                        <i className="fa-solid fa-lock text-[9px]" /> Auto
+                      </span>
+                    </div>
+                    <Input
+                      type="number"
+                      readOnly
+                      disabled
+                      placeholder="0"
+                      value={invoiceFormData.overtimeHours}
+                      className="opacity-85 cursor-not-allowed bg-muted/40 font-mono font-bold select-none"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {invoiceFormData.rateType === "daily" && (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="space-y-1 sm:col-span-1">
+                    <label className="font-semibold text-foreground">Currency</label>
+                    <select
+                      value={invoiceFormData.currency}
+                      onChange={(e) => setInvoiceFormData((prev) => ({ ...prev, currency: e.target.value }))}
+                      className="w-full h-9 px-3 text-xs bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer font-medium"
+                    >
+                      <option value="INR">INR (₹ - Indian Rupee)</option>
+                      <option value="USD">USD ($ - US Dollar)</option>
+                      <option value="EUR">EUR (€ - Euro)</option>
+                      <option value="GBP">GBP (£ - British Pound)</option>
+                      <option value="AED">AED (Dh - UAE Dirham)</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-1 sm:col-span-1">
+                    <label className="font-semibold text-foreground">Day / Daily Rate</label>
+                    <Input
+                      type="number"
+                      required
+                      min="0"
+                      placeholder="400"
+                      value={invoiceFormData.dailyRate}
+                      onChange={(e) => setInvoiceFormData((prev) => ({ ...prev, dailyRate: Number(e.target.value) }))}
+                    />
+                  </div>
+
+                  <div className="space-y-1 sm:col-span-1">
+                    <div className="flex items-center justify-between">
+                      <label className="font-semibold text-foreground">Days Worked</label>
+                      <span className="text-[10px] text-primary flex items-center gap-1">
+                        <i className="fa-solid fa-lock text-[9px]" /> Verified
+                      </span>
+                    </div>
+                    <Input
+                      type="number"
+                      required
+                      readOnly
+                      disabled
+                      placeholder="0"
+                      value={invoiceFormData.daysWorked}
+                      className="opacity-85 cursor-not-allowed bg-muted/40 font-mono font-bold select-none"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {invoiceFormData.rateType === "project" && (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="space-y-1 sm:col-span-1">
+                    <label className="font-semibold text-foreground">Currency</label>
+                    <select
+                      value={invoiceFormData.currency}
+                      onChange={(e) => setInvoiceFormData((prev) => ({ ...prev, currency: e.target.value }))}
+                      className="w-full h-9 px-3 text-xs bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer font-medium"
+                    >
+                      <option value="INR">INR (₹ - Indian Rupee)</option>
+                      <option value="USD">USD ($ - US Dollar)</option>
+                      <option value="EUR">EUR (€ - Euro)</option>
+                      <option value="GBP">GBP (£ - British Pound)</option>
+                      <option value="AED">AED (Dh - UAE Dirham)</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-1 sm:col-span-1">
+                    <label className="font-semibold text-foreground">Project / Milestone Fee</label>
+                    <Input
+                      type="number"
+                      required
+                      min="0"
+                      placeholder="5000"
+                      value={invoiceFormData.projectFixedAmount}
+                      onChange={(e) => setInvoiceFormData((prev) => ({ ...prev, projectFixedAmount: Number(e.target.value) }))}
+                    />
+                  </div>
+
+                  <div className="space-y-1 sm:col-span-1">
+                    <label className="font-semibold text-foreground">Project / Scope Title</label>
+                    <Input
+                      type="text"
+                      required
+                      placeholder="e.g. Backend API Migration"
+                      value={invoiceFormData.projectName}
+                      onChange={(e) => setInvoiceFormData((prev) => ({ ...prev, projectName: e.target.value }))}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Time Period Selection & Preset Picker */}
+              <div className="p-4 bg-muted/30 rounded-xl border border-border space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-border/80">
+                  <div>
+                    <label className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                      <i className="fa-solid fa-calendar-range text-primary" /> Invoice &amp; Time Tracking Period
+                    </label>
+                    <p className="text-[11px] text-muted-foreground">
+                      Select billing cycle or custom date range to fetch shift clock &amp; timesheet logs
+                    </p>
+                  </div>
+
+                  {/* Preset Pills */}
+                  <div className="flex flex-wrap items-center gap-1">
+                    {[
+                      { id: "this_month", label: "This Month" },
+                      { id: "last_month", label: "Last Month" },
+                      { id: "first_half", label: "1st - 15th" },
+                      { id: "second_half", label: "16th - End" },
+                      { id: "custom", label: "Custom" },
+                    ].map((p) => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => handleSelectPreset(p.id as any)}
+                        className={cn(
+                          "px-2.5 py-1 text-[11px] font-semibold rounded-md transition-all cursor-pointer border",
+                          invoiceFormData.periodPreset === p.id
+                            ? "bg-primary text-primary-foreground border-primary shadow-xs"
+                            : "bg-background text-muted-foreground border-border hover:text-foreground hover:bg-muted"
+                        )}
+                      >
+                        {p.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
-                <div className="space-y-1">
-                  <label className="font-semibold text-foreground">Billing Month / Period</label>
-                  <Input
-                    type="month"
-                    required
-                    value={invoiceFormData.period}
-                    onChange={(e) => setInvoiceFormData((prev) => ({ ...prev, period: e.target.value }))}
-                  />
+                {/* From Date & To Date Range Inputs */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-foreground flex items-center gap-1">
+                      <i className="fa-solid fa-calendar-plus text-sky-500 text-[11px]" /> From Date (Start)
+                    </label>
+                    <Input
+                      type="date"
+                      required
+                      value={invoiceFormData.startDate}
+                      onChange={(e) => {
+                        const newStart = e.target.value;
+                        setInvoiceFormData((prev) => ({
+                          ...prev,
+                          startDate: newStart,
+                          periodPreset: "custom",
+                          period: `${newStart} to ${prev.endDate}`,
+                          description: generateDefaultDescription(user?.role, user?.department, newStart, prev.endDate),
+                          notes: generateDefaultNotes(newStart, prev.endDate),
+                        }));
+                      }}
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-foreground flex items-center gap-1">
+                      <i className="fa-solid fa-calendar-check text-emerald-500 text-[11px]" /> To Date (End)
+                    </label>
+                    <Input
+                      type="date"
+                      required
+                      value={invoiceFormData.endDate}
+                      onChange={(e) => {
+                        const newEnd = e.target.value;
+                        setInvoiceFormData((prev) => ({
+                          ...prev,
+                          endDate: newEnd,
+                          periodPreset: "custom",
+                          period: `${prev.startDate} to ${newEnd}`,
+                          description: generateDefaultDescription(user?.role, user?.department, prev.startDate, newEnd),
+                          notes: generateDefaultNotes(prev.startDate, newEnd),
+                        }));
+                      }}
+                    />
+                  </div>
                 </div>
+              </div>
+
+              {/* Shift Clock & Timesheet Sync & Attach Panel */}
+              <div className="p-4 bg-primary/5 dark:bg-slate-900/60 rounded-xl border border-primary/20 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-primary/10">
+                  <div className="flex items-center gap-2">
+                    <div className="w-7 h-7 rounded-lg bg-primary/20 text-primary flex items-center justify-center">
+                      <i className="fa-solid fa-business-time text-xs" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-foreground">
+                        Shift Clock &amp; Timesheets Audit Sync
+                      </h4>
+                      <p className="text-[11px] text-muted-foreground">
+                        Selected Range: <strong className="text-foreground">{invoiceFormData.startDate}</strong> to <strong className="text-foreground">{invoiceFormData.endDate}</strong>
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={syncingTimeData}
+                      onClick={() => fetchShiftAndTimesheetData(invoiceFormData.startDate, invoiceFormData.endDate)}
+                      className="h-7 px-2.5 text-[11px] font-semibold gap-1.5 cursor-pointer bg-background"
+                    >
+                      <i className={cn("fa-solid fa-arrows-rotate text-xs text-primary", syncingTimeData && "animate-spin")} />
+                      {syncingTimeData ? "Syncing..." : "Sync Range"}
+                    </Button>
+
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={applySyncedValuesToForm}
+                      className="h-7 px-3 text-[11px] font-bold gap-1.5 cursor-pointer bg-primary hover:bg-primary/90 text-primary-foreground shadow-xs"
+                    >
+                      <i className="fa-solid fa-wand-magic-sparkles text-xs" /> Auto-Fill Hours
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Status KPI mini cards */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="p-2.5 bg-background/80 rounded-lg border border-border/80 flex items-center justify-between">
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-1">
+                        <i className="fa-solid fa-user-clock text-sky-500" /> Shift Attendance
+                      </span>
+                      <p className="text-sm font-bold text-foreground mt-0.5">
+                        {shiftData.totalHours} hrs <span className="text-xs font-normal text-muted-foreground">({shiftData.daysWorked} days)</span>
+                      </p>
+                    </div>
+                    {shiftData.overtimeHours > 0 && (
+                      <span className="px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400 text-[10px] font-bold border border-amber-500/20">
+                        +{shiftData.overtimeHours}h OT
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="p-2.5 bg-background/80 rounded-lg border border-border/80 flex items-center justify-between">
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-1">
+                        <i className="fa-solid fa-list-check text-emerald-500" /> Project Timesheets
+                      </span>
+                      <p className="text-sm font-bold text-foreground mt-0.5">
+                        {timesheetData.totalHours} hrs <span className="text-xs font-normal text-muted-foreground">({timesheetData.totalEntries} entries)</span>
+                      </p>
+                    </div>
+                    <span className="px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10px] font-bold border border-emerald-500/20">
+                      Verified Log
+                    </span>
+                  </div>
+                </div>
+
+                {/* Attachment toggles & expand details */}
+                <div className="pt-1 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                  <div className="flex flex-wrap items-center gap-4">
+                    <label className="flex items-center gap-1.5 cursor-pointer select-none font-medium text-foreground">
+                      <input
+                        type="checkbox"
+                        checked={attachShiftLogs}
+                        onChange={(e) => setAttachShiftLogs(e.target.checked)}
+                        className="rounded border-border text-primary focus:ring-primary w-3.5 h-3.5 cursor-pointer"
+                      />
+                      <span>Attach Shift Attendance Log</span>
+                    </label>
+
+                    <label className="flex items-center gap-1.5 cursor-pointer select-none font-medium text-foreground">
+                      <input
+                        type="checkbox"
+                        checked={attachTimesheetLogs}
+                        onChange={(e) => setAttachTimesheetLogs(e.target.checked)}
+                        className="rounded border-border text-primary focus:ring-primary w-3.5 h-3.5 cursor-pointer"
+                      />
+                      <span>Attach Timesheet Entries</span>
+                    </label>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowSyncDetails((prev) => !prev)}
+                    className="text-[11px] font-bold text-primary hover:underline flex items-center gap-1 cursor-pointer"
+                  >
+                    <span>{showSyncDetails ? "Hide Log Details" : "View Log Details"}</span>
+                    <i className={cn("fa-solid fa-chevron-down text-[10px] transition-transform", showSyncDetails && "rotate-180")} />
+                  </button>
+                </div>
+
+                {/* Expandable Log Details */}
+                {showSyncDetails && (
+                  <div className="mt-2 pt-2 border-t border-border/80 space-y-3">
+                    {/* Shift Logs Mini Table */}
+                    <div>
+                      <span className="font-bold text-[11px] text-foreground flex items-center gap-1 mb-1.5">
+                        <i className="fa-solid fa-clock text-xs text-sky-500" /> Daily Shift Clock Breakdown:
+                      </span>
+                      {shiftData.records.length === 0 ? (
+                        <p className="text-[11px] text-muted-foreground italic py-1">No attendance clock records found for this period.</p>
+                      ) : (
+                        <div className="max-h-36 overflow-y-auto border border-border rounded-lg">
+                          <table className="w-full text-[11px]">
+                            <thead className="bg-muted/60 sticky top-0 text-muted-foreground">
+                              <tr>
+                                <th className="py-1 px-2 text-left">Date</th>
+                                <th className="py-1 px-2 text-center">Clock In</th>
+                                <th className="py-1 px-2 text-center">Clock Out</th>
+                                <th className="py-1 px-2 text-right">Hours</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-border/60">
+                              {shiftData.records.map((r, i) => (
+                                <tr key={i} className="hover:bg-muted/20">
+                                  <td className="py-1 px-2 font-mono font-medium">{r.date}</td>
+                                  <td className="py-1 px-2 text-center font-mono text-muted-foreground">{r.clockIn}</td>
+                                  <td className="py-1 px-2 text-center font-mono text-muted-foreground">{r.clockOut}</td>
+                                  <td className="py-1 px-2 text-right font-mono font-bold text-primary">{r.totalHours}h</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Timesheets Mini Table */}
+                    <div>
+                      <span className="font-bold text-[11px] text-foreground flex items-center gap-1 mb-1.5">
+                        <i className="fa-solid fa-list-check text-xs text-emerald-500" /> Project Timesheet Tasks:
+                      </span>
+                      {timesheetData.records.length === 0 ? (
+                        <p className="text-[11px] text-muted-foreground italic py-1">No project timesheet records logged for this period.</p>
+                      ) : (
+                        <div className="max-h-36 overflow-y-auto border border-border rounded-lg">
+                          <table className="w-full text-[11px]">
+                            <thead className="bg-muted/60 sticky top-0 text-muted-foreground">
+                              <tr>
+                                <th className="py-1 px-2 text-left">Date</th>
+                                <th className="py-1 px-2 text-left">Project / Task</th>
+                                <th className="py-1 px-2 text-right">Logged</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-border/60">
+                              {timesheetData.records.map((e, i) => (
+                                <tr key={i} className="hover:bg-muted/20">
+                                  <td className="py-1 px-2 font-mono font-medium">{e.date}</td>
+                                  <td className="py-1 px-2">
+                                    <strong className="text-foreground">{e.projectName}:</strong> {e.taskDescription || "General task"}
+                                  </td>
+                                  <td className="py-1 px-2 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400">{e.hours}h</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-1">
+                <label className="font-semibold text-foreground">Tax Rate (%)</label>
+                <Input
+                  type="number"
+                  min="0"
+                  max="100"
+                  placeholder="0"
+                  value={invoiceFormData.taxRate}
+                  onChange={(e) => setInvoiceFormData((prev) => ({ ...prev, taxRate: Number(e.target.value) }))}
+                />
               </div>
 
               {/* Calculated Breakdown Card */}
               <div className="p-4 bg-muted/40 rounded-xl border border-border space-y-2 text-xs">
-                <div className="flex justify-between text-muted-foreground">
-                  <span>Regular Hours ({regHours}h @ {currSymbol}{rate}/h):</span>
-                  <span className="font-mono">{currSymbol}{(regHours * rate).toLocaleString()}</span>
-                </div>
-                {otHours > 0 && (
-                  <div className="flex justify-between text-amber-600 dark:text-amber-400">
-                    <span>Overtime 1.5x ({otHours}h @ {currSymbol}{rate * 1.5}/h):</span>
-                    <span className="font-mono">{currSymbol}{(otHours * rate * 1.5).toLocaleString()}</span>
-                  </div>
+                {invoiceFormData.rateType === "hourly" && (
+                  <>
+                    <div className="flex justify-between text-muted-foreground">
+                      <span>Regular Hours ({regHours}h @ {currSymbol}{hRate}/h):</span>
+                      <span className="font-mono">{currSymbol}{(regHours * hRate).toLocaleString()}</span>
+                    </div>
+                    {otHours > 0 && (
+                      <div className="flex justify-between text-amber-600 dark:text-amber-400">
+                        <span>Overtime 1.5x ({otHours}h @ {currSymbol}{hRate * 1.5}/h):</span>
+                        <span className="font-mono">{currSymbol}{(otHours * hRate * 1.5).toLocaleString()}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between text-foreground font-semibold">
+                      <span><i className="fa-solid fa-clock mr-1 text-primary" />Total Worked Hours:</span>
+                      <span className="font-mono">{formatHoursMinutes(regHours + otHours)}</span>
+                    </div>
+                  </>
                 )}
-                <div className="flex justify-between text-foreground font-semibold">
-                  <span><i className="fa-solid fa-clock mr-1 text-primary" />Total Worked Hours:</span>
-                  <span className="font-mono">{formatHoursMinutes(regHours + otHours)}</span>
-                </div>
+
+                {invoiceFormData.rateType === "daily" && (
+                  <>
+                    <div className="flex justify-between text-muted-foreground">
+                      <span>Daily Billing ({dWorked} days @ {currSymbol}{dRate}/day):</span>
+                      <span className="font-mono">{currSymbol}{(dWorked * dRate).toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between text-foreground font-semibold">
+                      <span><i className="fa-solid fa-calendar-check mr-1 text-primary" />Total Billable Days:</span>
+                      <span className="font-mono">{dWorked} days</span>
+                    </div>
+                  </>
+                )}
+
+                {invoiceFormData.rateType === "project" && (
+                  <>
+                    <div className="flex justify-between text-muted-foreground">
+                      <span>Project Milestone Scope:</span>
+                      <span className="font-semibold text-foreground truncate max-w-[200px]">{invoiceFormData.projectName || "Fixed Deliverable"}</span>
+                    </div>
+                    <div className="flex justify-between text-foreground font-semibold">
+                      <span><i className="fa-solid fa-briefcase mr-1 text-primary" />Project Base Fee:</span>
+                      <span className="font-mono">{currSymbol}{projAmount.toLocaleString()}</span>
+                    </div>
+                  </>
+                )}
+
                 {taxPct > 0 && (
                   <div className="flex justify-between text-muted-foreground">
                     <span>Tax ({taxPct}%):</span>
@@ -658,16 +1431,32 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
               </div>
 
               <div className="space-y-1">
-                <label className="font-semibold text-foreground">Billed To (Company / Entity)</label>
+                <div className="flex items-center justify-between">
+                  <label className="font-semibold text-foreground">Billed To (Company / Entity)</label>
+                  <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+                    <i className="fa-solid fa-lock text-[9px]" /> Auto-detected &amp; Locked
+                  </span>
+                </div>
                 <Input
                   type="text"
+                  readOnly
+                  disabled
                   value={invoiceFormData.billedToName}
-                  onChange={(e) => setInvoiceFormData((prev) => ({ ...prev, billedToName: e.target.value }))}
+                  className="opacity-85 cursor-not-allowed bg-muted/40 font-medium select-none"
                 />
               </div>
 
               <div className="space-y-1">
-                <label className="font-semibold text-foreground">Description of Work</label>
+                <div className="flex items-center justify-between">
+                  <label className="font-semibold text-foreground">Description of Work</label>
+                  <button
+                    type="button"
+                    onClick={() => setInvoiceFormData((prev) => ({ ...prev, description: generateDefaultDescription(user?.role, user?.department, prev.startDate, prev.endDate) }))}
+                    className="text-[10px] text-primary hover:underline cursor-pointer"
+                  >
+                    Reset to Default
+                  </button>
+                </div>
                 <Input
                   type="text"
                   placeholder="e.g. Fullstack engineering & consulting retainer"
@@ -677,7 +1466,16 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
               </div>
 
               <div className="space-y-1">
-                <label className="font-semibold text-foreground">Additional Notes</label>
+                <div className="flex items-center justify-between">
+                  <label className="font-semibold text-foreground">Additional Notes</label>
+                  <button
+                    type="button"
+                    onClick={() => setInvoiceFormData((prev) => ({ ...prev, notes: generateDefaultNotes(prev.startDate, prev.endDate) }))}
+                    className="text-[10px] text-primary hover:underline cursor-pointer"
+                  >
+                    Reset to Default
+                  </button>
+                </div>
                 <Input
                   type="text"
                   placeholder="e.g. Bank transfer details, project references..."
@@ -843,122 +1641,6 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
           </CardContent>
         </Card>
       </div>
-
-      {/* View Details Modal for Employee */}
-      {viewInvoice && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in"
-          onClick={() => setViewInvoice(null)}
-        >
-          <div
-            className="w-full max-w-lg bg-card border border-border rounded-xl shadow-xl p-6 space-y-4 max-h-[90vh] overflow-y-auto"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between pb-3 border-b border-border dark:border-slate-800">
-              <div>
-                <h2 className="text-base font-bold text-foreground flex items-center gap-2">
-                  <i className="fa-solid fa-file-invoice text-primary" /> Invoice {viewInvoice.invoiceNo}
-                </h2>
-                <p className="text-[11px] text-muted-foreground mt-0.5">Issued: <strong className="text-foreground font-semibold">{viewInvoice.invoiceDate}</strong> • Due: <strong className="text-foreground font-semibold">{viewInvoice.dueDate}</strong></p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setViewInvoice(null)}
-                className="w-8 h-8 rounded-lg bg-muted hover:bg-accent text-muted-foreground hover:text-foreground flex items-center justify-center transition-colors cursor-pointer"
-                title="Close Modal"
-              >
-                <i className="fa-solid fa-xmark text-sm" />
-              </button>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-              <div className="p-3 bg-muted/40 dark:bg-slate-800/60 rounded-xl border border-border/80 dark:border-slate-700/60 space-y-1 shadow-2xs">
-                <span className="font-bold text-muted-foreground dark:text-slate-400 uppercase tracking-wider text-[10px]">From:</span>
-                <p className="font-bold text-foreground text-sm">{viewInvoice.businessName}</p>
-                {viewInvoice.businessAddress && <p className="text-foreground/80 dark:text-slate-300 whitespace-pre-line text-xs">{viewInvoice.businessAddress}</p>}
-                {viewInvoice.businessEmail && (
-                  <p className="text-sky-600 dark:text-sky-300 font-mono font-medium text-[11px] pt-0.5 flex items-center gap-1.5">
-                    <i className="fa-solid fa-envelope text-[10px] opacity-75" />
-                    <span>{viewInvoice.businessEmail}</span>
-                  </p>
-                )}
-              </div>
-
-              <div className="p-3 bg-muted/40 dark:bg-slate-800/60 rounded-xl border border-border/80 dark:border-slate-700/60 space-y-1 shadow-2xs">
-                <span className="font-bold text-muted-foreground dark:text-slate-400 uppercase tracking-wider text-[10px]">Billed To:</span>
-                <p className="font-bold text-foreground text-sm">{viewInvoice.billedToName}</p>
-                {viewInvoice.billedToAddress && <p className="text-foreground/80 dark:text-slate-300 whitespace-pre-line text-xs">{viewInvoice.billedToAddress}</p>}
-                {viewInvoice.billedToEmail && (
-                  <p className="text-sky-600 dark:text-sky-300 font-mono font-medium text-[11px] pt-0.5 flex items-center gap-1.5">
-                    <i className="fa-solid fa-envelope text-[10px] opacity-75" />
-                    <span>{viewInvoice.billedToEmail}</span>
-                  </p>
-                )}
-              </div>
-            </div>
-
-            {/* Line Items */}
-            <div className="space-y-1.5">
-              <span className="font-bold text-foreground text-xs">Line Items</span>
-              <div className="border border-border dark:border-slate-800 rounded-xl overflow-hidden shadow-2xs">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-muted/70 dark:bg-slate-800/80 font-bold text-muted-foreground dark:text-slate-300 uppercase text-[10px] border-b border-border dark:border-slate-800">
-                    <tr>
-                      <th className="py-2.5 px-3.5">Description</th>
-                      <th className="py-2.5 px-3.5 text-center">Qty / Hours</th>
-                      <th className="py-2.5 px-3.5 text-right">Amount</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border/60 dark:divide-slate-800">
-                    {viewInvoice.items.map((item, idx) => {
-                      const curr = viewInvoice.currency === "EUR" ? "€" : viewInvoice.currency === "GBP" ? "£" : viewInvoice.currency === "INR" ? "₹" : "$";
-                      return (
-                        <tr key={idx} className="hover:bg-muted/30 dark:hover:bg-slate-800/40 transition-colors">
-                          <td className="py-2.5 px-3.5 font-medium text-foreground">{item.description}</td>
-                          <td className="py-2.5 px-3.5 text-center font-mono text-muted-foreground">{item.quantity}</td>
-                          <td className="py-2.5 px-3.5 text-right font-mono font-bold text-foreground">{curr}{item.amount.toLocaleString()}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            {/* Calculation Card */}
-            <div className="p-4 bg-muted/40 dark:bg-slate-800/60 rounded-xl border border-border/80 dark:border-slate-700/60 space-y-1 text-xs">
-              <div className="flex justify-between items-center font-bold text-sm">
-                <span className="text-foreground">Total Invoice Amount:</span>
-                <span className="text-lg font-black font-mono text-emerald-500 dark:text-emerald-400">
-                  {(viewInvoice.currency === "EUR" ? "€" : viewInvoice.currency === "GBP" ? "£" : viewInvoice.currency === "INR" ? "₹" : "$")}{viewInvoice.total.toLocaleString()}
-                </span>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between pt-3 border-t border-border dark:border-slate-800">
-              <div>{getStatusBadge(viewInvoice.status)}</div>
-              <div className="flex items-center gap-2">
-                <Button
-                  type="button"
-                  onClick={() => handlePrintPDF(viewInvoice)}
-                  className="gap-1.5 text-xs font-semibold h-8 cursor-pointer bg-rose-600 hover:bg-rose-700 text-white"
-                >
-                  <i className="fa-solid fa-file-pdf text-xs" /> Export PDF
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setViewInvoice(null)}
-                  className="h-8 text-xs cursor-pointer"
-                >
-                  Close
-                </Button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

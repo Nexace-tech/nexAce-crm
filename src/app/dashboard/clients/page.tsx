@@ -10,7 +10,6 @@ import { Input } from "@/components/ui/input";
 import { Pagination } from "@/components/ui/pagination";
 import { usePermissions } from "@/hooks/usePermissions";
 import { BulkImportModal } from "@/components/operations/BulkImportModal";
-import { SalesWorkdeskDashboard } from "@/components/operations/SalesWorkdeskDashboard";
 import HrWorkdeskDashboard from "@/components/operations/HrWorkdeskDashboard";
 import { cn } from "@/lib/utils";
 
@@ -41,18 +40,6 @@ interface ClientData {
   createdAt: string;
 }
 
-interface SalesDeal {
-  _id: string;
-  clientAccount: string;
-  dealName: string;
-  dealValue: number;
-  stage: "Prospecting" | "Discovery" | "Proposal Sent" | "Negotiation" | "Closed Won" | "Closed Lost";
-  probability: number;
-  owner: string;
-  expectedClose: string;
-  venture: string;
-  notes?: string;
-}
 
 interface ResourceAllocation {
   _id: string;
@@ -87,38 +74,15 @@ export default function OperationsPage() {
   const searchParams = useSearchParams();
   const { can, isAdmin, isOPS } = usePermissions();
   const tabParam = searchParams?.get("tab");
-  const initialTab: "operations" | "sales" | "hr" | "external" =
+  const initialTab: "operations" | "hr" | "external" =
     tabParam === "external" || tabParam === "external-teams"
       ? "external"
       : tabParam === "hr"
       ? "hr"
-      : tabParam === "operations"
-      ? "operations"
-      : "sales";
+      : "operations";
 
-  const [activeTab, setActiveTab] = useState<"operations" | "sales" | "hr" | "external">(initialTab);
+  const [activeTab, setActiveTab] = useState<"operations" | "hr" | "external">(initialTab);
   const [viewMode, setViewMode] = useState<"list" | "grid">("list");
-
-  // Sales Workdesk State
-  const [salesDeals, setSalesDeals] = useState<SalesDeal[]>([]);
-  const [salesLoading, setSalesLoading] = useState(false);
-  const [salesSearch, setSalesSearch] = useState("");
-  const [salesStageFilter, setSalesStageFilter] = useState("All");
-  const [salesOwnerFilter, setSalesOwnerFilter] = useState("All");
-  const [salesViewMode, setSalesViewMode] = useState<"table" | "kanban">("table");
-  const [showSalesModal, setShowSalesModal] = useState(false);
-  const [editingSalesDeal, setEditingSalesDeal] = useState<SalesDeal | null>(null);
-  const [salesFormData, setSalesFormData] = useState({
-    clientAccount: "",
-    dealName: "",
-    dealValue: "",
-    stage: "Prospecting" as SalesDeal["stage"],
-    probability: 50,
-    owner: "",
-    expectedClose: "",
-    venture: "Ace Consultancys",
-    notes: "",
-  });
 
   // HR Workdesk State
   const [hrAllocations, setHrAllocations] = useState<ResourceAllocation[]>([]);
@@ -271,7 +235,7 @@ export default function OperationsPage() {
   const [showModal, setShowModal] = useState(false);
   const [showBulkImportModal, setShowBulkImportModal] = useState(false);
   const [editingProject, setEditingProject] = useState<ClientData | null>(null);
-  const [deleteConfirmTarget, setDeleteConfirmTarget] = useState<{ type: "project" | "deal" | "allocation"; id: string; title: string } | null>(null);
+  const [deleteConfirmTarget, setDeleteConfirmTarget] = useState<{ type: "project" | "allocation"; id: string; title: string } | null>(null);
   const [isDeletingTarget, setIsDeletingTarget] = useState(false);
 
   const [formData, setFormData] = useState({
@@ -307,20 +271,6 @@ export default function OperationsPage() {
     }
   };
 
-  const fetchSalesDeals = async () => {
-    try {
-      setSalesLoading(true);
-      const res = await fetch("/api/operations/sales-deals");
-      if (res.ok) {
-        const data = await res.json();
-        setSalesDeals(data.deals || []);
-      }
-    } catch (err) {
-      console.error("Failed to fetch sales deals:", err);
-    } finally {
-      setSalesLoading(false);
-    }
-  };
 
   const fetchHrAllocations = async () => {
     try {
@@ -354,7 +304,6 @@ export default function OperationsPage() {
 
   useEffect(() => {
     fetchProjects();
-    fetchSalesDeals();
     fetchHrAllocations();
     fetchExternalMembers();
   }, []);
@@ -363,8 +312,6 @@ export default function OperationsPage() {
     const tabParam = searchParams?.get("tab");
     if (tabParam === "external" || tabParam === "external-teams") {
       setActiveTab("external");
-    } else if (tabParam === "sales") {
-      setActiveTab("sales");
     } else if (tabParam === "hr") {
       setActiveTab("hr");
     } else if (tabParam === "operations") {
@@ -702,103 +649,6 @@ export default function OperationsPage() {
     Low: "bg-slate-500/10 text-slate-500 border border-slate-500/20",
   };
 
-  const [salesSubmitting, setSalesSubmitting] = useState(false);
-  const savingSalesDeal = salesSubmitting;
-
-  const handleSaveSalesDeal = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!salesFormData.clientAccount || !salesFormData.dealName) return;
-    setSalesSubmitting(true);
-    try {
-      const url = editingSalesDeal
-        ? `/api/operations/sales-deals/${editingSalesDeal._id}`
-        : "/api/operations/sales-deals";
-      const method = editingSalesDeal ? "PATCH" : "POST";
-      const res = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          clientAccount: salesFormData.clientAccount,
-          dealName: salesFormData.dealName,
-          dealValue: Number(salesFormData.dealValue) || 0,
-          stage: salesFormData.stage,
-          probability: Number(salesFormData.probability) || 50,
-          owner: salesFormData.owner || "",
-          expectedClose: salesFormData.expectedClose || "",
-          venture: salesFormData.venture,
-          notes: salesFormData.notes || "",
-        }),
-      });
-      if (res.ok) {
-        await fetchSalesDeals();
-        setShowSalesModal(false);
-        setEditingSalesDeal(null);
-        setSalesFormData({ clientAccount: "", dealName: "", dealValue: "", stage: "Prospecting", probability: 50, owner: "", expectedClose: "", venture: "Ace Consultancys", notes: "" });
-      } else {
-        const err = await res.json();
-        alert(err.error || "Failed to save deal.");
-      }
-    } catch (err) {
-      console.error(err);
-      alert("Failed to save deal.");
-    } finally {
-      setSalesSubmitting(false);
-    }
-  };
-  const handleAddSalesDeal = handleSaveSalesDeal;
-
-  const handleDeleteSalesDeal = async (dealId: string) => {
-    try {
-      setIsDeletingTarget(true);
-      const res = await fetch(`/api/operations/sales-deals/${dealId}`, { method: "DELETE" });
-      if (res.ok) {
-        setSalesDeals((prev) => prev.filter((d) => d._id !== dealId));
-        setDeleteConfirmTarget(null);
-      } else {
-        alert("Failed to delete deal.");
-      }
-    } catch {
-      alert("Failed to delete deal.");
-    } finally {
-      setIsDeletingTarget(false);
-    }
-  };
-
-  const handleEditSalesDeal = (deal: SalesDeal) => {
-    setEditingSalesDeal(deal);
-    setSalesFormData({
-      clientAccount: deal.clientAccount,
-      dealName: deal.dealName,
-      dealValue: String(deal.dealValue),
-      stage: deal.stage,
-      probability: deal.probability,
-      owner: deal.owner,
-      expectedClose: deal.expectedClose ? deal.expectedClose.split("T")[0] : "",
-      venture: deal.venture,
-      notes: deal.notes || "",
-    });
-    setShowSalesModal(true);
-  };
-
-  const handleOpenSalesModal = (deal?: SalesDeal) => {
-    if (deal) {
-      handleEditSalesDeal(deal);
-    } else {
-      setEditingSalesDeal(null);
-      setSalesFormData({
-        clientAccount: "",
-        dealName: "",
-        dealValue: "",
-        stage: "Prospecting",
-        probability: 50,
-        owner: "",
-        expectedClose: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
-        venture: "Ace Consultancys",
-        notes: "",
-      });
-      setShowSalesModal(true);
-    }
-  };
 
   const [hrSubmitting, setHrSubmitting] = useState(false);
 
@@ -878,17 +728,6 @@ export default function OperationsPage() {
     setShowHrModal(true);
   };
 
-  const filteredSalesDeals = useMemo(() => {
-    return salesDeals.filter((deal) => {
-      const matchesSearch =
-        deal.clientAccount.toLowerCase().includes(salesSearch.toLowerCase()) ||
-        deal.dealName.toLowerCase().includes(salesSearch.toLowerCase()) ||
-        deal.owner.toLowerCase().includes(salesSearch.toLowerCase());
-      const matchesStage = salesStageFilter === "All" || deal.stage === salesStageFilter;
-      const matchesOwner = salesOwnerFilter === "All" || deal.owner === salesOwnerFilter;
-      return matchesSearch && matchesStage && matchesOwner;
-    });
-  }, [salesDeals, salesSearch, salesStageFilter, salesOwnerFilter]);
 
   const filteredHrAllocations = useMemo(() => {
     return hrAllocations.filter((res) => {
@@ -995,21 +834,6 @@ export default function OperationsPage() {
           <i className="fa-solid fa-list-check text-sm" /> Operations Control
         </button>
 
-        <button
-          type="button"
-          onClick={() => setActiveTab("sales")}
-          className={cn(
-            "px-4 py-2.5 text-sm font-semibold border-b-2 transition-all flex items-center gap-2 cursor-pointer shrink-0 whitespace-nowrap",
-            activeTab === "sales"
-              ? "border-primary text-primary bg-primary/10 rounded-t-md font-bold -mb-px"
-              : "border-transparent text-muted-foreground hover:text-foreground"
-          )}
-        >
-          <i className="fa-solid fa-handshake text-sm" /> Sales Workdesk
-          <Badge variant="soft" color="primary" className="ml-1 text-[10px] px-1.5 py-0.2">
-            {salesDeals.length}
-          </Badge>
-        </button>
 
         <button
           type="button"
@@ -1649,17 +1473,6 @@ export default function OperationsPage() {
         </div>
       )}
 
-      {/* Sales Workdesk Tab View - Redesigned to exact CRMS standard */}
-      {activeTab === "sales" && (
-        <SalesWorkdeskDashboard
-          deals={salesDeals}
-          loading={salesLoading}
-          onNewDeal={() => handleOpenSalesModal()}
-          onEditDeal={(deal) => handleOpenSalesModal(deal)}
-          onDeleteDeal={(id, title) => setDeleteConfirmTarget({ type: "deal", id, title })}
-          onRefresh={fetchSalesDeals}
-        />
-      )}
       {/* HR Workdesk Tab View - Redesigned to exact Kleon HR Standard */}
       {activeTab === "hr" && (
         <HrWorkdeskDashboard
@@ -1920,145 +1733,6 @@ export default function OperationsPage() {
               </table>
             </CardContent>
           </Card>
-        </div>
-      )}
-
-
-
-      {/* New Sales Deal Modal */}
-      {showSalesModal && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in"
-          onClick={() => { setShowSalesModal(false); setEditingSalesDeal(null); }}
-        >
-          <div
-            className="w-full max-w-lg bg-card border border-border rounded-xl shadow-xl p-6 space-y-4"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between pb-3 border-b border-border">
-              <h2 className="text-lg font-bold text-foreground flex items-center gap-2">
-                <i className="fa-solid fa-handshake text-primary" /> {editingSalesDeal ? "Edit Sales Deal" : "Create New Sales Deal"}
-              </h2>
-              <button
-                type="button"
-                onClick={() => { setShowSalesModal(false); setEditingSalesDeal(null); }}
-                className="text-muted-foreground hover:text-foreground p-1 rounded-md cursor-pointer"
-              >
-                <i className="fa-solid fa-xmark text-base" />
-              </button>
-            </div>
-
-            <form onSubmit={handleAddSalesDeal} className="space-y-4 text-xs">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="font-semibold text-foreground">Client Account Name *</label>
-                  <Input
-                    type="text"
-                    required
-                    placeholder="e.g. Acme FinTech Corp"
-                    value={salesFormData.clientAccount}
-                    onChange={(e) => setSalesFormData((prev) => ({ ...prev, clientAccount: e.target.value }))}
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="font-semibold text-foreground">Deal Title *</label>
-                  <Input
-                    type="text"
-                    required
-                    placeholder="e.g. Cloud Migration Retainer"
-                    value={salesFormData.dealName}
-                    onChange={(e) => setSalesFormData((prev) => ({ ...prev, dealName: e.target.value }))}
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="font-semibold text-foreground">Deal Valuation ($)</label>
-                  <Input
-                    type="number"
-                    placeholder="e.g. 45000"
-                    value={salesFormData.dealValue}
-                    onChange={(e) => setSalesFormData((prev) => ({ ...prev, dealValue: e.target.value }))}
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="font-semibold text-foreground">Pipeline Stage</label>
-                  <select
-                    value={salesFormData.stage}
-                    onChange={(e) => setSalesFormData((prev) => ({ ...prev, stage: e.target.value as SalesDeal["stage"] }))}
-                    className="w-full h-9 px-3 text-xs bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer"
-                  >
-                    <option value="Prospecting">Prospecting</option>
-                    <option value="Discovery">Discovery</option>
-                    <option value="Proposal Sent">Proposal Sent</option>
-                    <option value="Negotiation">Negotiation</option>
-                    <option value="Closed Won">Closed Won</option>
-                    <option value="Closed Lost">Closed Lost</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="font-semibold text-foreground">Win Probability ({salesFormData.probability}%)</label>
-                  <input
-                    type="range"
-                    min="0"
-                    max="100"
-                    step="5"
-                    value={salesFormData.probability}
-                    onChange={(e) => setSalesFormData((prev) => ({ ...prev, probability: Number(e.target.value) }))}
-                    className="w-full cursor-pointer accent-primary"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="font-semibold text-foreground">Deal Owner</label>
-                  <Input
-                    type="text"
-                    placeholder="e.g. Alex Mercer"
-                    value={salesFormData.owner}
-                    onChange={(e) => setSalesFormData((prev) => ({ ...prev, owner: e.target.value }))}
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="font-semibold text-foreground">Expected Target Close</label>
-                  <Input
-                    type="date"
-                    value={salesFormData.expectedClose}
-                    onChange={(e) => setSalesFormData((prev) => ({ ...prev, expectedClose: e.target.value }))}
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="font-semibold text-foreground">Company Venture</label>
-                  <select
-                    value={salesFormData.venture}
-                    onChange={(e) => setSalesFormData((prev) => ({ ...prev, venture: e.target.value }))}
-                    className="w-full h-9 px-3 text-xs bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer"
-                  >
-                    <option value="Ace Consultancys">Ace Consultancys</option>
-                    <option value="NexAce Tech">NexAce Tech</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-border">
-                <Button type="button" variant="outline" size="sm" onClick={() => { setShowSalesModal(false); setEditingSalesDeal(null); }} className="cursor-pointer">
-                  Cancel
-                </Button>
-                <Button type="submit" color="primary" size="sm" disabled={salesSubmitting} className="cursor-pointer gap-1.5">
-                  {salesSubmitting ? <><i className="fa-solid fa-spinner fa-spin text-xs" /> Saving...</> : (editingSalesDeal ? "Save Changes" : "Create Sales Deal")}
-                </Button>
-              </div>
-            </form>
-          </div>
         </div>
       )}
 
@@ -3109,171 +2783,6 @@ export default function OperationsPage() {
         </div>
       )}
 
-      {/* Add / Edit Sales Deal Modal */}
-      {showSalesModal && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in"
-          onClick={() => {
-            setShowSalesModal(false);
-            setEditingSalesDeal(null);
-          }}
-        >
-          <div
-            className="w-full max-w-lg bg-card border border-border rounded-xl shadow-xl p-6 space-y-4 max-h-[90vh] overflow-y-auto"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between pb-3 border-b border-border">
-              <h3 className="text-base font-bold text-foreground flex items-center gap-2">
-                <i className="fa-solid fa-handshake text-rose-500" />
-                {editingSalesDeal ? "Edit Sales Opportunity" : "Create New Sales Deal"}
-              </h3>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowSalesModal(false);
-                  setEditingSalesDeal(null);
-                }}
-                className="text-muted-foreground hover:text-foreground cursor-pointer text-sm"
-              >
-                <i className="fa-solid fa-xmark" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveSalesDeal} className="space-y-4 text-xs">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="font-semibold text-foreground">Client Account / Company *</label>
-                  <Input
-                    required
-                    placeholder="e.g. Apex Digital Labs"
-                    value={salesFormData.clientAccount}
-                    onChange={(e) => setSalesFormData((prev) => ({ ...prev, clientAccount: e.target.value }))}
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="font-semibold text-foreground">Deal Name / Scope *</label>
-                  <Input
-                    required
-                    placeholder="e.g. Enterprise Migration"
-                    value={salesFormData.dealName}
-                    onChange={(e) => setSalesFormData((prev) => ({ ...prev, dealName: e.target.value }))}
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="space-y-1.5">
-                  <label className="font-semibold text-foreground">Deal Value ($) *</label>
-                  <Input
-                    required
-                    type="number"
-                    min="0"
-                    placeholder="e.g. 50000"
-                    value={salesFormData.dealValue}
-                    onChange={(e) => setSalesFormData((prev) => ({ ...prev, dealValue: e.target.value }))}
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="font-semibold text-foreground">Pipeline Stage</label>
-                  <select
-                    value={salesFormData.stage}
-                    onChange={(e) => setSalesFormData((prev) => ({ ...prev, stage: e.target.value as any }))}
-                    className="w-full h-9 px-3 bg-background border border-input rounded-md text-foreground focus:outline-hidden focus:ring-1 focus:ring-primary"
-                  >
-                    <option value="Prospecting">Prospecting</option>
-                    <option value="Discovery">Discovery</option>
-                    <option value="Proposal Sent">Proposal Sent</option>
-                    <option value="Negotiation">Negotiation</option>
-                    <option value="Closed Won">Closed Won</option>
-                    <option value="Closed Lost">Closed Lost</option>
-                  </select>
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="font-semibold text-foreground">Win Probability (%)</label>
-                  <Input
-                    type="number"
-                    min="0"
-                    max="100"
-                    placeholder="50"
-                    value={salesFormData.probability}
-                    onChange={(e) => setSalesFormData((prev) => ({ ...prev, probability: Number(e.target.value) }))}
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label className="font-semibold text-foreground">Deal Owner / Assignee</label>
-                  <Input
-                    placeholder="e.g. Sara Khan"
-                    value={salesFormData.owner}
-                    onChange={(e) => setSalesFormData((prev) => ({ ...prev, owner: e.target.value }))}
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="font-semibold text-foreground">Expected Close Date</label>
-                  <Input
-                    type="date"
-                    value={salesFormData.expectedClose}
-                    onChange={(e) => setSalesFormData((prev) => ({ ...prev, expectedClose: e.target.value }))}
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="font-semibold text-foreground">Venture Name</label>
-                <Input
-                  placeholder="e.g. Ace Consultancys"
-                  value={salesFormData.venture}
-                  onChange={(e) => setSalesFormData((prev) => ({ ...prev, venture: e.target.value }))}
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="font-semibold text-foreground">Deal Notes & Background</label>
-                <textarea
-                  rows={3}
-                  placeholder="Key requirements, client decision makers, budget notes..."
-                  value={salesFormData.notes}
-                  onChange={(e) => setSalesFormData((prev) => ({ ...prev, notes: e.target.value }))}
-                  className="w-full p-2.5 bg-background border border-input rounded-md text-foreground focus:outline-hidden focus:ring-1 focus:ring-primary"
-                />
-              </div>
-
-              <div className="flex justify-end gap-2 pt-2 border-t border-border">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    setShowSalesModal(false);
-                    setEditingSalesDeal(null);
-                  }}
-                  className="cursor-pointer"
-                >
-                  Cancel
-                </Button>
-                <Button type="submit" color="primary" size="sm" disabled={savingSalesDeal} className="cursor-pointer bg-rose-600 hover:bg-rose-700 text-white">
-                  {savingSalesDeal ? (
-                    <>
-                      <i className="fa-solid fa-spinner fa-spin mr-1.5" /> Saving...
-                    </>
-                  ) : (
-                    <>
-                      <i className="fa-solid fa-check mr-1.5" /> {editingSalesDeal ? "Update Deal" : "Save Sales Deal"}
-                    </>
-                  )}
-                </Button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
       {/* Unified In-App Delete Confirmation Modal Popup */}
       {deleteConfirmTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in">
@@ -3284,7 +2793,7 @@ export default function OperationsPage() {
               </div>
               <div className="space-y-1">
                 <h3 className="text-base font-bold text-foreground">
-                  Delete {deleteConfirmTarget.type === "project" ? "Project" : deleteConfirmTarget.type === "deal" ? "Sales Deal" : "Resource Allocation"}
+                  Delete {deleteConfirmTarget.type === "project" ? "Project" : "Resource Allocation"}
                 </h3>
                 <p className="text-xs text-muted-foreground leading-relaxed">
                   Are you sure you want to delete <strong className="text-foreground">{deleteConfirmTarget.title}</strong>? This action cannot be undone.
@@ -3306,7 +2815,6 @@ export default function OperationsPage() {
                 size="sm"
                 onClick={() => {
                   if (deleteConfirmTarget.type === "project") handleDeleteProject(deleteConfirmTarget.id);
-                  else if (deleteConfirmTarget.type === "deal") handleDeleteSalesDeal(deleteConfirmTarget.id);
                   else if (deleteConfirmTarget.type === "allocation") handleDeleteHrAllocation(deleteConfirmTarget.id);
                 }}
                 disabled={isDeletingTarget}
@@ -3330,11 +2838,10 @@ export default function OperationsPage() {
       {/* Bulk Import Modal */}
       <BulkImportModal
         isOpen={showBulkImportModal}
-        defaultTarget={activeTab === "sales" ? "deals" : "clients"}
+        defaultTarget="clients"
         onClose={() => setShowBulkImportModal(false)}
         onSuccess={() => {
           fetchProjects();
-          fetchSalesDeals();
         }}
       />
     </div>

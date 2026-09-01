@@ -84,7 +84,11 @@ export async function GET(request: Request) {
     }
 
     if (startStr && endStr) {
-      query.date = { $gte: new Date(startStr), $lte: new Date(endStr) };
+      const startDateObj = new Date(startStr);
+      startDateObj.setUTCHours(0, 0, 0, 0);
+      const endDateObj = new Date(endStr);
+      endDateObj.setUTCHours(23, 59, 59, 999);
+      query.date = { $gte: startDateObj, $lte: endDateObj };
     }
 
     const entries = await TimeEntry.find(query)

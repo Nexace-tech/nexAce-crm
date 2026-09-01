@@ -4,14 +4,7 @@ import { SalesDeal } from "@/models/SalesDeal";
 import { ActivityLog } from "@/models/ActivityLog";
 import { requireTenantSession, isAuthError } from "@/lib/auth-guard";
 
-const SEED_DEALS = [
-  { clientAccount: "Apex Digital", dealName: "Brand Revamp 2026", dealValue: 48000, stage: "Proposal Sent", probability: 65, owner: "Sara Khan", expectedClose: "2026-09-30", venture: "Ace Consultancys" },
-  { clientAccount: "NovaTech Solutions", dealName: "ERP Integration Q3", dealValue: 95000, stage: "Negotiation", probability: 80, owner: "Ahmed Raza", expectedClose: "2026-08-31", venture: "Ace Consultancys" },
-  { clientAccount: "Greenfield Corp", dealName: "HR Module Deployment", dealValue: 22000, stage: "Discovery", probability: 40, owner: "Omar Malik", expectedClose: "2026-10-15", venture: "Ace Consultancys" },
-  { clientAccount: "AlphaStream Media", dealName: "Content Ops Retainer", dealValue: 14400, stage: "Closed Won", probability: 100, owner: "Fatima Noor", expectedClose: "2026-07-01", venture: "Ace Consultancys" },
-  { clientAccount: "BlueSky Logistics", dealName: "Fleet Tracking Platform", dealValue: 67000, stage: "Prospecting", probability: 20, owner: "Bilal Hassan", expectedClose: "2026-12-01", venture: "Ace Consultancys" },
-  { clientAccount: "TerraFund Capital", dealName: "Compliance Audit Suite", dealValue: 31000, stage: "Closed Lost", probability: 0, owner: "Ayesha Qureshi", expectedClose: "2026-06-15", venture: "Ace Consultancys" },
-];
+
 
 export async function GET() {
   try {
@@ -21,17 +14,7 @@ export async function GET() {
 
     await connectToDatabase();
 
-    let deals = await SalesDeal.find({ tenantId: tenantObjectId }).sort({ createdAt: -1 }).lean();
-
-    if (deals.length === 0) {
-      const seedDocs = SEED_DEALS.map((d) => ({
-        ...d,
-        tenantId: tenantObjectId,
-        createdBy: userObjectId,
-      }));
-      await SalesDeal.insertMany(seedDocs);
-      deals = await SalesDeal.find({ tenantId: tenantObjectId }).sort({ createdAt: -1 }).lean();
-    }
+    const deals = await SalesDeal.find({ tenantId: tenantObjectId }).sort({ createdAt: -1 }).lean();
 
     return NextResponse.json({ deals });
   } catch (error) {

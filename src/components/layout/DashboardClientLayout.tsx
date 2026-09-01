@@ -51,6 +51,7 @@ const featureSections: { title: string; items: MenuItem[] }[] = [
     title: "Operations & CRM",
     items: [
       { key: "clients", name: "Operation Portal", href: "/dashboard/clients", icon: "fa-solid fa-list-check" },
+      { key: "finance", name: "Finance Portal", href: "/dashboard/finance", icon: "fa-solid fa-coins" },
       { key: "referrals", name: "Referral Pipeline", href: "/dashboard/referrals", icon: "fa-solid fa-link" },
       { key: "goals", name: "Goals & OKRs", href: "/dashboard/goals", icon: "fa-solid fa-bullseye" },
     ],
@@ -284,7 +285,7 @@ export function DashboardClientLayout({ session, menuItems, isPending = false, c
 
         {/* ── Top Header Bar ─────────────────────────────────────────────── */}
         <header className="sticky top-0 z-30 flex items-center justify-between h-14 sm:h-16 px-4 sm:px-6 bg-white dark:bg-[#161c24] border-b border-slate-200 dark:border-[#232d3b] shadow-xs gap-3">
-          
+
           {/* Left: Mobile Menu Toggle & Brand / Desktop Search */}
           <div className="flex items-center gap-3 flex-1 max-w-md min-w-0">
             {/* Hamburger Button (Opens Drawer with Menu & Tools) */}
@@ -344,7 +345,7 @@ export function DashboardClientLayout({ session, menuItems, isPending = false, c
 
               {/* User Avatar */}
               <div className="ml-1">
-              <Link href="/dashboard/settings" className="block no-underline">
+                <Link href="/dashboard/settings" className="block no-underline">
                   <Avatar className="w-9 h-9 cursor-pointer border-2 border-[#00c5a0]/40">
                     {user?.photoUrl ? <AvatarImage src={user.photoUrl} alt={userName} /> : null}
                     <AvatarFallback className="bg-[#00c5a0]/15 text-[#00c5a0] font-bold text-xs">

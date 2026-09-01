@@ -24,6 +24,8 @@ const MODULES: ModuleMeta[] = [
   { key: "goals", name: "Goals, OKRs & Surveys", description: "Strategic goal tracking, kudos, and team pulse surveys", icon: "fa-solid fa-bullseye" },
   { key: "analytics", name: "Analytics & Audit Logs", description: "Detailed activity timeline logs and workspace analytics", icon: "fa-solid fa-chart-line" },
   { key: "clients", name: "Operation Portal", description: "Billable client project/retainer scope, owner, phase and health", icon: "fa-solid fa-list-check" },
+  { key: "sales", name: "Sales Workdesk", description: "Full sales pipeline management — deals, stages, and revenue forecasts", icon: "fa-solid fa-handshake" },
+  { key: "finance", name: "Finance Portal", description: "Invoices, expenses, budget tracking, and payroll overview", icon: "fa-solid fa-coins" },
   { key: "it", name: "IT & Infrastructure Portal", description: "Manage access keys, SaaS subscriptions, hardware assets & vendor invoices", icon: "fa-solid fa-terminal" },
   { key: "referrals", name: "Candidate Referral Pipeline", description: "Employee referral submissions and bonus tracking", icon: "fa-solid fa-link" },
   { key: "settings", name: "Settings & Administration", description: "User management, workspace branding, and security", icon: "fa-solid fa-gear" },

@@ -91,8 +91,8 @@ export function usePermissions() {
     const defaultModulesByRole: Record<string, string[]> = {
       Employee: ["overview", "team", "calendar", "projects", "reports", "chat", "hr", "referrals", "settings"],
       HR: ["overview", "team", "calendar", "projects", "reports", "chat", "hr", "goals", "settings"],
-      Manager: ["overview", "team", "calendar", "projects", "reports", "chat", "hr", "goals", "referrals", "settings"],
-      OPS: ["overview", "team", "calendar", "projects", "reports", "chat", "hr", "goals", "analytics", "clients", "it", "referrals", "settings"],
+      Manager: ["overview", "team", "calendar", "projects", "reports", "chat", "hr", "goals", "sales", "referrals", "settings"],
+      OPS: ["overview", "team", "calendar", "projects", "reports", "chat", "hr", "goals", "analytics", "clients", "sales", "finance", "it", "referrals", "settings"],
     };
     const roleKey = normalizeRoleKey(user.role);
     const allowedDefaults = defaultModulesByRole[roleKey] || defaultModulesByRole[user.role] || ["overview", "team", "calendar", "projects", "reports", "chat", "settings"];

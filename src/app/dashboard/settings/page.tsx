@@ -22,16 +22,16 @@ function SettingsPageContent() {
   const { user, loading: authLoading, refreshUser } = useAuth();
   const { can, isAdmin, isOPS } = usePermissions();
 
-  const [activeTab, setActiveTab] = useTabPersistence<"profile" | "security" | "invoice" | "all-invoices" | "users" | "shifts" | "subscription" | "permissions">(
+  const [activeTab, setActiveTab] = useTabPersistence<"profile" | "security" | "invoice" | "all-invoices" | "users" | "shifts" | "subscription" | "permissions" | "organization">(
     "settings_active_tab_v2",
     "profile",
-    ["profile", "security", "invoice", "all-invoices", "users", "shifts", "subscription", "permissions"]
+    ["profile", "security", "invoice", "all-invoices", "users", "shifts", "subscription", "permissions", "organization"]
   );
 
   // Sync tab with custom event from banners
   useEffect(() => {
     const handleTabSwitch = (e: any) => {
-      if (e.detail && e.detail !== activeTab && ["profile", "security", "invoice", "all-invoices", "users", "shifts", "subscription", "permissions"].includes(e.detail)) {
+      if (e.detail && e.detail !== activeTab && ["profile", "security", "invoice", "all-invoices", "users", "shifts", "subscription", "permissions", "organization"].includes(e.detail)) {
         setActiveTab(e.detail);
       }
     };
@@ -89,8 +89,43 @@ function SettingsPageContent() {
 
   const [companyName, setCompanyName] = useState("");
   const [companySlug, setCompanySlug] = useState("");
+  const [companyLogoUrl, setCompanyLogoUrl] = useState("");
+  const [companyTagline, setCompanyTagline] = useState("");
+  const [companyLegalName, setCompanyLegalName] = useState("");
+  const [companyRegistrationNumber, setCompanyRegistrationNumber] = useState("");
+  const [companyEntityType, setCompanyEntityType] = useState("Private Limited Company");
+  const [companyEmail, setCompanyEmail] = useState("");
+  const [companyBillingEmail, setCompanyBillingEmail] = useState("");
+  const [companyPhone, setCompanyPhone] = useState("");
+  const [companyTollFreePhone, setCompanyTollFreePhone] = useState("");
+  const [companyWebsite, setCompanyWebsite] = useState("");
+  const [companyTaxId, setCompanyTaxId] = useState("");
+  const [companyIndustry, setCompanyIndustry] = useState("IT & Software Services");
+  const [companyCurrency, setCompanyCurrency] = useState("INR");
+  const [companyTimezone, setCompanyTimezone] = useState("Asia/Kolkata (IST +05:30)");
+  const [companyDateFormat, setCompanyDateFormat] = useState("YYYY-MM-DD");
+  const [companyAddress, setCompanyAddress] = useState("");
+  const [companyCity, setCompanyCity] = useState("");
+  const [companyState, setCompanyState] = useState("");
+  const [companyCountry, setCompanyCountry] = useState("India");
+  const [companyPostalCode, setCompanyPostalCode] = useState("");
+  const [companyBankName, setCompanyBankName] = useState("");
+  const [companyAccountName, setCompanyAccountName] = useState("");
+  const [companyAccountNo, setCompanyAccountNo] = useState("");
+  const [companyIfscCode, setCompanyIfscCode] = useState("");
+  const [companyBranch, setCompanyBranch] = useState("");
+  const [companyUpiId, setCompanyUpiId] = useState("");
+  const [companyLinkedin, setCompanyLinkedin] = useState("");
+  const [companyTwitter, setCompanyTwitter] = useState("");
+  const [companyGithub, setCompanyGithub] = useState("");
+  const [companyFacebook, setCompanyFacebook] = useState("");
+  const [companyYoutube, setCompanyYoutube] = useState("");
+
   const [totalCompanyUsers, setTotalCompanyUsers] = useState<number | null>(null);
   const [updatingCompany, setUpdatingCompany] = useState(false);
+  const [uploadingCompanyLogo, setUploadingCompanyLogo] = useState(false);
+  const [copiedSlug, setCopiedSlug] = useState(false);
+  const companyLogoInputRef = React.useRef<HTMLInputElement | null>(null);
   const [showRemovePhotoModal, setShowRemovePhotoModal] = useState(false);
 
   useEffect(() => {
@@ -111,6 +146,9 @@ function SettingsPageContent() {
 
   useEffect(() => {
     if (!authLoading && user) {
+      if (activeTab === "organization" && !isAdmin && !isOPS) {
+        setActiveTab("profile");
+      }
       if (activeTab === "permissions" && !can("manageRolePermissions") && !isAdmin) {
         setActiveTab("profile");
       }
@@ -121,7 +159,7 @@ function SettingsPageContent() {
         setActiveTab("profile");
       }
     }
-  }, [activeTab, authLoading, user, isAdmin, can]);
+  }, [activeTab, authLoading, user, isAdmin, isOPS, can]);
 
   const fetchSubscription = async () => {
     try {
@@ -144,9 +182,41 @@ function SettingsPageContent() {
       if (res.ok) {
         const data = await res.json();
         if (data.company) {
-          setCompanyName(data.company.name || "");
-          setCompanySlug(data.company.slug || "");
-          setTotalCompanyUsers(data.company.totalUsers ?? null);
+          const c = data.company;
+          setCompanyName(c.name || "");
+          setCompanySlug(c.slug || "");
+          setCompanyLogoUrl(c.logoUrl || "");
+          setCompanyTagline(c.tagline || "");
+          setCompanyLegalName(c.legalName || "");
+          setCompanyRegistrationNumber(c.registrationNumber || "");
+          setCompanyEntityType(c.entityType || "Private Limited Company");
+          setCompanyEmail(c.email || "");
+          setCompanyBillingEmail(c.billingEmail || "");
+          setCompanyPhone(c.phone || "");
+          setCompanyTollFreePhone(c.tollFreePhone || "");
+          setCompanyWebsite(c.website || "");
+          setCompanyTaxId(c.taxId || "");
+          setCompanyIndustry(c.industry || "IT & Software Services");
+          setCompanyCurrency(c.currency || "INR");
+          setCompanyTimezone(c.timezone || "Asia/Kolkata (IST +05:30)");
+          setCompanyDateFormat(c.dateFormat || "YYYY-MM-DD");
+          setCompanyAddress(c.address || "");
+          setCompanyCity(c.city || "");
+          setCompanyState(c.state || "");
+          setCompanyCountry(c.country || "India");
+          setCompanyPostalCode(c.postalCode || "");
+          setCompanyBankName(c.bankDetails?.bankName || "");
+          setCompanyAccountName(c.bankDetails?.accountName || "");
+          setCompanyAccountNo(c.bankDetails?.accountNo || "");
+          setCompanyIfscCode(c.bankDetails?.ifscCode || "");
+          setCompanyBranch(c.bankDetails?.branch || "");
+          setCompanyUpiId(c.bankDetails?.upiId || "");
+          setCompanyLinkedin(c.socialLinks?.linkedin || "");
+          setCompanyTwitter(c.socialLinks?.twitter || "");
+          setCompanyGithub(c.socialLinks?.github || "");
+          setCompanyFacebook(c.socialLinks?.facebook || "");
+          setCompanyYoutube(c.socialLinks?.youtube || "");
+          setTotalCompanyUsers(c.totalUsers ?? null);
         }
       }
     } catch (e) {
@@ -173,6 +243,43 @@ function SettingsPageContent() {
     fetchCompanyDetails();
   }, []);
 
+  const handleCopySlug = () => {
+    if (!companySlug) return;
+    navigator.clipboard.writeText(companySlug);
+    setCopiedSlug(true);
+    showToast(`Workspace slug "${companySlug}" copied to clipboard!`, "success");
+    setTimeout(() => setCopiedSlug(false), 2000);
+  };
+
+  const handleUploadCompanyLogo = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      showToast("Please upload a valid image file (PNG, JPG, SVG, WebP).", "error");
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      showToast("Logo image size should be less than 5MB.", "error");
+      return;
+    }
+
+    setUploadingCompanyLogo(true);
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const base64 = event.target?.result as string;
+      setCompanyLogoUrl(base64);
+      setUploadingCompanyLogo(false);
+      showToast("Company logo updated! Click 'Save Company Details' to persist.", "success");
+    };
+    reader.onerror = () => {
+      setUploadingCompanyLogo(false);
+      showToast("Failed to process logo file.", "error");
+    };
+    reader.readAsDataURL(file);
+  };
+
   const handleUpdateCompany = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!companyName.trim()) {
@@ -184,11 +291,48 @@ function SettingsPageContent() {
       const res = await fetch("/api/settings/company", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: companyName }),
+        body: JSON.stringify({
+          name: companyName,
+          logoUrl: companyLogoUrl,
+          tagline: companyTagline,
+          legalName: companyLegalName,
+          registrationNumber: companyRegistrationNumber,
+          entityType: companyEntityType,
+          email: companyEmail,
+          billingEmail: companyBillingEmail,
+          phone: companyPhone,
+          tollFreePhone: companyTollFreePhone,
+          website: companyWebsite,
+          taxId: companyTaxId,
+          industry: companyIndustry,
+          currency: companyCurrency,
+          timezone: companyTimezone,
+          dateFormat: companyDateFormat,
+          address: companyAddress,
+          city: companyCity,
+          state: companyState,
+          country: companyCountry,
+          postalCode: companyPostalCode,
+          bankDetails: {
+            bankName: companyBankName,
+            accountName: companyAccountName,
+            accountNo: companyAccountNo,
+            ifscCode: companyIfscCode,
+            branch: companyBranch,
+            upiId: companyUpiId,
+          },
+          socialLinks: {
+            linkedin: companyLinkedin,
+            twitter: companyTwitter,
+            github: companyGithub,
+            facebook: companyFacebook,
+            youtube: companyYoutube,
+          },
+        }),
       });
       const data = await res.json();
       if (res.ok) {
-        showToast("Company details updated successfully!", "success");
+        showToast("Company & organization details saved successfully!", "success");
         await refreshUser();
         fetchCompanyDetails();
       } else {
@@ -669,6 +813,20 @@ function SettingsPageContent() {
 
         {(isAdmin || isOPS) && (
           <button
+            onClick={() => setActiveTab("organization")}
+            className={cn(
+              "px-3 py-2 text-xs sm:text-sm font-medium rounded-lg transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
+              activeTab === "organization"
+                ? "bg-background text-primary shadow-xs font-bold border border-border"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+            )}
+          >
+            <i className="fa-solid fa-building text-sky-500 text-sm" /> Organization Details
+          </button>
+        )}
+
+        {(isAdmin || isOPS) && (
+          <button
             onClick={() => setActiveTab("all-invoices")}
             className={cn(
               "px-3 py-2 text-xs sm:text-sm font-medium rounded-lg transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
@@ -754,72 +912,568 @@ function SettingsPageContent() {
           <ShiftAndStatusTab isAdmin={can("manageShifts") || isAdmin} showToast={showToast} />
         )}
 
-      {/* TAB 1: USER PROFILE & ORGANIZATION */}
-      {activeTab === "profile" && (
-        <div className="space-y-6">
-          {/* Company & Organization Details Card */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg font-bold flex items-center gap-2">
-                <i className="fa-solid fa-building text-primary text-lg" /> Company & Organization Profile
-              </CardTitle>
-              <CardDescription>
-                Workspace branding and organization details for your multi-tenant environment
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <form onSubmit={handleUpdateCompany} className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="space-y-1.5 md:col-span-2">
-                    <label className="text-xs font-semibold text-foreground">Company / Organization Name</label>
-                    <Input
-                      value={companyName}
-                      onChange={(e) => setCompanyName(e.target.value)}
-                      placeholder="e.g. NexAce Technologies"
-                      disabled={user?.role !== "Admin"}
-                      required
-                    />
+        {/* TAB: ORGANIZATION DETAILS (Admin & OPS only) */}
+        {activeTab === "organization" && (isAdmin || isOPS) && (
+          <div className="space-y-6">
+            {/* Enhanced Company & Organization Details Card */}
+            <Card className="border border-border/80 shadow-sm overflow-hidden">
+            <CardHeader className="bg-muted/20 border-b border-border/60 pb-5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="space-y-1">
+                  <CardTitle className="text-lg font-bold flex items-center gap-2.5 text-foreground">
+                    <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
+                      <i className="fa-solid fa-building text-base" />
+                    </div>
+                    Company &amp; Organization Profile
+                  </CardTitle>
+                  <CardDescription className="text-xs text-muted-foreground">
+                    Enterprise workspace branding, legal registration, corporate headquarters, and remittance configuration
+                  </CardDescription>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-background border border-border text-xs text-muted-foreground shadow-2xs">
+                    <i className="fa-solid fa-shield-check text-emerald-500" />
+                    <span>Isolation:</span>
+                    <strong className="text-foreground font-semibold">Tenant Strict</strong>
                   </div>
 
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-semibold text-foreground">Workspace Slug</label>
-                    <Input
-                      value={companySlug || "workspace"}
-                      disabled
-                      className="font-mono text-xs bg-muted/50 cursor-not-allowed"
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-background border border-border text-xs text-muted-foreground shadow-2xs">
+                    <i className="fa-solid fa-users text-primary" />
+                    <span>Users:</span>
+                    <strong className="text-foreground font-semibold">{totalCompanyUsers ?? "..."}</strong>
+                  </div>
+                </div>
+              </div>
+            </CardHeader>
+
+            <CardContent className="p-6">
+              <form onSubmit={handleUpdateCompany} className="space-y-8">
+                {/* BRAND IDENTITY & LOGO HERO BANNER */}
+                <div className="p-5 rounded-2xl bg-gradient-to-r from-primary/5 via-muted/30 to-background border border-border/80 flex flex-col md:flex-row items-center md:items-start gap-6">
+                  {/* Logo Display & Uploader */}
+                  <div className="relative group shrink-0">
+                    <input
+                      ref={companyLogoInputRef}
+                      type="file"
+                      accept="image/png, image/jpeg, image/webp, image/svg+xml"
+                      onChange={handleUploadCompanyLogo}
+                      className="hidden"
                     />
+                    
+                    <div
+                      onClick={() => companyLogoInputRef.current?.click()}
+                      className="w-24 h-24 rounded-2xl border-2 border-dashed border-primary/40 bg-background flex flex-col items-center justify-center cursor-pointer overflow-hidden relative shadow-sm hover:border-primary transition-all group/logo"
+                      title="Click to upload or update company logo"
+                    >
+                      {companyLogoUrl ? (
+                        <img
+                          src={companyLogoUrl}
+                          alt={companyName || "Company Logo"}
+                          className="w-full h-full object-contain p-2"
+                        />
+                      ) : (
+                        <div className="flex flex-col items-center justify-center text-muted-foreground text-center p-2">
+                          <i className="fa-solid fa-building-circle-arrow-right text-2xl text-primary/70 mb-1 group-hover/logo:scale-110 transition-transform" />
+                          <span className="text-[10px] font-semibold text-primary">Upload Logo</span>
+                        </div>
+                      )}
+
+                      {/* Hover Overlay */}
+                      <div className="absolute inset-0 bg-black/60 opacity-0 group-hover/logo:opacity-100 transition-opacity flex flex-col items-center justify-center text-white text-[10px] font-semibold gap-1 backdrop-blur-2xs">
+                        <i className="fa-solid fa-cloud-arrow-up text-sm" />
+                        <span>Change</span>
+                      </div>
+
+                      {uploadingCompanyLogo && (
+                        <div className="absolute inset-0 bg-black/70 flex items-center justify-center text-white">
+                          <i className="fa-solid fa-spinner fa-spin text-lg text-primary" />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Brand Overview & Quick Actions */}
+                  <div className="flex-1 text-center md:text-left space-y-2">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-2">
+                      <div>
+                        <h3 className="text-base font-bold text-foreground flex items-center justify-center md:justify-start gap-2">
+                          {companyName || "Organization Name"}
+                          <Badge variant="outline" className="text-[10px] bg-primary/10 text-primary border-primary/30 font-medium">
+                            {companyIndustry}
+                          </Badge>
+                        </h3>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {companyTagline || "Set your organization's official mission tagline and brand identity"}
+                        </p>
+                      </div>
+
+                      {/* Copy Workspace Slug Badge */}
+                      <div className="flex items-center justify-center md:justify-end gap-1.5">
+                        <button
+                          type="button"
+                          onClick={handleCopySlug}
+                          className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-mono font-medium rounded-lg bg-background border border-border hover:bg-muted text-muted-foreground hover:text-foreground transition-all cursor-pointer shadow-2xs"
+                          title="Click to copy workspace identifier"
+                        >
+                          <i className={cn("text-xs", copiedSlug ? "fa-solid fa-check text-emerald-500" : "fa-solid fa-copy text-primary")} />
+                          <span>{companySlug || "workspace"}</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center justify-center md:justify-start gap-2 pt-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() => companyLogoInputRef.current?.click()}
+                        className="gap-2 text-xs h-8 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold cursor-pointer shadow-xs"
+                      >
+                        <i className="fa-solid fa-cloud-arrow-up text-xs" />
+                        {companyLogoUrl ? "Change Logo" : "Upload Brand Logo"}
+                      </Button>
+
+                      {companyLogoUrl && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setCompanyLogoUrl("")}
+                          className="gap-1.5 text-xs h-8 text-rose-500 hover:text-rose-600 hover:bg-rose-500/10 border-rose-200 dark:border-rose-900/40 cursor-pointer"
+                        >
+                          <i className="fa-solid fa-trash-can text-xs" />
+                          Remove
+                        </Button>
+                      )}
+
+                      <span className="text-[11px] text-muted-foreground italic ml-1">
+                        Recommended: Transparent PNG or SVG (square or horizontal, max 5MB)
+                      </span>
+                    </div>
                   </div>
                 </div>
 
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-border/60">
-                  <div className="flex flex-col xs:flex-row sm:flex-row items-stretch sm:items-center gap-2 text-xs">
-                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-muted/40 border border-border/70 text-muted-foreground">
-                      <i className="fa-solid fa-users text-primary text-sm shrink-0" />
-                      <span>Active Accounts:</span>
-                      <strong className="text-foreground font-bold ml-auto sm:ml-0">{totalCompanyUsers ?? "..."}</strong>
+                {/* 1. GENERAL IDENTITY & BRANDING */}
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2 pb-2 border-b border-border/70">
+                    <div className="w-6 h-6 rounded-md bg-sky-500/10 flex items-center justify-center text-sky-500 text-xs">
+                      <i className="fa-solid fa-id-card" />
+                    </div>
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-foreground">
+                      1. Organization Identity &amp; Branding
+                    </h4>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                    <div className="space-y-1.5 md:col-span-2">
+                      <label className="text-xs font-semibold text-foreground">Company / Organization Display Name *</label>
+                      <Input
+                        value={companyName}
+                        onChange={(e) => setCompanyName(e.target.value)}
+                        placeholder="e.g. NexAce Technologies Pvt Ltd"
+                        required
+                      />
                     </div>
 
-                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-muted/40 border border-border/70 text-muted-foreground">
-                      <i className="fa-solid fa-shield-halved text-emerald-500 text-sm shrink-0" />
-                      <span>Isolation Mode:</span>
-                      <strong className="text-foreground font-bold whitespace-nowrap ml-auto sm:ml-0">Tenant ID Strict</strong>
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-semibold text-foreground">Workspace Identifier (Slug)</label>
+                      <Input
+                        value={companySlug || "workspace"}
+                        disabled
+                        className="font-mono text-xs bg-muted/50 cursor-not-allowed"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5 md:col-span-2">
+                      <label className="text-xs font-semibold text-foreground">Organization Tagline / Mission</label>
+                      <Input
+                        value={companyTagline}
+                        onChange={(e) => setCompanyTagline(e.target.value)}
+                        placeholder="e.g. Empowering Modern Digital Transformation & Enterprise Intelligence"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-semibold text-foreground">Entity Legal Type</label>
+                      <select
+                        value={companyEntityType}
+                        onChange={(e) => setCompanyEntityType(e.target.value)}
+                        className="w-full h-9.5 px-3 text-xs bg-background border border-default-200 rounded-md text-foreground focus:outline-none focus:border-primary cursor-pointer font-medium"
+                      >
+                        <option value="Private Limited Company">Private Limited Company (Pvt Ltd)</option>
+                        <option value="Public Limited Company">Public Limited Company (Ltd)</option>
+                        <option value="Limited Liability Company">Limited Liability Company (LLC)</option>
+                        <option value="Corporation">Corporation (Inc. / Corp.)</option>
+                        <option value="Partnership / LLP">Partnership / LLP</option>
+                        <option value="Sole Proprietorship">Sole Proprietorship</option>
+                        <option value="Non-Profit / NGO">Non-Profit / NGO</option>
+                        <option value="Other">Other</option>
+                      </select>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-semibold text-foreground">Industry Vertical</label>
+                      <select
+                        value={companyIndustry}
+                        onChange={(e) => setCompanyIndustry(e.target.value)}
+                        className="w-full h-9.5 px-3 text-xs bg-background border border-default-200 rounded-md text-foreground focus:outline-none focus:border-primary cursor-pointer font-medium"
+                      >
+                        <option value="IT & Software Services">IT &amp; Software Services</option>
+                        <option value="Consulting & Advisory">Consulting &amp; Advisory</option>
+                        <option value="Finance & Banking">Finance &amp; Banking</option>
+                        <option value="Healthcare & Life Sciences">Healthcare &amp; Life Sciences</option>
+                        <option value="Real Estate & Infrastructure">Real Estate &amp; Infrastructure</option>
+                        <option value="Manufacturing & Logistics">Manufacturing &amp; Logistics</option>
+                        <option value="E-Commerce & Retail">E-Commerce &amp; Retail</option>
+                        <option value="Education & EdTech">Education &amp; EdTech</option>
+                        <option value="Other">Other</option>
+                      </select>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-semibold text-foreground">Official Website URL</label>
+                      <Input
+                        type="url"
+                        value={companyWebsite}
+                        onChange={(e) => setCompanyWebsite(e.target.value)}
+                        placeholder="e.g. https://nexace.com"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* 2. OFFICIAL COMMUNICATIONS & CONTACT */}
+                <div className="space-y-4 pt-2">
+                  <div className="flex items-center gap-2 pb-2 border-b border-border/70">
+                    <div className="w-6 h-6 rounded-md bg-emerald-500/10 flex items-center justify-center text-emerald-500 text-xs">
+                      <i className="fa-solid fa-headset" />
+                    </div>
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-foreground">
+                      2. Communication &amp; Contact Channels
+                    </h4>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="space-y-1.5 sm:col-span-2">
+                      <label className="text-xs font-semibold text-foreground">Primary Corporate Email</label>
+                      <Input
+                        type="email"
+                        value={companyEmail}
+                        onChange={(e) => setCompanyEmail(e.target.value)}
+                        placeholder="e.g. contact@nexace.com"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5 sm:col-span-2">
+                      <label className="text-xs font-semibold text-foreground">Dedicated Billing &amp; Invoices Email</label>
+                      <Input
+                        type="email"
+                        value={companyBillingEmail}
+                        onChange={(e) => setCompanyBillingEmail(e.target.value)}
+                        placeholder="e.g. finance@nexace.com"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5 sm:col-span-2">
+                      <label className="text-xs font-semibold text-foreground">Primary Phone Number</label>
+                      <Input
+                        type="tel"
+                        value={companyPhone}
+                        onChange={(e) => setCompanyPhone(e.target.value)}
+                        placeholder="e.g. +91 98765 43210"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5 sm:col-span-2">
+                      <label className="text-xs font-semibold text-foreground">Toll-Free / Support Hotline</label>
+                      <Input
+                        type="tel"
+                        value={companyTollFreePhone}
+                        onChange={(e) => setCompanyTollFreePhone(e.target.value)}
+                        placeholder="e.g. 1800-123-4567"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* 3. HEADQUARTERS & REGIONAL PREFERENCES */}
+                <div className="space-y-4 pt-2">
+                  <div className="flex items-center gap-2 pb-2 border-b border-border/70">
+                    <div className="w-6 h-6 rounded-md bg-rose-500/10 flex items-center justify-center text-rose-500 text-xs">
+                      <i className="fa-solid fa-location-dot" />
+                    </div>
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-foreground">
+                      3. Headquarters &amp; Regional Settings
+                    </h4>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="space-y-1.5 sm:col-span-2 md:col-span-4">
+                      <label className="text-xs font-semibold text-foreground">Registered Office / Street Address</label>
+                      <Input
+                        type="text"
+                        value={companyAddress}
+                        onChange={(e) => setCompanyAddress(e.target.value)}
+                        placeholder="e.g. 100 Innovation Way, Suite 400, Tech Park Phase 2"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-semibold text-foreground">City</label>
+                      <Input
+                        type="text"
+                        value={companyCity}
+                        onChange={(e) => setCompanyCity(e.target.value)}
+                        placeholder="e.g. Bengaluru"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-semibold text-foreground">State / Province</label>
+                      <Input
+                        type="text"
+                        value={companyState}
+                        onChange={(e) => setCompanyState(e.target.value)}
+                        placeholder="e.g. Karnataka"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-semibold text-foreground">Country</label>
+                      <Input
+                        type="text"
+                        value={companyCountry}
+                        onChange={(e) => setCompanyCountry(e.target.value)}
+                        placeholder="e.g. India"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-semibold text-foreground">Postal / Zip Code</label>
+                      <Input
+                        type="text"
+                        value={companyPostalCode}
+                        onChange={(e) => setCompanyPostalCode(e.target.value)}
+                        placeholder="e.g. 560100"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5 sm:col-span-2">
+                      <label className="text-xs font-semibold text-foreground">Operating Timezone</label>
+                      <select
+                        value={companyTimezone}
+                        onChange={(e) => setCompanyTimezone(e.target.value)}
+                        className="w-full h-9.5 px-3 text-xs bg-background border border-default-200 rounded-md text-foreground focus:outline-none focus:border-primary cursor-pointer font-medium"
+                      >
+                        <option value="Asia/Kolkata (IST +05:30)">Asia/Kolkata (IST +05:30)</option>
+                        <option value="America/New_York (EST -05:00)">America/New_York (EST -05:00)</option>
+                        <option value="America/Los_Angeles (PST -08:00)">America/Los_Angeles (PST -08:00)</option>
+                        <option value="America/Chicago (CST -06:00)">America/Chicago (CST -06:00)</option>
+                        <option value="Europe/London (GMT +00:00)">Europe/London (GMT +00:00)</option>
+                        <option value="Europe/Paris (CET +01:00)">Europe/Paris (CET +01:00)</option>
+                        <option value="Asia/Dubai (GST +04:00)">Asia/Dubai (GST +04:00)</option>
+                        <option value="Asia/Singapore (SGT +08:00)">Asia/Singapore (SGT +08:00)</option>
+                        <option value="Australia/Sydney (AEST +10:00)">Australia/Sydney (AEST +10:00)</option>
+                      </select>
+                    </div>
+
+                    <div className="space-y-1.5 sm:col-span-2">
+                      <label className="text-xs font-semibold text-foreground">Standard Date Format</label>
+                      <select
+                        value={companyDateFormat}
+                        onChange={(e) => setCompanyDateFormat(e.target.value)}
+                        className="w-full h-9.5 px-3 text-xs bg-background border border-default-200 rounded-md text-foreground focus:outline-none focus:border-primary cursor-pointer font-medium"
+                      >
+                        <option value="YYYY-MM-DD">YYYY-MM-DD (e.g. 2026-09-01)</option>
+                        <option value="DD/MM/YYYY">DD/MM/YYYY (e.g. 01/09/2026)</option>
+                        <option value="MM/DD/YYYY">MM/DD/YYYY (e.g. 09/01/2026)</option>
+                        <option value="DD MMM YYYY">DD MMM YYYY (e.g. 01 Sep 2026)</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 4. LEGAL ENTITY & TAX REGISTRATIONS */}
+                <div className="space-y-4 pt-2">
+                  <div className="flex items-center gap-2 pb-2 border-b border-border/70">
+                    <div className="w-6 h-6 rounded-md bg-amber-500/10 flex items-center justify-center text-amber-500 text-xs">
+                      <i className="fa-solid fa-gavel" />
+                    </div>
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-foreground">
+                      4. Legal Entity &amp; Tax Registrations
+                    </h4>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="space-y-1.5 sm:col-span-2">
+                      <label className="text-xs font-semibold text-foreground">Legal Registered Name</label>
+                      <Input
+                        type="text"
+                        value={companyLegalName}
+                        onChange={(e) => setCompanyLegalName(e.target.value)}
+                        placeholder="e.g. NexAce Technologies Private Limited"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5 sm:col-span-2">
+                      <label className="text-xs font-semibold text-foreground">Corporate Registration / CIN No.</label>
+                      <Input
+                        type="text"
+                        value={companyRegistrationNumber}
+                        onChange={(e) => setCompanyRegistrationNumber(e.target.value)}
+                        placeholder="e.g. U72200KA2024PTC123456"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5 sm:col-span-2">
+                      <label className="text-xs font-semibold text-foreground">Tax ID / GSTIN / VAT Registration No.</label>
+                      <Input
+                        type="text"
+                        value={companyTaxId}
+                        onChange={(e) => setCompanyTaxId(e.target.value)}
+                        placeholder="e.g. 29ABCDE1234F1Z5"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5 sm:col-span-2">
+                      <label className="text-xs font-semibold text-foreground">Base Accounting Currency</label>
+                      <select
+                        value={companyCurrency}
+                        onChange={(e) => setCompanyCurrency(e.target.value)}
+                        className="w-full h-9.5 px-3 text-xs bg-background border border-default-200 rounded-md text-foreground focus:outline-none focus:border-primary cursor-pointer font-medium"
+                      >
+                        <option value="INR">INR (₹ - Indian Rupee)</option>
+                        <option value="USD">USD ($ - US Dollar)</option>
+                        <option value="EUR">EUR (€ - Euro)</option>
+                        <option value="GBP">GBP (£ - British Pound)</option>
+                        <option value="AED">AED (Dh - UAE Dirham)</option>
+                        <option value="CAD">CAD (C$ - Canadian Dollar)</option>
+                        <option value="AUD">AUD (A$ - Australian Dollar)</option>
+                        <option value="SGD">SGD (S$ - Singapore Dollar)</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 5. REMITTANCE & BANK DETAILS */}
+                <div className="space-y-4 pt-2">
+                  <div className="flex items-center gap-2 pb-2 border-b border-border/70">
+                    <div className="w-6 h-6 rounded-md bg-indigo-500/10 flex items-center justify-center text-indigo-500 text-xs">
+                      <i className="fa-solid fa-building-columns" />
+                    </div>
+                    <div className="flex-1 flex items-center justify-between">
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-foreground">
+                        5. Remittance &amp; Bank Details (Auto-Synced with Client Invoices)
+                      </h4>
+                      <span className="text-[11px] text-muted-foreground hidden sm:inline">
+                        Printed on invoice receipts &amp; wire transfers
+                      </span>
                     </div>
                   </div>
 
-                  {user?.role === "Admin" ? (
-                    <Button color="primary" type="submit" disabled={updatingCompany} className="gap-2 w-full sm:w-auto h-9 font-semibold">
-                      <i className="fa-solid fa-floppy-disk text-xs" /> {updatingCompany ? "Saving Company..." : "Save Company Details"}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-semibold text-foreground">Beneficiary / Account Name</label>
+                      <Input
+                        type="text"
+                        value={companyAccountName}
+                        onChange={(e) => setCompanyAccountName(e.target.value)}
+                        placeholder="e.g. NexAce Technologies Pvt Ltd"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-semibold text-foreground">Bank Name</label>
+                      <Input
+                        type="text"
+                        value={companyBankName}
+                        onChange={(e) => setCompanyBankName(e.target.value)}
+                        placeholder="e.g. HDFC Bank Ltd"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-semibold text-foreground">Account Number</label>
+                      <Input
+                        type="text"
+                        value={companyAccountNo}
+                        onChange={(e) => setCompanyAccountNo(e.target.value)}
+                        placeholder="e.g. 50200012345678"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-semibold text-foreground">IFSC / SWIFT / BIC Code</label>
+                      <Input
+                        type="text"
+                        value={companyIfscCode}
+                        onChange={(e) => setCompanyIfscCode(e.target.value)}
+                        placeholder="e.g. HDFC0000123"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-semibold text-foreground">Branch / Location</label>
+                      <Input
+                        type="text"
+                        value={companyBranch}
+                        onChange={(e) => setCompanyBranch(e.target.value)}
+                        placeholder="e.g. Koramangala 4th Block, Bengaluru"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-semibold text-foreground">UPI / Instant Payment ID (VPA)</label>
+                      <Input
+                        type="text"
+                        value={companyUpiId}
+                        onChange={(e) => setCompanyUpiId(e.target.value)}
+                        placeholder="e.g. nexace@hdfcbank"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* FOOTER ACTIONS BAR */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-6 border-t border-border/80">
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <i className="fa-solid fa-circle-info text-primary" />
+                    <span>All changes update organization branding and invoice details across the system.</span>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={fetchCompanyDetails}
+                      disabled={updatingCompany}
+                      className="gap-2 h-10 px-4 text-xs font-semibold cursor-pointer"
+                    >
+                      <i className="fa-solid fa-rotate-left text-xs" />
+                      Discard / Reload
                     </Button>
-                  ) : (
-                    <span className="text-xs text-muted-foreground italic flex items-center gap-1.5 py-1">
-                      <i className="fa-solid fa-lock text-xs" /> Admin access required to update company name
-                    </span>
-                  )}
+
+                    <Button
+                      color="primary"
+                      type="submit"
+                      disabled={updatingCompany}
+                      className="gap-2 h-10 px-6 font-semibold bg-primary hover:bg-primary/90 text-primary-foreground shadow-md hover:shadow-lg transition-all cursor-pointer"
+                    >
+                      <i className={cn("text-xs", updatingCompany ? "fa-solid fa-spinner fa-spin" : "fa-solid fa-floppy-disk")} />
+                      {updatingCompany ? "Saving Company Profile..." : "Save Company Details"}
+                    </Button>
+                  </div>
                 </div>
               </form>
             </CardContent>
           </Card>
+        </div>
+      )}
 
+      {/* TAB 1: USER ACCOUNT PROFILE (Personal) */}
+      {activeTab === "profile" && (
+        <div className="space-y-6">
           <form onSubmit={handleUpdateProfile}>
             <Card>
             <CardHeader>
