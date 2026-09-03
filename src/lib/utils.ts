@@ -163,11 +163,36 @@ export function generateSecurePassword(length: number = 12): string {
  * Uses explicit linkUrl if present, or intelligently determines the target dashboard route from type/title/message.
  */
 export function getNotificationTargetUrl(n: { type?: string; title?: string; message?: string; linkUrl?: string }): string | null {
-  if (n.linkUrl && n.linkUrl.trim()) return n.linkUrl.trim();
-
+  const rawLink = (n.linkUrl || "").trim();
   const title = (n.title || "").toLowerCase();
   const msg = (n.message || "").toLowerCase();
   const type = (n.type || "").toLowerCase();
+
+  // Extract any invoice number from title, message, or linkUrl if present
+  const invMatch = (n.title + " " + n.message + " " + rawLink).match(/\b(INV-[A-Za-z0-9_-]+)\b/i);
+  const invoiceNo = invMatch ? invMatch[1].toUpperCase() : null;
+
+  // Handle explicit linkUrl rewrites for updated/moved routes
+  if (rawLink) {
+    if (rawLink.includes("/dashboard/settings?tab=all-invoices") || rawLink.includes("/dashboard/settings?tab=invoices")) {
+      return `/dashboard/finance?tab=invoices${invoiceNo ? `&invoiceNo=${invoiceNo}` : ""}`;
+    }
+    if (rawLink.includes("/dashboard/settings?tab=self-invoices")) {
+      return `/dashboard/settings?tab=invoice${invoiceNo ? `&invoiceNo=${invoiceNo}` : ""}`;
+    }
+    return rawLink;
+  }
+
+  // Invoice notifications
+  if (title.includes("invoice") || msg.includes("invoice")) {
+    if (title.includes("new invoice") || msg.includes("review") || msg.includes("submitted invoice")) {
+      return `/dashboard/finance?tab=invoices${invoiceNo ? `&invoiceNo=${invoiceNo}` : ""}`;
+    }
+    if (title.includes("status updated") || msg.includes("your invoice")) {
+      return `/dashboard/settings?tab=invoice${invoiceNo ? `&invoiceNo=${invoiceNo}` : ""}`;
+    }
+    return `/dashboard/finance?tab=invoices${invoiceNo ? `&invoiceNo=${invoiceNo}` : ""}`;
+  }
 
   if (type === "task" || title.includes("task") || msg.includes("task") || title.includes("project")) {
     return "/dashboard/projects";
@@ -193,7 +218,7 @@ export function getNotificationTargetUrl(n: { type?: string; title?: string; mes
   if (type === "okr" || title.includes("okr") || title.includes("goal") || msg.includes("objective")) {
     return "/dashboard/okr";
   }
-  if (title.includes("subscription") || msg.includes("subscription") || title.includes("device") || title.includes("access grant") || title.includes("drive link") || title.includes("invoice")) {
+  if (title.includes("subscription") || msg.includes("subscription") || title.includes("device") || title.includes("access grant") || title.includes("drive link")) {
     return "/dashboard/it";
   }
   if (type === "hr" || title.includes("hr") || msg.includes("payroll") || msg.includes("timesheet") || title.includes("timesheet") || title.includes("checklist")) {

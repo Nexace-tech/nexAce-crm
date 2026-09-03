@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { downloadInvoicePdf } from "@/lib/invoice-pdf";
 
 export interface InvoiceDetailsItem {
   description: string;
@@ -40,6 +41,38 @@ export interface InvoiceDetailsData {
     accountNo?: string;
     ifscCode?: string;
     branch?: string;
+    upiId?: string;
+  };
+  shiftAttendance?: {
+    totalHours: number;
+    daysWorked: number;
+    overtimeHours: number;
+    records: Array<{
+      date: string;
+      clockIn: string;
+      clockOut: string;
+      totalHours: number;
+      status: string;
+    }>;
+  } | null;
+  timesheetEntries?: {
+    totalHours: number;
+    totalEntries: number;
+    records: Array<{
+      date: string;
+      hours: number;
+      projectName: string;
+      taskDescription: string;
+      billable: boolean;
+    }>;
+  } | null;
+  paymentDetails?: {
+    method: "Bank Transfer" | "UPI" | "Cash";
+    upiId?: string;
+    transactionId?: string;
+    screenshotUrl?: string;
+    screenshotFileName?: string;
+    paidAt?: string;
   };
 }
 
@@ -47,6 +80,7 @@ interface InvoiceDetailsViewProps {
   invoice: InvoiceDetailsData;
   onClose?: () => void;
   onStatusChange?: (newStatus: string) => void;
+  onPaymentConfirm?: () => void; // intercepts "Paid" selection to open payment modal
   isUpdatingStatus?: boolean;
 }
 
@@ -80,9 +114,22 @@ export function InvoiceDetailsView({
   invoice,
   onClose,
   onStatusChange,
+  onPaymentConfirm,
   isUpdatingStatus = false,
 }: InvoiceDetailsViewProps) {
   const printRef = useRef<HTMLDivElement>(null);
+  const [companyLogoUrl, setCompanyLogoUrl] = useState<string>("");
+
+  useEffect(() => {
+    fetch("/api/settings/company")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.company?.logoUrl) {
+          setCompanyLogoUrl(data.company.logoUrl);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const getCurrencySymbol = (curr: string = "INR") => {
     switch (curr?.toUpperCase()) {
@@ -98,19 +145,26 @@ export function InvoiceDetailsView({
 
   const symbol = getCurrencySymbol(invoice.currency);
 
+  const headerSubtitle = invoice.businessAddress?.trim()
+    ? invoice.businessAddress.trim()
+    : invoice.businessName && !invoice.businessName.toLowerCase().includes("nexace")
+    ? "Professional Services & Consulting"
+    : "CRM & Enterprise Solutions";
+
   const getStatusBadge = (status: string) => {
-    const styles: Record<string, string> = {
-      Paid: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30",
-      Pending: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30",
-      Sent: "bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/30",
-      Draft: "bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/30",
-      Overdue: "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30",
-      Cancelled: "bg-zinc-500/10 text-zinc-500 border-zinc-500/30 line-through",
-      Archived: "bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/30",
+    const config: Record<string, { style: string; icon: string }> = {
+      Paid: { style: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30", icon: "fa-circle-check" },
+      Pending: { style: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30", icon: "fa-clock" },
+      Sent: { style: "bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/30", icon: "fa-paper-plane" },
+      Draft: { style: "bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/30", icon: "fa-pen-ruler" },
+      Overdue: { style: "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30", icon: "fa-triangle-exclamation" },
+      Cancelled: { style: "bg-zinc-500/10 text-zinc-500 border-zinc-500/30 line-through", icon: "fa-ban" },
+      Archived: { style: "bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/30", icon: "fa-box-archive" },
     };
+    const c = config[status] || { style: "bg-muted text-muted-foreground border-border", icon: "fa-circle-info" };
     return (
-      <span className={cn("inline-flex items-center px-3 py-1 rounded-full text-xs font-bold border", styles[status] || "bg-muted text-muted-foreground")}>
-        <i className="fa-solid fa-circle text-[6px] mr-1.5 opacity-70" />
+      <span className={cn("inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border shadow-2xs", c.style)}>
+        <i className={cn("fa-solid text-[10px]", c.icon)} />
         {status}
       </span>
     );
@@ -126,15 +180,19 @@ export function InvoiceDetailsView({
       <head>
         <title>Invoice - ${invoice.invoiceNo}</title>
         <style>
-          @page { size: A4; margin: 15mm; }
+          @page {
+            size: A4;
+            margin: 0;  /* Suppress browser date/URL print headers & footers */
+          }
           body {
             font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
             color: #1e293b;
             background: #ffffff;
             margin: 0;
-            padding: 0;
+            padding: 15mm;
             font-size: 13px;
             line-height: 1.5;
+            box-sizing: border-box;
           }
           .invoice-card {
             border: 1px solid #e2e8f0;
@@ -142,6 +200,11 @@ export function InvoiceDetailsView({
             padding: 32px;
             max-width: 800px;
             margin: 0 auto;
+            min-height: 260mm;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            box-sizing: border-box;
           }
           .header-row {
             display: flex;
@@ -272,7 +335,7 @@ export function InvoiceDetailsView({
             display: flex;
             justify-content: space-between;
             align-items: flex-end;
-            margin-top: 36px;
+            margin-top: auto;
             padding-top: 24px;
             border-top: 1px dashed #e2e8f0;
           }
@@ -294,9 +357,16 @@ export function InvoiceDetailsView({
       <body>
         <div class="invoice-card">
           <div class="header-row">
-            <div>
-              <div class="brand-logo">NEXACE</div>
-              <div class="brand-subtitle">CRM &amp; Enterprise Solutions</div>
+            <div style="display: flex; align-items: center; gap: 14px;">
+              ${companyLogoUrl ? `<img src="${companyLogoUrl}" style="width: 44px; height: 44px; object-fit: contain; border-radius: 8px; border: 1px solid #e2e8f0; padding: 2px;" />` : `
+              <div style="width: 44px; height: 44px; border-radius: 8px; background: #00c5a0; display: flex; align-items: center; justify-content: center; color: white; font-weight: 900; font-size: 22px;">
+                ${(invoice.businessName || "NEXACE").charAt(0)}
+              </div>
+              `}
+              <div>
+                <div class="brand-logo">${invoice.businessName || "NEXACE"}</div>
+                <div class="brand-subtitle">${headerSubtitle}</div>
+              </div>
             </div>
             <div class="invoice-tag">
               <div class="invoice-no">${invoice.invoiceNo}</div>
@@ -308,7 +378,11 @@ export function InvoiceDetailsView({
             <div class="info-col">
               <h4>Invoice Details</h4>
               <p><strong>Issued:</strong> ${invoice.invoiceDate}</p>
-              <p><strong>Due Date:</strong> ${invoice.dueDate}</p>
+              ${invoice.status === "Paid" ? `
+                <p><strong>Paid Date:</strong> ${(invoice as any).paymentDetails?.paidAt ? new Date((invoice as any).paymentDetails.paidAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : invoice.invoiceDate}</p>
+              ` : `
+                <p><strong>Due Date:</strong> ${invoice.dueDate}</p>
+              `}
               <p><strong>Ref #:</strong> ${invoice.customerNo || "N/A"}</p>
             </div>
             <div class="info-col">
@@ -350,11 +424,30 @@ export function InvoiceDetailsView({
 
           <div class="footer-grid">
             <div class="bank-box">
-              <h5>Bank &amp; Payment Details</h5>
-              <div class="bank-row"><span>Bank:</span><strong>${invoice.bankDetails?.bankName || "Corporate Banking"}</strong></div>
-              <div class="bank-row"><span>Account No:</span><strong>${invoice.bankDetails?.accountNo || "782459739212"}</strong></div>
-              <div class="bank-row"><span>IFSC / Code:</span><strong>${invoice.bankDetails?.ifscCode || "NEXA0004128"}</strong></div>
-              <div class="bank-row"><span>Payment Ref:</span><strong>${invoice.invoiceNo}</strong></div>
+              ${(invoice as any).paymentDetails?.method ? `
+                <h5 style="color:#10b981; font-weight: 800; font-size: 12px; margin: 0 0 10px 0; text-transform: uppercase; letter-spacing: 0.05em;">Payment Received (${(invoice as any).paymentDetails.method})</h5>
+                <div class="bank-row"><span>Method:</span><strong>${(invoice as any).paymentDetails.method === "Cash" ? "Cash Settlement" : (invoice as any).paymentDetails.method}</strong></div>
+                ${(invoice as any).paymentDetails.method === "Bank Transfer" ? `
+                  <div class="bank-row"><span>Bank:</span><strong>${invoice.bankDetails?.bankName || "Corporate Banking"}</strong></div>
+                  <div class="bank-row"><span>Account No:</span><strong>${invoice.bankDetails?.accountNo || "782459739212"}</strong></div>
+                  <div class="bank-row"><span>IFSC / Code:</span><strong>${invoice.bankDetails?.ifscCode || "NEXA0004128"}</strong></div>
+                ` : ""}
+                ${(invoice as any).paymentDetails.method === "UPI" ? `
+                  <div class="bank-row"><span>UPI ID:</span><strong>${(invoice as any).paymentDetails.upiId || invoice.bankDetails?.upiId || "nexace@okaxis"}</strong></div>
+                  ${(invoice as any).paymentDetails.transactionId ? `<div class="bank-row"><span>Txn ID:</span><strong>${(invoice as any).paymentDetails.transactionId}</strong></div>` : ""}
+                ` : ""}
+                ${(invoice as any).paymentDetails.method === "Cash" ? `
+                  <div class="bank-row"><span>Status:</span><strong>Confirmed &amp; Settled in Cash</strong></div>
+                ` : ""}
+                <div class="bank-row"><span>Paid On:</span><strong>${(invoice as any).paymentDetails.paidAt ? new Date((invoice as any).paymentDetails.paidAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : invoice.invoiceDate}</strong></div>
+                <div class="bank-row"><span>Reference:</span><strong>${invoice.invoiceNo}</strong></div>
+              ` : `
+                <h5>Bank &amp; Remittance Details</h5>
+                <div class="bank-row"><span>Bank:</span><strong>${invoice.bankDetails?.bankName || "Corporate Banking"}</strong></div>
+                <div class="bank-row"><span>Account No:</span><strong>${invoice.bankDetails?.accountNo || "782459739212"}</strong></div>
+                <div class="bank-row"><span>IFSC / Code:</span><strong>${invoice.bankDetails?.ifscCode || "NEXA0004128"}</strong></div>
+                <div class="bank-row"><span>Payment Ref:</span><strong>${invoice.invoiceNo}</strong></div>
+              `}
             </div>
 
             <div class="summary-box">
@@ -400,6 +493,38 @@ export function InvoiceDetailsView({
     printWindow.document.close();
   };
 
+  const handleDownloadPdf = () => {
+    try {
+      downloadInvoicePdf(
+        {
+          invoiceNo: invoice.invoiceNo,
+          invoiceDate: invoice.invoiceDate,
+          dueDate: invoice.dueDate,
+          customerNo: invoice.customerNo,
+          businessName: invoice.businessName || "NexAce IT Team",
+          businessAddress: invoice.businessAddress,
+          businessEmail: invoice.businessEmail,
+          billedToName: invoice.billedToName || "Client",
+          billedToAddress: invoice.billedToAddress,
+          billedToEmail: invoice.billedToEmail,
+          items: invoice.items || [],
+          subtotal: invoice.subtotal || 0,
+          taxRate: invoice.taxRate,
+          taxAmount: invoice.taxAmount,
+          total: invoice.total || 0,
+          currency: invoice.currency || "INR",
+          status: invoice.status,
+          notes: invoice.notes,
+          paymentDetails: invoice.paymentDetails,
+          logoUrl: companyLogoUrl || (invoice as any).logoUrl,
+        },
+        `Invoice_${invoice.invoiceNo}.pdf`
+      );
+    } catch (err) {
+      console.error("Failed to download PDF invoice:", err);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* ── Top Bar with Actions ── */}
@@ -422,7 +547,31 @@ export function InvoiceDetailsView({
               Invoice #{invoice.invoiceNo}
             </h1>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Issued on <strong className="text-foreground">{invoice.invoiceDate}</strong> • Due by <strong className="text-foreground">{invoice.dueDate}</strong>
+              Issued on <strong className="text-foreground">{invoice.invoiceDate}</strong> •{" "}
+              {invoice.status === "Paid" ? (
+                <>
+                  Paid on{" "}
+                  <strong className="text-emerald-500 font-semibold">
+                    {(invoice as any).paymentDetails?.paidAt
+                      ? new Date((invoice as any).paymentDetails.paidAt).toLocaleString("en-IN", {
+                          day: "2-digit",
+                          month: "short",
+                          year: "numeric",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                          hour12: true,
+                        })
+                      : invoice.invoiceDate}
+                  </strong>
+                </>
+              ) : (
+                <>
+                  Due by <strong className="text-foreground">{invoice.dueDate}</strong>
+                  {(invoice as any).updatedAt && (
+                    <span> • Updated: <strong className="text-foreground">{new Date((invoice as any).updatedAt).toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: true })}</strong></span>
+                  )}
+                </>
+              )}
             </p>
           </div>
         </div>
@@ -434,7 +583,14 @@ export function InvoiceDetailsView({
               <select
                 disabled={isUpdatingStatus}
                 value={invoice.status}
-                onChange={(e) => onStatusChange(e.target.value)}
+                onChange={(e) => {
+                  const newVal = e.target.value;
+                  if (newVal === "Paid" && onPaymentConfirm) {
+                    onPaymentConfirm();
+                  } else {
+                    onStatusChange(newVal);
+                  }
+                }}
                 className="h-9 px-3 text-xs bg-background border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer font-bold"
               >
                 <option value="Draft">Draft</option>
@@ -461,7 +617,7 @@ export function InvoiceDetailsView({
           <Button
             type="button"
             size="sm"
-            onClick={handlePrint}
+            onClick={handleDownloadPdf}
             className="gap-2 font-semibold h-9 px-4 cursor-pointer bg-rose-600 hover:bg-rose-700 text-white shadow-xs"
           >
             <i className="fa-solid fa-file-pdf text-xs" /> Download PDF
@@ -472,19 +628,27 @@ export function InvoiceDetailsView({
       {/* ── Main Invoice Paper Card ── */}
       <div
         ref={printRef}
-        className="bg-card border border-border rounded-2xl p-6 sm:p-10 shadow-sm space-y-8 max-w-5xl mx-auto transition-all"
+        className="bg-card border border-border rounded-2xl p-6 sm:p-10 shadow-sm space-y-8 max-w-5xl mx-auto transition-all min-h-[720px] flex flex-col justify-between"
       >
         {/* ── Invoice Header ── */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6 pb-6 border-b border-border/80">
           <div>
-            <div className="flex items-center gap-2.5">
-              <div className="w-10 h-10 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-black text-lg">
-                <i className="fa-solid fa-bolt" />
-              </div>
+            <div className="flex items-center gap-3">
+              {companyLogoUrl ? (
+                <img
+                  src={companyLogoUrl}
+                  alt="Organization Logo"
+                  className="w-11 h-11 rounded-xl object-contain border border-border/80 bg-background p-1 shadow-xs"
+                />
+              ) : (
+                <div className="w-11 h-11 rounded-xl bg-primary/15 border border-primary/25 flex items-center justify-center text-primary font-black text-xl shadow-xs">
+                  <i className="fa-solid fa-building-circle-check" />
+                </div>
+              )}
               <div>
-                <span className="text-2xl font-black tracking-tight text-foreground">NEXACE</span>
-                <span className="block text-[11px] font-bold text-muted-foreground uppercase tracking-widest">
-                  CRM &amp; Enterprise Solutions
+                <span className="text-2xl font-black tracking-tight text-foreground">{invoice.businessName || "NEXACE"}</span>
+                <span className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
+                  {headerSubtitle}
                 </span>
               </div>
             </div>
@@ -504,24 +668,42 @@ export function InvoiceDetailsView({
         </div>
 
         {/* ── 3-Column Info Block ── */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 p-5 bg-muted/20 dark:bg-slate-900/40 rounded-xl border border-border/60">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
           {/* Col 1: Invoice Details */}
-          <div className="space-y-2">
-            <h3 className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-              <i className="fa-solid fa-file-lines text-primary text-xs" /> Invoice Information
+          <div className="p-4 bg-muted/20 dark:bg-slate-900/30 rounded-xl border border-border/70 space-y-3 shadow-2xs">
+            <h3 className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+              <span className="w-5 h-5 rounded-md bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-500">
+                <i className="fa-solid fa-file-invoice text-[10px]" />
+              </span>
+              Invoice Details
             </h3>
-            <div className="space-y-1 text-xs">
+            <div className="space-y-1.5 text-xs">
               <div className="flex justify-between py-0.5 border-b border-border/40">
                 <span className="text-muted-foreground">Invoice Date:</span>
                 <span className="font-semibold text-foreground font-mono">{invoice.invoiceDate}</span>
               </div>
-              <div className="flex justify-between py-0.5 border-b border-border/40">
-                <span className="text-muted-foreground">Due Date:</span>
-                <span className="font-semibold text-foreground font-mono">{invoice.dueDate}</span>
-              </div>
+              {invoice.status === "Paid" ? (
+                <div className="flex justify-between py-0.5 border-b border-border/40">
+                  <span className="text-muted-foreground">Paid Date:</span>
+                  <span className="font-semibold text-emerald-600 dark:text-emerald-400 font-mono">
+                    {(invoice as any).paymentDetails?.paidAt
+                      ? new Date((invoice as any).paymentDetails.paidAt).toLocaleDateString("en-IN", {
+                          day: "2-digit",
+                          month: "short",
+                          year: "numeric",
+                        })
+                      : invoice.invoiceDate}
+                  </span>
+                </div>
+              ) : (
+                <div className="flex justify-between py-0.5 border-b border-border/40">
+                  <span className="text-muted-foreground">Due Date:</span>
+                  <span className="font-semibold text-foreground font-mono">{invoice.dueDate}</span>
+                </div>
+              )}
               <div className="flex justify-between py-0.5 border-b border-border/40">
                 <span className="text-muted-foreground">Currency:</span>
-                <span className="font-semibold text-foreground font-mono">{invoice.currency || "USD"} ({symbol})</span>
+                <span className="font-semibold text-foreground font-mono">{invoice.currency || "INR"} ({symbol})</span>
               </div>
               <div className="flex justify-between py-0.5">
                 <span className="text-muted-foreground">Payment Terms:</span>
@@ -531,17 +713,20 @@ export function InvoiceDetailsView({
           </div>
 
           {/* Col 2: Billing From */}
-          <div className="space-y-2">
-            <h3 className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-              <i className="fa-solid fa-building-user text-primary text-xs" /> Invoice From
+          <div className="p-4 bg-muted/20 dark:bg-slate-900/30 rounded-xl border border-border/70 space-y-3 shadow-2xs">
+            <h3 className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+              <span className="w-5 h-5 rounded-md bg-violet-500/10 border border-violet-500/20 flex items-center justify-center text-violet-500">
+                <i className="fa-solid fa-user-tie text-[10px]" />
+              </span>
+              Invoice From
             </h3>
             <div className="space-y-1 text-xs">
               <p className="font-bold text-sm text-foreground">{invoice.businessName}</p>
-              <p className="text-muted-foreground whitespace-pre-line leading-relaxed">
+              <p className="text-muted-foreground whitespace-pre-line leading-relaxed text-[11px]">
                 {invoice.businessAddress || "Professional Services & Team Member"}
               </p>
               {invoice.businessEmail && (
-                <p className="text-sky-600 dark:text-sky-400 font-mono text-[11px] pt-1 flex items-center gap-1.5">
+                <p className="text-sky-600 dark:text-sky-400 font-mono text-[11px] pt-1.5 flex items-center gap-1.5">
                   <i className="fa-solid fa-envelope text-[10px] opacity-75" />
                   <span>{invoice.businessEmail}</span>
                 </p>
@@ -550,17 +735,20 @@ export function InvoiceDetailsView({
           </div>
 
           {/* Col 3: Billing To */}
-          <div className="space-y-2">
-            <h3 className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-              <i className="fa-solid fa-location-dot text-primary text-xs" /> Invoice To (Client)
+          <div className="p-4 bg-muted/20 dark:bg-slate-900/30 rounded-xl border border-border/70 space-y-3 shadow-2xs">
+            <h3 className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+              <span className="w-5 h-5 rounded-md bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-sky-500">
+                <i className="fa-solid fa-building-circle-check text-[10px]" />
+              </span>
+              Invoice To (Client)
             </h3>
             <div className="space-y-1 text-xs">
               <p className="font-bold text-sm text-foreground">{invoice.billedToName}</p>
-              <p className="text-muted-foreground whitespace-pre-line leading-relaxed">
+              <p className="text-muted-foreground whitespace-pre-line leading-relaxed text-[11px]">
                 {invoice.billedToAddress || "Headquarters - Corporate Office"}
               </p>
               {invoice.billedToEmail && (
-                <p className="text-sky-600 dark:text-sky-400 font-mono text-[11px] pt-1 flex items-center gap-1.5">
+                <p className="text-sky-600 dark:text-sky-400 font-mono text-[11px] pt-1.5 flex items-center gap-1.5">
                   <i className="fa-solid fa-envelope text-[10px] opacity-75" />
                   <span>{invoice.billedToEmail}</span>
                 </p>
@@ -614,32 +802,228 @@ export function InvoiceDetailsView({
           </div>
         </div>
 
+        {/* ── Shift Clock & Timesheet Audit Breakdown (Admin View) ── */}
+        {(invoice.shiftAttendance?.records?.length || invoice.timesheetEntries?.records?.length) ? (
+          <div className="space-y-4">
+            <h3 className="text-xs font-bold text-foreground uppercase tracking-wider flex items-center gap-2">
+              <i className="fa-solid fa-clock-rotate-left text-primary" /> Shift Clock &amp; Timesheet Audit
+            </h3>
+
+            {/* Shift Attendance Breakdown */}
+            {invoice.shiftAttendance && invoice.shiftAttendance.records.length > 0 && (
+              <div className="border border-border rounded-xl overflow-hidden">
+                <div className="px-4 py-2.5 bg-primary/5 border-b border-border flex items-center justify-between">
+                  <span className="text-xs font-bold text-foreground flex items-center gap-2">
+                    <i className="fa-solid fa-user-clock text-primary text-xs" /> Shift Clock Attendance
+                  </span>
+                  <div className="flex items-center gap-3 text-xs font-semibold">
+                    <span className="text-muted-foreground">{invoice.shiftAttendance.daysWorked} days</span>
+                    <span className="text-foreground font-mono">{invoice.shiftAttendance.totalHours} hrs</span>
+                    {invoice.shiftAttendance.overtimeHours > 0 && (
+                      <span className="text-amber-500 font-mono">+{invoice.shiftAttendance.overtimeHours} OT</span>
+                    )}
+                  </div>
+                </div>
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-muted/40 border-b border-border font-bold text-muted-foreground uppercase text-[10px]">
+                    <tr>
+                      <th className="py-2.5 px-4">Date</th>
+                      <th className="py-2.5 px-3">Clock In</th>
+                      <th className="py-2.5 px-3">Clock Out</th>
+                      <th className="py-2.5 px-3 text-right">Hours</th>
+                      <th className="py-2.5 px-3 text-center">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/60">
+                    {invoice.shiftAttendance.records.map((rec, idx) => (
+                      <tr key={idx} className="hover:bg-muted/10 transition-colors">
+                        <td className="py-2.5 px-4 font-mono font-semibold text-foreground">{rec.date}</td>
+                        <td className="py-2.5 px-3 text-muted-foreground">{rec.clockIn}</td>
+                        <td className="py-2.5 px-3 text-muted-foreground">
+                          {rec.clockOut === "Working..." ? (
+                            <span className="text-emerald-500 font-semibold">Active</span>
+                          ) : rec.clockOut}
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-mono font-bold text-foreground">{rec.totalHours}h</td>
+                        <td className="py-2.5 px-3 text-center">
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                            {rec.status}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* Timesheet Entries Breakdown */}
+            {invoice.timesheetEntries && invoice.timesheetEntries.records.length > 0 && (
+              <div className="border border-border rounded-xl overflow-hidden">
+                <div className="px-4 py-2.5 bg-primary/5 border-b border-border flex items-center justify-between">
+                  <span className="text-xs font-bold text-foreground flex items-center gap-2">
+                    <i className="fa-solid fa-table-list text-primary text-xs" /> Project Timesheets
+                  </span>
+                  <div className="flex items-center gap-3 text-xs font-semibold">
+                    <span className="text-muted-foreground">{invoice.timesheetEntries.totalEntries} entries</span>
+                    <span className="text-foreground font-mono">{invoice.timesheetEntries.totalHours} hrs</span>
+                  </div>
+                </div>
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-muted/40 border-b border-border font-bold text-muted-foreground uppercase text-[10px]">
+                    <tr>
+                      <th className="py-2.5 px-4">Date</th>
+                      <th className="py-2.5 px-3">Project</th>
+                      <th className="py-2.5 px-3">Task</th>
+                      <th className="py-2.5 px-3 text-right">Hours</th>
+                      <th className="py-2.5 px-3 text-center">Billable</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/60">
+                    {invoice.timesheetEntries.records.map((entry, idx) => (
+                      <tr key={idx} className="hover:bg-muted/10 transition-colors">
+                        <td className="py-2.5 px-4 font-mono font-semibold text-foreground">{entry.date}</td>
+                        <td className="py-2.5 px-3 font-medium text-foreground">{entry.projectName || "—"}</td>
+                        <td className="py-2.5 px-3 text-muted-foreground max-w-[200px] truncate">{entry.taskDescription || "—"}</td>
+                        <td className="py-2.5 px-3 text-right font-mono font-bold text-foreground">{entry.hours}h</td>
+                        <td className="py-2.5 px-3 text-center">
+                          <span className={cn(
+                            "px-2 py-0.5 rounded-full text-[10px] font-bold border",
+                            entry.billable
+                              ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
+                              : "bg-muted text-muted-foreground border-border"
+                          )}>
+                            {entry.billable ? "Billable" : "Non-Bill"}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        ) : null}
+
         {/* ── Bottom 2-Column: Bank Details & Financial Summary ── */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
-          {/* Left: Bank Details */}
-          <div className="p-5 bg-muted/30 dark:bg-slate-900/40 rounded-xl border border-border/80 space-y-3">
-            <h4 className="text-xs font-bold text-foreground uppercase tracking-wider flex items-center gap-2">
-              <i className="fa-solid fa-building-columns text-primary" /> Bank &amp; Payment Details
-            </h4>
-            <div className="space-y-2 text-xs">
-              <div className="flex justify-between py-1 border-b border-border/50">
-                <span className="text-muted-foreground">Bank Name:</span>
-                <span className="font-semibold text-foreground">{invoice.bankDetails?.bankName || "Corporate Banking Partner"}</span>
+          {/* Left: Dynamic Payment / Bank Details based on Status & Method */}
+          {invoice.status === "Paid" && invoice.paymentDetails?.method ? (
+            <div className="p-5 bg-emerald-500/5 dark:bg-emerald-950/20 rounded-xl border border-emerald-500/30 space-y-3">
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-wider flex items-center gap-2">
+                  <i className="fa-solid fa-circle-check text-emerald-500" /> Payment Received
+                  {invoice.paymentDetails.method === "UPI" && " (UPI)"}
+                  {invoice.paymentDetails.method === "Cash" && " (Cash)"}
+                  {invoice.paymentDetails.method === "Bank Transfer" && " (Bank Transfer)"}
+                </h4>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
+                  Paid
+                </span>
               </div>
-              <div className="flex justify-between py-1 border-b border-border/50">
-                <span className="text-muted-foreground">Account Number:</span>
-                <span className="font-mono font-semibold text-foreground">{invoice.bankDetails?.accountNo || "782459739212"}</span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-border/50">
-                <span className="text-muted-foreground">IFSC / Swift Code:</span>
-                <span className="font-mono font-semibold text-foreground">{invoice.bankDetails?.ifscCode || "NEXA0004128"}</span>
-              </div>
-              <div className="flex justify-between py-1">
-                <span className="text-muted-foreground">Payment Reference:</span>
-                <span className="font-mono font-bold text-primary">{invoice.invoiceNo}</span>
+              <div className="space-y-2 text-xs">
+                <div className="flex justify-between py-1 border-b border-border/50">
+                  <span className="text-muted-foreground">Payment Method:</span>
+                  <span className={cn(
+                    "font-bold flex items-center gap-1.5",
+                    invoice.paymentDetails.method === "UPI" ? "text-violet-600 dark:text-violet-400" :
+                    invoice.paymentDetails.method === "Cash" ? "text-emerald-600 dark:text-emerald-400" :
+                    "text-sky-600 dark:text-sky-400"
+                  )}>
+                    <i className={cn(
+                      "fa-solid text-[10px]",
+                      invoice.paymentDetails.method === "UPI" ? "fa-qrcode" :
+                      invoice.paymentDetails.method === "Cash" ? "fa-money-bill-transfer" :
+                      "fa-building-columns"
+                    )} />
+                    {invoice.paymentDetails.method === "Cash" ? "Cash Settlement" : invoice.paymentDetails.method}
+                  </span>
+                </div>
+
+                {invoice.paymentDetails.method === "UPI" && (
+                  <>
+                    <div className={cn("flex justify-between py-1", invoice.paymentDetails.transactionId ? "border-b border-border/50" : "")}>
+                      <span className="text-muted-foreground">UPI ID:</span>
+                      <span className="font-mono font-bold text-foreground bg-violet-500/10 px-2 py-0.5 rounded-full border border-violet-500/20 text-violet-600 dark:text-violet-400">
+                        <i className="fa-solid fa-qrcode mr-1 text-[9px]" />
+                        {invoice.paymentDetails.upiId || invoice.bankDetails?.upiId || "nexace@okaxis"}
+                      </span>
+                    </div>
+                    {invoice.paymentDetails.transactionId && (
+                      <div className="flex justify-between py-1">
+                        <span className="text-muted-foreground">Transaction ID:</span>
+                        <span className="font-mono font-bold text-foreground bg-muted/60 px-2 py-0.5 rounded">
+                          {invoice.paymentDetails.transactionId}
+                        </span>
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {invoice.paymentDetails.method === "Bank Transfer" && (
+                  <>
+                    <div className="flex justify-between py-1 border-b border-border/50">
+                      <span className="text-muted-foreground">Bank Name:</span>
+                      <span className="font-semibold text-foreground">{invoice.bankDetails?.bankName || "Corporate Banking"}</span>
+                    </div>
+                    <div className="flex justify-between py-1 border-b border-border/50">
+                      <span className="text-muted-foreground">Account Number:</span>
+                      <span className="font-mono font-semibold text-foreground">{invoice.bankDetails?.accountNo || "782459739212"}</span>
+                    </div>
+                    <div className="flex justify-between py-1">
+                      <span className="text-muted-foreground">IFSC / Code:</span>
+                      <span className="font-mono font-semibold text-foreground">{invoice.bankDetails?.ifscCode || "NEXA0004128"}</span>
+                    </div>
+                  </>
+                )}
+
+                {invoice.paymentDetails.method === "Cash" && (
+                  <div className="flex justify-between py-1">
+                    <span className="text-muted-foreground">Settlement Status:</span>
+                    <span className="font-semibold text-foreground">Verified &amp; Settled in Cash</span>
+                  </div>
+                )}
+
+                {invoice.paymentDetails.screenshotUrl && (
+                  <div className="pt-2 border-t border-border/50 flex justify-end">
+                    <a
+                      href={invoice.paymentDetails.screenshotUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 text-xs font-bold text-violet-600 dark:text-violet-400 hover:underline"
+                    >
+                      <i className="fa-solid fa-receipt text-[10px]" />
+                      View Payment Receipt
+                    </a>
+                  </div>
+                )}
               </div>
             </div>
-          </div>
+          ) : (
+            <div className="p-5 bg-muted/30 dark:bg-slate-900/40 rounded-xl border border-border/80 space-y-3">
+              <h4 className="text-xs font-bold text-foreground uppercase tracking-wider flex items-center gap-2">
+                <i className="fa-solid fa-building-columns text-primary" /> Bank &amp; Payment Details
+              </h4>
+              <div className="space-y-2 text-xs">
+                <div className="flex justify-between py-1 border-b border-border/50">
+                  <span className="text-muted-foreground">Bank Name:</span>
+                  <span className="font-semibold text-foreground">{invoice.bankDetails?.bankName || "Corporate Banking Partner"}</span>
+                </div>
+                <div className="flex justify-between py-1 border-b border-border/50">
+                  <span className="text-muted-foreground">Account Number:</span>
+                  <span className="font-mono font-semibold text-foreground">{invoice.bankDetails?.accountNo || "782459739212"}</span>
+                </div>
+                <div className="flex justify-between py-1 border-b border-border/50">
+                  <span className="text-muted-foreground">IFSC / Swift Code:</span>
+                  <span className="font-mono font-semibold text-foreground">{invoice.bankDetails?.ifscCode || "NEXA0004128"}</span>
+                </div>
+                <div className="flex justify-between py-1">
+                  <span className="text-muted-foreground">Payment Reference:</span>
+                  <span className="font-mono font-bold text-primary">{invoice.invoiceNo}</span>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Right: Financial Summary */}
           <div className="p-5 bg-muted/20 dark:bg-slate-900/50 rounded-xl border border-border/80 space-y-3">
@@ -677,7 +1061,7 @@ export function InvoiceDetailsView({
         </div>
 
         {/* ── Terms & Conditions and Signature ── */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-6 border-t border-dashed border-border items-end">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-6 border-t border-dashed border-border items-end mt-auto">
           <div className="space-y-2 text-xs text-muted-foreground">
             <h4 className="font-bold text-foreground uppercase tracking-wider text-[11px] flex items-center gap-1.5">
               <i className="fa-solid fa-circle-info text-primary" /> Terms &amp; Conditions

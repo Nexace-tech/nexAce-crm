@@ -103,6 +103,8 @@ export const DEFAULT_FEATURE_PERMISSIONS: Record<string, Record<string, boolean>
     viewAnalyticsDashboard: true, viewAuditLogs: true, exportReports: true, viewSecurityEvents: true,
     // CRM & Clients
     viewClients: true, createClients: true, editClients: true, deleteClients: true, viewDeals: true, manageDeals: true, exportClientData: true, manageClientContacts: true,
+    // Finance & Invoices
+    viewFinancePortal: true, viewInvoices: true, createInvoices: true, approveInvoices: true, confirmInvoicePayments: true, exportInvoices: true, manageExpenses: true, viewExpenseReports: true,
     // IT & Infrastructure
     viewITPortal: true, manageITAccess: true, manageITSubscriptions: true, manageITDevices: true, manageITInvoices: true,
     // Referrals
@@ -137,6 +139,8 @@ export const DEFAULT_FEATURE_PERMISSIONS: Record<string, Record<string, boolean>
     viewAnalyticsDashboard: true, viewAuditLogs: false, exportReports: true, viewSecurityEvents: false,
     // CRM & Clients
     viewClients: false, createClients: false, editClients: false, deleteClients: false, viewDeals: false, manageDeals: false, exportClientData: false, manageClientContacts: false,
+    // Finance & Invoices
+    viewFinancePortal: false, viewInvoices: false, createInvoices: true, approveInvoices: false, confirmInvoicePayments: false, exportInvoices: true, manageExpenses: false, viewExpenseReports: false,
     // IT & Infrastructure
     viewITPortal: false, manageITAccess: false, manageITSubscriptions: false, manageITDevices: false, manageITInvoices: false,
     // Referrals
@@ -171,6 +175,8 @@ export const DEFAULT_FEATURE_PERMISSIONS: Record<string, Record<string, boolean>
     viewAnalyticsDashboard: false, viewAuditLogs: false, exportReports: true, viewSecurityEvents: false,
     // CRM & Clients
     viewClients: false, createClients: false, editClients: false, deleteClients: false, viewDeals: false, manageDeals: false, exportClientData: false, manageClientContacts: false,
+    // Finance & Invoices
+    viewFinancePortal: false, viewInvoices: false, createInvoices: true, approveInvoices: false, confirmInvoicePayments: false, exportInvoices: true, manageExpenses: false, viewExpenseReports: false,
     // IT & Infrastructure
     viewITPortal: false, manageITAccess: false, manageITSubscriptions: false, manageITDevices: false, manageITInvoices: false,
     // Referrals
@@ -205,6 +211,8 @@ export const DEFAULT_FEATURE_PERMISSIONS: Record<string, Record<string, boolean>
     viewAnalyticsDashboard: false, viewAuditLogs: false, exportReports: false, viewSecurityEvents: false,
     // CRM & Clients
     viewClients: false, createClients: false, editClients: false, deleteClients: false, viewDeals: false, manageDeals: false, exportClientData: false, manageClientContacts: false,
+    // Finance & Invoices
+    viewFinancePortal: false, viewInvoices: false, createInvoices: true, approveInvoices: false, confirmInvoicePayments: false, exportInvoices: true, manageExpenses: false, viewExpenseReports: false,
     // IT & Infrastructure
     viewITPortal: false, manageITAccess: false, manageITSubscriptions: false, manageITDevices: false, manageITInvoices: false,
     // Referrals

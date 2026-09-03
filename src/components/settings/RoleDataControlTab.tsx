@@ -44,6 +44,7 @@ type FeatureCategory =
   | "Goals & OKRs"
   | "Analytics"
   | "CRM & Clients"
+  | "Finance & Invoices"
   | "IT & Infrastructure"
   | "Referrals"
   | "Admin & Users"
@@ -168,6 +169,16 @@ const FEATURE_ACTIONS: FeatureMeta[] = [
   { key: "viewDeals", name: "View CRM Deals & Pipeline", category: "CRM & Clients", subGroup: "Sales Pipeline & Deals", description: "Access the sales pipeline and deal stage tracking", icon: "fa-solid fa-money-bill-trend-up" },
   { key: "manageDeals", name: "Create & Manage Deals", category: "CRM & Clients", subGroup: "Sales Pipeline & Deals", description: "Add deals, update stages, and attach files to opportunities", icon: "fa-solid fa-suitcase-rolling" },
 
+  // Finance & Invoices
+  { key: "viewFinancePortal", name: "Access Finance Portal", category: "Finance & Invoices", subGroup: "Financial Dashboard", description: "View Finance Portal summaries, revenue graphs, and financial health", icon: "fa-solid fa-coins" },
+  { key: "viewInvoices", name: "View All Invoices", category: "Finance & Invoices", subGroup: "Invoices Management", description: "Browse all team submitted and vendor/client invoices across workspace", icon: "fa-solid fa-file-invoice-dollar" },
+  { key: "createInvoices", name: "Create & Submit Invoices", category: "Finance & Invoices", subGroup: "Invoices Management", description: "Create, generate, and submit new service invoices", icon: "fa-solid fa-file-circle-plus" },
+  { key: "approveInvoices", name: "Approve & Manage Invoices", category: "Finance & Invoices", subGroup: "Invoices Management", description: "Approve, reject, and update invoice status", icon: "fa-solid fa-circle-check" },
+  { key: "confirmInvoicePayments", name: "Confirm Payments & Attach Proof", category: "Finance & Invoices", subGroup: "Invoices Management", description: "Mark invoices as Paid, record Bank Transfer/UPI/Cash and save payment proofs in Drive", icon: "fa-solid fa-receipt" },
+  { key: "exportInvoices", name: "Export & Download Invoices PDF", category: "Finance & Invoices", subGroup: "Invoices Management", description: "Download official PDF invoice documents and export data", icon: "fa-solid fa-file-pdf" },
+  { key: "manageExpenses", name: "Record & Manage Expenses", category: "Finance & Invoices", subGroup: "Expenses & Budget", description: "Create, categorize, edit, and delete company operational expenses", icon: "fa-solid fa-money-bill-transfer" },
+  { key: "viewExpenseReports", name: "View Financial & Expense Reports", category: "Finance & Invoices", subGroup: "Expenses & Budget", description: "Access detailed monthly expense breakdowns and audit reports", icon: "fa-solid fa-chart-pie" },
+
   // IT & Infrastructure
   { key: "viewITPortal", name: "Access IT Portal", category: "IT & Infrastructure", subGroup: "IT Command Center", description: "Browse the IT Portal overview and hardware/software inventory", icon: "fa-solid fa-terminal" },
   { key: "manageITAccess", name: "Manage Access Keys & Credentials", category: "IT & Infrastructure", subGroup: "Access & Security", description: "Grant, suspend, or revoke tool access records and user credentials", icon: "fa-solid fa-key" },
@@ -200,7 +211,7 @@ const FEATURE_ACTIONS: FeatureMeta[] = [
 const FEATURE_CATEGORIES: FeatureCategory[] = [
   "Overview", "Team", "Calendar & Time", "Projects", "Sprints", "Drive",
   "Chat", "HR & Leave", "Appraisals", "Goals & OKRs", "Analytics",
-  "CRM & Clients", "IT & Infrastructure", "Referrals", "Admin & Users", "Settings",
+  "CRM & Clients", "Finance & Invoices", "IT & Infrastructure", "Referrals", "Admin & Users", "Settings",
 ];
 
 const CATEGORY_COLORS: Record<FeatureCategory, { text: string; bg: string; border: string; badge: string }> = {
@@ -216,6 +227,7 @@ const CATEGORY_COLORS: Record<FeatureCategory, { text: string; bg: string; borde
   "Goals & OKRs":      { text: "text-indigo-500",  bg: "bg-indigo-500/10",  border: "border-indigo-500/30",  badge: "bg-indigo-500/15 text-indigo-600 dark:text-indigo-400" },
   "Analytics":         { text: "text-cyan-500",    bg: "bg-cyan-500/10",    border: "border-cyan-500/30",    badge: "bg-cyan-500/15 text-cyan-600 dark:text-cyan-400" },
   "CRM & Clients":     { text: "text-emerald-500", bg: "bg-emerald-500/10", border: "border-emerald-500/30", badge: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400" },
+  "Finance & Invoices": { text: "text-amber-500",  bg: "bg-amber-500/10",   border: "border-amber-500/30",   badge: "bg-amber-500/15 text-amber-600 dark:text-amber-400" },
   "IT & Infrastructure": { text: "text-purple-500", bg: "bg-purple-500/10", border: "border-purple-500/30", badge: "bg-purple-500/15 text-purple-600 dark:text-purple-400" },
   "Referrals":         { text: "text-lime-500",    bg: "bg-lime-500/10",    border: "border-lime-500/30",    badge: "bg-lime-500/15 text-lime-600 dark:text-lime-400" },
   "Admin & Users":     { text: "text-red-500",     bg: "bg-red-500/10",     border: "border-red-500/30",     badge: "bg-red-500/15 text-red-600 dark:text-red-400" },
@@ -235,6 +247,7 @@ const CATEGORY_ICONS: Record<FeatureCategory, string> = {
   "Goals & OKRs":      "fa-solid fa-bullseye",
   "Analytics":         "fa-solid fa-chart-line",
   "CRM & Clients":     "fa-solid fa-handshake",
+  "Finance & Invoices": "fa-solid fa-coins",
   "IT & Infrastructure": "fa-solid fa-terminal",
   "Referrals":         "fa-solid fa-link",
   "Admin & Users":     "fa-solid fa-user-gear",

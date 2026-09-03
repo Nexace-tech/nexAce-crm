@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 import { usePermissions } from "@/hooks/usePermissions";
 
 export default function FinancePage() {
-  const { isAdmin, isOPS } = usePermissions();
+  const { can, canAccessModule, isAdmin, isOPS, loading: permLoading } = usePermissions();
 
   // ── Invoice State ──
   const [invoices, setInvoices] = useState<FinanceInvoice[]>([]);
@@ -360,6 +360,22 @@ export default function FinancePage() {
   const EXPENSE_CATEGORIES = ["Operations", "Technology", "Marketing", "HR & Training", "Facilities", "Travel", "Legal", "Finance", "Other"];
   const INVOICE_CATEGORIES = ["Services", "Consulting", "Software Development", "Content Operations", "HR Services", "Platform Development", "Compliance & Audit", "Project Management", "Other"];
 
+  const hasAccess = isAdmin || isOPS || canAccessModule("finance") || can("viewFinancePortal");
+
+  if (!permLoading && !hasAccess) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6 space-y-4">
+        <div className="w-16 h-16 rounded-2xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-500 text-2xl">
+          <i className="fa-solid fa-shield-halved" />
+        </div>
+        <h2 className="text-xl font-bold text-foreground">Access Restricted</h2>
+        <p className="text-sm text-muted-foreground max-w-md">
+          You do not have permission to view the Finance Portal. Please contact your workspace administrator to request access.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-8">
       {/* Toast */}
@@ -389,18 +405,20 @@ export default function FinancePage() {
           <Button variant="outline" size="sm" onClick={() => { fetchInvoices(); fetchExpenses(); fetchDeals(); }} className="gap-2 h-8 font-semibold cursor-pointer">
             <i className="fa-solid fa-rotate-right text-xs" /> Refresh
           </Button>
-          {(isAdmin || isOPS) && (
-            <>
-              <Button variant="outline" size="sm" onClick={handleNewExpense} className="gap-2 h-8 font-semibold cursor-pointer">
-                <i className="fa-solid fa-receipt text-xs" /> Log Expense
-              </Button>
-              <Button variant="outline" size="sm" onClick={handleNewDeal} className="gap-2 h-8 font-semibold cursor-pointer">
-                <i className="fa-solid fa-handshake text-xs" /> New Deal
-              </Button>
-              <Button size="sm" onClick={handleNewInvoice} className="gap-2 h-8 font-semibold cursor-pointer">
-                <i className="fa-solid fa-file-invoice-dollar text-xs" /> New Invoice
-              </Button>
-            </>
+          {(can("manageExpenses") || isAdmin || isOPS) && (
+            <Button variant="outline" size="sm" onClick={handleNewExpense} className="gap-2 h-8 font-semibold cursor-pointer">
+              <i className="fa-solid fa-receipt text-xs" /> Log Expense
+            </Button>
+          )}
+          {(can("manageDeals") || isAdmin || isOPS) && (
+            <Button variant="outline" size="sm" onClick={handleNewDeal} className="gap-2 h-8 font-semibold cursor-pointer">
+              <i className="fa-solid fa-handshake text-xs" /> New Deal
+            </Button>
+          )}
+          {(can("createInvoices") || isAdmin || isOPS) && (
+            <Button size="sm" onClick={handleNewInvoice} className="gap-2 h-8 font-semibold cursor-pointer">
+              <i className="fa-solid fa-file-invoice-dollar text-xs" /> New Invoice
+            </Button>
           )}
         </div>
       </div>

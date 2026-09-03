@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useEffect, useMemo } from "react";
+import { useSearchParams } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -143,7 +144,32 @@ export function FinancePortalDashboard({
   onDeleteDeal,
   onRefresh,
 }: FinancePortalDashboardProps) {
-  const [activeTab, setActiveTab] = useState<"overview" | "invoices" | "expenses" | "budget" | "payroll">("overview");
+  const searchParams = useSearchParams();
+  const urlTab = searchParams.get("tab");
+  const [activeTab, setActiveTab] = useState<"overview" | "invoices" | "expenses" | "budget" | "payroll">(
+    urlTab === "invoices" || urlTab === "expenses" || urlTab === "budget" || urlTab === "payroll" ? urlTab : "overview"
+  );
+
+  useEffect(() => {
+    const tabParam = searchParams.get("tab");
+    if (tabParam && ["overview", "invoices", "expenses", "budget", "payroll"].includes(tabParam)) {
+      setActiveTab(tabParam as any);
+    }
+  }, [searchParams]);
+
+  const [financeScope, setFinanceScope] = useState<"internal" | "external">("internal");
+  const [externalInvoices, setExternalInvoices] = useState<FinanceInvoice[]>([]);
+  const [externalExpenses, setExternalExpenses] = useState<FinanceExpense[]>([]);
+  const [externalDeals, setExternalDeals] = useState<SalesDeal[]>([]);
+  const [externalBudgets, setExternalBudgets] = useState<Array<{ dept: string; budget: number; spent: number; color: string }>>([]);
+  const [externalPayroll, setExternalPayroll] = useState<Array<{ period: string; total: number; headcount: number; status: string; date: string }>>([]);
+
+  const activeInvoices = financeScope === "internal" ? invoices : externalInvoices;
+  const activeExpenses = financeScope === "internal" ? expenses : externalExpenses;
+  const activeDeals = financeScope === "internal" ? deals : externalDeals;
+  const activeBudgetData = financeScope === "internal" ? BUDGET_DATA : externalBudgets;
+  const activePayrollData = financeScope === "internal" ? PAYROLL_DATA : externalPayroll;
+
   const [invoiceSearch, setInvoiceSearch] = useState("");
   const [invoiceStatusFilter, setInvoiceStatusFilter] = useState("All");
   const [expenseSearch, setExpenseSearch] = useState("");
@@ -153,22 +179,22 @@ export function FinancePortalDashboard({
 
   // ── KPI Calculations ──
   const kpis = useMemo(() => {
-    const totalRevenue = invoices.filter(i => i.status === "Paid").reduce((s, i) => s + i.amount, 0);
-    const outstanding = invoices.filter(i => i.status === "Pending" || i.status === "Overdue").reduce((s, i) => s + i.amount, 0);
-    const overdue = invoices.filter(i => i.status === "Overdue").reduce((s, i) => s + i.amount, 0);
-    const totalExpenses = expenses.filter(e => e.status === "Approved").reduce((s, e) => s + e.amount, 0);
+    const totalRevenue = activeInvoices.filter(i => i.status === "Paid").reduce((s, i) => s + i.amount, 0);
+    const outstanding = activeInvoices.filter(i => i.status === "Pending" || i.status === "Overdue").reduce((s, i) => s + i.amount, 0);
+    const overdue = activeInvoices.filter(i => i.status === "Overdue").reduce((s, i) => s + i.amount, 0);
+    const totalExpenses = activeExpenses.filter(e => e.status === "Approved").reduce((s, e) => s + e.amount, 0);
     const netProfit = totalRevenue - totalExpenses;
     const profitMargin = totalRevenue > 0 ? Math.round((netProfit / totalRevenue) * 100) : 0;
-    const paidCount = invoices.filter(i => i.status === "Paid").length;
-    const pendingCount = invoices.filter(i => i.status === "Pending").length;
-    const overdueCount = invoices.filter(i => i.status === "Overdue").length;
+    const paidCount = activeInvoices.filter(i => i.status === "Paid").length;
+    const pendingCount = activeInvoices.filter(i => i.status === "Pending").length;
+    const overdueCount = activeInvoices.filter(i => i.status === "Overdue").length;
     return { totalRevenue, outstanding, overdue, totalExpenses, netProfit, profitMargin, paidCount, pendingCount, overdueCount };
-  }, [invoices, expenses]);
+  }, [activeInvoices, activeExpenses]);
 
   // ── Expense Categories ──
   const expenseCategories = useMemo(() => {
     const cats: Record<string, number> = {};
-    expenses.filter(e => e.status === "Approved").forEach(e => {
+    activeExpenses.filter(e => e.status === "Approved").forEach(e => {
       cats[e.category] = (cats[e.category] || 0) + e.amount;
     });
     const total = Object.values(cats).reduce((s, v) => s + v, 0) || 1;
@@ -176,41 +202,93 @@ export function FinancePortalDashboard({
     return Object.entries(cats).map(([name, val], i) => ({
       name, val, pct: Math.round((val / total) * 100), color: palette[i % palette.length],
     })).sort((a, b) => b.val - a.val);
-  }, [expenses]);
+  }, [activeExpenses]);
 
   // ── Chart max ──
   const chartMax = useMemo(() => Math.max(...MONTHLY_DATA.flatMap(d => [d.revenue, d.expenses]), 1), []);
 
   // ── Filtered Lists ──
   const filteredInvoices = useMemo(() =>
-    invoices.filter(inv => {
+    activeInvoices.filter(inv => {
       const q = invoiceSearch.toLowerCase();
       const matchSearch = !q || inv.client.toLowerCase().includes(q) || inv.invoiceNo.toLowerCase().includes(q) || inv.category.toLowerCase().includes(q);
       const matchStatus = invoiceStatusFilter === "All" || inv.status === invoiceStatusFilter;
       return matchSearch && matchStatus;
-    }), [invoices, invoiceSearch, invoiceStatusFilter]);
+    }), [activeInvoices, invoiceSearch, invoiceStatusFilter]);
 
   const filteredExpenses = useMemo(() =>
-    expenses.filter(exp => {
+    activeExpenses.filter(exp => {
       const q = expenseSearch.toLowerCase();
       const matchSearch = !q || exp.title.toLowerCase().includes(q) || exp.category.toLowerCase().includes(q) || exp.department.toLowerCase().includes(q);
       const matchCat = expenseCatFilter === "All" || exp.category === expenseCatFilter;
       const matchStatus = expenseStatusFilter === "All" || exp.status === expenseStatusFilter;
       return matchSearch && matchCat && matchStatus;
-    }), [expenses, expenseSearch, expenseCatFilter, expenseStatusFilter]);
+    }), [activeExpenses, expenseSearch, expenseCatFilter, expenseStatusFilter]);
 
-  const expenseCatOptions = useMemo(() => ["All", ...Array.from(new Set(expenses.map(e => e.category)))], [expenses]);
+  const expenseCatOptions = useMemo(() => ["All", ...Array.from(new Set(activeExpenses.map(e => e.category)))], [activeExpenses]);
 
   const tabs = [
-    { key: "overview",  label: "Overview",   icon: "fa-handshake", count: deals.length },
-    { key: "invoices",  label: "Invoices",   icon: "fa-file-invoice-dollar", count: invoices.length },
-    { key: "expenses",  label: "Expenses",   icon: "fa-receipt", count: expenses.length },
+    { key: "overview",  label: "Overview",   icon: "fa-handshake", count: activeDeals.length },
+    { key: "invoices",  label: "Invoices",   icon: "fa-file-invoice-dollar", count: activeInvoices.length },
+    { key: "expenses",  label: "Expenses",   icon: "fa-receipt", count: activeExpenses.length },
     { key: "budget",    label: "Budget",     icon: "fa-wallet" },
     { key: "payroll",   label: "Payroll",    icon: "fa-money-check-dollar" },
   ] as const;
 
   return (
     <div className="space-y-6">
+      {/* ── Top Scope Switcher: Internal vs External Finance ── */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-2 bg-muted/40 dark:bg-slate-900/50 rounded-2xl border border-border/80">
+        <div className="flex items-center gap-1.5 p-1 bg-background/90 dark:bg-slate-950/90 rounded-xl border border-border/60 shadow-2xs">
+          <button
+            type="button"
+            onClick={() => setFinanceScope("internal")}
+            className={cn(
+              "px-4 py-2 text-xs font-bold rounded-lg transition-all flex items-center gap-2 cursor-pointer",
+              financeScope === "internal"
+                ? "bg-primary text-primary-foreground shadow-xs font-black"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+            )}
+          >
+            <i className="fa-solid fa-building text-xs" />
+            Internal Finance
+            <span className={cn(
+              "text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold",
+              financeScope === "internal" ? "bg-white/20 text-white" : "bg-muted text-muted-foreground"
+            )}>
+              Live
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setFinanceScope("external")}
+            className={cn(
+              "px-4 py-2 text-xs font-bold rounded-lg transition-all flex items-center gap-2 cursor-pointer",
+              financeScope === "external"
+                ? "bg-primary text-primary-foreground shadow-xs font-black"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+            )}
+          >
+            <i className="fa-solid fa-globe text-xs" />
+            External Finance
+            <span className={cn(
+              "text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold",
+              financeScope === "external" ? "bg-white/20 text-white" : "bg-muted text-muted-foreground"
+            )}>
+              0
+            </span>
+          </button>
+        </div>
+
+        <div className="text-xs text-muted-foreground px-3 flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+          <span>
+            Viewing <strong className="text-foreground font-semibold">{financeScope === "internal" ? "Internal Corporate Financials" : "External & Vendor Accounts"}</strong>
+          </span>
+        </div>
+      </div>
+
       {/* ── Sub-Navigation ── */}
       <div className="flex border-b border-border space-x-1 overflow-x-auto no-scrollbar">
         {tabs.map(tab => (
@@ -236,10 +314,9 @@ export function FinancePortalDashboard({
         ))}
       </div>
 
-
       {/* ── INVOICES TAB (Master Invoices) ── */}
       {activeTab === "invoices" && (
-        <AdminInvoicesTab showToast={showToast} />
+        <AdminInvoicesTab showToast={showToast} scope={financeScope} />
       )}
 
       {/* ── EXPENSES TAB ── */}
@@ -248,9 +325,9 @@ export function FinancePortalDashboard({
           {/* KPI Row */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             {[
-              { label: "Total Approved",  val: expenses.filter(e => e.status === "Approved").reduce((s, e) => s + e.amount, 0), color: "text-foreground", bg: "bg-primary/10 text-primary", icon: "fa-circle-check" },
-              { label: "Pending Approval",val: expenses.filter(e => e.status === "Pending").reduce((s, e) => s + e.amount, 0),  color: "text-amber-500",  bg: "bg-amber-500/10 text-amber-500", icon: "fa-clock" },
-              { label: "Rejected",         val: expenses.filter(e => e.status === "Rejected").reduce((s, e) => s + e.amount, 0), color: "text-rose-500",   bg: "bg-rose-500/10 text-rose-500",  icon: "fa-xmark-circle" },
+              { label: "Total Approved",  val: activeExpenses.filter(e => e.status === "Approved").reduce((s, e) => s + e.amount, 0), color: "text-foreground", bg: "bg-primary/10 text-primary", icon: "fa-circle-check" },
+              { label: "Pending Approval",val: activeExpenses.filter(e => e.status === "Pending").reduce((s, e) => s + e.amount, 0),  color: "text-amber-500",  bg: "bg-amber-500/10 text-amber-500", icon: "fa-clock" },
+              { label: "Rejected",         val: activeExpenses.filter(e => e.status === "Rejected").reduce((s, e) => s + e.amount, 0), color: "text-rose-500",   bg: "bg-rose-500/10 text-rose-500",  icon: "fa-xmark-circle" },
             ].map(m => (
               <Card key={m.label}>
                 <CardContent className="p-4 flex items-center justify-between">
@@ -279,7 +356,7 @@ export function FinancePortalDashboard({
                   {["All", "Approved", "Pending", "Rejected"].map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
                 <Button size="sm" onClick={onNewExpense} className="gap-2 font-semibold h-8 cursor-pointer">
-                  <i className="fa-solid fa-plus text-xs" /> Log Expense
+                  <i className="fa-solid fa-plus text-xs" /> {financeScope === "external" ? "Log External Expense" : "Log Expense"}
                 </Button>
               </div>
               <Card>
@@ -313,7 +390,8 @@ export function FinancePortalDashboard({
                       ))}
                       {filteredExpenses.length === 0 && (
                         <tr><td colSpan={7} className="py-16 text-center text-muted-foreground text-sm">
-                          <i className="fa-solid fa-receipt text-3xl mb-3 block opacity-20" />No expenses found.
+                          <i className="fa-solid fa-receipt text-3xl mb-3 block opacity-20" />
+                          {financeScope === "external" ? "No external expenses recorded yet." : "No expenses found."}
                         </td></tr>
                       )}
                     </tbody>
@@ -345,7 +423,9 @@ export function FinancePortalDashboard({
                   </div>
                 ))}
                 {expenseCategories.length === 0 && (
-                  <p className="text-xs text-muted-foreground text-center py-8">No expense data yet.</p>
+                  <p className="text-xs text-muted-foreground text-center py-8">
+                    {financeScope === "external" ? "No external expense categories." : "No expense data yet."}
+                  </p>
                 )}
               </CardContent>
             </Card>
@@ -359,13 +439,13 @@ export function FinancePortalDashboard({
           {/* Budget KPIs */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             {(() => {
-              const totalBudget = BUDGET_DATA.reduce((s, b) => s + b.budget, 0);
-              const totalSpent  = BUDGET_DATA.reduce((s, b) => s + b.spent, 0);
+              const totalBudget = activeBudgetData.reduce((s, b) => s + b.budget, 0);
+              const totalSpent  = activeBudgetData.reduce((s, b) => s + b.spent, 0);
               const remaining   = totalBudget - totalSpent;
-              const overBudget  = BUDGET_DATA.filter(b => b.spent > b.budget).length;
+              const overBudget  = activeBudgetData.filter(b => b.spent > b.budget).length;
               return [
-                { label: "Total Budget",    val: `$${fmt(totalBudget)}`, sub: `${BUDGET_DATA.length} departments`, icon: "fa-wallet",              bg: "bg-primary/10 text-primary"    },
-                { label: "Total Spent",     val: `$${fmt(totalSpent)}`,  sub: `${Math.round((totalSpent/totalBudget)*100)}% utilized`, icon: "fa-money-bill-wave", bg: "bg-amber-500/10 text-amber-500" },
+                { label: "Total Budget",    val: `$${fmt(totalBudget)}`, sub: `${activeBudgetData.length} departments`, icon: "fa-wallet",              bg: "bg-primary/10 text-primary"    },
+                { label: "Total Spent",     val: `$${fmt(totalSpent)}`,  sub: `${totalBudget > 0 ? Math.round((totalSpent/totalBudget)*100) : 0}% utilized`, icon: "fa-money-bill-wave", bg: "bg-amber-500/10 text-amber-500" },
                 { label: "Remaining",       val: `$${fmt(remaining)}`,   sub: `${overBudget} dept(s) over budget`, icon: "fa-piggy-bank",         bg: overBudget > 0 ? "bg-rose-500/10 text-rose-500" : "bg-emerald-500/10 text-emerald-500" },
               ];
             })().map(m => (
@@ -386,11 +466,11 @@ export function FinancePortalDashboard({
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-bold flex items-center gap-2">
-                <i className="fa-solid fa-bars-progress text-primary" /> Department Budget Utilization
+                <i className="fa-solid fa-bars-progress text-primary" /> {financeScope === "external" ? "External Project & Vendor Budgets" : "Department Budget Utilization"}
               </CardTitle>
             </CardHeader>
             <CardContent className="pt-0 space-y-5">
-              {BUDGET_DATA.map(dept => {
+              {activeBudgetData.map(dept => {
                 const pct = Math.min(100, Math.round((dept.spent / dept.budget) * 100));
                 const over = dept.spent > dept.budget;
                 return (
@@ -420,6 +500,13 @@ export function FinancePortalDashboard({
                   </div>
                 );
               })}
+              {activeBudgetData.length === 0 && (
+                <div className="py-12 text-center text-muted-foreground">
+                  <i className="fa-solid fa-wallet text-3xl mb-3 block opacity-25" />
+                  <p className="text-sm font-semibold">No external budget allocations recorded yet.</p>
+                  <p className="text-xs text-muted-foreground mt-1">Configure external project allocations to track vendor spending against budget.</p>
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -431,11 +518,11 @@ export function FinancePortalDashboard({
           {/* Payroll KPIs */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             {(() => {
-              const lastPaid    = PAYROLL_DATA.find(p => p.status === "Paid");
-              const totalYTD    = PAYROLL_DATA.filter(p => p.status === "Paid").reduce((s, p) => s + p.total, 0);
-              const processing  = PAYROLL_DATA.find(p => p.status === "Processing");
+              const lastPaid    = activePayrollData.find(p => p.status === "Paid");
+              const totalYTD    = activePayrollData.filter(p => p.status === "Paid").reduce((s, p) => s + p.total, 0);
+              const processing  = activePayrollData.find(p => p.status === "Processing");
               return [
-                { label: "YTD Payroll",         val: `$${fmt(totalYTD)}`,             sub: `${PAYROLL_DATA.filter(p => p.status === "Paid").length} cycles paid`, icon: "fa-coins",              bg: "bg-emerald-500/10 text-emerald-500" },
+                { label: "YTD Payroll",         val: `$${fmt(totalYTD)}`,             sub: `${activePayrollData.filter(p => p.status === "Paid").length} cycles paid`, icon: "fa-coins",              bg: "bg-emerald-500/10 text-emerald-500" },
                 { label: "Last Disbursement",    val: lastPaid ? `$${fmt(lastPaid.total)}` : "—", sub: lastPaid?.period || "—", icon: "fa-money-check-dollar", bg: "bg-primary/10 text-primary" },
                 { label: "Next Processing",      val: processing ? `$${fmt(processing.total)}` : "—", sub: processing ? `Due ${processing.date}` : "—", icon: "fa-clock",            bg: "bg-amber-500/10 text-amber-500" },
               ];
@@ -458,7 +545,7 @@ export function FinancePortalDashboard({
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-sm font-bold flex items-center gap-2">
-                  <i className="fa-solid fa-table text-primary" /> Payroll History
+                  <i className="fa-solid fa-table text-primary" /> {financeScope === "external" ? "External Contractor Payout History" : "Payroll History"}
                 </CardTitle>
                 <Button variant="outline" size="sm" className="gap-2 h-8 font-semibold cursor-pointer">
                   <i className="fa-solid fa-download text-xs" /> Export
@@ -475,32 +562,44 @@ export function FinancePortalDashboard({
                   </tr>
                 </thead>
                 <tbody>
-                  {PAYROLL_DATA.sort((a, b) => b.date.localeCompare(a.date)).map((p, i) => (
+                  {activePayrollData.sort((a, b) => b.date.localeCompare(a.date)).map((p, i) => (
                     <tr key={p.period} className={cn("border-b border-border/50 hover:bg-muted/30 transition-colors", i % 2 === 1 && "bg-muted/10")}>
                       <td className="py-3 px-3 font-semibold text-foreground">{p.period}</td>
                       <td className="py-3 px-3 font-bold text-foreground">${fmt(p.total)}</td>
-                      <td className="py-3 px-3 text-muted-foreground">{p.headcount} employees</td>
+                      <td className="py-3 px-3 text-muted-foreground">{p.headcount} recipients</td>
                       <td className="py-3 px-3 text-muted-foreground text-xs">{p.date}</td>
                       <td className="py-3 px-3">
                         <span className={cn("text-[11px] font-semibold px-2.5 py-0.5 rounded-full border", payrollStatusStyle[p.status])}>{p.status}</span>
                       </td>
                     </tr>
                   ))}
+                  {activePayrollData.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="py-12 text-center text-muted-foreground">
+                        <i className="fa-solid fa-money-check-dollar text-3xl mb-3 block opacity-25" />
+                        <p className="text-sm font-semibold">No external contractor disbursements recorded.</p>
+                        <p className="text-xs text-muted-foreground mt-1">Disbursements to external agencies and freelance staff will appear here.</p>
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </CardContent>
           </Card>
 
-          <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-4 text-xs text-amber-600 dark:text-amber-400 flex items-start gap-2.5">
-            <i className="fa-solid fa-circle-info mt-0.5 shrink-0" />
-            <span>Payroll data is currently showing demo records. Connect your payroll provider or enter actual payroll runs to reflect live data.</span>
-          </div>
+          {financeScope === "internal" && (
+            <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-4 text-xs text-amber-600 dark:text-amber-400 flex items-start gap-2.5">
+              <i className="fa-solid fa-circle-info mt-0.5 shrink-0" />
+              <span>Payroll data is currently showing demo records. Connect your payroll provider or enter actual payroll runs to reflect live data.</span>
+            </div>
+          )}
         </div>
       )}
+
       {/* ── OVERVIEW TAB (Sales Pipeline) ── */}
       {activeTab === "overview" && (
         <SalesWorkdeskDashboard
-          deals={deals}
+          deals={activeDeals}
           loading={loadingDeals}
           onNewDeal={onNewDeal}
           onEditDeal={onEditDeal}

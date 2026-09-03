@@ -1,13 +1,21 @@
 import nodemailer from "nodemailer";
 
+export interface EmailAttachment {
+  filename: string;
+  content?: Buffer | string;
+  path?: string;
+  contentType?: string;
+}
+
 export interface SendMailOptions {
   to: string;
   subject: string;
   text: string;
   html: string;
+  attachments?: EmailAttachment[];
 }
 
-export async function sendEmail({ to, subject, text, html }: SendMailOptions) {
+export async function sendEmail({ to, subject, text, html, attachments }: SendMailOptions) {
   const host = process.env.SMTP_HOST?.trim();
   const port = parseInt(process.env.SMTP_PORT || "587");
   const user = process.env.SMTP_USER?.trim();
@@ -34,6 +42,7 @@ export async function sendEmail({ to, subject, text, html }: SendMailOptions) {
         subject,
         text,
         html,
+        attachments,
       });
       console.log(`[SMTP] Live email sent successfully to ${to}`);
       return { success: true, isDev: false };
@@ -67,6 +76,7 @@ export async function sendEmail({ to, subject, text, html }: SendMailOptions) {
       subject: `[DEV] ${subject}`,
       text,
       html,
+      attachments,
     });
 
     const previewUrl = nodemailer.getTestMessageUrl(info) || "";

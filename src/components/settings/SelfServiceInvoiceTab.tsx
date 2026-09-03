@@ -1,12 +1,14 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
 import { InvoiceDetailsView } from "@/components/finance/InvoiceDetailsView";
+import { downloadInvoicePdf } from "@/lib/invoice-pdf";
 
 interface InvoiceItem {
   description: string;
@@ -37,6 +39,21 @@ interface Invoice {
   status: "Draft" | "Sent" | "Pending" | "Paid" | "Overdue" | "Archived" | "Cancelled";
   notes?: string;
   createdAt?: string;
+  bankDetails?: {
+    bankName?: string;
+    accountName?: string;
+    accountNo?: string;
+    ifscCode?: string;
+    branch?: string;
+  };
+  paymentDetails?: {
+    method: "Bank Transfer" | "UPI" | "Cash";
+    upiId?: string;
+    transactionId?: string;
+    screenshotUrl?: string;
+    screenshotFileName?: string;
+    paidAt?: string;
+  };
 }
 
 function formatHoursMinutes(val: number): string {
@@ -60,6 +77,10 @@ function toLocalDateString(d: Date): string {
 }
 
 export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps) {
+  const searchParams = useSearchParams();
+  const targetInvoiceNo = searchParams.get("invoiceNo");
+  const targetInvoiceId = searchParams.get("invoiceId");
+
   const { user } = useAuth();
   const [activeSubTab, setActiveSubTab] = useState<"history" | "generate">("history");
   const [myInvoices, setMyInvoices] = useState<Invoice[]>([]);
@@ -97,6 +118,26 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
     totalEntries: 0,
     records: [],
   });
+  const [companyLogoUrl, setCompanyLogoUrl] = useState<string>("");
+  const [companyBankDetails, setCompanyBankDetails] = useState<{
+    bankName?: string;
+    accountName?: string;
+    accountNo?: string;
+    ifscCode?: string;
+    branch?: string;
+  }>({});
+
+  useEffect(() => {
+    fetch("/api/settings/company")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.company) {
+          if (data.company.logoUrl) setCompanyLogoUrl(data.company.logoUrl);
+          if (data.company.bankDetails) setCompanyBankDetails(data.company.bankDetails);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const now = new Date();
   const initialStart = toLocalDateString(new Date(now.getFullYear(), now.getMonth(), 1));
@@ -122,9 +163,12 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
     // Daily Rate
     dailyRate: 400,
     daysWorked: 0,
-    // Project-Based Fixed Fee
+    // Project-Based Fixed Fee (Multiple Projects Supported)
     projectName: "Fullstack Architecture & Feature Delivery",
     projectFixedAmount: 5000,
+    projects: [
+      { id: "1", name: "Fullstack Architecture & Feature Delivery", amount: 5000 },
+    ],
     // Common
     taxRate: 0,
     currency: "INR",
@@ -138,6 +182,46 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
     billedToEmail: user?.tenantId?.slug ? `finance@${user.tenantId.slug}.com` : "finance@nexace.com",
     notes: generateDefaultNotes(initialStart, initialEnd),
   });
+
+  const handleAddProject = () => {
+    setInvoiceFormData((prev) => {
+      const existing = prev.projects && prev.projects.length > 0 ? prev.projects : [];
+      return {
+        ...prev,
+        projects: [
+          ...existing,
+          { id: Date.now().toString(), name: "", amount: 0 },
+        ],
+      };
+    });
+  };
+
+  const handleRemoveProject = (id: string) => {
+    setInvoiceFormData((prev) => {
+      const remaining = (prev.projects || []).filter((p) => p.id !== id);
+      const updated = remaining.length > 0 ? remaining : [{ id: Date.now().toString(), name: "", amount: 0 }];
+      return {
+        ...prev,
+        projects: updated,
+        projectName: updated[0]?.name || "",
+        projectFixedAmount: Number(updated[0]?.amount) || 0,
+      };
+    });
+  };
+
+  const handleProjectChange = (id: string, field: "name" | "amount", value: string | number) => {
+    setInvoiceFormData((prev) => {
+      const updated = (prev.projects || []).map((p) =>
+        p.id === id ? { ...p, [field]: value } : p
+      );
+      return {
+        ...prev,
+        projects: updated,
+        projectName: updated[0]?.name || prev.projectName,
+        projectFixedAmount: Number(updated[0]?.amount) || prev.projectFixedAmount,
+      };
+    });
+  };
 
   const fetchShiftAndTimesheetData = async (startDate: string, endDate: string) => {
     try {
@@ -159,7 +243,9 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
         });
 
         calculatedShiftHrs = periodAtt.reduce((sum, r) => {
-          let hrs = Number(r.totalHours) || 0;
+          // Use stored regularHours + overtimeHours for completed shifts (totalHours does not exist in DB)
+          let hrs = (Number(r.regularHours) || 0) + (Number(r.overtimeHours) || 0);
+          // For active sessions (clocked in, not yet clocked out) compute live elapsed time
           if (hrs === 0 && r.clockIn && !r.clockOut) {
             const diffMs = Math.max(0, Date.now() - new Date(r.clockIn).getTime());
             hrs = Math.round((diffMs / (1000 * 60 * 60)) * 10) / 10;
@@ -167,16 +253,20 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
           return sum + hrs;
         }, 0);
 
-        calculatedDaysCount = periodAtt.filter((r) => (Number(r.totalHours) || 0) > 0 || r.clockIn).length;
-        const standardCap = calculatedDaysCount * 8;
-        calculatedOtHrs = Math.max(0, calculatedShiftHrs - standardCap);
+        calculatedDaysCount = periodAtt.filter((r) =>
+          (Number(r.regularHours) || 0) + (Number(r.overtimeHours) || 0) > 0 || r.clockIn
+        ).length;
+        // Sum stored overtimeHours directly — avoids re-deriving from a daily cap
+        calculatedOtHrs = periodAtt.reduce((sum, r) => sum + (Number(r.overtimeHours) || 0), 0);
 
         setShiftData({
           totalHours: Math.round(calculatedShiftHrs * 10) / 10,
           daysWorked: calculatedDaysCount,
           overtimeHours: Math.round(calculatedOtHrs * 10) / 10,
           records: periodAtt.map((r) => {
-            let recordHrs = Number(r.totalHours) || 0;
+            // Use stored regularHours + overtimeHours for completed shifts
+            let recordHrs = (Number(r.regularHours) || 0) + (Number(r.overtimeHours) || 0);
+            // For active sessions compute live elapsed time
             if (recordHrs === 0 && r.clockIn && !r.clockOut) {
               const diffMs = Math.max(0, Date.now() - new Date(r.clockIn).getTime());
               recordHrs = Math.round((diffMs / (1000 * 60 * 60)) * 10) / 10;
@@ -315,7 +405,19 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
           );
         });
 
-        setMyInvoices(filtered.length > 0 ? filtered : allInvoices);
+        const effectiveInvoices = filtered.length > 0 ? filtered : allInvoices;
+        setMyInvoices(effectiveInvoices);
+
+        // Auto-open target invoice if requested via notification deep-link
+        if (targetInvoiceNo || targetInvoiceId) {
+          const match = allInvoices.find((i) =>
+            (targetInvoiceNo && i.invoiceNo?.toLowerCase() === targetInvoiceNo.toLowerCase()) ||
+            (targetInvoiceId && (i._id === targetInvoiceId || i.id === targetInvoiceId))
+          );
+          if (match) {
+            setViewInvoice(match);
+          }
+        }
       }
     } catch (err) {
       console.error("Error fetching personal invoices:", err);
@@ -356,6 +458,10 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
               .filter(Boolean)
               .join(", ");
 
+            if (comp.bankDetails) {
+              setCompanyBankDetails(comp.bankDetails);
+            }
+
             setInvoiceFormData((prev) => ({
               ...prev,
               billedToName: comp.name || prev.billedToName,
@@ -391,7 +497,11 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
       const hRate = Number(invoiceFormData.hourlyRate) || 0;
       const dRate = Number(invoiceFormData.dailyRate) || 0;
       const dWorked = Number(invoiceFormData.daysWorked) || 0;
-      const projAmount = Number(invoiceFormData.projectFixedAmount) || 0;
+      const effectiveProjects =
+        invoiceFormData.projects && invoiceFormData.projects.length > 0
+          ? invoiceFormData.projects
+          : [{ id: "1", name: invoiceFormData.projectName || "Project Milestone", amount: Number(invoiceFormData.projectFixedAmount) || 0 }];
+      const totalProjAmount = effectiveProjects.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
 
       let subtotalVal = 0;
       const items: InvoiceItem[] = [];
@@ -421,12 +531,15 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
           amount: dWorked * dRate,
         });
       } else {
-        subtotalVal = projAmount;
-        items.push({
-          description: `${invoiceFormData.projectName || invoiceFormData.description} (Project Fixed Milestone) [${invoiceFormData.period}]`,
-          quantity: 1,
-          unitPrice: projAmount,
-          amount: projAmount,
+        subtotalVal = totalProjAmount;
+        effectiveProjects.forEach((p, idx) => {
+          const pAmount = Number(p.amount) || 0;
+          items.push({
+            description: `${p.name || `Project Milestone #${idx + 1}`} (Project Fixed Milestone) [${invoiceFormData.period}]`,
+            quantity: 1,
+            unitPrice: pAmount,
+            amount: pAmount,
+          });
         });
       }
 
@@ -467,8 +580,21 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
           currency: invoiceFormData.currency,
           status: "Pending",
           notes: combinedNotes,
+          // Structured shift clock & timesheet data for full admin visibility
+          shiftAttendance: (attachShiftLogs && shiftData.daysWorked > 0) ? {
+            totalHours: shiftData.totalHours,
+            daysWorked: shiftData.daysWorked,
+            overtimeHours: shiftData.overtimeHours,
+            records: shiftData.records,
+          } : null,
+          timesheetEntries: (attachTimesheetLogs && timesheetData.totalEntries > 0) ? {
+            totalHours: timesheetData.totalHours,
+            totalEntries: timesheetData.totalEntries,
+            records: timesheetData.records,
+          } : null,
         }),
       });
+
 
       if (res.ok) {
         showToast(`Invoice ${invoiceNo} generated and submitted to Finance for approval!`, "success");
@@ -501,8 +627,6 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
     const toEmail = isDraft ? invoiceFormData.billedToEmail : invoiceToPrint.billedToEmail || "";
 
     const curr = isDraft ? invoiceFormData.currency : invoiceToPrint.currency;
-    const symbol = curr === "EUR" ? "€" : curr === "GBP" ? "£" : curr === "INR" ? "₹" : "$";
-
     const subtotalVal = isDraft ? subtotal : invoiceToPrint.subtotal;
     const taxRateVal = isDraft ? taxPct : invoiceToPrint.taxRate;
     const taxAmountVal = isDraft ? taxVal : invoiceToPrint.taxAmount;
@@ -520,267 +644,78 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
     }
     const finalNotesToPrint = (notesVal ? `${notesVal}\n` : "") + draftAttachmentsSummary.trim();
 
-    const printWindow = window.open("", "_blank");
-    if (!printWindow) {
-      showToast("Pop-up blocker is preventing export. Please allow popups.", "error");
-      return;
-    }
-
-    const itemsListHtml = isDraft
+    const items = isDraft
       ? invoiceFormData.rateType === "hourly"
-        ? `
-          <tr>
-            <td>${invoiceFormData.description} (Regular Hours) [${invoiceFormData.period}]</td>
-            <td class="text-center">${regHours}</td>
-            <td class="text-right">${symbol}${hRate.toLocaleString()}</td>
-            <td class="text-right" style="font-weight: bold;">${symbol}${(regHours * hRate).toLocaleString()}</td>
-          </tr>
-          ${
-            otHours > 0
-              ? `
-            <tr>
-              <td>Overtime Hours (1.5x Rate) [${invoiceFormData.period}]</td>
-              <td class="text-center">${otHours}</td>
-              <td class="text-right">${symbol}${(hRate * 1.5).toLocaleString()}</td>
-              <td class="text-right" style="font-weight: bold;">${symbol}${(otHours * hRate * 1.5).toLocaleString()}</td>
-            </tr>
-          `
-              : ""
-          }
-        `
+        ? [
+            {
+              description: `${invoiceFormData.description} (Regular Hours) [${invoiceFormData.period}]`,
+              quantity: regHours,
+              unitPrice: hRate,
+              amount: regHours * hRate,
+            },
+            ...(otHours > 0
+              ? [
+                  {
+                    description: `Overtime Hours (1.5x Rate) [${invoiceFormData.period}]`,
+                    quantity: otHours,
+                    unitPrice: hRate * 1.5,
+                    amount: otHours * hRate * 1.5,
+                  },
+                ]
+              : []),
+          ]
         : invoiceFormData.rateType === "daily"
-        ? `
-          <tr>
-            <td>${invoiceFormData.description} (Daily Rate: ${dWorked} days) [${invoiceFormData.period}]</td>
-            <td class="text-center">${dWorked}</td>
-            <td class="text-right">${symbol}${dRate.toLocaleString()}</td>
-            <td class="text-right" style="font-weight: bold;">${symbol}${(dWorked * dRate).toLocaleString()}</td>
-          </tr>
-        `
-        : `
-          <tr>
-            <td>${invoiceFormData.projectName || invoiceFormData.description} (Project Fixed Fee) [${invoiceFormData.period}]</td>
-            <td class="text-center">1</td>
-            <td class="text-right">${symbol}${projAmount.toLocaleString()}</td>
-            <td class="text-right" style="font-weight: bold;">${symbol}${projAmount.toLocaleString()}</td>
-          </tr>
-        `
-      : invoiceToPrint.items
-          .map(
-            (item) => `
-        <tr>
-          <td>${item.description}</td>
-          <td class="text-center">${item.quantity}</td>
-          <td class="text-right">${symbol}${item.unitPrice.toLocaleString()}</td>
-          <td class="text-right" style="font-weight: bold;">${symbol}${item.amount.toLocaleString()}</td>
-        </tr>
-      `
-          )
-          .join("");
+        ? [
+            {
+              description: `${invoiceFormData.description} (Daily Rate: ${dWorked} days) [${invoiceFormData.period}]`,
+              quantity: dWorked,
+              unitPrice: dRate,
+              amount: dWorked * dRate,
+            },
+          ]
+        : (invoiceFormData.projects && invoiceFormData.projects.length > 0
+            ? invoiceFormData.projects
+            : [{ id: "1", name: invoiceFormData.projectName || "Project Milestone", amount: Number(invoiceFormData.projectFixedAmount) || 0 }]
+          ).map((p, idx) => ({
+            description: `${p.name || `Project Milestone #${idx + 1}`} (Project Fixed Fee) [${invoiceFormData.period}]`,
+            quantity: 1,
+            unitPrice: Number(p.amount) || 0,
+            amount: Number(p.amount) || 0,
+          }))
+      : invoiceToPrint.items || [];
 
-    const html = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>Invoice - ${invNo}</title>
-        <style>
-          @page {
-            size: auto;
-            margin: 0mm;
-          }
-          body {
-            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-            margin: 20mm;
-            color: #333;
-            background-color: #fff;
-          }
-          .invoice-header {
-            display: flex;
-            justify-content: space-between;
-            border-bottom: 2px solid #eee;
-            padding-bottom: 20px;
-            margin-bottom: 30px;
-          }
-          .invoice-title {
-            font-size: 28px;
-            font-weight: bold;
-            color: #0d9488;
-          }
-          .invoice-details {
-            text-align: right;
-            font-size: 14px;
-          }
-          .grid-addresses {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 40px;
-            margin-bottom: 40px;
-          }
-          .address-box {
-            background-color: #fcfcfc;
-            border: 1px solid #f0f0f0;
-            padding: 20px;
-            border-radius: 8px;
-          }
-          .address-title {
-            font-size: 11px;
-            text-transform: uppercase;
-            font-weight: bold;
-            color: #666;
-            margin-bottom: 8px;
-          }
-          .address-name {
-            font-size: 16px;
-            font-weight: bold;
-            margin-bottom: 5px;
-          }
-          .address-text {
-            font-size: 13px;
-            color: #555;
-            line-height: 1.5;
-          }
-          table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-bottom: 30px;
-          }
-          th {
-            background-color: #f9f9f9;
-            border-bottom: 2px solid #eee;
-            padding: 12px;
-            font-size: 12px;
-            text-transform: uppercase;
-            font-weight: bold;
-            color: #555;
-          }
-          td {
-            border-bottom: 1px solid #eee;
-            padding: 12px;
-            font-size: 13px;
-          }
-          .text-right {
-            text-align: right;
-          }
-          .text-center {
-            text-align: center;
-          }
-          .totals-section {
-            float: right;
-            width: 300px;
-            margin-bottom: 40px;
-          }
-          .totals-row {
-            display: flex;
-            justify-content: space-between;
-            font-size: 13px;
-            margin-bottom: 8px;
-          }
-          .grand-total {
-            border-top: 1.5px solid #eee;
-            padding-top: 10px;
-            font-size: 16px;
-            font-weight: bold;
-            color: #0d9488;
-          }
-          .notes-section {
-            clear: both;
-            border-top: 1px solid #eee;
-            padding-top: 20px;
-            font-size: 12px;
-            color: #666;
-            line-height: 1.6;
-          }
-        </style>
-      </head>
-      <body>
-        <div class="invoice-header">
-          <div>
-            <div class="invoice-title">NEXACE</div>
-            <div style="font-size: 13px; color: #666; margin-top: 5px;">Invoice Statement</div>
-          </div>
-          <div class="invoice-details">
-            <div style="font-weight: bold; font-size: 16px;">Invoice #: ${invNo}</div>
-            <div style="margin-top: 5px;">Date: ${date}</div>
-            <div>Due Date: ${dueDateVal}</div>
-            <div>Status: ${statusVal}</div>
-          </div>
-        </div>
-
-        <div class="grid-addresses">
-          <div class="address-box">
-            <div class="address-title">From:</div>
-            <div class="address-name">${fromName}</div>
-            <div class="address-text">${fromAddress}</div>
-            <div class="address-text" style="font-family: monospace;">${fromEmail}</div>
-          </div>
-          <div class="address-box">
-            <div class="address-title">To:</div>
-            <div class="address-name">${toName}</div>
-            <div class="address-text">${toAddress}</div>
-            <div class="address-text" style="font-family: monospace;">${toEmail}</div>
-          </div>
-        </div>
-
-        <table>
-          <thead>
-            <tr>
-              <th>Description</th>
-              <th class="text-center" style="width: 100px;">Qty / Hours</th>
-              <th class="text-right" style="width: 120px;">Rate</th>
-              <th class="text-right" style="width: 150px;">Amount</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${itemsListHtml}
-        </table>
-
-        <div class="totals-section">
-          <div class="totals-row">
-            <span>Total Worked Hours:</span>
-            <span style="font-family: monospace; font-weight: bold;">${formatHoursMinutes(isDraft ? regHours + otHours : (invoiceToPrint?.items || []).reduce((acc, item) => acc + item.quantity, 0))}</span>
-          </div>
-          <div class="totals-row">
-            <span>Subtotal:</span>
-            <span style="font-family: monospace;">${symbol}${subtotalVal.toLocaleString()}</span>
-          </div>
-          ${
-            taxRateVal > 0
-              ? `
-            <div class="totals-row">
-              <span>Tax (${taxRateVal}%):</span>
-              <span style="font-family: monospace;">${symbol}${taxAmountVal.toLocaleString()}</span>
-            </div>
-          `
-              : ""
-          }
-          <div class="totals-row grand-total">
-            <span>Grand Total:</span>
-            <span style="font-family: monospace;">${symbol}${grandTotalVal.toLocaleString()}</span>
-          </div>
-        </div>
-
-        ${
-          finalNotesToPrint
-            ? `
-          <div class="notes-section">
-            <strong>Notes &amp; Attachments:</strong>
-            <p style="margin-top: 5px; white-space: pre-wrap;">${finalNotesToPrint}</p>
-          </div>
-        `
-            : ""
-        }
-
-        <script>
-          window.onload = function() {
-            window.print();
-          }
-        </script>
-      </body>
-      </html>
-    `;
-
-    printWindow.document.write(html);
-    printWindow.document.close();
+    try {
+      downloadInvoicePdf(
+        {
+          invoiceNo: invNo,
+          invoiceDate: date,
+          dueDate: dueDateVal,
+          customerNo: isDraft ? undefined : invoiceToPrint.customerNo,
+          businessName: fromName || "NexAce IT Team",
+          businessAddress: fromAddress,
+          businessEmail: fromEmail,
+          billedToName: toName || "Client",
+          billedToAddress: toAddress,
+          billedToEmail: toEmail,
+          items,
+          subtotal: subtotalVal,
+          taxRate: taxRateVal,
+          taxAmount: taxAmountVal,
+          total: grandTotalVal,
+          currency: curr || "INR",
+          status: statusVal,
+          notes: finalNotesToPrint,
+          bankDetails: isDraft ? companyBankDetails : (invoiceToPrint.bankDetails || companyBankDetails),
+          paymentDetails: isDraft ? undefined : invoiceToPrint.paymentDetails,
+          logoUrl: companyLogoUrl,
+        },
+        `Invoice_${invNo}.pdf`
+      );
+      showToast(`Invoice PDF (${invNo}) downloaded successfully!`, "success");
+    } catch (err) {
+      console.error("Failed to auto download invoice PDF:", err);
+      showToast("Failed to download PDF invoice.", "error");
+    }
   };
 
   const regHours = Number(invoiceFormData.hoursWorked) || 0;
@@ -788,14 +723,18 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
   const hRate = Number(invoiceFormData.hourlyRate) || 0;
   const dRate = Number(invoiceFormData.dailyRate) || 0;
   const dWorked = Number(invoiceFormData.daysWorked) || 0;
-  const projAmount = Number(invoiceFormData.projectFixedAmount) || 0;
+  const effectiveProjects =
+    invoiceFormData.projects && invoiceFormData.projects.length > 0
+      ? invoiceFormData.projects
+      : [{ id: "1", name: invoiceFormData.projectName || "Project Milestone", amount: Number(invoiceFormData.projectFixedAmount) || 0 }];
+  const totalProjAmount = effectiveProjects.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
 
   const subtotal =
     invoiceFormData.rateType === "hourly"
       ? regHours * hRate + otHours * (hRate * 1.5)
       : invoiceFormData.rateType === "daily"
       ? dWorked * dRate
-      : projAmount;
+      : totalProjAmount;
 
   const taxPct = Number(invoiceFormData.taxRate) || 0;
   const taxVal = (subtotal * taxPct) / 100;
@@ -822,16 +761,18 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
   );
 
   const getStatusBadge = (status: string) => {
-    const colors: Record<string, string> = {
-      Paid: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20",
-      Pending: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20",
-      Sent: "bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/20",
-      Draft: "bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/20",
-      Overdue: "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20",
-      Cancelled: "bg-slate-500/10 text-slate-500 border-slate-500/20 line-through",
+    const config: Record<string, { color: string; icon: string }> = {
+      Paid: { color: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20", icon: "fa-circle-check" },
+      Pending: { color: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20", icon: "fa-clock" },
+      Sent: { color: "bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/20", icon: "fa-paper-plane" },
+      Draft: { color: "bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/20", icon: "fa-pen-ruler" },
+      Overdue: { color: "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20", icon: "fa-triangle-exclamation" },
+      Cancelled: { color: "bg-slate-500/10 text-slate-500 border-slate-500/20 line-through", icon: "fa-ban" },
     };
+    const c = config[status] || { color: "bg-muted text-muted-foreground border-border", icon: "fa-circle-info" };
     return (
-      <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold border", colors[status] || "bg-muted text-muted-foreground")}>
+      <span className={cn("inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold border", c.color)}>
+        <i className={cn("fa-solid text-[9px]", c.icon)} />
         {status}
       </span>
     );
@@ -1052,43 +993,108 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
               )}
 
               {invoiceFormData.rateType === "project" && (
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  <div className="space-y-1 sm:col-span-1">
-                    <label className="font-semibold text-foreground">Currency</label>
-                    <select
-                      value={invoiceFormData.currency}
-                      onChange={(e) => setInvoiceFormData((prev) => ({ ...prev, currency: e.target.value }))}
-                      className="w-full h-9 px-3 text-xs bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer font-medium"
-                    >
-                      <option value="INR">INR (₹ - Indian Rupee)</option>
-                      <option value="USD">USD ($ - US Dollar)</option>
-                      <option value="EUR">EUR (€ - Euro)</option>
-                      <option value="GBP">GBP (£ - British Pound)</option>
-                      <option value="AED">AED (Dh - UAE Dirham)</option>
-                    </select>
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
+                    <div className="space-y-1 sm:col-span-1">
+                      <label className="font-semibold text-foreground">Currency</label>
+                      <select
+                        value={invoiceFormData.currency}
+                        onChange={(e) => setInvoiceFormData((prev) => ({ ...prev, currency: e.target.value }))}
+                        className="w-full h-9 px-3 text-xs bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer font-medium"
+                      >
+                        <option value="INR">INR (₹ - Indian Rupee)</option>
+                        <option value="USD">USD ($ - US Dollar)</option>
+                        <option value="EUR">EUR (€ - Euro)</option>
+                        <option value="GBP">GBP (£ - British Pound)</option>
+                        <option value="AED">AED (Dh - UAE Dirham)</option>
+                      </select>
+                    </div>
+                    <div className="sm:col-span-2 flex items-center justify-between sm:justify-end gap-3 pb-1 text-xs">
+                      <span className="text-muted-foreground font-medium">
+                        Total Project Milestone(s): <strong className="text-foreground">{invoiceFormData.projects?.length || 1}</strong>
+                      </span>
+                      <span className="font-bold text-primary bg-primary/10 px-2.5 py-1 rounded-md border border-primary/20 font-mono">
+                        {currSymbol}{totalProjAmount.toLocaleString()}
+                      </span>
+                    </div>
                   </div>
 
-                  <div className="space-y-1 sm:col-span-1">
-                    <label className="font-semibold text-foreground">Project / Milestone Fee</label>
-                    <Input
-                      type="number"
-                      required
-                      min="0"
-                      placeholder="5000"
-                      value={invoiceFormData.projectFixedAmount}
-                      onChange={(e) => setInvoiceFormData((prev) => ({ ...prev, projectFixedAmount: Number(e.target.value) }))}
-                    />
-                  </div>
+                  {/* Dynamic Projects / Milestones List */}
+                  <div className="space-y-3 pt-1">
+                    <div className="flex items-center justify-between">
+                      <label className="font-semibold text-foreground text-xs uppercase tracking-wider flex items-center gap-1.5">
+                        <i className="fa-solid fa-diagram-project text-primary text-xs" />
+                        Project Deliverables &amp; Milestones
+                      </label>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={handleAddProject}
+                        className="h-7 px-2.5 text-[11px] gap-1.5 font-bold text-primary border-dashed border-primary/40 hover:bg-primary/5 cursor-pointer"
+                      >
+                        <i className="fa-solid fa-plus text-[10px]" /> Add Project
+                      </Button>
+                    </div>
 
-                  <div className="space-y-1 sm:col-span-1">
-                    <label className="font-semibold text-foreground">Project / Scope Title</label>
-                    <Input
-                      type="text"
-                      required
-                      placeholder="e.g. Backend API Migration"
-                      value={invoiceFormData.projectName}
-                      onChange={(e) => setInvoiceFormData((prev) => ({ ...prev, projectName: e.target.value }))}
-                    />
+                    <div className="space-y-2.5">
+                      {(invoiceFormData.projects || []).map((proj, idx) => (
+                        <div
+                          key={proj.id || idx}
+                          className="p-3 bg-muted/20 dark:bg-slate-900/40 rounded-xl border border-border/80 grid grid-cols-1 sm:grid-cols-12 gap-3 items-center transition-all hover:border-border"
+                        >
+                          <div className="sm:col-span-1 flex items-center gap-1 text-muted-foreground text-xs font-mono font-bold">
+                            <span className="w-6 h-6 rounded-md bg-muted flex items-center justify-center text-[10px] text-foreground">
+                              #{idx + 1}
+                            </span>
+                          </div>
+
+                          <div className="sm:col-span-7 space-y-1">
+                            <div className="flex items-center justify-between">
+                              <label className="text-[11px] font-semibold text-muted-foreground">Project / Scope Title</label>
+                            </div>
+                            <Input
+                              type="text"
+                              required
+                              placeholder={idx === 0 ? "e.g. Fullstack Architecture & Feature Delivery" : `e.g. Deliverable / Milestone #${idx + 1}`}
+                              value={proj.name}
+                              onChange={(e) => handleProjectChange(proj.id, "name", e.target.value)}
+                              className="h-8.5 text-xs bg-background"
+                            />
+                          </div>
+
+                          <div className="sm:col-span-3 space-y-1">
+                            <label className="text-[11px] font-semibold text-muted-foreground">Milestone Fee ({currSymbol})</label>
+                            <Input
+                              type="number"
+                              required
+                              min="0"
+                              placeholder="e.g. 5000"
+                              value={proj.amount === 0 ? "" : proj.amount}
+                              onChange={(e) => handleProjectChange(proj.id, "amount", e.target.value === "" ? 0 : Number(e.target.value))}
+                              className="h-8.5 text-xs font-mono font-bold bg-background"
+                            />
+                          </div>
+
+                          <div className="sm:col-span-1 flex justify-end sm:pt-4">
+                            {(invoiceFormData.projects || []).length > 1 ? (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleRemoveProject(proj.id)}
+                                title="Remove this project"
+                                className="h-8 w-8 p-0 text-rose-500 hover:text-rose-600 hover:bg-rose-500/10 cursor-pointer rounded-lg"
+                              >
+                                <i className="fa-solid fa-trash-can text-xs" />
+                              </Button>
+                            ) : (
+                              <div className="h-8 w-8" />
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 </div>
               )}
@@ -1407,13 +1413,20 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
 
                 {invoiceFormData.rateType === "project" && (
                   <>
-                    <div className="flex justify-between text-muted-foreground">
-                      <span>Project Milestone Scope:</span>
-                      <span className="font-semibold text-foreground truncate max-w-[200px]">{invoiceFormData.projectName || "Fixed Deliverable"}</span>
+                    <div className="space-y-1">
+                      {effectiveProjects.map((p, i) => (
+                        <div key={p.id || i} className="flex justify-between text-muted-foreground text-xs">
+                          <span className="truncate max-w-[220px]">
+                            <i className="fa-solid fa-diagram-project mr-1 text-[10px] text-primary" />
+                            {p.name || `Project Milestone #${i + 1}`}:
+                          </span>
+                          <span className="font-mono font-medium">{currSymbol}{(Number(p.amount) || 0).toLocaleString()}</span>
+                        </div>
+                      ))}
                     </div>
-                    <div className="flex justify-between text-foreground font-semibold">
-                      <span><i className="fa-solid fa-briefcase mr-1 text-primary" />Project Base Fee:</span>
-                      <span className="font-mono">{currSymbol}{projAmount.toLocaleString()}</span>
+                    <div className="flex justify-between text-foreground font-semibold pt-1 border-t border-border/40">
+                      <span><i className="fa-solid fa-briefcase mr-1 text-primary" />Total Projects Fee ({effectiveProjects.length}):</span>
+                      <span className="font-mono">{currSymbol}{totalProjAmount.toLocaleString()}</span>
                     </div>
                   </>
                 )}
@@ -1443,44 +1456,6 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
                   disabled
                   value={invoiceFormData.billedToName}
                   className="opacity-85 cursor-not-allowed bg-muted/40 font-medium select-none"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <div className="flex items-center justify-between">
-                  <label className="font-semibold text-foreground">Description of Work</label>
-                  <button
-                    type="button"
-                    onClick={() => setInvoiceFormData((prev) => ({ ...prev, description: generateDefaultDescription(user?.role, user?.department, prev.startDate, prev.endDate) }))}
-                    className="text-[10px] text-primary hover:underline cursor-pointer"
-                  >
-                    Reset to Default
-                  </button>
-                </div>
-                <Input
-                  type="text"
-                  placeholder="e.g. Fullstack engineering & consulting retainer"
-                  value={invoiceFormData.description}
-                  onChange={(e) => setInvoiceFormData((prev) => ({ ...prev, description: e.target.value }))}
-                />
-              </div>
-
-              <div className="space-y-1">
-                <div className="flex items-center justify-between">
-                  <label className="font-semibold text-foreground">Additional Notes</label>
-                  <button
-                    type="button"
-                    onClick={() => setInvoiceFormData((prev) => ({ ...prev, notes: generateDefaultNotes(prev.startDate, prev.endDate) }))}
-                    className="text-[10px] text-primary hover:underline cursor-pointer"
-                  >
-                    Reset to Default
-                  </button>
-                </div>
-                <Input
-                  type="text"
-                  placeholder="e.g. Bank transfer details, project references..."
-                  value={invoiceFormData.notes}
-                  onChange={(e) => setInvoiceFormData((prev) => ({ ...prev, notes: e.target.value }))}
                 />
               </div>
 
@@ -1559,49 +1534,113 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
                 {paginatedInvoices.map((inv) => {
                   const curr = inv.currency === "EUR" ? "€" : inv.currency === "GBP" ? "£" : inv.currency === "INR" ? "₹" : "$";
                   return (
-                    <div
-                      key={inv._id || inv.id}
-                      className="p-3 bg-muted/20 hover:bg-muted/40 rounded-xl border border-border/80 flex items-center justify-between gap-3 text-xs transition-colors"
-                    >
-                      <div className="space-y-1.5 truncate">
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono font-bold text-primary">{inv.invoiceNo}</span>
-                          {getStatusBadge(inv.status)}
+                    <div key={inv._id || inv.id} className="rounded-xl border border-border/80 overflow-hidden">
+                      <div
+                        className="p-3 bg-muted/20 hover:bg-muted/30 flex items-center justify-between gap-3 text-xs transition-colors cursor-default"
+                      >
+                        <div className="space-y-1.5 truncate">
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono font-bold text-primary">{inv.invoiceNo}</span>
+                            {getStatusBadge(inv.status)}
+                            {inv.status === "Paid" && inv.paymentDetails?.method && (
+                              <span className={cn(
+                                "inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-bold border",
+                                inv.paymentDetails.method === "UPI"
+                                  ? "bg-violet-500/10 text-violet-600 dark:text-violet-400 border-violet-500/20"
+                                  : inv.paymentDetails.method === "Cash"
+                                  ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
+                                  : "bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/20"
+                              )}>
+                                <i className={cn(
+                                  "fa-solid text-[9px]",
+                                  inv.paymentDetails.method === "UPI" ? "fa-qrcode" :
+                                  inv.paymentDetails.method === "Cash" ? "fa-money-bill-transfer" :
+                                  "fa-building-columns"
+                                )} />
+                                {inv.paymentDetails.method}
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[11px] text-muted-foreground truncate">
+                            Billed to: <strong className="text-foreground">{inv.billedToName}</strong>
+                          </div>
+                          <div className="text-[10px] font-mono text-muted-foreground">
+                            {inv.status === "Paid" ? (
+                              <span className="text-emerald-500 font-semibold">
+                                Paid: {inv.paymentDetails?.paidAt ? new Date(inv.paymentDetails.paidAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : inv.invoiceDate}
+                              </span>
+                            ) : (
+                              <span>Due: {inv.dueDate}</span>
+                            )}
+                          </div>
                         </div>
-                        <div className="text-[11px] text-muted-foreground truncate">
-                          Billed to: <strong className="text-foreground">{inv.billedToName}</strong>
-                        </div>
-                        <div className="text-[10px] font-mono text-muted-foreground">
-                          Due: {inv.dueDate}
+                        <div className="text-right shrink-0 space-y-1.5">
+                          <div className="font-mono font-extrabold text-foreground text-sm">
+                            {curr}{inv.total.toLocaleString()}
+                          </div>
+                          <div className="flex items-center gap-1 justify-end">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setViewInvoice(inv)}
+                              className="h-6 w-6 p-0 cursor-pointer text-muted-foreground hover:text-primary"
+                              title="View details"
+                            >
+                              <i className="fa-solid fa-eye text-[10px]" />
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handlePrintPDF(inv)}
+                              className="h-6 w-6 p-0 cursor-pointer text-rose-500 border-rose-500/10 hover:border-rose-500/40 bg-rose-500/5"
+                              title="Export PDF"
+                            >
+                              <i className="fa-solid fa-file-pdf text-[10px]" />
+                            </Button>
+                          </div>
                         </div>
                       </div>
-                      <div className="text-right shrink-0 space-y-1.5">
-                        <div className="font-mono font-extrabold text-foreground text-sm">
-                          {curr}{inv.total.toLocaleString()}
+
+                      {/* Payment Receipt strip — only for paid invoices with payment details */}
+                      {inv.status === "Paid" && inv.paymentDetails && (
+                        <div className="px-3 py-2.5 bg-emerald-500/5 border-t border-emerald-500/15 flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-2 text-[11px] text-emerald-700 dark:text-emerald-400">
+                            <i className="fa-solid fa-circle-check shrink-0" />
+                            <span className="font-semibold">
+                              Paid via {inv.paymentDetails.method}
+                              {inv.paymentDetails.upiId && (
+                                <span className="ml-1.5 font-mono text-violet-600 dark:text-violet-400 bg-violet-500/10 px-1.5 py-0.5 rounded-full border border-violet-500/20 text-[10px]">
+                                  <i className="fa-solid fa-qrcode mr-1 text-[9px]" />{inv.paymentDetails.upiId}
+                                </span>
+                              )}
+                              {inv.paymentDetails.paidAt && (
+                                <span className="ml-1 text-muted-foreground font-mono">
+                                  · Paid on {new Date(inv.paymentDetails.paidAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}
+                                </span>
+                              )}
+                              {inv.paymentDetails.transactionId && (
+                                <span className="ml-1 text-muted-foreground font-mono">
+                                  · Txn: {inv.paymentDetails.transactionId}
+                                </span>
+                              )}
+                            </span>
+                          </div>
+                          {inv.paymentDetails.screenshotUrl && (
+                            <a
+                              href={inv.paymentDetails.screenshotUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center gap-1.5 text-[10px] font-bold text-violet-600 dark:text-violet-400 hover:underline shrink-0"
+                              title={inv.paymentDetails.screenshotFileName || "View payment receipt"}
+                            >
+                              <i className="fa-solid fa-receipt text-[10px]" />
+                              View Receipt
+                            </a>
+                          )}
                         </div>
-                        <div className="flex items-center gap-1 justify-end">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setViewInvoice(inv)}
-                            className="h-6 w-6 p-0 cursor-pointer text-muted-foreground hover:text-primary"
-                            title="View details"
-                          >
-                            <i className="fa-solid fa-eye text-[10px]" />
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handlePrintPDF(inv)}
-                            className="h-6 w-6 p-0 cursor-pointer text-rose-500 border-rose-500/10 hover:border-rose-500/40 bg-rose-500/5"
-                            title="Export PDF"
-                          >
-                            <i className="fa-solid fa-file-pdf text-[10px]" />
-                          </Button>
-                        </div>
-                      </div>
+                      )}
                     </div>
                   );
                 })}

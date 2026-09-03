@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, Suspense } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import { usePermissions } from "@/hooks/usePermissions";
 import { Preloader } from "@/components/ui/Preloader";
@@ -16,22 +17,45 @@ import { UserManagementTab } from "@/components/settings/UserManagementTab";
 import { RoleDataControlTab } from "@/components/settings/RoleDataControlTab";
 import { ShiftAndStatusTab } from "@/components/settings/ShiftAndStatusTab";
 import { SelfServiceInvoiceTab } from "@/components/settings/SelfServiceInvoiceTab";
-import { AdminInvoicesTab } from "@/components/settings/AdminInvoicesTab";
 
 function SettingsPageContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const { user, loading: authLoading, refreshUser } = useAuth();
   const { can, isAdmin, isOPS } = usePermissions();
 
-  const [activeTab, setActiveTab] = useTabPersistence<"profile" | "security" | "invoice" | "all-invoices" | "users" | "shifts" | "subscription" | "permissions" | "organization">(
+  const [activeTab, setActiveTab] = useTabPersistence<"profile" | "security" | "invoice" | "users" | "shifts" | "subscription" | "permissions" | "organization">(
     "settings_active_tab_v2",
     "profile",
-    ["profile", "security", "invoice", "all-invoices", "users", "shifts", "subscription", "permissions", "organization"]
+    ["profile", "security", "invoice", "users", "shifts", "subscription", "permissions", "organization"]
   );
+
+  // Sync tab with URL searchParams and handle redirection for moved tabs
+  useEffect(() => {
+    const tabParam = searchParams.get("tab");
+    if (!tabParam) return;
+
+    if (tabParam === "all-invoices" || tabParam === "invoices") {
+      const invNo = searchParams.get("invoiceNo");
+      const invId = searchParams.get("invoiceId");
+      router.replace(`/dashboard/finance?tab=invoices${invNo ? `&invoiceNo=${encodeURIComponent(invNo)}` : ""}${invId ? `&invoiceId=${encodeURIComponent(invId)}` : ""}`);
+      return;
+    }
+
+    if (tabParam === "self-invoices" || tabParam === "invoice") {
+      setActiveTab("invoice");
+      return;
+    }
+
+    if (["profile", "security", "invoice", "users", "shifts", "subscription", "permissions", "organization"].includes(tabParam)) {
+      setActiveTab(tabParam as any);
+    }
+  }, [searchParams, router, setActiveTab]);
 
   // Sync tab with custom event from banners
   useEffect(() => {
     const handleTabSwitch = (e: any) => {
-      if (e.detail && e.detail !== activeTab && ["profile", "security", "invoice", "all-invoices", "users", "shifts", "subscription", "permissions", "organization"].includes(e.detail)) {
+      if (e.detail && e.detail !== activeTab && ["profile", "security", "invoice", "users", "shifts", "subscription", "permissions", "organization"].includes(e.detail)) {
         setActiveTab(e.detail);
       }
     };
@@ -825,20 +849,6 @@ function SettingsPageContent() {
           </button>
         )}
 
-        {(isAdmin || isOPS) && (
-          <button
-            onClick={() => setActiveTab("all-invoices")}
-            className={cn(
-              "px-3 py-2 text-xs sm:text-sm font-medium rounded-lg transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
-              activeTab === "all-invoices"
-                ? "bg-background text-primary shadow-xs font-bold border border-border"
-                : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
-            )}
-          >
-            <i className="fa-solid fa-file-invoice text-amber-500 text-sm" /> Master Invoices
-          </button>
-        )}
-
         {(can("manageUsers") || isAdmin || isOPS) && (
           <button
             onClick={() => setActiveTab("users")}
@@ -849,7 +859,7 @@ function SettingsPageContent() {
                 : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
             )}
           >
-            <i className="fa-solid fa-users-gear text-purple-500 text-sm" /> User Management
+            <i className="fa-solid fa-users text-primary text-sm" /> Users
           </button>
         )}
 
@@ -863,11 +873,11 @@ function SettingsPageContent() {
                 : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
             )}
           >
-            <i className="fa-solid fa-clock-rotate-left text-amber-500 text-sm" /> Shifts &amp; Employment
+            <i className="fa-solid fa-clock text-amber-500 text-sm" /> Shifts &amp; Status
           </button>
         )}
 
-        {(can("manageRolePermissions") || isAdmin || isOPS) && (
+        {(can("manageRoles") || isAdmin || isOPS) && (
           <button
             onClick={() => setActiveTab("permissions")}
             className={cn(
@@ -877,21 +887,21 @@ function SettingsPageContent() {
                 : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
             )}
           >
-            <i className="fa-solid fa-lock text-sky-500 text-sm" /> Roles &amp; Security
+            <i className="fa-solid fa-shield-halved text-rose-500 text-sm" /> Permissions
           </button>
         )}
 
-        {(can("viewBillingSubscription") || isAdmin || isOPS) && (
+        {(can("manageBilling") || isAdmin || isOPS) && (
           <button
             onClick={() => setActiveTab("subscription")}
             className={cn(
               "px-3 py-2 text-xs sm:text-sm font-medium rounded-lg transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
               activeTab === "subscription"
-                ? "bg-background text-amber-500 shadow-xs font-bold border border-border"
+                ? "bg-background text-primary shadow-xs font-bold border border-border"
                 : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
             )}
           >
-            <i className="fa-solid fa-crown text-amber-500 text-sm" /> Subscription &amp; Plans
+            <i className="fa-solid fa-credit-card text-emerald-500 text-sm" /> Subscription &amp; Plan
           </button>
         )}
       </div>
@@ -903,9 +913,6 @@ function SettingsPageContent() {
 
         {/* TAB: SELF-SERVICE INVOICE GENERATOR */}
         {activeTab === "invoice" && <SelfServiceInvoiceTab showToast={showToast} />}
-
-        {/* TAB: ADMIN MASTER INVOICES */}
-        {activeTab === "all-invoices" && (isAdmin || isOPS) && <AdminInvoicesTab showToast={showToast} />}
 
         {/* TAB: SHIFTS & EMPLOYMENT TYPES */}
         {activeTab === "shifts" && (can("manageShifts") || isAdmin) && (
