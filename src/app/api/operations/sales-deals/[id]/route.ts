@@ -18,7 +18,7 @@ export async function PATCH(
     const body = await request.json();
     await connectToDatabase();
 
-    const { dealName, clientAccount, clientName, dealValue, value, stage, probability, owner, expectedClose, expectedCloseDate, notes, priority, venture } = body;
+    const { dealName, clientAccount, clientName, dealValue, value, stage, probability, owner, expectedClose, expectedCloseDate, notes, priority, venture, currency } = body;
     const updatePayload: Record<string, unknown> = {};
     if (dealName !== undefined) updatePayload.dealName = dealName;
     if (clientAccount !== undefined || clientName !== undefined) updatePayload.clientAccount = clientAccount || clientName;
@@ -28,12 +28,37 @@ export async function PATCH(
     if (owner !== undefined) updatePayload.owner = owner;
     if (expectedClose !== undefined || expectedCloseDate !== undefined) updatePayload.expectedClose = String(expectedClose || expectedCloseDate || "");
     if (venture !== undefined) updatePayload.venture = venture;
+    if (currency !== undefined) updatePayload.currency = currency;
     if (notes !== undefined) updatePayload.notes = notes;
+
+    const existingDeal = await SalesDeal.findOne({
+      _id: new mongoose.Types.ObjectId(id),
+      tenantId: tenantObjectId,
+    });
+
+    if (!existingDeal) return NextResponse.json({ error: "Deal not found" }, { status: 404 });
+
+    const isStageChanged = stage !== undefined && stage !== existingDeal.stage;
+    const historyEntry = isStageChanged
+      ? {
+          fromStage: existingDeal.stage,
+          toStage: stage,
+          changedBy: userObjectId,
+          changedByName: session.userName || "Admin",
+          notes: notes !== undefined ? String(notes) : "",
+          timestamp: new Date(),
+        }
+      : null;
+
+    const updateOps: Record<string, unknown> = { $set: updatePayload };
+    if (historyEntry) {
+      updateOps.$push = { stageHistory: historyEntry };
+    }
 
     const deal = await SalesDeal.findOneAndUpdate(
       { _id: new mongoose.Types.ObjectId(id), tenantId: tenantObjectId },
-      { $set: updatePayload },
-      { returnDocument: 'after' }
+      updateOps,
+      { returnDocument: "after" }
     );
 
     if (!deal) return NextResponse.json({ error: "Deal not found" }, { status: 404 });
@@ -43,9 +68,11 @@ export async function PATCH(
       userId: userObjectId,
       userName: session.userName,
       userRole: session.role,
-      action: "SALES_DEAL_UPDATED",
+      action: isStageChanged ? "SALES_DEAL_STAGE_CHANGED" : "SALES_DEAL_UPDATED",
       targetName: deal.dealName,
-      details: `Updated sales deal "${deal.dealName}"`,
+      details: isStageChanged
+        ? `Moved deal "${deal.dealName}" from ${existingDeal.stage} to ${stage}${notes ? ` - Reason: ${notes}` : ""}`
+        : `Updated sales deal "${deal.dealName}"`,
     });
 
     return NextResponse.json({ deal });

@@ -2225,7 +2225,16 @@ function InvoicesTab({ invoices, loading, onAdd, onEdit, onDelete, autoOpenAdd }
     }
   }, [autoOpenAdd]);
 
-  const filtered = useMemo(() => invoices.filter((inv) => {
+  const isExternalITInvoice = (inv: Invoice) => {
+    const cust = (inv.customerNo || "").toUpperCase();
+    const notes = (inv.notes || "").toLowerCase();
+    const billedTo = (inv.billedToName || "").toLowerCase();
+    return cust.startsWith("EXT-") || notes.includes("proposal") || (billedTo.includes("external") && !cust.startsWith("EMP-")) || (inv as any).category === "Client Billing";
+  };
+
+  const itInvoices = useMemo(() => invoices.filter((inv) => !isExternalITInvoice(inv)), [invoices]);
+
+  const filtered = useMemo(() => itInvoices.filter((inv) => {
     const q = search.toLowerCase();
     const matchesSearch = !q || inv.invoiceNo.toLowerCase().includes(q) || inv.billedToName.toLowerCase().includes(q) || inv.customerNo?.toLowerCase().includes(q);
     const matchesStatus = filterStatus === "All" || inv.status === filterStatus;
@@ -2246,10 +2255,10 @@ function InvoicesTab({ invoices, loading, onAdd, onEdit, onDelete, autoOpenAdd }
     }
 
     return matchesSearch && matchesStatus && matchesCurrency && matchesDate;
-  }), [invoices, search, filterStatus, filterCurrency, filterDateRange]);
+  }), [itInvoices, search, filterStatus, filterCurrency, filterDateRange]);
 
-  const totalRevenue = invoices.filter((inv) => inv.status === "Paid").reduce((acc, inv) => acc + (inv.total || 0), 0);
-  const pendingAmount = invoices.filter((inv) => inv.status === "Pending" || inv.status === "Sent" || inv.status === "Overdue").reduce((acc, inv) => acc + (inv.total || 0), 0);
+  const totalRevenue = itInvoices.filter((inv) => inv.status === "Paid").reduce((acc, inv) => acc + (inv.total || 0), 0);
+  const pendingAmount = itInvoices.filter((inv) => inv.status === "Pending" || inv.status === "Sent" || inv.status === "Overdue").reduce((acc, inv) => acc + (inv.total || 0), 0);
 
   const handleSave = async (data: Omit<Invoice, "id">) => {
     setSaving(true);
@@ -2382,7 +2391,7 @@ function InvoicesTab({ invoices, loading, onAdd, onEdit, onDelete, autoOpenAdd }
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div className="rounded-xl border border-border bg-card p-4">
           <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-semibold">Total Invoices</p>
-          <p className="text-xl font-bold text-foreground mt-1">{invoices.length}</p>
+          <p className="text-xl font-bold text-foreground mt-1">{itInvoices.length}</p>
         </div>
         <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4">
           <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-semibold">Paid Revenue</p>
@@ -2394,7 +2403,7 @@ function InvoicesTab({ invoices, loading, onAdd, onEdit, onDelete, autoOpenAdd }
         </div>
         <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-4">
           <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-semibold">Drafts</p>
-          <p className="text-xl font-bold text-blue-500 mt-1">{invoices.filter((i) => i.status === "Draft").length}</p>
+          <p className="text-xl font-bold text-blue-500 mt-1">{itInvoices.filter((i) => i.status === "Draft").length}</p>
         </div>
       </div>
 

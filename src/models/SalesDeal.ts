@@ -1,5 +1,14 @@
 import mongoose, { Schema, Document, Model } from "mongoose";
 
+export interface IDealStageHistory {
+  fromStage?: string;
+  toStage: string;
+  changedBy?: mongoose.Types.ObjectId;
+  changedByName?: string;
+  notes?: string;
+  timestamp: Date;
+}
+
 export interface ISalesDeal extends Document {
   tenantId: mongoose.Types.ObjectId;
   createdBy: mongoose.Types.ObjectId;
@@ -11,7 +20,9 @@ export interface ISalesDeal extends Document {
   owner: string;
   expectedClose: string;
   venture: string;
+  currency?: string;
   notes?: string;
+  stageHistory?: IDealStageHistory[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -32,7 +43,18 @@ const SalesDealSchema = new Schema<ISalesDeal>(
     owner: { type: String, trim: true, default: "" },
     expectedClose: { type: String, default: "" },
     venture: { type: String, trim: true, default: "Ace Consultancys" },
+    currency: { type: String, trim: true, default: "USD" },
     notes: { type: String, trim: true, default: "" },
+    stageHistory: [
+      {
+        fromStage: { type: String, trim: true },
+        toStage: { type: String, required: true, trim: true },
+        changedBy: { type: Schema.Types.ObjectId, ref: "User" },
+        changedByName: { type: String, trim: true },
+        notes: { type: String, trim: true },
+        timestamp: { type: Date, default: Date.now },
+      },
+    ],
   },
   { timestamps: true }
 );

@@ -25,6 +25,7 @@ export default function SalesWorkdeskPage() {
     owner: "",
     expectedClose: "",
     venture: "Ace Consultancys",
+    currency: "USD",
     notes: "",
   });
 
@@ -58,7 +59,7 @@ export default function SalesWorkdeskPage() {
   }, []);
 
   // ── Handlers ──
-  const handleOpenSalesModal = (deal?: SalesDeal) => {
+  const handleOpenSalesModal = (deal?: SalesDeal, prefillStage?: SalesDeal["stage"]) => {
     if (deal) {
       setEditingSalesDeal(deal);
       setSalesFormData({
@@ -70,6 +71,7 @@ export default function SalesWorkdeskPage() {
         owner: deal.owner,
         expectedClose: deal.expectedClose ? deal.expectedClose.split("T")[0] : "",
         venture: deal.venture,
+        currency: deal.currency || "USD",
         notes: deal.notes || "",
       });
     } else {
@@ -78,15 +80,34 @@ export default function SalesWorkdeskPage() {
         clientAccount: "",
         dealName: "",
         dealValue: "",
-        stage: "Prospecting",
+        stage: prefillStage || "Prospecting",
         probability: 50,
         owner: "",
         expectedClose: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
         venture: "Ace Consultancys",
+        currency: "USD",
         notes: "",
       });
     }
     setShowSalesModal(true);
+  };
+
+  const handleStageChange = async (dealId: string, newStage: SalesDeal["stage"]) => {
+    try {
+      const res = await fetch(`/api/operations/sales-deals/${dealId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ stage: newStage }),
+      });
+      if (res.ok) {
+        setSalesDeals(prev => prev.map(d => d._id === dealId ? { ...d, stage: newStage } : d));
+        showToast(`Deal moved to ${newStage}`);
+      } else {
+        showToast("Failed to update deal stage", "error");
+      }
+    } catch {
+      showToast("Failed to update deal stage", "error");
+    }
   };
 
   const handleSaveSalesDeal = async (e: React.FormEvent) => {
@@ -110,6 +131,7 @@ export default function SalesWorkdeskPage() {
           owner: salesFormData.owner || "",
           expectedClose: salesFormData.expectedClose || "",
           venture: salesFormData.venture,
+          currency: salesFormData.currency,
           notes: salesFormData.notes || "",
         }),
       });
@@ -192,10 +214,11 @@ export default function SalesWorkdeskPage() {
       <SalesWorkdeskDashboard
         deals={salesDeals}
         loading={salesLoading}
-        onNewDeal={() => handleOpenSalesModal()}
+        onNewDeal={(prefillStage) => handleOpenSalesModal(undefined, prefillStage)}
         onEditDeal={(deal) => handleOpenSalesModal(deal)}
         onDeleteDeal={(id, name) => setDeleteTarget({ id, name })}
         onRefresh={fetchSalesDeals}
+        onStageChange={handleStageChange}
       />
 
       {/* ── Add / Edit Deal Modal ── */}
@@ -244,9 +267,9 @@ export default function SalesWorkdeskPage() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className={labelCls}>Deal Value ($)</label>
+              <div className="grid grid-cols-3 gap-3">
+                <div className="space-y-1 col-span-2">
+                  <label className={labelCls}>Deal Value</label>
                   <Input
                     type="number"
                     min="0"
@@ -257,15 +280,18 @@ export default function SalesWorkdeskPage() {
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className={labelCls}>Probability (%)</label>
-                  <Input
-                    type="number"
-                    min="0"
-                    max="100"
-                    className={inputCls}
-                    value={salesFormData.probability}
-                    onChange={e => setSalesFormData(p => ({ ...p, probability: Number(e.target.value) }))}
-                  />
+                  <label className={labelCls}>Currency</label>
+                  <select
+                    value={salesFormData.currency}
+                    onChange={e => setSalesFormData(p => ({ ...p, currency: e.target.value }))}
+                    className="w-full h-9 rounded-md border border-input bg-background text-sm px-2 text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
+                  >
+                    <option value="USD">USD ($)</option>
+                    <option value="INR">INR (₹)</option>
+                    <option value="EUR">EUR (€)</option>
+                    <option value="GBP">GBP (£)</option>
+                    <option value="AED">AED</option>
+                  </select>
                 </div>
               </div>
 
@@ -283,6 +309,20 @@ export default function SalesWorkdeskPage() {
                   </select>
                 </div>
                 <div className="space-y-1">
+                  <label className={labelCls}>Probability (%)</label>
+                  <Input
+                    type="number"
+                    min="0"
+                    max="100"
+                    className={inputCls}
+                    value={salesFormData.probability}
+                    onChange={e => setSalesFormData(p => ({ ...p, probability: Number(e.target.value) }))}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
                   <label className={labelCls}>Expected Close</label>
                   <Input
                     type="date"
@@ -291,9 +331,6 @@ export default function SalesWorkdeskPage() {
                     onChange={e => setSalesFormData(p => ({ ...p, expectedClose: e.target.value }))}
                   />
                 </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <label className={labelCls}>Owner</label>
                   <Input
@@ -303,18 +340,19 @@ export default function SalesWorkdeskPage() {
                     placeholder="Deal owner name"
                   />
                 </div>
-                <div className="space-y-1">
-                  <label className={labelCls}>Venture</label>
-                  <select
-                    value={salesFormData.venture}
-                    onChange={e => setSalesFormData(p => ({ ...p, venture: e.target.value }))}
-                    className="w-full h-9 rounded-md border border-input bg-background text-sm px-2 text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
-                  >
-                    {["Ace Consultancys", "NexAce Tech", "Ziqsy", "Other"].map(v => (
-                      <option key={v} value={v}>{v}</option>
-                    ))}
-                  </select>
-                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className={labelCls}>Venture</label>
+                <select
+                  value={salesFormData.venture}
+                  onChange={e => setSalesFormData(p => ({ ...p, venture: e.target.value }))}
+                  className="w-full h-9 rounded-md border border-input bg-background text-sm px-2 text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
+                >
+                  {["Ace Consultancys", "NexAce Tech", "Ziqsy", "Other"].map(v => (
+                    <option key={v} value={v}>{v}</option>
+                  ))}
+                </select>
               </div>
 
               <div className="space-y-1">

@@ -52,6 +52,7 @@ const featureSections: { title: string; items: MenuItem[] }[] = [
     items: [
       { key: "clients", name: "Operation Portal", href: "/dashboard/clients", icon: "fa-solid fa-list-check" },
       { key: "finance", name: "Finance Portal", href: "/dashboard/finance", icon: "fa-solid fa-coins" },
+      { key: "bd", name: "BD Portal", href: "/dashboard/bd", icon: "fa-solid fa-handshake" },
       { key: "referrals", name: "Referral Pipeline", href: "/dashboard/referrals", icon: "fa-solid fa-link" },
       { key: "goals", name: "Goals & OKRs", href: "/dashboard/goals", icon: "fa-solid fa-bullseye" },
     ],
@@ -120,7 +121,8 @@ export function DashboardClientLayout({ session, menuItems, isPending = false, c
 
   const isRouteActive = (href: string) => {
     if (href === "/dashboard") return pathname === "/dashboard";
-    return pathname.startsWith(href);
+    const hrefPath = href.split("?")[0];
+    return pathname.startsWith(hrefPath);
   };
 
   return (

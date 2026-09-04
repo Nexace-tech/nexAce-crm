@@ -58,7 +58,18 @@ export async function POST(request: Request) {
           owner: item.owner || item.deliveryOwner || session.userName || "Admin",
           expectedClose: item.expectedClose || item.targetEndDate || "2026-12-31",
           venture: item.venture || "Ace Consultancys",
-          notes: item.notes || "Bulk imported deal",
+          currency: item.currency || "USD",
+          notes: item.notes || "",
+          stageHistory: [
+            {
+              fromStage: undefined,
+              toStage: item.stage || "Prospecting",
+              changedBy: userObjectId,
+              changedByName: session.userName || "Admin",
+              notes: item.notes || "Bulk imported deal",
+              timestamp: new Date(),
+            },
+          ],
         });
       });
 
@@ -85,7 +96,7 @@ export async function POST(request: Request) {
     }
 
     // ── Handle Single Deal Creation ──────────────────────────────────────────
-    const { clientAccount, dealName, dealValue, stage, probability, owner, expectedClose, venture, notes } = body;
+    const { clientAccount, dealName, dealValue, stage, probability, owner, expectedClose, venture, currency, notes } = body;
 
     if (!clientAccount?.trim() || !dealName?.trim()) {
       return NextResponse.json({ error: "Client account and deal name are required" }, { status: 400 });
@@ -102,7 +113,18 @@ export async function POST(request: Request) {
       owner: owner?.trim() || session.userName || "Unassigned",
       expectedClose: expectedClose || "",
       venture: venture || "Ace Consultancys",
+      currency: currency || "USD",
       notes: notes || "",
+      stageHistory: [
+        {
+          fromStage: undefined,
+          toStage: stage || "Prospecting",
+          changedBy: userObjectId,
+          changedByName: session.userName || "Admin",
+          notes: notes || "Initial deal creation",
+          timestamp: new Date(),
+        },
+      ],
     });
 
     await ActivityLog.create({

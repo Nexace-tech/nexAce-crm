@@ -7,6 +7,14 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
+export interface IDealStageHistoryItem {
+  fromStage?: string;
+  toStage: string;
+  changedByName?: string;
+  notes?: string;
+  timestamp: string | Date;
+}
+
 export interface SalesDeal {
   _id: string;
   clientAccount: string;
@@ -17,19 +25,45 @@ export interface SalesDeal {
   owner: string;
   expectedClose: string;
   venture: string;
+  currency?: string;
   notes?: string;
   category?: string;
+  stageHistory?: IDealStageHistoryItem[];
   createdAt?: string;
 }
+
+export const KANBAN_STAGES = [
+  "Prospecting",
+  "Discovery",
+  "Proposal Sent",
+  "Negotiation",
+  "Closed Won",
+  "Closed Lost",
+] as const;
 
 interface SalesWorkdeskDashboardProps {
   deals: SalesDeal[];
   loading?: boolean;
-  onNewDeal: () => void;
+  onNewDeal: (prefillStage?: SalesDeal["stage"]) => void;
   onEditDeal: (deal: SalesDeal) => void;
   onDeleteDeal: (dealId: string, dealName: string) => void;
   onRefresh?: () => void;
+  onStageChange?: (dealId: string, newStage: SalesDeal["stage"]) => void;
 }
+
+// Currency formatters and symbol resolution
+const getCurrencySymbol = (currency?: string): string => {
+  if (!currency) return "$";
+  const c = currency.toUpperCase();
+  if (c === "INR" || c === "₹") return "₹";
+  if (c === "EUR" || c === "€") return "€";
+  if (c === "GBP" || c === "£") return "£";
+  if (c === "AED") return "AED ";
+  if (c === "SAR") return "SAR ";
+  if (c === "CAD") return "CA$";
+  if (c === "AUD") return "AU$";
+  return "$";
+};
 
 // Deterministic currency formatters to prevent SSR locale hydration mismatches
 const formatUSD = (val: number | string) => {
@@ -42,6 +76,29 @@ const formatUSDDec = (val: number | string) => {
   return new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(num);
 };
 
+const formatCurr = (val: number | string, currency?: string) => {
+  const sym = getCurrencySymbol(currency);
+  return `${sym}${formatUSD(val)}`;
+};
+
+const formatCurrDec = (val: number | string, currency?: string) => {
+  const sym = getCurrencySymbol(currency);
+  return `${sym}${formatUSDDec(val)}`;
+};
+
+const formatMultiCurrDeals = (dealsList: SalesDeal[], fallbackCurrency: string = "USD"): string => {
+  if (!dealsList || dealsList.length === 0) return formatCurr(0, fallbackCurrency);
+  const totalsByCurrency: Record<string, number> = {};
+  dealsList.forEach((d) => {
+    const c = (d.currency || fallbackCurrency).toUpperCase();
+    totalsByCurrency[c] = (totalsByCurrency[c] || 0) + (Number(d.dealValue) || 0);
+  });
+  const entries = Object.entries(totalsByCurrency).filter(([_, sum]) => sum > 0);
+  if (entries.length === 0) return formatCurr(0, fallbackCurrency);
+  if (entries.length === 1) return formatCurr(entries[0][1], entries[0][0]);
+  return entries.map(([c, sum]) => formatCurr(sum, c)).join(" • ");
+};
+
 export function SalesWorkdeskDashboard({
   deals,
   loading = false,
@@ -49,6 +106,7 @@ export function SalesWorkdeskDashboard({
   onEditDeal,
   onDeleteDeal,
   onRefresh,
+  onStageChange,
 }: SalesWorkdeskDashboardProps) {
   // Navigation sub-views: "overview" (exact  Sales Dashboard) | "kanban" | "table"
   const [viewMode, setViewMode] = useState<"overview" | "kanban" | "table">("overview");
@@ -68,12 +126,12 @@ export function SalesWorkdeskDashboard({
   const [hoveredGrowthMonth, setHoveredGrowthMonth] = useState<number | null>(null);
 
   // Exact CRMS Reference Demo Deals Fallback
-  const defaultRecentDeals = useMemo(() => [
-    { _id: "demo-1", dealName: "SkyHigh Annual Booking", category: "Appointment", clientAccount: "SkyHigh Aviation", dealValue: 7811800, stage: "Closed Won" as const, owner: "Sara Khan", expectedClose: "2026-12-01", probability: 100, venture: "Ace Consultancys" },
-    { _id: "demo-2", dealName: "CRM Onboarding Package", category: "Appointment", clientAccount: "NovaTech Solutions", dealValue: 7211289, stage: "Closed Lost" as const, owner: "Ahmed Raza", expectedClose: "2026-10-15", probability: 0, venture: "Ace Consultancys" },
-    { _id: "demo-3", dealName: "Enterprise Plan Upgrade", category: "Appointment", clientAccount: "Apex Digital Labs", dealValue: 1611457, stage: "Closed Won" as const, owner: "Bilal Hassan", expectedClose: "2026-09-30", probability: 100, venture: "Ace Consultancys" },
-    { _id: "demo-4", dealName: "CRM Migration Project", category: "Appointment", clientAccount: "AlphaStream Media", dealValue: 8511789, stage: "Closed Won" as const, owner: "Fatima Noor", expectedClose: "2026-11-20", probability: 100, venture: "Ace Consultancys" },
-    { _id: "demo-5", dealName: "Project Management", category: "Appointment", clientAccount: "Global Logistics", dealValue: 6512589, stage: "Closed Won" as const, owner: "Omar Malik", expectedClose: "2026-08-31", probability: 100, venture: "Ace Consultancys" },
+  const defaultRecentDeals: SalesDeal[] = useMemo(() => [
+    { _id: "demo-1", dealName: "SkyHigh Annual Booking", category: "Appointment", clientAccount: "SkyHigh Aviation", dealValue: 7811800, stage: "Closed Won" as const, owner: "Sara Khan", expectedClose: "2026-12-01", probability: 100, venture: "Ace Consultancys", currency: "USD" },
+    { _id: "demo-2", dealName: "CRM Onboarding Package", category: "Appointment", clientAccount: "NovaTech Solutions", dealValue: 7211289, stage: "Closed Lost" as const, owner: "Ahmed Raza", expectedClose: "2026-10-15", probability: 0, venture: "Ace Consultancys", currency: "USD" },
+    { _id: "demo-3", dealName: "Enterprise Plan Upgrade", category: "Appointment", clientAccount: "Apex Digital Labs", dealValue: 1611457, stage: "Closed Won" as const, owner: "Bilal Hassan", expectedClose: "2026-09-30", probability: 100, venture: "Ace Consultancys", currency: "USD" },
+    { _id: "demo-4", dealName: "CRM Migration Project", category: "Appointment", clientAccount: "AlphaStream Media", dealValue: 8511789, stage: "Closed Won" as const, owner: "Fatima Noor", expectedClose: "2026-11-20", probability: 100, venture: "Ace Consultancys", currency: "USD" },
+    { _id: "demo-5", dealName: "Project Management", category: "Appointment", clientAccount: "Global Logistics", dealValue: 6512589, stage: "Closed Won" as const, owner: "Omar Malik", expectedClose: "2026-08-31", probability: 100, venture: "Ace Consultancys", currency: "USD" },
   ], []);
 
   // Active Deals Dataset (Uses real deals if available, falls back to demo)
@@ -121,17 +179,31 @@ export function SalesWorkdeskDashboard({
     };
   }, [activeDealsList, totalPipelineVal, deals.length]);
 
-  // 4. Dynamic Total Revenue based on Timeframe Toggle
+  // 4. Dynamic Dominant Currency across active dataset
+  const dominantCurrency = useMemo(() => {
+    if (deals.length === 0) return "USD";
+    const counts: Record<string, number> = {};
+    deals.forEach((d) => {
+      const c = d.currency || "USD";
+      counts[c] = (counts[c] || 0) + 1;
+    });
+    return Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] || "USD";
+  }, [deals]);
+
+  const dominantSym = getCurrencySymbol(dominantCurrency);
+
+  // 5. Dynamic Total Revenue based on Timeframe Toggle
   const revenueMetrics = useMemo(() => {
+    const sym = getCurrencySymbol(dominantCurrency);
     if (revenueTimeframe === "weekly") {
       return {
         mtdLabel: "Total MTD Revenue",
-        mtdVal: deals.length > 0 ? `$${formatUSDDec(totalPipelineVal * 0.25)}` : "$18,50,800.00",
+        mtdVal: deals.length > 0 ? formatCurrDec(totalPipelineVal * 0.25, dominantCurrency) : `${sym}18,50,800.00`,
         mtdChange: "+2.5%",
         mtdPeriod: "Month Till Date",
         mtdPositive: true,
         ytdLabel: "Total YTD Revenue",
-        ytdVal: deals.length > 0 ? `$${formatUSDDec(totalPipelineVal)}` : "$85,25,800.00",
+        ytdVal: deals.length > 0 ? formatCurrDec(totalPipelineVal, dominantCurrency) : `${sym}85,25,800.00`,
         ytdChange: "-5.0%",
         ytdPeriod: "Year Till Date",
         ytdPositive: false,
@@ -139,12 +211,12 @@ export function SalesWorkdeskDashboard({
     } else if (revenueTimeframe === "monthly") {
       return {
         mtdLabel: "Total Monthly Revenue",
-        mtdVal: deals.length > 0 ? `$${formatUSDDec(totalPipelineVal * 0.45)}` : "$42,30,500.00",
+        mtdVal: deals.length > 0 ? formatCurrDec(totalPipelineVal * 0.45, dominantCurrency) : `${sym}42,30,500.00`,
         mtdChange: "+8.4%",
         mtdPeriod: "This Month",
         mtdPositive: true,
         ytdLabel: "Total Annual Revenue",
-        ytdVal: deals.length > 0 ? `$${formatUSDDec(totalPipelineVal * 1.5)}` : "$1,12,50,000.00",
+        ytdVal: deals.length > 0 ? formatCurrDec(totalPipelineVal * 1.5, dominantCurrency) : `${sym}1,12,50,000.00`,
         ytdChange: "+12.2%",
         ytdPeriod: "Year Till Date",
         ytdPositive: true,
@@ -152,26 +224,26 @@ export function SalesWorkdeskDashboard({
     } else {
       return {
         mtdLabel: "H1 Revenue",
-        mtdVal: deals.length > 0 ? `$${formatUSDDec(totalPipelineVal * 0.8)}` : "$85,25,800.00",
+        mtdVal: deals.length > 0 ? formatCurrDec(totalPipelineVal * 0.8, dominantCurrency) : `${sym}85,25,800.00`,
         mtdChange: "+14.1%",
         mtdPeriod: "First Half",
         mtdPositive: true,
         ytdLabel: "Full Year Revenue Target",
-        ytdVal: deals.length > 0 ? `$${formatUSDDec(totalPipelineVal * 2.2)}` : "$1,85,00,000.00",
+        ytdVal: deals.length > 0 ? formatCurrDec(totalPipelineVal * 2.2, dominantCurrency) : `${sym}1,85,00,000.00`,
         ytdChange: "+18.5%",
         ytdPeriod: "Full Fiscal Year",
         ytdPositive: true,
       };
     }
-  }, [revenueTimeframe, totalPipelineVal, deals.length]);
+  }, [revenueTimeframe, totalPipelineVal, deals.length, dominantCurrency]);
 
-  // 5. Dynamic Unique Deal Owners List for Avatars
+  // 6. Dynamic Unique Deal Owners List for Avatars
   const uniqueOwners = useMemo(() => {
     const set = Array.from(new Set(activeDealsList.map((d) => d.owner).filter(Boolean)));
     return set.length > 0 ? set : ["Sara Khan", "Ahmed Raza", "Bilal Hassan", "Fatima Noor", "Omar Malik"];
   }, [activeDealsList]);
 
-  // 6. Dynamic Recently Created Deals List with Timeframe Filter
+  // 7. Dynamic Recently Created Deals List with Timeframe Filter
   const recentDealsList = useMemo(() => {
     const source = deals.length > 0 ? deals : defaultRecentDeals;
     if (dealsTimeframe === "Weekly") {
@@ -182,14 +254,66 @@ export function SalesWorkdeskDashboard({
     return source.slice(0, 10);
   }, [deals, defaultRecentDeals, dealsTimeframe]);
 
-  // 7. Dynamic Avg Deal Size
+  // 8. Dynamic Avg Deal Size
   const avgDealSizeFormatted = useMemo(() => {
     if (deals.length > 0) {
       const avg = totalPipelineVal / Math.max(1, deals.length);
-      return `$${avg.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      return formatCurrDec(avg, dominantCurrency);
     }
-    return "$1,56,054.50";
-  }, [deals, totalPipelineVal]);
+    return formatCurrDec(0, dominantCurrency);
+  }, [deals, totalPipelineVal, dominantCurrency]);
+
+  // 9. Table Sorting State & Handlers
+  const [sortField, setSortField] = useState<"dealName" | "clientAccount" | "stage" | "probability" | "dealValue" | "expectedClose">("dealName");
+  const [sortAsc, setSortAsc] = useState(true);
+
+  const toggleSort = (field: "dealName" | "clientAccount" | "stage" | "probability" | "dealValue" | "expectedClose") => {
+    if (sortField === field) {
+      setSortAsc(!sortAsc);
+    } else {
+      setSortField(field);
+      setSortAsc(true);
+    }
+  };
+
+  // 10. Helper for Kanban card aging / timeline status
+  const getDueStatus = (dateStr?: string) => {
+    if (!dateStr) return null;
+    const target = new Date(dateStr);
+    if (isNaN(target.getTime())) return null;
+    const now = new Date();
+    const diffDays = Math.ceil((target.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+    if (diffDays < 0) {
+      return { label: `Overdue (${Math.abs(diffDays)}d)`, cls: "text-rose-600 dark:text-rose-400 bg-rose-500/10 border-rose-500/30" };
+    }
+    if (diffDays === 0) {
+      return { label: "Closing Today", cls: "text-amber-600 dark:text-amber-400 bg-amber-500/10 border-amber-500/30" };
+    }
+    if (diffDays <= 7) {
+      return { label: `Due in ${diffDays}d`, cls: "text-amber-600 dark:text-amber-400 bg-amber-500/10 border-amber-500/30" };
+    }
+    return { label: `In ${diffDays}d`, cls: "text-muted-foreground bg-muted/40 border-border/50" };
+  };
+
+  // 11. Quick Stage Progression Mover
+  const handleMoveStage = (deal: SalesDeal, direction: "prev" | "next") => {
+    const idx = KANBAN_STAGES.indexOf(deal.stage);
+    if (direction === "prev" && idx > 0) {
+      const nextStage = KANBAN_STAGES[idx - 1];
+      if (onStageChange) {
+        onStageChange(deal._id, nextStage);
+      } else {
+        onEditDeal({ ...deal, stage: nextStage });
+      }
+    } else if (direction === "next" && idx < KANBAN_STAGES.length - 1) {
+      const nextStage = KANBAN_STAGES[idx + 1];
+      if (onStageChange) {
+        onStageChange(deal._id, nextStage);
+      } else {
+        onEditDeal({ ...deal, stage: nextStage });
+      }
+    }
+  };
 
   // 8. Dynamic Sales Growth Monthly Distribution based on selected Period
   const monthlyGrowthData = useMemo(() => {
@@ -272,9 +396,9 @@ export function SalesWorkdeskDashboard({
     return { areaPath, linePath };
   }, [monthlyGrowthData]);
 
-  // Filtered deals for table & kanban views
+  // Filtered and sorted deals for table & kanban views
   const filteredDeals = useMemo(() => {
-    return activeDealsList.filter((d) => {
+    const list = activeDealsList.filter((d) => {
       const matchSearch =
         d.dealName.toLowerCase().includes(searchQuery.toLowerCase()) ||
         d.clientAccount.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -283,7 +407,21 @@ export function SalesWorkdeskDashboard({
       const matchOwner = ownerFilter === "All" || d.owner === ownerFilter;
       return matchSearch && matchStage && matchOwner;
     });
-  }, [activeDealsList, searchQuery, stageFilter, ownerFilter]);
+
+    return [...list].sort((a, b) => {
+      let comparison = 0;
+      if (sortField === "dealValue") {
+        comparison = a.dealValue - b.dealValue;
+      } else if (sortField === "probability") {
+        comparison = a.probability - b.probability;
+      } else if (sortField === "expectedClose") {
+        comparison = (a.expectedClose || "").localeCompare(b.expectedClose || "");
+      } else {
+        comparison = String(a[sortField] || "").localeCompare(String(b[sortField] || ""));
+      }
+      return sortAsc ? comparison : -comparison;
+    });
+  }, [activeDealsList, searchQuery, stageFilter, ownerFilter, sortField, sortAsc]);
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
@@ -404,7 +542,7 @@ export function SalesWorkdeskDashboard({
 
           {/* New Sales Deal Button */}
           <Button
-            onClick={onNewDeal}
+            onClick={() => onNewDeal()}
             color="primary"
             size="sm"
             className="gap-2 font-bold cursor-pointer h-9 px-4 bg-primary hover:bg-primary/90 text-primary-foreground shadow-xs"
@@ -717,6 +855,28 @@ export function SalesWorkdeskDashboard({
                     </div>
                   </div>
                 </div>
+
+                {/* Visual Win / Loss Distribution Bar */}
+                <div className="pt-2 border-t border-border/40 space-y-1.5">
+                  <div className="flex items-center justify-between text-[11px] font-semibold text-muted-foreground">
+                    <span className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
+                      <i className="fa-solid fa-circle-check text-[10px]" /> Won ({conversionRate}%)
+                    </span>
+                    <span className="flex items-center gap-1.5 text-rose-600 dark:text-rose-400">
+                      Lost ({(100 - parseFloat(conversionRate)).toFixed(1)}%) <i className="fa-solid fa-circle-xmark text-[10px]" />
+                    </span>
+                  </div>
+                  <div className="w-full h-2 rounded-full bg-muted/60 overflow-hidden flex">
+                    <div
+                      className="h-full bg-emerald-500 rounded-l-full transition-all duration-500"
+                      style={{ width: `${Math.min(100, Math.max(0, parseFloat(conversionRate)))}%` }}
+                    />
+                    <div
+                      className="h-full bg-rose-500 rounded-r-full transition-all duration-500"
+                      style={{ width: `${Math.max(0, 100 - parseFloat(conversionRate))}%` }}
+                    />
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -726,7 +886,7 @@ export function SalesWorkdeskDashboard({
                 <h2 className="text-base font-extrabold text-foreground tracking-tight">Sales Pipeline Overview</h2>
                 <div className="flex items-center gap-2 mt-1">
                   <span className="text-xl font-extrabold text-foreground">
-                    ${formatUSDDec(totalPipelineVal)}
+                    {formatCurrDec(totalPipelineVal, dominantCurrency)}
                   </span>
                   <span className="text-xs font-bold text-[#28c76f] bg-[#e1f3e9] dark:bg-emerald-950/40 px-2 py-0.5 rounded-full">
                     +2.5% Last Week
@@ -742,8 +902,9 @@ export function SalesWorkdeskDashboard({
                     className="absolute inset-y-0 left-0 bg-[#e2d9f3] dark:bg-purple-900/40 rounded-xl transition-all duration-500"
                     style={{ width: `${pipelineStages.prob.pct}%` }}
                   />
-                  <span className="relative z-10 text-xs font-bold text-foreground">
-                    Probability - ${formatUSD(pipelineStages.prob.sum)}
+                  <span className="relative z-10 text-xs font-bold text-foreground flex items-center justify-between">
+                    <span>Probability</span>
+                    <span className="font-mono">{formatCurr(pipelineStages.prob.sum, dominantCurrency)}</span>
                   </span>
                 </div>
 
@@ -753,8 +914,9 @@ export function SalesWorkdeskDashboard({
                     className="absolute inset-y-0 left-0 bg-[#d7f4e3] dark:bg-emerald-900/40 rounded-xl transition-all duration-500"
                     style={{ width: `${pipelineStages.prop.pct}%` }}
                   />
-                  <span className="relative z-10 text-xs font-bold text-foreground">
-                    Proposal Sent - ${formatUSD(pipelineStages.prop.sum)}
+                  <span className="relative z-10 text-xs font-bold text-foreground flex items-center justify-between">
+                    <span>Proposal Sent</span>
+                    <span className="font-mono">{formatCurr(pipelineStages.prop.sum, dominantCurrency)}</span>
                   </span>
                 </div>
 
@@ -764,8 +926,9 @@ export function SalesWorkdeskDashboard({
                     className="absolute inset-y-0 left-0 bg-[#fff0c8] dark:bg-amber-900/40 rounded-xl transition-all duration-500"
                     style={{ width: `${pipelineStages.opp.pct}%` }}
                   />
-                  <span className="relative z-10 text-xs font-bold text-foreground">
-                    Opportunity - ${formatUSD(pipelineStages.opp.sum)}
+                  <span className="relative z-10 text-xs font-bold text-foreground flex items-center justify-between">
+                    <span>Opportunity</span>
+                    <span className="font-mono">{formatCurr(pipelineStages.opp.sum, dominantCurrency)}</span>
                   </span>
                 </div>
 
@@ -775,8 +938,9 @@ export function SalesWorkdeskDashboard({
                     className="absolute inset-y-0 left-0 bg-[#ffe2e2] dark:bg-rose-900/40 rounded-xl transition-all duration-500"
                     style={{ width: `${pipelineStages.totalWon.pct}%` }}
                   />
-                  <span className="relative z-10 text-xs font-bold text-foreground">
-                    Total Deals - ${formatUSD(pipelineStages.totalWon.sum)}
+                  <span className="relative z-10 text-xs font-bold text-foreground flex items-center justify-between">
+                    <span>Total Deals</span>
+                    <span className="font-mono">{formatCurr(pipelineStages.totalWon.sum, dominantCurrency)}</span>
                   </span>
                 </div>
               </div>
@@ -852,7 +1016,7 @@ export function SalesWorkdeskDashboard({
                             </p>
                           </td>
                           <td className="py-3.5 px-3 font-extrabold font-mono text-foreground text-sm">
-                            ${formatUSD(d.dealValue)}
+                            {formatCurr(d.dealValue, (d as any).currency || dominantCurrency)}
                           </td>
                           <td className="py-3.5 px-3 text-right">
                             <span
@@ -1105,165 +1269,205 @@ export function SalesWorkdeskDashboard({
       {/* VIEW 2: KANBAN BOARD VIEW (Authentic CRMS Deals Kanban Design) */}
       {viewMode === "kanban" && (
         <div className="flex gap-4 overflow-x-auto pb-6 pt-1 items-start min-h-[550px]">
-          {(["Prospecting", "Discovery", "Proposal Sent", "Negotiation", "Closed Won", "Closed Lost"] as const).map(
-            (stage) => {
-              const stageDeals = filteredDeals.filter((d) => d.stage === stage);
-              const stageTotal = stageDeals.reduce((sum, d) => sum + d.dealValue, 0);
+          {KANBAN_STAGES.map((stage) => {
+            const stageDeals = filteredDeals.filter((d) => d.stage === stage);
+            const stageTotal = stageDeals.reduce((sum, d) => sum + d.dealValue, 0);
 
-              const stageColors: Record<string, { dot: string; bg: string; text: string }> = {
-                Prospecting: { dot: "bg-blue-500", bg: "bg-blue-500/10", text: "text-blue-600 dark:text-blue-400" },
-                Discovery: { dot: "bg-sky-500", bg: "bg-sky-500/10", text: "text-sky-600 dark:text-sky-400" },
-                "Proposal Sent": {
-                  dot: "bg-amber-500",
-                  bg: "bg-amber-500/10",
-                  text: "text-amber-600 dark:text-amber-400",
-                },
-                Negotiation: {
-                  dot: "bg-purple-500",
-                  bg: "bg-purple-500/10",
-                  text: "text-purple-600 dark:text-purple-400",
-                },
-                "Closed Won": {
-                  dot: "bg-emerald-500",
-                  bg: "bg-emerald-500/10",
-                  text: "text-emerald-600 dark:text-emerald-400",
-                },
-                "Closed Lost": { dot: "bg-rose-500", bg: "bg-rose-500/10", text: "text-rose-600 dark:text-rose-400" },
-              };
+            const stageColors: Record<string, { dot: string; bg: string; text: string; border: string }> = {
+              Prospecting: { dot: "bg-blue-500", bg: "bg-blue-500/10", text: "text-blue-600 dark:text-blue-400", border: "border-blue-500/20" },
+              Discovery: { dot: "bg-sky-500", bg: "bg-sky-500/10", text: "text-sky-600 dark:text-sky-400", border: "border-sky-500/20" },
+              "Proposal Sent": { dot: "bg-amber-500", bg: "bg-amber-500/10", text: "text-amber-600 dark:text-amber-400", border: "border-amber-500/20" },
+              Negotiation: { dot: "bg-purple-500", bg: "bg-purple-500/10", text: "text-purple-600 dark:text-purple-400", border: "border-purple-500/20" },
+              "Closed Won": { dot: "bg-emerald-500", bg: "bg-emerald-500/10", text: "text-emerald-600 dark:text-emerald-400", border: "border-emerald-500/20" },
+              "Closed Lost": { dot: "bg-rose-500", bg: "bg-rose-500/10", text: "text-rose-600 dark:text-rose-400", border: "border-rose-500/20" },
+            };
 
-              const stageConf = stageColors[stage] || stageColors.Prospecting;
+            const stageConf = stageColors[stage] || stageColors.Prospecting;
 
-              return (
-                <div key={stage} className="w-72 shrink-0 flex flex-col gap-3">
-                  {/* Column Header Card */}
-                  <div className="bg-card border border-border/80 rounded-xl p-3.5 shadow-2xs">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <div className={cn("w-2.5 h-2.5 rounded-full shrink-0", stageConf.dot)} />
-                        <h3 className="font-extrabold text-sm text-foreground tracking-tight">{stage}</h3>
+            return (
+              <div key={stage} className="w-80 shrink-0 flex flex-col gap-3">
+                {/* Column Header Card */}
+                <div className="bg-card border border-border/80 rounded-2xl p-3.5 shadow-2xs">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className={cn("w-2.5 h-2.5 rounded-full shrink-0 shadow-xs", stageConf.dot)} />
+                      <h3 className="font-extrabold text-sm text-foreground tracking-tight">{stage}</h3>
+                      <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
+                        {stageDeals.length}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => onNewDeal(stage)}
+                      className="w-6 h-6 rounded-md bg-muted/60 hover:bg-primary hover:text-primary-foreground text-muted-foreground transition-all flex items-center justify-center cursor-pointer shadow-2xs"
+                      title={`Add deal to ${stage}`}
+                    >
+                      <i className="fa-solid fa-plus text-[10px]" />
+                    </button>
+                  </div>
+                  <div className="flex items-center justify-between mt-2 pt-2 border-t border-border/40 text-xs">
+                    <span className="text-muted-foreground font-medium">Stage Total:</span>
+                    <span className="font-mono font-black text-foreground">
+                      {formatMultiCurrDeals(stageDeals, dominantCurrency)}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Deals Cards List */}
+                <div className="space-y-3">
+                  {stageDeals.length === 0 ? (
+                    <div className="bg-muted/15 border border-dashed border-border/80 rounded-2xl p-6 text-center text-xs text-muted-foreground font-medium flex flex-col items-center justify-center gap-2">
+                      <div className={cn("w-8 h-8 rounded-full flex items-center justify-center opacity-70", stageConf.bg, stageConf.text)}>
+                        <i className="fa-solid fa-inbox text-xs" />
                       </div>
+                      <span>No deals in {stage}</span>
                       <button
                         type="button"
-                        className="text-muted-foreground hover:text-foreground p-1 transition-colors cursor-pointer"
-                        title="Column options"
+                        onClick={() => onNewDeal(stage)}
+                        className="mt-1 px-3 py-1 text-[11px] font-bold rounded-lg border border-border hover:bg-card hover:text-primary transition-all cursor-pointer shadow-2xs"
                       >
-                        <i className="fa-solid fa-ellipsis-vertical text-xs" />
+                        <i className="fa-solid fa-plus text-[9px] mr-1" /> Add Deal
                       </button>
                     </div>
-                    <p className="text-xs text-muted-foreground font-medium mt-1">
-                      {stageDeals.length} {stageDeals.length === 1 ? "Lead" : "Leads"} &bull; ${formatUSD(stageTotal)}
-                    </p>
-                  </div>
+                  ) : (
+                    stageDeals.map((deal) => {
+                      const initials = deal.clientAccount
+                        .split(" ")
+                        .map((n) => n[0])
+                        .slice(0, 2)
+                        .join("")
+                        .toUpperCase() || "DL";
 
-                  {/* Deals Cards List */}
-                  <div className="space-y-3">
-                    {stageDeals.length === 0 ? (
-                      <div className="bg-muted/20 border border-dashed border-border/80 rounded-xl p-6 text-center text-xs text-muted-foreground font-medium">
-                        No deals in {stage}
-                      </div>
-                    ) : (
-                      stageDeals.map((deal) => {
-                        const initials = deal.clientAccount
-                          .split(" ")
-                          .map((n) => n[0])
-                          .slice(0, 2)
-                          .join("")
-                          .toUpperCase() || "DL";
+                      const dueStatus = getDueStatus(deal.expectedClose);
 
-                        return (
-                          <div
-                            key={deal._id}
-                            className="bg-card border border-border/80 rounded-xl p-4 shadow-2xs hover:shadow-md hover:border-primary/40 transition-all space-y-3 group"
-                          >
-                            {/* Card Header with Initials Badge */}
-                            <div className="flex items-start gap-3">
-                              <div className={cn("w-8 h-8 rounded-full flex items-center justify-center font-black text-xs shrink-0", stageConf.bg, stageConf.text)}>
-                                {initials}
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <h4 className="font-bold text-xs text-foreground truncate group-hover:text-primary transition-colors">
-                                  {deal.dealName}
-                                </h4>
-                                <p className="text-[11px] text-muted-foreground truncate">{deal.clientAccount}</p>
-                              </div>
+                      return (
+                        <div
+                          key={deal._id}
+                          className="bg-card border border-border/80 rounded-2xl p-4 shadow-2xs hover:shadow-md hover:border-primary/40 hover:-translate-y-0.5 transition-all duration-200 space-y-3 group"
+                        >
+                          {/* Card Header with Initials Badge */}
+                          <div className="flex items-start gap-3">
+                            <div className={cn("w-9 h-9 rounded-xl flex items-center justify-center font-black text-xs shrink-0 shadow-2xs", stageConf.bg, stageConf.text)}>
+                              {initials}
                             </div>
-
-                            {/* Details with Icons */}
-                            <div className="space-y-1 text-xs text-muted-foreground">
-                              <div className="flex items-center gap-2">
-                                <i className="fa-solid fa-dollar-sign text-muted-foreground text-xs w-3 text-center" />
-                                <span className="font-mono font-bold text-foreground">${formatUSD(deal.dealValue)}</span>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <i className="fa-solid fa-briefcase text-muted-foreground text-[11px] w-3 text-center" />
-                                <span className="text-muted-foreground truncate text-[11px]">{deal.venture}</span>
-                              </div>
-                            </div>
-
-                            {/* Owner and Probability */}
-                            <div className="flex items-center justify-between text-xs pt-2 border-t border-border/40">
-                              <div className="flex items-center gap-1.5 min-w-0">
-                                <div className="w-5 h-5 rounded-full bg-muted flex items-center justify-center text-[9px] font-bold text-foreground shrink-0 border border-border/60">
-                                  {deal.owner ? deal.owner[0] : "U"}
-                                </div>
-                                <span className="font-medium text-foreground truncate text-[11px]">
-                                  {deal.owner || "Unassigned"}
-                                </span>
-                              </div>
-                              <span
-                                className={cn(
-                                  "px-2 py-0.5 rounded-full text-[10px] font-bold font-mono shrink-0",
-                                  deal.probability >= 70
-                                    ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                                    : deal.probability >= 40
-                                    ? "bg-amber-500/10 text-amber-600 dark:text-amber-400"
-                                    : "bg-rose-500/10 text-rose-600 dark:text-rose-400"
-                                )}
+                            <div className="flex-1 min-w-0">
+                              <h4
+                                onClick={() => onEditDeal(deal)}
+                                className="font-bold text-xs text-foreground truncate group-hover:text-primary transition-colors cursor-pointer"
+                                title={deal.dealName}
                               >
-                                {deal.probability}%
+                                {deal.dealName}
+                              </h4>
+                              <p className="text-[11px] text-muted-foreground truncate">{deal.clientAccount}</p>
+                            </div>
+                          </div>
+
+                          {/* Value & Venture Badge */}
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-1.5 font-mono">
+                              <span className="text-sm font-black text-foreground">
+                                {formatCurr(deal.dealValue, deal.currency || dominantCurrency)}
+                              </span>
+                            </div>
+                            <span className="text-[10px] font-semibold text-muted-foreground bg-muted/60 px-2 py-0.5 rounded-md truncate max-w-[120px]">
+                              {deal.venture}
+                            </span>
+                          </div>
+
+                          {/* Probability and Timeline */}
+                          <div className="flex items-center justify-between text-xs pt-2 border-t border-border/40 gap-2">
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <div className="w-5 h-5 rounded-full bg-muted flex items-center justify-center text-[9px] font-bold text-foreground shrink-0 border border-border/60">
+                                {deal.owner ? deal.owner[0] : "U"}
+                              </div>
+                              <span className="font-medium text-foreground truncate text-[11px]">
+                                {deal.owner || "Unassigned"}
                               </span>
                             </div>
 
-                            {/* Footer: Date and Action Buttons */}
-                            <div className="flex items-center justify-between pt-2 border-t border-border/40 text-[11px] text-muted-foreground">
-                              <div className="flex items-center gap-1 font-mono">
-                                <i className="fa-solid fa-calendar text-[10px]" />
-                                <span>{deal.expectedClose || "No date"}</span>
-                              </div>
-                              <div className="flex items-center gap-1">
+                            <span
+                              className={cn(
+                                "px-2 py-0.5 rounded-full text-[10px] font-bold font-mono shrink-0",
+                                deal.probability >= 70
+                                  ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                                  : deal.probability >= 40
+                                  ? "bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                                  : "bg-rose-500/10 text-rose-600 dark:text-rose-400"
+                              )}
+                            >
+                              {deal.probability}% win prob
+                            </span>
+                          </div>
+
+                          {/* Due Date & Stage Progression Controls */}
+                          <div className="flex items-center justify-between pt-2 border-t border-border/40 text-[11px] text-muted-foreground">
+                            {/* Expected close or due badge */}
+                            <div className="flex items-center gap-1">
+                              {dueStatus ? (
+                                <span className={cn("text-[9px] font-bold px-1.5 py-0.5 rounded-md border", dueStatus.cls)}>
+                                  {dueStatus.label}
+                                </span>
+                              ) : (
+                                <span className="text-[10px] font-mono text-muted-foreground">
+                                  {deal.expectedClose || "No target"}
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Stage Move Controls & Action Buttons */}
+                            <div className="flex items-center gap-1">
+                              {KANBAN_STAGES.indexOf(stage) > 0 && (
                                 <button
                                   type="button"
-                                  onClick={() => onEditDeal(deal)}
-                                  className="p-1 text-muted-foreground hover:text-primary transition-colors cursor-pointer"
-                                  title="Edit Deal"
+                                  onClick={() => handleMoveStage(deal, "prev")}
+                                  className="w-6 h-6 rounded-md border border-border/60 hover:border-primary/40 hover:bg-muted/60 text-muted-foreground hover:text-primary flex items-center justify-center transition-colors cursor-pointer"
+                                  title={`Move back to ${KANBAN_STAGES[KANBAN_STAGES.indexOf(stage) - 1]}`}
                                 >
-                                  <i className="fa-solid fa-pen-to-square text-xs" />
+                                  <i className="fa-solid fa-arrow-left text-[9px]" />
                                 </button>
+                              )}
+                              {KANBAN_STAGES.indexOf(stage) < KANBAN_STAGES.length - 1 && (
                                 <button
                                   type="button"
-                                  onClick={() => onDeleteDeal(deal._id, deal.dealName)}
-                                  className="p-1 text-muted-foreground hover:text-destructive transition-colors cursor-pointer"
-                                  title="Delete Deal"
+                                  onClick={() => handleMoveStage(deal, "next")}
+                                  className="w-6 h-6 rounded-md border border-border/60 hover:border-primary/40 hover:bg-muted/60 text-muted-foreground hover:text-primary flex items-center justify-center transition-colors cursor-pointer"
+                                  title={`Advance to ${KANBAN_STAGES[KANBAN_STAGES.indexOf(stage) + 1]}`}
                                 >
-                                  <i className="fa-solid fa-trash text-xs" />
+                                  <i className="fa-solid fa-arrow-right text-[9px]" />
                                 </button>
-                              </div>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => onEditDeal(deal)}
+                                className="w-6 h-6 rounded-md hover:bg-muted/60 text-muted-foreground hover:text-primary flex items-center justify-center transition-colors cursor-pointer ml-0.5"
+                                title="Edit Deal"
+                              >
+                                <i className="fa-solid fa-pen-to-square text-[10px]" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => onDeleteDeal(deal._id, deal.dealName)}
+                                className="w-6 h-6 rounded-md hover:bg-muted/60 text-muted-foreground hover:text-destructive flex items-center justify-center transition-colors cursor-pointer"
+                                title="Delete Deal"
+                              >
+                                <i className="fa-solid fa-trash text-[10px]" />
+                              </button>
                             </div>
                           </div>
-                        );
-                      })
-                    )}
-                  </div>
+                        </div>
+                      );
+                    })
+                  )}
                 </div>
-              );
-            }
-          )}
+              </div>
+            );
+          })}
         </div>
       )}
 
       {/* VIEW 3: ALL DEALS TABLE VIEW */}
       {viewMode === "table" && (
-        <Card className="border border-border shadow-sm overflow-hidden">
+        <Card className="border border-border shadow-sm overflow-hidden rounded-2xl">
           {/* Table Filters */}
           <div className="p-4 border-b border-border bg-muted/20 flex flex-wrap items-center justify-between gap-3">
             <div className="flex flex-wrap items-center gap-3">
@@ -1274,8 +1478,17 @@ export function SalesWorkdeskDashboard({
                   placeholder="Search deals or accounts..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-9 h-9 text-xs"
+                  className="pl-9 pr-7 h-9 text-xs"
                 />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery("")}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground text-xs"
+                  >
+                    <i className="fa-solid fa-xmark" />
+                  </button>
+                )}
               </div>
 
               <select
@@ -1284,12 +1497,11 @@ export function SalesWorkdeskDashboard({
                 className="h-9 px-3 text-xs bg-background border border-border rounded-md text-foreground cursor-pointer"
               >
                 <option value="All">All Stages</option>
-                <option value="Prospecting">Prospecting</option>
-                <option value="Discovery">Discovery</option>
-                <option value="Proposal Sent">Proposal Sent</option>
-                <option value="Negotiation">Negotiation</option>
-                <option value="Closed Won">Closed Won</option>
-                <option value="Closed Lost">Closed Lost</option>
+                {KANBAN_STAGES.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
               </select>
 
               <select
@@ -1304,10 +1516,25 @@ export function SalesWorkdeskDashboard({
                   </option>
                 ))}
               </select>
+
+              {(searchQuery || stageFilter !== "All" || ownerFilter !== "All") && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setSearchQuery("");
+                    setStageFilter("All");
+                    setOwnerFilter("All");
+                  }}
+                  className="text-xs h-9 text-muted-foreground hover:text-foreground gap-1.5"
+                >
+                  <i className="fa-solid fa-filter-circle-xmark text-xs" /> Reset Filters
+                </Button>
+              )}
             </div>
 
             <Button
-              onClick={onNewDeal}
+              onClick={() => onNewDeal()}
               color="primary"
               size="sm"
               className="gap-2 font-bold cursor-pointer h-9 px-4 bg-primary hover:bg-primary/90 text-primary-foreground shadow-xs"
@@ -1318,15 +1545,63 @@ export function SalesWorkdeskDashboard({
 
           <CardContent className="p-0 overflow-x-auto">
             <table className="w-full text-left text-xs">
-              <thead className="bg-muted/40 border-b border-border font-bold text-muted-foreground uppercase">
+              <thead className="bg-muted/40 border-b border-border font-bold text-muted-foreground uppercase select-none">
                 <tr>
-                  <th className="py-3 px-4">Deal / Scope</th>
-                  <th className="py-3 px-4">Client Account</th>
-                  <th className="py-3 px-4">Stage</th>
-                  <th className="py-3 px-4">Probability</th>
+                  <th
+                    className="py-3 px-4 cursor-pointer hover:text-foreground transition-colors"
+                    onClick={() => toggleSort("dealName")}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span>Deal / Scope</span>
+                      <i className={cn("fa-solid text-[10px]", sortField === "dealName" ? (sortAsc ? "fa-sort-up text-primary" : "fa-sort-down text-primary") : "fa-sort opacity-40")} />
+                    </div>
+                  </th>
+                  <th
+                    className="py-3 px-4 cursor-pointer hover:text-foreground transition-colors"
+                    onClick={() => toggleSort("clientAccount")}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span>Client Account</span>
+                      <i className={cn("fa-solid text-[10px]", sortField === "clientAccount" ? (sortAsc ? "fa-sort-up text-primary" : "fa-sort-down text-primary") : "fa-sort opacity-40")} />
+                    </div>
+                  </th>
+                  <th
+                    className="py-3 px-4 cursor-pointer hover:text-foreground transition-colors"
+                    onClick={() => toggleSort("stage")}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span>Stage</span>
+                      <i className={cn("fa-solid text-[10px]", sortField === "stage" ? (sortAsc ? "fa-sort-up text-primary" : "fa-sort-down text-primary") : "fa-sort opacity-40")} />
+                    </div>
+                  </th>
+                  <th
+                    className="py-3 px-4 cursor-pointer hover:text-foreground transition-colors"
+                    onClick={() => toggleSort("probability")}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span>Probability</span>
+                      <i className={cn("fa-solid text-[10px]", sortField === "probability" ? (sortAsc ? "fa-sort-up text-primary" : "fa-sort-down text-primary") : "fa-sort opacity-40")} />
+                    </div>
+                  </th>
                   <th className="py-3 px-4">Owner</th>
-                  <th className="py-3 px-4">Expected Close</th>
-                  <th className="py-3 px-4 text-right">Value</th>
+                  <th
+                    className="py-3 px-4 cursor-pointer hover:text-foreground transition-colors"
+                    onClick={() => toggleSort("expectedClose")}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span>Expected Close</span>
+                      <i className={cn("fa-solid text-[10px]", sortField === "expectedClose" ? (sortAsc ? "fa-sort-up text-primary" : "fa-sort-down text-primary") : "fa-sort opacity-40")} />
+                    </div>
+                  </th>
+                  <th
+                    className="py-3 px-4 text-right cursor-pointer hover:text-foreground transition-colors"
+                    onClick={() => toggleSort("dealValue")}
+                  >
+                    <div className="flex items-center justify-end gap-1.5">
+                      <span>Value</span>
+                      <i className={cn("fa-solid text-[10px]", sortField === "dealValue" ? (sortAsc ? "fa-sort-up text-primary" : "fa-sort-down text-primary") : "fa-sort opacity-40")} />
+                    </div>
+                  </th>
                   <th className="py-3 px-4 text-right">Actions</th>
                 </tr>
               </thead>
@@ -1334,22 +1609,32 @@ export function SalesWorkdeskDashboard({
                 {filteredDeals.length === 0 ? (
                   <tr>
                     <td colSpan={8} className="py-12 text-center text-muted-foreground">
+                      <i className="fa-solid fa-folder-open text-2xl mb-2 opacity-30 text-primary block" />
                       No sales deals found matching criteria.
                     </td>
                   </tr>
                 ) : (
                   filteredDeals.map((deal) => {
                     const stageColors: Record<string, string> = {
-                      Prospecting: "bg-blue-500/10 text-blue-600 dark:text-blue-400",
-                      Discovery: "bg-sky-500/10 text-sky-600 dark:text-sky-400",
-                      "Proposal Sent": "bg-amber-500/10 text-amber-600 dark:text-amber-400",
-                      Negotiation: "bg-purple-500/10 text-purple-600 dark:text-purple-400",
-                      "Closed Won": "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
-                      "Closed Lost": "bg-red-500/10 text-red-600 dark:text-red-400",
+                      Prospecting: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20",
+                      Discovery: "bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/20",
+                      "Proposal Sent": "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20",
+                      Negotiation: "bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20",
+                      "Closed Won": "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20",
+                      "Closed Lost": "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20",
                     };
+                    const dueStatus = getDueStatus(deal.expectedClose);
                     return (
-                      <tr key={deal._id} className="hover:bg-muted/20 transition-colors">
-                        <td className="py-3 px-4 font-bold text-foreground">{deal.dealName}</td>
+                      <tr key={deal._id} className="hover:bg-muted/20 transition-colors group">
+                        <td className="py-3 px-4">
+                          <p
+                            className="font-bold text-foreground group-hover:text-primary transition-colors cursor-pointer"
+                            onClick={() => onEditDeal(deal)}
+                          >
+                            {deal.dealName}
+                          </p>
+                          <p className="text-[11px] text-muted-foreground">{deal.venture}</p>
+                        </td>
                         <td className="py-3 px-4 text-foreground font-medium">{deal.clientAccount}</td>
                         <td className="py-3 px-4">
                           <span
@@ -1361,24 +1646,53 @@ export function SalesWorkdeskDashboard({
                             {deal.stage}
                           </span>
                         </td>
-                        <td className="py-3 px-4 font-mono">{deal.probability}%</td>
-                        <td className="py-3 px-4">{deal.owner || "Unassigned"}</td>
-                        <td className="py-3 px-4 font-mono text-muted-foreground">{deal.expectedClose}</td>
-                        <td className="py-3 px-4 text-right font-mono font-bold text-foreground">
-                          ${formatUSD(deal.dealValue)}
+                        <td className="py-3 px-4">
+                          <span
+                            className={cn(
+                              "font-mono font-bold text-xs px-2 py-0.5 rounded-full",
+                              deal.probability >= 70
+                                ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                                : deal.probability >= 40
+                                ? "bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                                : "bg-rose-500/10 text-rose-600 dark:text-rose-400"
+                            )}
+                          >
+                            {deal.probability}%
+                          </span>
+                        </td>
+                        <td className="py-3 px-4">
+                          <div className="flex items-center gap-1.5">
+                            <div className="w-5 h-5 rounded-full bg-muted flex items-center justify-center text-[9px] font-bold text-foreground shrink-0 border border-border/60">
+                              {deal.owner ? deal.owner[0] : "U"}
+                            </div>
+                            <span className="font-medium text-foreground">{deal.owner || "Unassigned"}</span>
+                          </div>
+                        </td>
+                        <td className="py-3 px-4 font-mono text-muted-foreground">
+                          <div className="flex items-center gap-1.5">
+                            <span>{deal.expectedClose || "—"}</span>
+                            {dueStatus && (
+                              <span className={cn("text-[9px] font-bold px-1.5 py-0.2 rounded-md border", dueStatus.cls)}>
+                                {dueStatus.label}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="py-3 px-4 text-right font-mono font-bold text-foreground text-sm">
+                          {formatCurr(deal.dealValue, deal.currency || dominantCurrency)}
                         </td>
                         <td className="py-3 px-4 text-right">
                           <div className="flex items-center justify-end gap-1.5">
                             <button
                               onClick={() => onEditDeal(deal)}
-                              className="p-1 text-muted-foreground hover:text-primary transition-colors cursor-pointer"
+                              className="w-7 h-7 rounded-lg hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-primary transition-colors cursor-pointer"
                               title="Edit Deal"
                             >
                               <i className="fa-solid fa-pen-to-square text-xs" />
                             </button>
                             <button
                               onClick={() => onDeleteDeal(deal._id, deal.dealName)}
-                              className="p-1 text-muted-foreground hover:text-destructive transition-colors cursor-pointer"
+                              className="w-7 h-7 rounded-lg hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-destructive transition-colors cursor-pointer"
                               title="Delete Deal"
                             >
                               <i className="fa-solid fa-trash text-xs" />
@@ -1390,6 +1704,19 @@ export function SalesWorkdeskDashboard({
                   })
                 )}
               </tbody>
+              {filteredDeals.length > 0 && (
+                <tfoot className="bg-muted/30 border-t border-border font-bold text-foreground">
+                  <tr>
+                    <td colSpan={6} className="py-3 px-4 text-xs">
+                      Total ({filteredDeals.length} {filteredDeals.length === 1 ? "Deal" : "Deals"})
+                    </td>
+                    <td className="py-3 px-4 text-right font-mono font-black text-sm text-primary">
+                      {formatMultiCurrDeals(filteredDeals, dominantCurrency)}
+                    </td>
+                    <td className="py-3 px-4" />
+                  </tr>
+                </tfoot>
+              )}
             </table>
           </CardContent>
         </Card>

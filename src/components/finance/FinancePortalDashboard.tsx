@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 import { SalesWorkdeskDashboard } from "@/components/operations/SalesWorkdeskDashboard";
 import type { SalesDeal } from "@/components/operations/SalesWorkdeskDashboard";
 import { AdminInvoicesTab } from "@/components/settings/AdminInvoicesTab";
+import { ExternalFinanceOverview } from "./ExternalFinanceOverview";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -71,25 +72,6 @@ const fmt = (val: number) =>
 const fmtDec = (val: number) =>
   new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val);
 
-// ─── Budget Data (static demo) ───────────────────────────────────────────────
-
-const BUDGET_DATA = [
-  { dept: "Engineering",    budget: 85000, spent: 67200, color: "bg-blue-500" },
-  { dept: "Marketing",      budget: 45000, spent: 38900, color: "bg-purple-500" },
-  { dept: "HR & People",    budget: 32000, spent: 18400, color: "bg-emerald-500" },
-  { dept: "IT & Infra",     budget: 28000, spent: 22100, color: "bg-amber-500" },
-  { dept: "Operations",     budget: 55000, spent: 49300, color: "bg-rose-500" },
-  { dept: "Legal",          budget: 18000, spent: 12700, color: "bg-cyan-500" },
-];
-
-const PAYROLL_DATA = [
-  { period: "Aug 2026", total: 186400, headcount: 24, status: "Paid",       date: "2026-08-28" },
-  { period: "Jul 2026", total: 184200, headcount: 24, status: "Paid",       date: "2026-07-28" },
-  { period: "Jun 2026", total: 179800, headcount: 23, status: "Paid",       date: "2026-06-28" },
-  { period: "May 2026", total: 176500, headcount: 23, status: "Paid",       date: "2026-05-28" },
-  { period: "Sep 2026", total: 188000, headcount: 25, status: "Processing", date: "2026-09-28" },
-];
-
 // ─── Status Styles ───────────────────────────────────────────────────────────
 
 const invoiceStatusStyle: Record<string, string> = {
@@ -111,17 +93,6 @@ const payrollStatusStyle: Record<string, string> = {
   Processing: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20",
   Pending:    "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20",
 };
-
-// ─── Monthly Revenue/Expense Bar Data ────────────────────────────────────────
-
-const MONTHLY_DATA = [
-  { month: "Mar", revenue: 142000, expenses: 98000 },
-  { month: "Apr", revenue: 168000, expenses: 112000 },
-  { month: "May", revenue: 155000, expenses: 105000 },
-  { month: "Jun", revenue: 198000, expenses: 131000 },
-  { month: "Jul", revenue: 211000, expenses: 144000 },
-  { month: "Aug", revenue: 243000, expenses: 152000 },
-];
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -158,17 +129,141 @@ export function FinancePortalDashboard({
   }, [searchParams]);
 
   const [financeScope, setFinanceScope] = useState<"internal" | "external">("internal");
-  const [externalInvoices, setExternalInvoices] = useState<FinanceInvoice[]>([]);
-  const [externalExpenses, setExternalExpenses] = useState<FinanceExpense[]>([]);
   const [externalDeals, setExternalDeals] = useState<SalesDeal[]>([]);
-  const [externalBudgets, setExternalBudgets] = useState<Array<{ dept: string; budget: number; spent: number; color: string }>>([]);
   const [externalPayroll, setExternalPayroll] = useState<Array<{ period: string; total: number; headcount: number; status: string; date: string }>>([]);
 
-  const activeInvoices = financeScope === "internal" ? invoices : externalInvoices;
-  const activeExpenses = financeScope === "internal" ? expenses : externalExpenses;
+  const isExternalInvoice = (inv: FinanceInvoice) => {
+    const cat = (inv.category || "").toLowerCase();
+    const notes = (inv.notes || "").toLowerCase();
+    const invNo = (inv.invoiceNo || "").toUpperCase();
+    return cat.includes("client") || cat.includes("service") || cat.includes("external") || notes.includes("proposal") || invNo.startsWith("EXT-") || (!cat.includes("employee") && !cat.includes("payroll"));
+  };
+
+  const internalInvoices = useMemo(() => invoices.filter((inv) => !isExternalInvoice(inv)), [invoices]);
+  const externalInvoices = useMemo(() => invoices.filter((inv) => isExternalInvoice(inv)), [invoices]);
+
+  const isExternalExpense = (exp: FinanceExpense) => {
+    const cat = (exp.category || "").toLowerCase();
+    if (cat.includes("payroll") || cat.includes("internal salary") || cat.includes("employee reimbursement")) {
+      return false;
+    }
+    return true;
+  };
+
+  const internalExpenses = useMemo(() => expenses.filter((e) => !isExternalExpense(e)), [expenses]);
+  const externalExpensesList = useMemo(() => expenses.filter((e) => isExternalExpense(e)), [expenses]);
+  const activeExpenses = financeScope === "internal" ? expenses : (externalExpensesList.length > 0 ? externalExpensesList : expenses);
+
+  const activeInvoices = financeScope === "internal" ? internalInvoices : externalInvoices;
   const activeDeals = financeScope === "internal" ? deals : externalDeals;
-  const activeBudgetData = financeScope === "internal" ? BUDGET_DATA : externalBudgets;
-  const activePayrollData = financeScope === "internal" ? PAYROLL_DATA : externalPayroll;
+
+  const activeBudgetData = useMemo(() => {
+    const palette = ["bg-blue-500", "bg-purple-500", "bg-emerald-500", "bg-amber-500", "bg-rose-500", "bg-cyan-500", "bg-indigo-500", "bg-teal-500"];
+    
+    if (financeScope === "internal") {
+      const depts: Record<string, number> = {};
+      activeExpenses.forEach((e) => {
+        const deptName = e.department?.trim() || "General";
+        depts[deptName] = (depts[deptName] || 0) + (e.status === "Approved" ? Number(e.amount) || 0 : 0);
+      });
+
+      const deptNames = Array.from(new Set([
+        "Engineering", "Marketing", "HR & People", "IT & Infra", "Operations", "Legal",
+        ...Object.keys(depts),
+      ]));
+
+      return deptNames.map((dept, i) => {
+        const spent = depts[dept] || 0;
+        const budget = spent > 0 ? Math.max(Math.ceil((spent * 1.35) / 5000) * 5000, 20000) : 25000;
+        return {
+          dept,
+          budget,
+          spent,
+          color: palette[i % palette.length],
+        };
+      });
+    }
+
+    // External Scope: Aggregate real external expenses by category
+    const cats: Record<string, number> = {};
+    activeExpenses.forEach((e) => {
+      const catName = e.category?.trim() || "Operations";
+      cats[catName] = (cats[catName] || 0) + (e.status === "Approved" ? Number(e.amount) || 0 : 0);
+    });
+
+    const externalCategoryNames = Array.from(new Set([
+      "Technology", "Marketing", "Facilities", "HR & Training", "IT", "Operations",
+      ...Object.keys(cats),
+    ]));
+
+    return externalCategoryNames.map((cat, i) => {
+      const spent = cats[cat] || 0;
+      const budget = spent > 0 ? Math.max(Math.ceil((spent * 1.3) / 5000) * 5000, 15000) : 20000;
+      return {
+        dept: cat,
+        budget,
+        spent,
+        color: palette[i % palette.length],
+      };
+    });
+  }, [financeScope, activeExpenses]);
+
+  const activePayrollData = useMemo(() => {
+    if (financeScope === "external") {
+      const contractorExpenses = activeExpenses.filter(e =>
+        (e.category || "").toLowerCase().includes("contractor") ||
+        (e.department || "").toLowerCase().includes("contractor")
+      );
+      if (contractorExpenses.length === 0) return [];
+      const groups: Record<string, { total: number; count: number; date: string; status: string }> = {};
+      contractorExpenses.forEach((exp) => {
+        const date = new Date(exp.date || Date.now());
+        const period = !isNaN(date.getTime())
+          ? date.toLocaleDateString("en-US", { month: "short", year: "numeric" })
+          : "Current Period";
+        if (!groups[period]) {
+          groups[period] = { total: 0, count: 0, date: exp.date, status: exp.status === "Approved" ? "Paid" : "Pending" };
+        }
+        groups[period].total += Number(exp.amount) || 0;
+        groups[period].count += 1;
+      });
+      return Object.entries(groups).map(([period, data]) => ({
+        period,
+        total: data.total,
+        headcount: data.count,
+        status: data.status,
+        date: data.date,
+      }));
+    }
+
+    // Internal Scope: group real employee invoices from MongoDB by billing period
+    const empInvoices = internalInvoices;
+    if (empInvoices.length === 0) return [];
+
+    const groups: Record<string, { total: number; count: number; date: string; paidCount: number }> = {};
+    empInvoices.forEach((inv) => {
+      const dateStr = inv.issuedDate || (inv.createdAt ? new Date(inv.createdAt).toISOString().split("T")[0] : "");
+      const dateObj = dateStr ? new Date(dateStr) : new Date();
+      const period = !isNaN(dateObj.getTime())
+        ? dateObj.toLocaleDateString("en-US", { month: "short", year: "numeric" })
+        : "Current Period";
+
+      if (!groups[period]) {
+        groups[period] = { total: 0, count: 0, date: dateStr || new Date().toISOString().split("T")[0], paidCount: 0 };
+      }
+      groups[period].total += Number(inv.amount) || 0;
+      groups[period].count += 1;
+      if (inv.status === "Paid") groups[period].paidCount += 1;
+    });
+
+    return Object.entries(groups).map(([period, data]) => ({
+      period,
+      total: data.total,
+      headcount: data.count,
+      status: data.paidCount === data.count ? "Paid" : data.paidCount > 0 ? "Processing" : "Pending",
+      date: data.date,
+    })).sort((a, b) => b.date.localeCompare(a.date));
+  }, [financeScope, internalInvoices, activeExpenses]);
 
   const [invoiceSearch, setInvoiceSearch] = useState("");
   const [invoiceStatusFilter, setInvoiceStatusFilter] = useState("All");
@@ -204,8 +299,6 @@ export function FinancePortalDashboard({
     })).sort((a, b) => b.val - a.val);
   }, [activeExpenses]);
 
-  // ── Chart max ──
-  const chartMax = useMemo(() => Math.max(...MONTHLY_DATA.flatMap(d => [d.revenue, d.expenses]), 1), []);
 
   // ── Filtered Lists ──
   const filteredInvoices = useMemo(() =>
@@ -227,13 +320,18 @@ export function FinancePortalDashboard({
 
   const expenseCatOptions = useMemo(() => ["All", ...Array.from(new Set(activeExpenses.map(e => e.category)))], [activeExpenses]);
 
-  const tabs = [
-    { key: "overview",  label: "Overview",   icon: "fa-handshake", count: activeDeals.length },
-    { key: "invoices",  label: "Invoices",   icon: "fa-file-invoice-dollar", count: activeInvoices.length },
-    { key: "expenses",  label: "Expenses",   icon: "fa-receipt", count: activeExpenses.length },
-    { key: "budget",    label: "Budget",     icon: "fa-wallet" },
-    { key: "payroll",   label: "Payroll",    icon: "fa-money-check-dollar" },
-  ] as const;
+  const tabs = useMemo(() => [
+    {
+      key: "overview" as const,
+      label: "Overview",
+      icon: financeScope === "external" ? "fa-chart-pie" : "fa-handshake",
+      count: financeScope === "external" ? externalInvoices.length : activeDeals.length,
+    },
+    { key: "invoices" as const,  label: "Invoices",   icon: "fa-file-invoice-dollar", count: activeInvoices.length },
+    { key: "expenses" as const,  label: "Expenses",   icon: "fa-receipt", count: activeExpenses.length },
+    { key: "budget" as const,    label: "Budget",     icon: "fa-wallet" },
+    { key: "payroll" as const,   label: "Payroll",    icon: "fa-money-check-dollar" },
+  ], [financeScope, externalInvoices.length, activeDeals.length, activeInvoices.length, activeExpenses.length]);
 
   return (
     <div className="space-y-6">
@@ -256,7 +354,7 @@ export function FinancePortalDashboard({
               "text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold",
               financeScope === "internal" ? "bg-white/20 text-white" : "bg-muted text-muted-foreground"
             )}>
-              Live
+              {internalInvoices.length}
             </span>
           </button>
 
@@ -276,7 +374,7 @@ export function FinancePortalDashboard({
               "text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold",
               financeScope === "external" ? "bg-white/20 text-white" : "bg-muted text-muted-foreground"
             )}>
-              0
+              {externalInvoices.length}
             </span>
           </button>
         </div>
@@ -587,25 +685,36 @@ export function FinancePortalDashboard({
             </CardContent>
           </Card>
 
-          {financeScope === "internal" && (
-            <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-4 text-xs text-amber-600 dark:text-amber-400 flex items-start gap-2.5">
-              <i className="fa-solid fa-circle-info mt-0.5 shrink-0" />
-              <span>Payroll data is currently showing demo records. Connect your payroll provider or enter actual payroll runs to reflect live data.</span>
-            </div>
-          )}
         </div>
       )}
 
-      {/* ── OVERVIEW TAB (Sales Pipeline) ── */}
+      {/* ── OVERVIEW TAB ── */}
       {activeTab === "overview" && (
-        <SalesWorkdeskDashboard
-          deals={activeDeals}
-          loading={loadingDeals}
-          onNewDeal={onNewDeal}
-          onEditDeal={onEditDeal}
-          onDeleteDeal={onDeleteDeal}
-          onRefresh={onRefresh}
-        />
+        financeScope === "external" ? (
+          <ExternalFinanceOverview
+            invoices={externalInvoices}
+            expenses={activeExpenses}
+            budgetData={activeBudgetData}
+            loadingInvoices={loadingInvoices}
+            loadingExpenses={loadingExpenses}
+            showToast={showToast}
+            onNewInvoice={onNewInvoice}
+            onEditInvoice={onEditInvoice}
+            onNewExpense={onNewExpense}
+            onEditExpense={onEditExpense}
+            onNavigateTab={(tab) => setActiveTab(tab)}
+            onRefresh={onRefresh}
+          />
+        ) : (
+          <SalesWorkdeskDashboard
+            deals={activeDeals}
+            loading={loadingDeals}
+            onNewDeal={onNewDeal}
+            onEditDeal={onEditDeal}
+            onDeleteDeal={onDeleteDeal}
+            onRefresh={onRefresh}
+          />
+        )
       )}
     </div>
   );
