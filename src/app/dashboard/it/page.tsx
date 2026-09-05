@@ -2822,8 +2822,14 @@ function DevicesTab({
 
       {/* ─── Main Content View (Table vs Cards) ─── */}
       {loading ? (
-        <div className="space-y-2 p-4 rounded-xl border border-border">
-          {Array.from({ length: 4 }).map((_, i) => <SkeletonRow key={i} cols={10} />)}
+        <div className="rounded-xl border border-border overflow-hidden bg-card/40">
+          <table className="w-full text-xs">
+            <tbody>
+              {Array.from({ length: 5 }).map((_, i) => (
+                <SkeletonRow key={i} cols={10} />
+              ))}
+            </tbody>
+          </table>
         </div>
       ) : filtered.length === 0 ? (
         <div className="py-16 text-center rounded-2xl border border-dashed border-border bg-card/40">
