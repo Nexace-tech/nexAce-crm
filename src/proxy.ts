@@ -2,12 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { decrypt } from "@/lib/session";
 
-/**
- * Next.js Proxy — runs before any page is rendered.
- * Protects all /dashboard/* routes by validating the session cookie.
- * Unauthenticated requests are redirected to /login immediately,
- * preventing any flash of authenticated UI.
- */
+
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
