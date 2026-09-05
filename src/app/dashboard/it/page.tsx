@@ -2237,7 +2237,20 @@ const getWarrantyMeta = (expiry?: string) => {
   return { label: "Active Warranty", cls: "bg-emerald-500/10 text-emerald-500 border-emerald-500/30", icon: "fa-solid fa-shield-check" };
 };
 
-function DevicesTab({ devices, allDevices, nextAssetTags = {}, loading, onAdd, onEdit, onDelete, autoOpenAdd, userName, userDepartment, isPrivileged, teamMembers = [] }: {
+function DevicesTab({
+  devices,
+  allDevices,
+  nextAssetTags = {},
+  loading,
+  onAdd,
+  onEdit,
+  onDelete,
+  autoOpenAdd,
+  userName,
+  userDepartment,
+  isPrivileged,
+  teamMembers = [],
+}: {
   devices: Device[];        // filtered (user-scoped) — for display
   allDevices: Device[];     // full list — for asset tag generation
   nextAssetTags?: Record<string, string>;
@@ -2255,6 +2268,8 @@ function DevicesTab({ devices, allDevices, nextAssetTags = {}, loading, onAdd, o
   const [filterType, setFilterType] = useState("All");
   const [filterStatus, setFilterStatus] = useState("All");
   const [filterLocation, setFilterLocation] = useState("All");
+  const [filterCondition, setFilterCondition] = useState("All");
+  const [viewMode, setViewMode] = useState<"table" | "grid">("table");
   const [modal, setModal] = useState<{ mode: "add" } | { mode: "edit"; item: Device } | null>(null);
   const [inspectDevice, setInspectDevice] = useState<Device | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
@@ -2263,6 +2278,7 @@ function DevicesTab({ devices, allDevices, nextAssetTags = {}, loading, onAdd, o
   const [deleting, setDeleting] = useState(false);
   const [copiedTag, setCopiedTag] = useState(false);
   const [copiedSerial, setCopiedSerial] = useState(false);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
   const [relocatingId, setRelocatingId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -2273,6 +2289,7 @@ function DevicesTab({ devices, allDevices, nextAssetTags = {}, loading, onAdd, o
 
   const types = useMemo(() => ["All", ...Array.from(new Set(devices.map((d) => d.type).filter(Boolean)))], [devices]);
   const locations = useMemo(() => ["All", ...Array.from(new Set(devices.map((d) => d.location || "HQ - Main Office").filter(Boolean)))], [devices]);
+  const conditions = useMemo(() => ["All", "Excellent", "Good", "Fair", "Poor"], []);
 
   const locationCounts = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -2283,14 +2300,34 @@ function DevicesTab({ devices, allDevices, nextAssetTags = {}, loading, onAdd, o
     return counts;
   }, [devices]);
 
+  const inUseCount = devices.filter((d) => d.status === "In Use").length;
+  const availableCount = devices.filter((d) => d.status === "Available").length;
+  const inRepairCount = devices.filter((d) => d.status === "In Repair").length;
+  const retiredCount = devices.filter((d) => d.status === "Retired").length;
+  const expiringWarrantyCount = devices.filter((d) => {
+    if (!d.warrantyExpiry) return false;
+    const diff = Math.ceil((new Date(d.warrantyExpiry).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+    return diff >= 0 && diff <= 45;
+  }).length;
+
   const filtered = useMemo(() => devices.filter((d) => {
     const q = search.toLowerCase();
     const loc = d.location || "HQ - Main Office";
-    return (!q || d.assetTag.toLowerCase().includes(q) || d.brand?.toLowerCase().includes(q) || d.modelName?.toLowerCase().includes(q) || d.assignedTo?.toLowerCase().includes(q) || loc.toLowerCase().includes(q) || (d.serialNumber && d.serialNumber.toLowerCase().includes(q)))
+    const matchesSearch = !q ||
+      d.assetTag.toLowerCase().includes(q) ||
+      d.brand?.toLowerCase().includes(q) ||
+      d.modelName?.toLowerCase().includes(q) ||
+      d.assignedTo?.toLowerCase().includes(q) ||
+      d.department?.toLowerCase().includes(q) ||
+      loc.toLowerCase().includes(q) ||
+      (d.serialNumber && d.serialNumber.toLowerCase().includes(q));
+
+    return matchesSearch
       && (filterType === "All" || d.type === filterType)
       && (filterStatus === "All" || d.status === filterStatus)
-      && (filterLocation === "All" || loc === filterLocation);
-  }), [devices, search, filterType, filterStatus, filterLocation]);
+      && (filterLocation === "All" || loc === filterLocation)
+      && (filterCondition === "All" || d.condition === filterCondition);
+  }), [devices, search, filterType, filterStatus, filterLocation, filterCondition]);
 
   const handleSave = async (data: Omit<Device, "id">) => {
     setSaving(true);
@@ -2321,7 +2358,7 @@ function DevicesTab({ devices, allDevices, nextAssetTags = {}, loading, onAdd, o
         setInspectDevice({ ...inspectDevice, status: newStatus });
       }
     } catch {
-      // handled by parent toast
+      // handled by parent
     }
   };
 
@@ -2337,10 +2374,15 @@ function DevicesTab({ devices, allDevices, nextAssetTags = {}, loading, onAdd, o
     }
   };
 
-  const copyAssetTag = (tag: string) => {
+  const copyAssetTag = (tag: string, id?: string) => {
     navigator.clipboard.writeText(tag);
-    setCopiedTag(true);
-    setTimeout(() => setCopiedTag(false), 2500);
+    if (id) {
+      setCopiedId(id);
+      setTimeout(() => setCopiedId(null), 2500);
+    } else {
+      setCopiedTag(true);
+      setTimeout(() => setCopiedTag(false), 2500);
+    }
   };
 
   const copySerial = (serial: string) => {
@@ -2350,12 +2392,14 @@ function DevicesTab({ devices, allDevices, nextAssetTags = {}, loading, onAdd, o
   };
 
   const QUICK_LOCATIONS = [
+    "HQ - Main Office",
     "HQ - Floor 1",
     "HQ - Floor 2",
     "HQ - IT Lab",
     "HQ - Server Room",
     "HQ - Storage Room",
     "Remote / WFH",
+    "Dwarka Delhi",
     "Branch Office",
   ];
 
@@ -2380,11 +2424,10 @@ function DevicesTab({ devices, allDevices, nextAssetTags = {}, loading, onAdd, o
       )}
       {deleteId && <ConfirmDialog title="Remove Device" message="Permanently remove this device from inventory?" onConfirm={handleDelete} onCancel={() => !deleting && setDeleteId(null)} loading={deleting} />}
 
-      {/* ─── Device Inspection & Telemetry Drawer / Modal ─── */}
+      {/* ─── Device Inspection & Telemetry Modal ─── */}
       {inspectDevice && (
         <div className="fixed inset-0 z-[65] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in">
           <div className="w-full max-w-xl bg-card border border-border rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-150" onClick={(e) => e.stopPropagation()}>
-            {/* Header with gradient backdrop */}
             <div className="relative p-5 border-b border-border bg-gradient-to-r from-primary/10 via-violet-500/10 to-blue-500/10">
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-3">
@@ -2405,9 +2448,7 @@ function DevicesTab({ devices, allDevices, nextAssetTags = {}, loading, onAdd, o
               </div>
             </div>
 
-            {/* Content body */}
             <div className="p-5 space-y-4 overflow-y-auto">
-              {/* Location & Quick Relocate Highlight Card */}
               <div className="p-4 rounded-xl bg-muted/40 border border-border/80 space-y-2.5">
                 <div className="flex items-center justify-between">
                   <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
@@ -2424,7 +2465,6 @@ function DevicesTab({ devices, allDevices, nextAssetTags = {}, loading, onAdd, o
                   })()}
                 </div>
                 
-                {/* 1-Click Quick Move Location Bar */}
                 <div className="pt-2 border-t border-border/60">
                   <p className="text-[10px] font-semibold text-muted-foreground mb-1.5">Quick Relocate Asset:</p>
                   <div className="flex flex-wrap gap-1.5">
@@ -2452,9 +2492,7 @@ function DevicesTab({ devices, allDevices, nextAssetTags = {}, loading, onAdd, o
                 </div>
               </div>
 
-              {/* Grid Information Matrix */}
               <div className="grid grid-cols-2 gap-3 text-xs">
-                {/* Custodian / Assigned Employee */}
                 <div className="p-3 rounded-xl bg-muted/30 border border-border">
                   <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block">Assigned Custodian</span>
                   <div className="font-bold text-foreground mt-1 flex items-center gap-1.5">
@@ -2464,7 +2502,6 @@ function DevicesTab({ devices, allDevices, nextAssetTags = {}, loading, onAdd, o
                   <span className="text-[11px] text-muted-foreground block mt-0.5">{inspectDevice.department || "General"}</span>
                 </div>
 
-                {/* Operating System */}
                 <div className="p-3 rounded-xl bg-muted/30 border border-border">
                   <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block">Operating System</span>
                   <div className="font-bold text-foreground mt-1 flex items-center gap-1.5">
@@ -2474,7 +2511,6 @@ function DevicesTab({ devices, allDevices, nextAssetTags = {}, loading, onAdd, o
                   <span className="text-[11px] text-muted-foreground block mt-0.5">Last Seen: {inspectDevice.lastSeen || "Today"}</span>
                 </div>
 
-                {/* Serial / IMEI Number */}
                 <div className="p-3 rounded-xl bg-muted/30 border border-border">
                   <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block">Serial / IMEI</span>
                   <div className="flex items-center justify-between mt-1">
@@ -2491,7 +2527,6 @@ function DevicesTab({ devices, allDevices, nextAssetTags = {}, loading, onAdd, o
                   </div>
                 </div>
 
-                {/* Warranty Status */}
                 <div className="p-3 rounded-xl bg-muted/30 border border-border">
                   <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block">Warranty Status</span>
                   {(() => {
@@ -2512,7 +2547,6 @@ function DevicesTab({ devices, allDevices, nextAssetTags = {}, loading, onAdd, o
                 </div>
               </div>
 
-              {/* Hardware Specifications */}
               {inspectDevice.specs && (
                 <div className="p-3 rounded-xl bg-muted/30 border border-border">
                   <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Hardware Specifications</span>
@@ -2521,13 +2555,10 @@ function DevicesTab({ devices, allDevices, nextAssetTags = {}, loading, onAdd, o
               )}
             </div>
 
-            {/* Footer action buttons */}
             <div className="flex items-center justify-between gap-2 p-4 border-t border-border bg-muted/20 shrink-0">
               <button
                 type="button"
-                onClick={() => {
-                  setBadgeDevice(inspectDevice);
-                }}
+                onClick={() => setBadgeDevice(inspectDevice)}
                 className="h-8 px-3 rounded-lg border border-border bg-background hover:bg-muted text-xs font-semibold text-foreground flex items-center gap-1.5 cursor-pointer shadow-2xs"
               >
                 <i className="fa-solid fa-print text-xs text-primary" /> Print Label
@@ -2573,7 +2604,6 @@ function DevicesTab({ devices, allDevices, nextAssetTags = {}, loading, onAdd, o
               </button>
             </div>
 
-            {/* Virtual Barcode & Asset Badge Card */}
             <div className="p-4 rounded-xl bg-muted/40 border-2 border-dashed border-primary/30 text-center space-y-3 print:border-solid">
               <div className="flex items-center justify-between text-[10px] text-muted-foreground uppercase font-bold tracking-wider">
                 <span>NexAce IT Asset</span>
@@ -2584,7 +2614,6 @@ function DevicesTab({ devices, allDevices, nextAssetTags = {}, loading, onAdd, o
                 <div className="font-mono text-xl font-black text-primary tracking-widest">
                   {badgeDevice.assetTag}
                 </div>
-                {/* Barcode Visual Strip Simulation */}
                 <div className="flex gap-[2px] h-6 items-end mt-2 opacity-80">
                   {Array.from({ length: 32 }).map((_, i) => (
                     <div
@@ -2642,202 +2671,475 @@ function DevicesTab({ devices, allDevices, nextAssetTags = {}, loading, onAdd, o
         </div>
       )}
 
-      {/* KPI Inventory Chips & Location Breakdown */}
-      <div className="space-y-2.5">
-        <div className="flex flex-wrap gap-2.5 items-center">
-          {[
-            { label: "In Use", count: devices.filter((d) => d.status === "In Use").length, cls: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20" },
-            { label: "Available", count: devices.filter((d) => d.status === "Available").length, cls: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20" },
-            { label: "In Repair", count: devices.filter((d) => d.status === "In Repair").length, cls: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20" },
-            { label: "Retired", count: devices.filter((d) => d.status === "Retired").length, cls: "bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/20" },
-          ].map((chip) => (
-            <button key={chip.label} onClick={() => setFilterStatus(filterStatus === chip.label ? "All" : chip.label)} className={cn("flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-semibold cursor-pointer transition-all", chip.cls, filterStatus === chip.label ? "ring-2 ring-offset-1 ring-current" : "")}>
-              <span className="text-base font-bold leading-none">{chip.count}</span>{chip.label}
-            </button>
-          ))}
-          <span className="text-xs text-muted-foreground ml-auto">{devices.length} total assets</span>
-        </div>
-
-        {/* Location Quick Distribution Pills */}
-        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1">
-          <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider shrink-0 flex items-center gap-1 mr-1">
-            <i className="fa-solid fa-map-location-dot text-primary text-xs" /> Locations:
-          </span>
-          <button
-            onClick={() => setFilterLocation("All")}
-            className={cn(
-              "px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all cursor-pointer whitespace-nowrap shrink-0",
-              filterLocation === "All"
-                ? "bg-primary text-primary-foreground border-primary shadow-xs"
-                : "bg-muted/60 text-muted-foreground border-border hover:border-primary/50"
-            )}
-          >
-            All Locations ({devices.length})
-          </button>
-          {Object.entries(locationCounts).map(([loc, count]) => {
-            const locMeta = getLocationMeta(loc);
-            const isSelected = filterLocation === loc;
-            return (
-              <button
-                key={loc}
-                onClick={() => setFilterLocation(isSelected ? "All" : loc)}
-                className={cn(
-                  "px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all cursor-pointer whitespace-nowrap shrink-0 flex items-center gap-1.5",
-                  isSelected
-                    ? "bg-primary text-primary-foreground border-primary shadow-xs"
-                    : cn("bg-card text-foreground border-border hover:border-primary/50", locMeta.bg)
-                )}
-              >
-                <i className={cn(locMeta.icon, isSelected ? "text-primary-foreground" : locMeta.color)} />
-                <span>{loc}</span>
-                <span className={cn("text-[10px] px-1.5 py-0.2 rounded-full font-bold", isSelected ? "bg-black/20 text-white" : "bg-muted text-muted-foreground")}>
-                  {count}
+      {/* ─── Premium KPI Stat Card Ribbon ─── */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-3">
+        {[
+          { label: "Total Fleet", count: devices.length, filter: "All", icon: "fa-solid fa-laptop", color: "text-primary", bg: "from-primary/10 to-primary/5", border: "border-primary/20", sub: "All registered assets" },
+          { label: "In Active Use", count: inUseCount, filter: "In Use", icon: "fa-solid fa-user-check", color: "text-emerald-500", bg: "from-emerald-500/10 to-emerald-500/5", border: "border-emerald-500/20", sub: `${devices.length > 0 ? Math.round((inUseCount / devices.length) * 100) : 0}% of inventory` },
+          { label: "Available Ready", count: availableCount, filter: "Available", icon: "fa-solid fa-boxes-stacked", color: "text-blue-500", bg: "from-blue-500/10 to-blue-500/5", border: "border-blue-500/20", sub: "Ready for deployment" },
+          { label: "In Repair", count: inRepairCount, filter: "In Repair", icon: "fa-solid fa-wrench", color: "text-amber-500", bg: "from-amber-500/10 to-amber-500/5", border: "border-amber-500/20", sub: "Under maintenance" },
+          { label: "Retired / Scrap", count: retiredCount, filter: "Retired", icon: "fa-solid fa-box-archive", color: "text-slate-400", bg: "from-slate-500/10 to-slate-500/5", border: "border-slate-500/20", sub: "Decommissioned" },
+        ].map((card) => {
+          const isActive = filterStatus === card.filter || (card.filter === "All" && filterStatus === "All");
+          return (
+            <div
+              key={card.label}
+              onClick={() => setFilterStatus(card.filter)}
+              className={cn(
+                "relative p-3.5 rounded-xl border bg-gradient-to-br transition-all cursor-pointer group shadow-2xs hover:shadow-md",
+                card.bg,
+                isActive ? "ring-2 ring-primary border-primary shadow-sm" : "border-border hover:border-primary/40"
+              )}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground group-hover:text-foreground transition-colors">
+                  {card.label}
                 </span>
-              </button>
-            );
-          })}
-        </div>
+                <i className={cn(card.icon, card.color, "text-xs group-hover:scale-110 transition-transform")} />
+              </div>
+              <div className="mt-2 flex items-baseline justify-between">
+                <span className="text-2xl font-black text-foreground tabular-nums tracking-tight">{card.count}</span>
+                <span className="text-[10px] text-muted-foreground font-medium truncate max-w-[90px]">{card.sub}</span>
+              </div>
+            </div>
+          );
+        })}
       </div>
 
-      {/* Filter & Action Bar */}
-      <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between flex-wrap">
-        <div className="relative flex-1 max-w-xs">
-          <i className="fa-solid fa-magnifying-glass absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground" />
-          <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search asset tag, model, serial, location, user…" className="pl-8 h-8 text-xs" />
+      {/* ─── Location Distribution Ribbon ─── */}
+      <div className="p-2.5 rounded-xl bg-muted/40 border border-border/80 flex items-center gap-2 overflow-x-auto no-scrollbar">
+        <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider shrink-0 flex items-center gap-1.5 px-2">
+          <i className="fa-solid fa-location-dot text-primary text-xs" /> Locations:
+        </span>
+        <button
+          onClick={() => setFilterLocation("All")}
+          className={cn(
+            "px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer whitespace-nowrap shrink-0 flex items-center gap-1.5",
+            filterLocation === "All"
+              ? "bg-primary text-primary-foreground border-primary shadow-xs"
+              : "bg-background text-muted-foreground border-border hover:border-primary/50 hover:text-foreground"
+          )}
+        >
+          <span>All Locations</span>
+          <span className={cn("text-[10px] px-1.5 py-0.2 rounded-full font-bold", filterLocation === "All" ? "bg-black/20 text-white" : "bg-muted text-muted-foreground")}>
+            {devices.length}
+          </span>
+        </button>
+        {Object.entries(locationCounts).map(([loc, count]) => {
+          const locMeta = getLocationMeta(loc);
+          const isSelected = filterLocation === loc;
+          return (
+            <button
+              key={loc}
+              onClick={() => setFilterLocation(isSelected ? "All" : loc)}
+              className={cn(
+                "px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer whitespace-nowrap shrink-0 flex items-center gap-1.5",
+                isSelected
+                  ? "bg-primary text-primary-foreground border-primary shadow-xs"
+                  : cn("bg-background text-foreground border-border hover:border-primary/50", locMeta.bg)
+              )}
+            >
+              <i className={cn(locMeta.icon, isSelected ? "text-primary-foreground" : locMeta.color, "text-xs")} />
+              <span className="truncate">{loc}</span>
+              <span className={cn("text-[10px] px-1.5 py-0.2 rounded-full font-bold", isSelected ? "bg-black/20 text-white" : "bg-muted text-muted-foreground")}>
+                {count}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* ─── Search, Filters & View Mode Switcher ─── */}
+      <div className="flex flex-col sm:flex-row gap-2.5 items-start sm:items-center justify-between flex-wrap">
+        <div className="relative flex-1 min-w-[220px] max-w-sm">
+          <i className="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search asset tag, model, serial, user, location…"
+            className="pl-8 pr-7 h-8 text-xs bg-card"
+          />
+          {search && (
+            <button
+              type="button"
+              onClick={() => setSearch("")}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground cursor-pointer"
+            >
+              <i className="fa-solid fa-xmark text-xs" />
+            </button>
+          )}
         </div>
+
         <div className="flex flex-wrap gap-2 items-center">
-          <select className={SELECT_CLS} value={filterType} onChange={(e) => setFilterType(e.target.value)}>{types.map((t) => <option key={t}>{t}</option>)}</select>
-          <select className={SELECT_CLS} value={filterLocation} onChange={(e) => setFilterLocation(e.target.value)}>{locations.map((l) => <option key={l} value={l}>{l === "All" ? "All Locations" : l}</option>)}</select>
-          <select className={SELECT_CLS} value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>{["All", "In Use", "Available", "In Repair", "Retired"].map((s) => <option key={s}>{s}</option>)}</select>
-          <span className="text-xs text-muted-foreground">{filtered.length} device{filtered.length !== 1 ? "s" : ""}</span>
-          <button onClick={() => setModal({ mode: "add" })} className="flex items-center gap-1.5 h-8 px-3 rounded-lg bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-colors cursor-pointer shadow-sm">
+          <select className={SELECT_CLS} value={filterType} onChange={(e) => setFilterType(e.target.value)}>
+            {types.map((t) => <option key={t} value={t}>{t === "All" ? "All Types" : t}</option>)}
+          </select>
+          <select className={SELECT_CLS} value={filterLocation} onChange={(e) => setFilterLocation(e.target.value)}>
+            {locations.map((l) => <option key={l} value={l}>{l === "All" ? "All Locations" : l}</option>)}
+          </select>
+          <select className={SELECT_CLS} value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
+            {["All", "In Use", "Available", "In Repair", "Retired"].map((s) => <option key={s} value={s}>{s === "All" ? "All Statuses" : s}</option>)}
+          </select>
+          <select className={SELECT_CLS} value={filterCondition} onChange={(e) => setFilterCondition(e.target.value)}>
+            {conditions.map((c) => <option key={c} value={c}>{c === "All" ? "All Conditions" : c}</option>)}
+          </select>
+
+          {/* View Mode Toggle */}
+          <div className="flex items-center p-0.5 rounded-lg border border-border bg-muted/40">
+            <button
+              type="button"
+              onClick={() => setViewMode("table")}
+              className={cn(
+                "h-7 w-7 rounded-md flex items-center justify-center text-xs transition-colors cursor-pointer",
+                viewMode === "table" ? "bg-card text-foreground shadow-xs font-bold" : "text-muted-foreground hover:text-foreground"
+              )}
+              title="Table View"
+            >
+              <i className="fa-solid fa-table-list" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode("grid")}
+              className={cn(
+                "h-7 w-7 rounded-md flex items-center justify-center text-xs transition-colors cursor-pointer",
+                viewMode === "grid" ? "bg-card text-foreground shadow-xs font-bold" : "text-muted-foreground hover:text-foreground"
+              )}
+              title="Hardware Grid Cards"
+            >
+              <i className="fa-solid fa-grip" />
+            </button>
+          </div>
+
+          <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">{filtered.length} device{filtered.length !== 1 ? "s" : ""}</span>
+          <button
+            onClick={() => setModal({ mode: "add" })}
+            className="flex items-center gap-1.5 h-8 px-3.5 rounded-lg bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-all cursor-pointer shadow-sm hover:shadow"
+          >
             <i className="fa-solid fa-plus text-[10px]" /> Register Device
           </button>
         </div>
       </div>
 
-      {/* Devices Data Table */}
-      <div className="overflow-x-auto rounded-xl border border-border">
-        <table className="w-full text-xs">
-          <thead>
-            <tr className="bg-muted/60 border-b border-border">
-              {["Asset Tag", "Type", "Brand / Model", "Assigned To", "Dept.", "Location", "Warranty", "Condition", "Status", ""].map((h) => (
-                <th key={h} className="text-left px-3 py-2.5 font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap text-[10px]">{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? Array.from({ length: 4 }).map((_, i) => <SkeletonRow key={i} cols={10} />) :
-              filtered.length === 0 ? (
-                <tr><td colSpan={10} className="text-center py-12 text-muted-foreground"><i className="fa-solid fa-laptop text-2xl mb-2 block opacity-30" /><p className="text-xs">{devices.length === 0 ? "No devices registered yet." : "No results match."}</p></td></tr>
-              ) : (
-                filtered.map((row, idx) => {
-                  const locMeta = getLocationMeta(row.location);
-                  const wMeta = getWarrantyMeta(row.warrantyExpiry);
-                  return (
-                    <tr key={row.id} className={cn("border-b border-border/60 hover:bg-muted/30 transition-colors group", idx % 2 === 0 ? "" : "bg-muted/10")}>
-                      <td className="px-3 py-2.5 whitespace-nowrap">
-                        <button
-                          onClick={() => setInspectDevice(row)}
-                          className="font-mono font-bold text-primary hover:underline flex items-center gap-1.5 cursor-pointer text-xs"
-                          title="Click to inspect asset details & telemetry"
-                        >
-                          <i className="fa-solid fa-laptop-code text-[10px] opacity-70 group-hover:opacity-100" />
-                          {row.assetTag}
-                        </button>
-                      </td>
-                      <td className="px-3 py-2.5 whitespace-nowrap">
-                        <span className="flex items-center gap-1.5 text-muted-foreground font-medium">
-                          <i className={cn(deviceIcon(row.type), "text-xs")} />
-                          {row.type}
-                        </span>
-                      </td>
-                      <td className="px-3 py-2.5 text-foreground whitespace-nowrap font-medium">
-                        <div className="hover:text-primary cursor-pointer" onClick={() => setInspectDevice(row)}>{row.brand} {row.modelName}</div>
-                        {row.specs && <div className="text-[10px] text-muted-foreground font-normal truncate max-w-[140px]">{row.specs}</div>}
-                      </td>
-                      <td className="px-3 py-2.5 text-muted-foreground whitespace-nowrap font-medium text-foreground">{row.assignedTo || "—"}</td>
-                      <td className="px-3 py-2.5 text-muted-foreground whitespace-nowrap">{row.department || "—"}</td>
-                      <td className="px-3 py-2.5 whitespace-nowrap">
-                        <div className="relative inline-block">
+      {/* ─── Main Content View (Table vs Cards) ─── */}
+      {loading ? (
+        <div className="space-y-2 p-4 rounded-xl border border-border">
+          {Array.from({ length: 4 }).map((_, i) => <SkeletonRow key={i} cols={10} />)}
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="py-16 text-center rounded-2xl border border-dashed border-border bg-card/40">
+          <div className="w-12 h-12 rounded-2xl bg-muted/60 flex items-center justify-center mx-auto mb-3 text-muted-foreground/60 text-xl">
+            <i className="fa-solid fa-laptop" />
+          </div>
+          <h4 className="text-sm font-bold text-foreground">No hardware devices found</h4>
+          <p className="text-xs text-muted-foreground mt-1 max-w-sm mx-auto">
+            {devices.length === 0 ? "No hardware devices have been registered yet. Click 'Register Device' to add an asset." : "No devices match your active filters or search term."}
+          </p>
+        </div>
+      ) : viewMode === "grid" ? (
+        /* ─── Hardware Grid Cards View ─── */
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3.5">
+          {filtered.map((d) => {
+            const locMeta = getLocationMeta(d.location);
+            const wMeta = getWarrantyMeta(d.warrantyExpiry);
+            return (
+              <div
+                key={d.id}
+                className="group relative p-4 rounded-2xl border border-border/80 bg-card hover:border-primary/50 hover:shadow-lg transition-all flex flex-col justify-between"
+              >
+                <div>
+                  {/* Top Bar: Icon + Asset Tag + Status */}
+                  <div className="flex items-start justify-between gap-2 mb-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-10 h-10 rounded-xl bg-primary/10 border border-primary/20 text-primary flex items-center justify-center text-lg shrink-0 group-hover:scale-105 transition-transform">
+                        <i className={deviceIcon(d.type)} />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-1.5">
                           <button
                             type="button"
-                            onClick={() => setRelocatingId(relocatingId === row.id ? null : row.id)}
-                            className={cn("inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg border text-[11px] font-semibold cursor-pointer hover:shadow-xs transition-all", locMeta.bg)}
-                            title="Click to quickly relocate device"
+                            onClick={() => copyAssetTag(d.assetTag, d.id)}
+                            className="font-mono font-bold text-xs text-primary hover:underline flex items-center gap-1 cursor-pointer"
+                            title="Copy Asset Tag"
                           >
-                            <i className={cn(locMeta.icon, locMeta.color)} />
-                            <span>{locMeta.label}</span>
-                            <i className="fa-solid fa-chevron-down text-[8px] opacity-60 ml-0.5" />
+                            <span>{d.assetTag}</span>
+                            <i className={cn(copiedId === d.id ? "fa-solid fa-check text-emerald-500" : "fa-solid fa-copy text-[9px] opacity-0 group-hover:opacity-100")} />
                           </button>
+                        </div>
+                        <p className="text-[10px] text-muted-foreground font-medium">{d.type}</p>
+                      </div>
+                    </div>
+                    <span className={statusBadge(d.status)}>{d.status}</span>
+                  </div>
 
-                          {/* Quick Relocate Inline Dropdown Popover */}
-                          {relocatingId === row.id && (
-                            <div className="absolute left-0 top-full mt-1 z-30 w-44 bg-card border border-border rounded-xl shadow-xl p-1.5 space-y-1 animate-in fade-in zoom-in-95">
-                              <p className="text-[9px] font-bold text-muted-foreground uppercase px-2 py-1">Relocate Asset</p>
-                              {QUICK_LOCATIONS.map((ql) => (
-                                <button
-                                  key={ql}
-                                  type="button"
-                                  onClick={() => handleQuickRelocate(row, ql)}
-                                  className={cn(
-                                    "w-full text-left px-2 py-1 rounded-lg text-[11px] font-semibold transition-colors cursor-pointer flex items-center gap-1.5",
-                                    (row.location || "HQ - Main Office") === ql
-                                      ? "bg-primary/15 text-primary"
-                                      : "hover:bg-muted text-foreground"
-                                  )}
-                                >
-                                  <i className={cn(getLocationMeta(ql).icon, "text-[10px]")} />
-                                  <span className="truncate">{ql}</span>
-                                </button>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-3 py-2.5 whitespace-nowrap">
-                        {wMeta ? (
-                          <span className={cn("inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold border", wMeta.cls)}>
-                            <i className={wMeta.icon} />
-                            {wMeta.label}
-                          </span>
-                        ) : (
-                          <span className="text-muted-foreground text-[10px]">—</span>
-                        )}
-                      </td>
-                      <td className="px-3 py-2.5 whitespace-nowrap"><span className={statusBadge(row.condition)}>{row.condition}</span></td>
-                      <td className="px-3 py-2.5 whitespace-nowrap">
-                        <select
-                          value={row.status}
-                          onChange={(e) => handleQuickStatusChange(row, e.target.value as Device["status"])}
-                          className={cn(
-                            "h-6 text-[10px] font-bold rounded-full px-2 py-0.5 border cursor-pointer focus:outline-none transition-all",
-                            row.status === "In Use" ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30" :
-                            row.status === "Available" ? "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30" :
-                            row.status === "In Repair" ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30" :
-                            "bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/30"
-                          )}
+                  {/* Brand & Model */}
+                  <h4 className="text-xs font-bold text-foreground truncate">{d.brand} {d.modelName}</h4>
+                  {d.specs && <p className="text-[11px] text-muted-foreground truncate mt-0.5">{d.specs}</p>}
+
+                  {/* Custodian & Department */}
+                  <div className="mt-3 pt-2.5 border-t border-border/60 flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-2 truncate">
+                      <div className="w-6 h-6 rounded-full bg-muted border border-border flex items-center justify-center text-[10px] font-bold text-foreground shrink-0">
+                        {(d.assignedTo || "U").slice(0, 2).toUpperCase()}
+                      </div>
+                      <div className="truncate">
+                        <p className="text-[11px] font-semibold text-foreground truncate leading-tight">{d.assignedTo || "Unassigned"}</p>
+                        <p className="text-[9px] text-muted-foreground truncate leading-none">{d.department || "General"}</p>
+                      </div>
+                    </div>
+                    <span className={cn("text-[10px] font-bold px-2 py-0.5 rounded-md border shrink-0", statusBadge(d.condition))}>
+                      {d.condition}
+                    </span>
+                  </div>
+
+                  {/* Location & Warranty Pills */}
+                  <div className="mt-2.5 flex items-center justify-between gap-1 flex-wrap">
+                    <span className={cn("inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-semibold border truncate max-w-[130px]", locMeta.bg)}>
+                      <i className={cn(locMeta.icon, "text-[9px]")} />
+                      <span className="truncate">{locMeta.label}</span>
+                    </span>
+
+                    {wMeta ? (
+                      <span className={cn("inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-semibold border truncate", wMeta.cls)}>
+                        <i className={cn(wMeta.icon, "text-[9px]")} />
+                        <span>{wMeta.label}</span>
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-muted-foreground">No warranty</span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Card Action Footer */}
+                <div className="mt-3.5 pt-2.5 border-t border-border flex items-center justify-between gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setInspectDevice(d)}
+                    className="flex-1 h-7 rounded-lg bg-muted/60 hover:bg-muted text-foreground text-[11px] font-semibold flex items-center justify-center gap-1 cursor-pointer transition-colors"
+                  >
+                    <i className="fa-solid fa-eye text-[10px] text-primary" /> Inspect
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBadgeDevice(d)}
+                    className="h-7 w-7 rounded-lg border border-border bg-background hover:bg-muted text-muted-foreground hover:text-foreground flex items-center justify-center text-xs cursor-pointer"
+                    title="Print Label"
+                  >
+                    <i className="fa-solid fa-qrcode" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setModal({ mode: "edit", item: d })}
+                    className="h-7 w-7 rounded-lg border border-border bg-background hover:bg-muted text-muted-foreground hover:text-foreground flex items-center justify-center text-xs cursor-pointer"
+                    title="Edit"
+                  >
+                    <i className="fa-solid fa-pen" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDeleteId(d.id)}
+                    className="h-7 w-7 rounded-lg border border-border bg-background hover:bg-destructive/10 text-muted-foreground hover:text-destructive flex items-center justify-center text-xs cursor-pointer"
+                    title="Delete"
+                  >
+                    <i className="fa-solid fa-trash" />
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        /* ─── Enhanced Data Table View ─── */
+        <div className="overflow-x-auto rounded-2xl border border-border bg-card shadow-xs">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="bg-muted/50 border-b border-border">
+                {["Asset Tag", "Type", "Brand / Model", "Assigned Custodian", "Dept.", "Physical Location", "Warranty", "Condition", "Status", ""].map((h) => (
+                  <th key={h} className="text-left px-3.5 py-3 font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap text-[10px]">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((row, idx) => {
+                const locMeta = getLocationMeta(row.location);
+                const wMeta = getWarrantyMeta(row.warrantyExpiry);
+                return (
+                  <tr
+                    key={row.id}
+                    className={cn(
+                      "border-b border-border/50 hover:bg-muted/30 transition-colors group",
+                      idx % 2 === 0 ? "bg-card" : "bg-muted/5"
+                    )}
+                  >
+                    {/* Asset Tag */}
+                    <td className="px-3.5 py-2.5 whitespace-nowrap">
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setInspectDevice(row)}
+                          className="font-mono font-bold text-primary hover:underline flex items-center gap-1.5 cursor-pointer text-xs"
+                          title="Click to inspect asset details"
                         >
-                          {["In Use", "Available", "In Repair", "Retired"].map((s) => (
-                            <option key={s} value={s}>{s}</option>
-                          ))}
-                        </select>
-                      </td>
-                      <td className="px-3 py-2.5 whitespace-nowrap">
-                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button onClick={() => setInspectDevice(row)} className="w-6 h-6 rounded-md bg-muted hover:bg-accent flex items-center justify-center text-muted-foreground hover:text-foreground cursor-pointer" title="Inspect Asset"><i className="fa-solid fa-eye text-[9px]" /></button>
-                          <button onClick={() => setBadgeDevice(row)} className="w-6 h-6 rounded-md bg-muted hover:bg-accent flex items-center justify-center text-muted-foreground hover:text-foreground cursor-pointer" title="View Asset Badge"><i className="fa-solid fa-qrcode text-[9px]" /></button>
-                          <button onClick={() => setModal({ mode: "edit", item: row })} className="w-6 h-6 rounded-md bg-muted hover:bg-accent flex items-center justify-center text-muted-foreground hover:text-foreground cursor-pointer" title="Edit"><i className="fa-solid fa-pen text-[9px]" /></button>
-                          <button onClick={() => setDeleteId(row.id)} className="w-6 h-6 rounded-md bg-muted hover:bg-red-500/10 flex items-center justify-center text-muted-foreground hover:text-red-500 cursor-pointer" title="Delete"><i className="fa-solid fa-trash text-[9px]" /></button>
+                          <i className="fa-solid fa-laptop-code text-[10px] opacity-70 group-hover:opacity-100" />
+                          <span>{row.assetTag}</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => copyAssetTag(row.assetTag, row.id)}
+                          className="text-muted-foreground hover:text-primary cursor-pointer p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                          title="Copy Asset Tag"
+                        >
+                          <i className={cn(copiedId === row.id ? "fa-solid fa-check text-emerald-500" : "fa-solid fa-copy text-[9px]")} />
+                        </button>
+                      </div>
+                    </td>
+
+                    {/* Type */}
+                    <td className="px-3.5 py-2.5 whitespace-nowrap">
+                      <span className="inline-flex items-center gap-1.5 text-muted-foreground font-semibold">
+                        <i className={cn(deviceIcon(row.type), "text-xs text-primary/80")} />
+                        <span>{row.type}</span>
+                      </span>
+                    </td>
+
+                    {/* Brand / Model */}
+                    <td className="px-3.5 py-2.5 text-foreground whitespace-nowrap font-medium">
+                      <div className="font-bold hover:text-primary cursor-pointer text-xs" onClick={() => setInspectDevice(row)}>
+                        {row.brand} {row.modelName}
+                      </div>
+                      {row.specs && <div className="text-[10px] text-muted-foreground font-normal truncate max-w-[150px]">{row.specs}</div>}
+                    </td>
+
+                    {/* Assigned Custodian */}
+                    <td className="px-3.5 py-2.5 whitespace-nowrap">
+                      <div className="flex items-center gap-2">
+                        <div className="w-6 h-6 rounded-full bg-primary/10 text-primary border border-primary/20 flex items-center justify-center text-[10px] font-bold shrink-0">
+                          {(row.assignedTo || "U").slice(0, 2).toUpperCase()}
                         </div>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-          </tbody>
-        </table>
-      </div>
+                        <span className="font-semibold text-foreground">{row.assignedTo || "Unassigned"}</span>
+                      </div>
+                    </td>
+
+                    {/* Department */}
+                    <td className="px-3.5 py-2.5 text-muted-foreground whitespace-nowrap font-medium">{row.department || "—"}</td>
+
+                    {/* Physical Location with Inline Quick Relocate Dropdown */}
+                    <td className="px-3.5 py-2.5 whitespace-nowrap">
+                      <div className="relative inline-block">
+                        <button
+                          type="button"
+                          onClick={() => setRelocatingId(relocatingId === row.id ? null : row.id)}
+                          className={cn("inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[11px] font-semibold cursor-pointer hover:shadow-xs transition-all", locMeta.bg)}
+                          title="Click to relocate device"
+                        >
+                          <i className={cn(locMeta.icon, locMeta.color)} />
+                          <span>{locMeta.label}</span>
+                          <i className="fa-solid fa-chevron-down text-[8px] opacity-60 ml-0.5" />
+                        </button>
+
+                        {relocatingId === row.id && (
+                          <div className="absolute left-0 top-full mt-1.5 z-30 w-48 bg-card border border-border rounded-xl shadow-2xl p-1.5 space-y-1 animate-in fade-in zoom-in-95">
+                            <p className="text-[9px] font-bold text-muted-foreground uppercase px-2 py-1 flex items-center gap-1">
+                              <i className="fa-solid fa-arrows-split-up-and-left text-primary" /> Relocate Asset
+                            </p>
+                            {QUICK_LOCATIONS.map((ql) => (
+                              <button
+                                key={ql}
+                                type="button"
+                                onClick={() => handleQuickRelocate(row, ql)}
+                                className={cn(
+                                  "w-full text-left px-2 py-1 rounded-lg text-[11px] font-semibold transition-colors cursor-pointer flex items-center gap-1.5",
+                                  (row.location || "HQ - Main Office") === ql
+                                    ? "bg-primary/15 text-primary"
+                                    : "hover:bg-muted text-foreground"
+                                )}
+                              >
+                                <i className={cn(getLocationMeta(ql).icon, "text-[10px]")} />
+                                <span className="truncate">{ql}</span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </td>
+
+                    {/* Warranty */}
+                    <td className="px-3.5 py-2.5 whitespace-nowrap">
+                      {wMeta ? (
+                        <span className={cn("inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold border", wMeta.cls)}>
+                          <i className={wMeta.icon} />
+                          {wMeta.label}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground text-[10px]">—</span>
+                      )}
+                    </td>
+
+                    {/* Condition */}
+                    <td className="px-3.5 py-2.5 whitespace-nowrap">
+                      <span className={cn("px-2.5 py-0.5 rounded-full text-[10px] font-bold border", statusBadge(row.condition))}>
+                        {row.condition}
+                      </span>
+                    </td>
+
+                    {/* Status */}
+                    <td className="px-3.5 py-2.5 whitespace-nowrap">
+                      <select
+                        value={row.status}
+                        onChange={(e) => handleQuickStatusChange(row, e.target.value as Device["status"])}
+                        className={cn(
+                          "h-6 text-[10px] font-bold rounded-full px-2 py-0.5 border cursor-pointer focus:outline-none transition-all",
+                          row.status === "In Use" ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30" :
+                          row.status === "Available" ? "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30" :
+                          row.status === "In Repair" ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30" :
+                          "bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/30"
+                        )}
+                      >
+                        {["In Use", "Available", "In Repair", "Retired"].map((s) => (
+                          <option key={s} value={s}>{s}</option>
+                        ))}
+                      </select>
+                    </td>
+
+                    {/* Action Toolbar */}
+                    <td className="px-3.5 py-2.5 whitespace-nowrap">
+                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={() => setInspectDevice(row)}
+                          className="w-7 h-7 rounded-lg bg-muted hover:bg-accent flex items-center justify-center text-muted-foreground hover:text-foreground cursor-pointer shadow-2xs"
+                          title="Inspect Telemetry"
+                        >
+                          <i className="fa-solid fa-eye text-[10px]" />
+                        </button>
+                        <button
+                          onClick={() => setBadgeDevice(row)}
+                          className="w-7 h-7 rounded-lg bg-muted hover:bg-accent flex items-center justify-center text-muted-foreground hover:text-foreground cursor-pointer shadow-2xs"
+                          title="Print Label"
+                        >
+                          <i className="fa-solid fa-qrcode text-[10px]" />
+                        </button>
+                        <button
+                          onClick={() => setModal({ mode: "edit", item: row })}
+                          className="w-7 h-7 rounded-lg bg-muted hover:bg-accent flex items-center justify-center text-muted-foreground hover:text-foreground cursor-pointer shadow-2xs"
+                          title="Edit"
+                        >
+                          <i className="fa-solid fa-pen text-[10px]" />
+                        </button>
+                        <button
+                          onClick={() => setDeleteId(row.id)}
+                          className="w-7 h-7 rounded-lg bg-muted hover:bg-red-500/10 flex items-center justify-center text-muted-foreground hover:text-red-500 cursor-pointer shadow-2xs"
+                          title="Delete"
+                        >
+                          <i className="fa-solid fa-trash text-[10px]" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
