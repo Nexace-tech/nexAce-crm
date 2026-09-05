@@ -24,7 +24,7 @@ export async function proxy(request: NextRequest) {
     if (!session || !session.userId || !session.tenantId) {
       // Clear stale/invalid cookie and redirect
       const response = NextResponse.redirect(new URL("/login", request.url));
-      response.cookies.delete("session");
+      response.cookies.set("session", "", { path: "/", maxAge: 0, expires: new Date(0) });
       return response;
     }
   }
@@ -34,7 +34,7 @@ export async function proxy(request: NextRequest) {
     const sessionCookie = request.cookies.get("session")?.value;
     if (sessionCookie) {
       const session = await decrypt(sessionCookie);
-      if (session?.userId) {
+      if (session?.userId && session?.tenantId) {
         return NextResponse.redirect(new URL("/dashboard", request.url));
       }
     }

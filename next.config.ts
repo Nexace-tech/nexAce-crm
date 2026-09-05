@@ -44,8 +44,11 @@ const nextConfig: NextConfig = {
 
     return [
       {
-        source: "/(.*)",
+        source: "/((?!_next/static|_next/image|favicon.ico).*)",
         headers: [
+          { key: "Cache-Control", value: "no-cache, no-store, max-age=0, must-revalidate" },
+          { key: "CDN-Cache-Control", value: "no-cache, no-store, max-age=0, must-revalidate" },
+          { key: "Surrogate-Control", value: "no-store" },
           { key: "X-Frame-Options", value: "DENY" },
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
