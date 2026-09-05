@@ -325,10 +325,10 @@ const MODULES: ModuleItem[] = [
     ],
   },
 
-  // ── 6. Operation Portal, Sales & Clients ──────────────────────────────────
+  // ── 6. OPS Portal, Sales & Clients ──────────────────────────────────
   {
     id: "clients",
-    name: "Operation Portal, Sales & Clients",
+    name: "OPS Portal, Sales & Clients",
     path: "/dashboard/clients",
     icon: "fa-list-check",
     color: "#14b8a6",
@@ -341,13 +341,13 @@ const MODULES: ModuleItem[] = [
       { label: "Deal Stages", value: "6 Stage Pipeline" },
       { label: "Bulk Importer", value: "CSV & Paste" },
     ],
-    description: "Client delivery accounts, sales deals pipeline, batch data importer, staffing utilization grid, and external contractor directory.",
+    description: "Client delivery accounts, sales deals pipeline, batch data importer, staffing utilization grid, reports & data exports, and external contractor directory.",
     steps: [
       {
         title: "How to Bulk Import Data (CSV, JSON & Copy-Paste)",
         purpose: "Batch import dozens of client retainers and sales pipeline deals simultaneously.",
         instructions: [
-          "In the top right of the Operation Portal, click the 'Bulk Import' button.",
+          "In the top right of the OPS Portal, click the 'Bulk Import' button.",
           "Select the Entity Type: 'Client Retainers & Projects' or 'Sales Pipeline Deals'.",
           "Choose your input method: Drag and drop a `.csv`, `.tsv`, `.txt`, or `.json` file, or click 'Paste Spreadsheet Data' to paste directly from Excel or Google Sheets.",
           "Click 'Download Template' if you need a formatted sample template.",
@@ -597,7 +597,7 @@ const MODULES: ModuleItem[] = [
         title: "How to Track Hardware & Device Inventory",
         purpose: "Maintain an asset inventory of physical laptops, monitors, and devices.",
         instructions: [
-          "In the 'Devices' tab, click '+ Register Device', enter Asset Tag (e.g. 'MAC-2026-084'), Device Type, Brand, Model, OS, Condition (Excellent, Good, Fair, Poor), and Assigned Employee. Click 'Save Device'.",
+          "In the 'Devices' tab, click '+ Register Device', enter Asset Tag (e.g. 'ACE-LAP-001'), Device Type, Brand, Model, Location (e.g. 'HQ - Floor 2', 'Remote / WFH'), OS, Condition (Excellent, Good, Fair, Poor), and Assigned Employee. Click 'Save Device'.",
         ],
       },
       {

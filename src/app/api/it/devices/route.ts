@@ -43,16 +43,16 @@ export async function getNextAssetTag(
 }
 
 const SEED_DEVICES = [
-  { assetTag: "ACE-LAP-001", type: "Laptop", brand: "Apple", modelName: "MacBook Pro 14\"", assignedTo: "Ahmed Raza", department: "IT", os: "macOS 14 Sonoma", lastSeen: "2026-08-11", condition: "Excellent", status: "In Use" },
-  { assetTag: "ACE-LAP-002", type: "Laptop", brand: "Dell", modelName: "XPS 15", assignedTo: "Sara Khan", department: "Ops", os: "Windows 11 Pro", lastSeen: "2026-08-11", condition: "Good", status: "In Use" },
-  { assetTag: "ACE-LAP-003", type: "Laptop", brand: "Lenovo", modelName: "ThinkPad X1 Carbon", assignedTo: "Zain Ali", department: "Engineering", os: "Ubuntu 24.04", lastSeen: "2026-08-10", condition: "Good", status: "In Use" },
-  { assetTag: "ACE-MON-001", type: "Monitor", brand: "LG", modelName: "UltraFine 4K 27\"", assignedTo: "Ahmed Raza", department: "IT", os: "N/A", lastSeen: "2026-08-11", condition: "Excellent", status: "In Use" },
-  { assetTag: "ACE-LAP-004", type: "Laptop", brand: "Apple", modelName: "MacBook Air M2", assignedTo: "Fatima Noor", department: "Design", os: "macOS 14 Sonoma", lastSeen: "2026-08-09", condition: "Excellent", status: "In Use" },
-  { assetTag: "ACE-LAP-005", type: "Laptop", brand: "HP", modelName: "EliteBook 840", assignedTo: "—", department: "—", os: "Windows 11 Pro", lastSeen: "2026-07-01", condition: "Good", status: "Available" },
-  { assetTag: "ACE-LAP-006", type: "Laptop", brand: "Dell", modelName: "Inspiron 15", assignedTo: "Nadia Rao", department: "HR", os: "Windows 11 Home", lastSeen: "2026-08-08", condition: "Fair", status: "In Repair" },
-  { assetTag: "ACE-PHN-001", type: "Mobile", brand: "Apple", modelName: "iPhone 15 Pro", assignedTo: "Omar Malik", department: "Ops", os: "iOS 17", lastSeen: "2026-08-11", condition: "Excellent", status: "In Use" },
-  { assetTag: "ACE-RTR-001", type: "Router", brand: "Cisco", modelName: "RV340", assignedTo: "Office Network", department: "IT", os: "Firmware 1.0.4", lastSeen: "2026-08-11", condition: "Good", status: "In Use" },
-  { assetTag: "ACE-LAP-007", type: "Laptop", brand: "Lenovo", modelName: "IdeaPad 5", assignedTo: "—", department: "—", os: "Windows 10 Home", lastSeen: "2026-01-15", condition: "Poor", status: "Retired" },
+  { assetTag: "ACE-LAP-001", type: "Laptop", brand: "Apple", modelName: "MacBook Pro 14\"", assignedTo: "Ahmed Raza", department: "IT", location: "HQ - Floor 2", os: "macOS 14 Sonoma", lastSeen: "2026-08-11", condition: "Excellent", status: "In Use" },
+  { assetTag: "ACE-LAP-002", type: "Laptop", brand: "Dell", modelName: "XPS 15", assignedTo: "Sara Khan", department: "Ops", location: "HQ - Floor 1", os: "Windows 11 Pro", lastSeen: "2026-08-11", condition: "Good", status: "In Use" },
+  { assetTag: "ACE-LAP-003", type: "Laptop", brand: "Lenovo", modelName: "ThinkPad X1 Carbon", assignedTo: "Zain Ali", department: "Engineering", location: "Remote / WFH", os: "Ubuntu 24.04", lastSeen: "2026-08-10", condition: "Good", status: "In Use" },
+  { assetTag: "ACE-MON-001", type: "Monitor", brand: "LG", modelName: "UltraFine 4K 27\"", assignedTo: "Ahmed Raza", department: "IT", location: "HQ - IT Lab", os: "N/A", lastSeen: "2026-08-11", condition: "Excellent", status: "In Use" },
+  { assetTag: "ACE-LAP-004", type: "Laptop", brand: "Apple", modelName: "MacBook Air M2", assignedTo: "Fatima Noor", department: "Design", location: "HQ - Floor 2", os: "macOS 14 Sonoma", lastSeen: "2026-08-09", condition: "Excellent", status: "In Use" },
+  { assetTag: "ACE-LAP-005", type: "Laptop", brand: "HP", modelName: "EliteBook 840", assignedTo: "—", department: "—", location: "HQ - Storage Room", os: "Windows 11 Pro", lastSeen: "2026-07-01", condition: "Good", status: "Available" },
+  { assetTag: "ACE-LAP-006", type: "Laptop", brand: "Dell", modelName: "Inspiron 15", assignedTo: "Nadia Rao", department: "HR", location: "HQ - Floor 1", os: "Windows 11 Home", lastSeen: "2026-08-08", condition: "Fair", status: "In Repair" },
+  { assetTag: "ACE-PHN-001", type: "Mobile", brand: "Apple", modelName: "iPhone 15 Pro", assignedTo: "Omar Malik", department: "Ops", location: "Remote / WFH", os: "iOS 17", lastSeen: "2026-08-11", condition: "Excellent", status: "In Use" },
+  { assetTag: "ACE-RTR-001", type: "Router", brand: "Cisco", modelName: "RV340", assignedTo: "Office Network", department: "IT", location: "HQ - Server Room", os: "Firmware 1.0.4", lastSeen: "2026-08-11", condition: "Good", status: "In Use" },
+  { assetTag: "ACE-LAP-007", type: "Laptop", brand: "Lenovo", modelName: "IdeaPad 5", assignedTo: "—", department: "—", location: "HQ - Storage Room", os: "Windows 10 Home", lastSeen: "2026-01-15", condition: "Poor", status: "Retired" },
 ];
 
 export async function GET(request: Request) {
@@ -125,6 +125,7 @@ export async function POST(request: Request) {
       warrantyExpiry,
       assignedTo,
       department,
+      location,
       os,
       lastSeen,
       condition,
@@ -178,6 +179,7 @@ export async function POST(request: Request) {
       warrantyExpiry: warrantyExpiry?.trim() || "",
       assignedTo: assignedTo?.trim() || session.userName || "—",
       department: department?.trim() || "—",
+      location: location?.trim() || "HQ - Main Office",
       os: os?.trim() || "",
       lastSeen: lastSeen || new Date().toISOString().slice(0, 10),
       condition: condition || "Good",

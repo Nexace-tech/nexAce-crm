@@ -73,12 +73,11 @@ export default async function DashboardLayout({ children }: DashboardLayoutProps
     { key: "team", name: "My Team", href: "/dashboard/team", icon: "fa-solid fa-users" },
     { key: "calendar", name: "Calendar & Timesheets", href: "/dashboard/calendar", icon: "fa-solid fa-calendar-days" },
     { key: "projects", name: "Projects & Drive", href: "/dashboard/projects", icon: "fa-solid fa-folder-tree" },
-    { key: "reports", name: "Report", href: "/dashboard/reports", icon: "fa-solid fa-file-lines" },
     { key: "chat", name: "Chat & Mail", href: "/dashboard/chat", icon: "fa-solid fa-comments" },
     { key: "hr", name: "HR Portal", href: "/dashboard/hr", icon: "fa-solid fa-briefcase" },
     { key: "goals", name: "Goals & OKRs", href: "/dashboard/goals", icon: "fa-solid fa-bullseye" },
     { key: "analytics", name: "Analytics Logs", href: "/dashboard/analytics", icon: "fa-solid fa-chart-line" },
-    { key: "clients", name: "Operation Portal", href: "/dashboard/clients", icon: "fa-solid fa-list-check" },
+    { key: "clients", name: "OPS Portal", href: "/dashboard/clients", icon: "fa-solid fa-list-check" },
     { key: "sales", name: "Sales Workdesk", href: "/dashboard/sales", icon: "fa-solid fa-handshake" },
     { key: "finance", name: "Finance Portal", href: "/dashboard/finance", icon: "fa-solid fa-coins" },
     { key: "bd", name: "BD Portal", href: "/dashboard/bd", icon: "fa-solid fa-handshake" },
@@ -100,9 +99,9 @@ export default async function DashboardLayout({ children }: DashboardLayoutProps
       // Fallback defaults
       if (isSubAdminRole(role)) return true; // OPS (SubAdmin) defaults to full operational access
       if (role === "Manager") return !["analytics", "clients", "it", "finance", "bd"].includes(mod.key);
-      if (role === "HR") return ["overview", "team", "calendar", "projects", "reports", "chat", "hr", "goals", "settings"].includes(mod.key);
+      if (role === "HR") return ["overview", "team", "calendar", "projects", "chat", "hr", "goals", "settings"].includes(mod.key);
       // Employee
-      return ["overview", "team", "calendar", "projects", "reports", "chat", "hr", "referrals", "settings"].includes(mod.key);
+      return ["overview", "team", "calendar", "projects", "chat", "hr", "referrals", "settings"].includes(mod.key);
     });
   }
 

@@ -20,6 +20,8 @@ interface DriveLink {
   link: string;
   owner: string;
   accessLevel: string;
+  shareScope?: "All Users" | "Specific Users" | "Private";
+  sharedWith?: string[];
   lastUpdated: string;
   reviewFrequency: string;
   notes: string;
@@ -60,6 +62,7 @@ interface Device {
   warrantyExpiry?: string;
   assignedTo: string;
   department: string;
+  location?: string;
   os: string;
   lastSeen: string;
   condition: "Excellent" | "Good" | "Fair" | "Poor";
@@ -602,73 +605,353 @@ function OverviewTab({ access, subscriptions, devices, loading, onNavigate, onQu
 
 // ─── Drive Links Tab ──────────────────────────────────────────────────────────
 
-const EMPTY_DRIVE = { name: "", category: "", venture: "Ace Consultancy", platform: "Google Sheets", link: "", owner: "", accessLevel: "View - Team", lastUpdated: new Date().toISOString().slice(0, 10), reviewFrequency: "Monthly", notes: "" };
+const makeEmptyDrive = (userName = ""): Omit<DriveLink, "id"> => ({
+  name: "",
+  category: "",
+  venture: "Ace Consultancy",
+  platform: "Google Sheets",
+  link: "",
+  owner: userName || "",
+  accessLevel: "View - Team",
+  shareScope: "All Users",
+  sharedWith: [],
+  lastUpdated: new Date().toISOString().slice(0, 10),
+  reviewFrequency: "Monthly",
+  notes: "",
+});
 
-function DriveModal({ initial, onSave, onClose, saving, teamMembers = [], existingCategories = [] }: {
+function DriveModal({
+  initial,
+  onSave,
+  onClose,
+  saving,
+  userName,
+  isPrivileged,
+  teamMembers = [],
+  existingCategories = [],
+}: {
   initial: Omit<DriveLink, "id">;
   onSave: (d: Omit<DriveLink, "id">) => void;
   onClose: () => void;
   saving?: boolean;
+  userName?: string;
+  isPrivileged?: boolean;
   teamMembers?: TeamMemberOption[];
   existingCategories?: string[];
 }) {
-  const [form, setForm] = useState(initial);
-  const set = (k: keyof typeof form, v: string) => setForm((p) => ({ ...p, [k]: v }));
+  const [form, setForm] = useState(() => ({
+    ...initial,
+    owner: initial.owner || userName || "Ace",
+    shareScope: initial.shareScope || "All Users",
+    sharedWith: initial.sharedWith || [],
+  }));
+  const [memberFilter, setMemberFilter] = useState("");
+  const set = (k: keyof typeof form, v: any) => setForm((p) => ({ ...p, [k]: v }));
   const fieldCls = "w-full h-8 rounded-lg border border-border bg-muted/60 text-xs px-3 focus:outline-none focus:ring-1 focus:ring-primary text-foreground placeholder:text-muted-foreground";
 
   const allCategories = useMemo(() => {
     return Array.from(new Set([...DRIVE_CATEGORIES, ...existingCategories.filter(Boolean)]));
   }, [existingCategories]);
 
+  const filteredMembers = useMemo(() => {
+    const q = memberFilter.toLowerCase();
+    if (!q) return teamMembers;
+    return teamMembers.filter(
+      (m) => m.name.toLowerCase().includes(q) || (m.department && m.department.toLowerCase().includes(q))
+    );
+  }, [teamMembers, memberFilter]);
+
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={!saving ? onClose : undefined} />
-      <div className="relative bg-card border border-border rounded-2xl shadow-2xl w-full max-w-lg animate-in fade-in zoom-in-95 duration-150 overflow-hidden">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-          <h3 className="text-sm font-bold text-foreground flex items-center gap-2"><i className="fa-solid fa-folder-open text-violet-500" />{(initial as any)._id ? "Edit File Link" : "Add File / Drive Link"}</h3>
-          <button onClick={onClose} disabled={saving} className="text-muted-foreground hover:text-foreground cursor-pointer disabled:opacity-50"><i className="fa-solid fa-xmark" /></button>
+      <div className="relative bg-card border border-border rounded-2xl shadow-2xl w-full max-w-lg animate-in fade-in zoom-in-95 duration-150 overflow-hidden flex flex-col max-h-[90vh]">
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border bg-muted/20 shrink-0">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-violet-500/10 text-violet-500 flex items-center justify-center border border-violet-500/20">
+              <i className="fa-solid fa-folder-open text-sm" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-foreground">
+                {(initial as any)._id || (initial as any).id ? "Edit File / Drive Link" : "Add File / Drive Link"}
+              </h3>
+              <p className="text-[11px] text-muted-foreground">
+                Share documents, trackers, spreadsheets &amp; SOP links across the team
+              </p>
+            </div>
+          </div>
+          <button onClick={onClose} disabled={saving} className="text-muted-foreground hover:text-foreground cursor-pointer disabled:opacity-50">
+            <i className="fa-solid fa-xmark text-sm" />
+          </button>
         </div>
-        <div className="p-5 space-y-3 max-h-[70vh] overflow-y-auto">
+
+        {/* Form Body */}
+        <div className="p-5 space-y-3.5 overflow-y-auto">
           <div className="grid grid-cols-2 gap-3">
-            <div className="col-span-2"><label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">File / Resource Name *</label><input className={fieldCls} value={form.name} onChange={(e) => set("name", e.target.value)} placeholder="e.g. Brand Guidelines 2026" /></div>
+            {/* Resource Name */}
+            <div className="col-span-2">
+              <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">
+                File / Resource Name *
+              </label>
+              <input
+                className={fieldCls}
+                value={form.name}
+                onChange={(e) => set("name", e.target.value)}
+                placeholder="e.g. Brand Guidelines 2026, Q3 Financial Model…"
+              />
+            </div>
+
+            {/* Category */}
             <div>
               <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Category</label>
-              <input list="drive-categories-datalist" className={fieldCls} value={form.category} onChange={(e) => set("category", e.target.value)} placeholder="e.g. Ops/Admin" />
+              <input
+                list="drive-categories-datalist"
+                className={fieldCls}
+                value={form.category}
+                onChange={(e) => set("category", e.target.value)}
+                placeholder="e.g. Ops/Admin, Brand/Design"
+              />
               <datalist id="drive-categories-datalist">
                 {allCategories.map((c) => <option key={c} value={c} />)}
               </datalist>
             </div>
-            <div><label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Platform</label>
+
+            {/* Platform */}
+            <div>
+              <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Platform</label>
               <select className={cn(fieldCls, "cursor-pointer")} value={form.platform} onChange={(e) => set("platform", e.target.value)}>
-                {["Google Sheets", "Google Docs", "Notion", "PDF", "Other"].map((p) => <option key={p}>{p}</option>)}
+                {["Google Sheets", "Google Docs", "Notion", "PDF", "Figma", "Canva", "Loom", "Miro", "Other"].map((p) => <option key={p}>{p}</option>)}
               </select>
             </div>
-            <div>
-              <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Owner</label>
-              <input list="drive-owners-datalist" className={fieldCls} value={form.owner} onChange={(e) => set("owner", e.target.value)} placeholder="Select or enter owner" />
+
+            {/* Owner with Quick "Set to Me" */}
+            <div className="col-span-2 sm:col-span-1">
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Owner</label>
+                {userName && (
+                  <button
+                    type="button"
+                    onClick={() => set("owner", userName)}
+                    className="text-[9px] font-semibold text-primary hover:underline cursor-pointer flex items-center gap-1"
+                    title="Set current user as owner"
+                  >
+                    <i className="fa-solid fa-user-check text-[8px]" /> Set to Me ({userName})
+                  </button>
+                )}
+              </div>
+              <input
+                list="drive-owners-datalist"
+                className={fieldCls}
+                value={form.owner}
+                onChange={(e) => set("owner", e.target.value)}
+                placeholder="Select or enter owner"
+              />
               <datalist id="drive-owners-datalist">
-                {teamMembers.map((m) => <option key={m._id || m.name} value={m.name}>{m.department ? `${m.name} (${m.department})` : m.name}</option>)}
+                {teamMembers.map((m) => (
+                  <option key={m._id || m.name} value={m.name}>
+                    {m.department ? `${m.name} (${m.department})` : m.name}
+                  </option>
+                ))}
               </datalist>
             </div>
-            <div><label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Access Level</label>
+
+            {/* Access Permission Level */}
+            <div className="col-span-2 sm:col-span-1">
+              <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Access Level</label>
               <select className={cn(fieldCls, "cursor-pointer")} value={form.accessLevel} onChange={(e) => set("accessLevel", e.target.value)}>
                 {["View - Team", "Edit - Team", "Admin Only", "Public"].map((a) => <option key={a}>{a}</option>)}
               </select>
             </div>
-            <div className="col-span-2"><label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Link (URL)</label><input className={fieldCls} value={form.link} onChange={(e) => set("link", e.target.value)} placeholder="https://..." /></div>
-            <div><label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Review Frequency</label>
+
+            {/* ─── Granular Share Scope Selector ─── */}
+            <div className="col-span-2 space-y-2.5 p-3 rounded-xl bg-muted/40 border border-border">
+              <div className="flex items-center justify-between">
+                <label className="text-[10px] font-bold text-foreground uppercase tracking-wide flex items-center gap-1.5">
+                  <i className="fa-solid fa-share-nodes text-primary text-xs" /> Share With / Visibility
+                </label>
+                <span className="text-[9px] text-muted-foreground">Select who has access to this link</span>
+              </div>
+
+              {/* 3 Scope Cards */}
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { id: "All Users", label: "All Users", icon: "fa-solid fa-globe", sub: "Entire Team", color: "text-emerald-500" },
+                  { id: "Specific Users", label: "Specific Users", icon: "fa-solid fa-user-group", sub: "Select Members", color: "text-primary" },
+                  { id: "Private", label: "Only Me", icon: "fa-solid fa-lock", sub: "Private / Owner", color: "text-amber-500" },
+                ].map((opt) => {
+                  const isSelected = form.shareScope === opt.id;
+                  return (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => set("shareScope", opt.id as any)}
+                      className={cn(
+                        "flex flex-col items-center gap-1 p-2 rounded-lg border text-center transition-all cursor-pointer",
+                        isSelected
+                          ? "bg-primary/10 border-primary text-primary shadow-xs ring-1 ring-primary/40 font-bold"
+                          : "bg-background border-border text-muted-foreground hover:text-foreground hover:border-border/80"
+                      )}
+                    >
+                      <i className={cn(opt.icon, "text-xs", isSelected ? "text-primary" : opt.color)} />
+                      <span className="text-[11px] font-bold leading-tight">{opt.label}</span>
+                      <span className="text-[9px] opacity-70 leading-tight">{opt.sub}</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Specific Users Picker & Multi-Select */}
+              {form.shareScope === "Specific Users" && (
+                <div className="mt-2.5 pt-2.5 border-t border-border space-y-2 animate-in fade-in slide-in-from-top-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="relative flex-1">
+                      <i className="fa-solid fa-magnifying-glass absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground" />
+                      <input
+                        type="text"
+                        placeholder="Search team members…"
+                        value={memberFilter}
+                        onChange={(e) => setMemberFilter(e.target.value)}
+                        className="w-full h-7 pl-7 pr-2 rounded-md border border-border bg-background text-[11px] placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                      />
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => setForm((p) => ({ ...p, sharedWith: teamMembers.map((m) => m.name) }))}
+                        className="h-7 px-2 text-[10px] font-semibold rounded-md border border-border bg-background hover:bg-muted text-foreground cursor-pointer"
+                      >
+                        Select All
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setForm((p) => ({ ...p, sharedWith: [] }))}
+                        className="h-7 px-2 text-[10px] font-semibold rounded-md border border-border bg-background hover:bg-muted text-muted-foreground cursor-pointer"
+                      >
+                        Clear
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Selected Members Badges */}
+                  {(form.sharedWith || []).length > 0 && (
+                    <div className="flex flex-wrap gap-1 max-h-20 overflow-y-auto p-1.5 rounded-lg bg-background border border-border">
+                      {(form.sharedWith || []).map((name) => (
+                        <span
+                          key={name}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold bg-primary/10 text-primary border border-primary/20"
+                        >
+                          <i className="fa-solid fa-user text-[8px]" />
+                          {name}
+                          <button
+                            type="button"
+                            onClick={() => setForm((p) => ({ ...p, sharedWith: (p.sharedWith || []).filter((n) => n !== name) }))}
+                            className="hover:text-destructive cursor-pointer ml-0.5"
+                          >
+                            <i className="fa-solid fa-xmark text-[8px]" />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Member Selection List */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 max-h-36 overflow-y-auto p-1 border border-border/80 rounded-lg bg-background">
+                    {filteredMembers.length === 0 ? (
+                      <div className="col-span-2 text-center py-3 text-[11px] text-muted-foreground">
+                        No team members match search
+                      </div>
+                    ) : (
+                      filteredMembers.map((m) => {
+                        const isSelected = (form.sharedWith || []).includes(m.name);
+                        return (
+                          <div
+                            key={m._id || m.name}
+                            onClick={() => {
+                              setForm((p) => {
+                                const curr = p.sharedWith || [];
+                                return {
+                                  ...p,
+                                  sharedWith: isSelected ? curr.filter((n) => n !== m.name) : [...curr, m.name],
+                                };
+                              });
+                            }}
+                            className={cn(
+                              "flex items-center justify-between p-1.5 rounded-md border text-xs cursor-pointer transition-colors",
+                              isSelected
+                                ? "bg-primary/10 border-primary/40 text-foreground font-semibold"
+                                : "border-transparent hover:bg-muted text-muted-foreground"
+                            )}
+                          >
+                            <div className="flex items-center gap-1.5 truncate">
+                              <div className="w-5 h-5 rounded-full bg-muted border border-border flex items-center justify-center text-[9px] font-bold text-foreground shrink-0">
+                                {m.name.slice(0, 1).toUpperCase()}
+                              </div>
+                              <div className="truncate">
+                                <p className="text-[11px] truncate leading-tight">{m.name}</p>
+                                {m.department && <p className="text-[9px] text-muted-foreground truncate leading-none">{m.department}</p>}
+                              </div>
+                            </div>
+                            <i className={cn(isSelected ? "fa-solid fa-circle-check text-primary text-xs" : "fa-regular fa-circle text-muted-foreground/40 text-xs", "shrink-0 ml-1")} />
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Link URL */}
+            <div className="col-span-2">
+              <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Link (URL)</label>
+              <input
+                className={fieldCls}
+                value={form.link}
+                onChange={(e) => set("link", e.target.value)}
+                placeholder="https://docs.google.com/… or https://notion.so/…"
+              />
+            </div>
+
+            {/* Review Frequency */}
+            <div>
+              <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Review Frequency</label>
               <select className={cn(fieldCls, "cursor-pointer")} value={form.reviewFrequency} onChange={(e) => set("reviewFrequency", e.target.value)}>
                 {["Daily", "Weekly", "Monthly", "Quarterly", "As needed"].map((r) => <option key={r}>{r}</option>)}
               </select>
             </div>
-            <div><label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Last Updated</label><input type="date" className={fieldCls} value={form.lastUpdated} onChange={(e) => set("lastUpdated", e.target.value)} /></div>
-            <div className="col-span-2"><label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Notes</label><textarea className={cn(fieldCls, "h-16 py-2 resize-none")} value={form.notes} onChange={(e) => set("notes", e.target.value)} placeholder="Optional notes…" /></div>
+
+            {/* Last Updated */}
+            <div>
+              <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Last Updated</label>
+              <input type="date" className={fieldCls} value={form.lastUpdated} onChange={(e) => set("lastUpdated", e.target.value)} />
+            </div>
+
+            {/* Notes */}
+            <div className="col-span-2">
+              <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Notes / Description</label>
+              <textarea
+                className={cn(fieldCls, "h-16 py-2 resize-none")}
+                value={form.notes}
+                onChange={(e) => set("notes", e.target.value)}
+                placeholder="Optional notes, instructions, or access guidelines…"
+              />
+            </div>
           </div>
         </div>
-        <div className="flex gap-2 px-5 py-4 border-t border-border">
-          <button onClick={onClose} disabled={saving} className="flex-1 h-9 rounded-lg border border-border bg-muted/60 text-xs font-semibold text-muted-foreground hover:bg-muted cursor-pointer disabled:opacity-50">Cancel</button>
-          <button onClick={() => { if (form.name.trim()) onSave(form); }} disabled={!form.name.trim() || saving} className="flex-1 h-9 rounded-lg bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 disabled:opacity-50 cursor-pointer flex items-center justify-center gap-1.5">
-            {saving ? <><i className="fa-solid fa-circle-notch fa-spin text-[10px]" />Saving…</> : "Save"}
+
+        {/* Modal Footer */}
+        <div className="flex gap-2 px-5 py-4 border-t border-border bg-muted/10 shrink-0">
+          <button onClick={onClose} disabled={saving} className="flex-1 h-9 rounded-lg border border-border bg-muted/60 text-xs font-semibold text-muted-foreground hover:bg-muted cursor-pointer disabled:opacity-50">
+            Cancel
+          </button>
+          <button
+            onClick={() => {
+              if (form.name.trim()) onSave(form);
+            }}
+            disabled={!form.name.trim() || saving}
+            className="flex-1 h-9 rounded-lg bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 disabled:opacity-50 cursor-pointer flex items-center justify-center gap-1.5 shadow-sm"
+          >
+            {saving ? <><i className="fa-solid fa-circle-notch fa-spin text-[10px]" />Saving…</> : <><i className="fa-solid fa-check text-[10px]" />Save Link</>}
           </button>
         </div>
       </div>
@@ -676,22 +959,37 @@ function DriveModal({ initial, onSave, onClose, saving, teamMembers = [], existi
   );
 }
 
-function DriveLinksTab({ links, loading, onAdd, onEdit, onDelete, autoOpenAdd, teamMembers = [] }: {
-  links: DriveLink[]; loading: boolean;
+function DriveLinksTab({
+  links,
+  loading,
+  onAdd,
+  onEdit,
+  onDelete,
+  autoOpenAdd,
+  userName,
+  isPrivileged,
+  teamMembers = [],
+}: {
+  links: DriveLink[];
+  loading: boolean;
   onAdd: (d: Omit<DriveLink, "id">) => Promise<void>;
   onEdit: (id: string, d: Omit<DriveLink, "id">) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
   autoOpenAdd?: boolean;
+  userName?: string;
+  isPrivileged?: boolean;
   teamMembers?: TeamMemberOption[];
 }) {
   const [search, setSearch] = useState("");
   const [filterCat, setFilterCat] = useState("All");
   const [filterPlatform, setFilterPlatform] = useState("All");
   const [filterAccess, setFilterAccess] = useState("All");
+  const [filterScope, setFilterScope] = useState("All");
   const [modal, setModal] = useState<{ mode: "add" } | { mode: "edit"; item: DriveLink } | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   useEffect(() => {
     if (autoOpenAdd) {
@@ -705,11 +1003,24 @@ function DriveLinksTab({ links, loading, onAdd, onEdit, onDelete, autoOpenAdd, t
 
   const filtered = useMemo(() => links.filter((d) => {
     const q = search.toLowerCase();
-    return (!q || d.name.toLowerCase().includes(q) || d.owner.toLowerCase().includes(q) || d.notes?.toLowerCase().includes(q))
+    const matchesSearch = !q ||
+      d.name.toLowerCase().includes(q) ||
+      d.owner.toLowerCase().includes(q) ||
+      (d.sharedWith && d.sharedWith.some((s) => s.toLowerCase().includes(q))) ||
+      d.notes?.toLowerCase().includes(q);
+
+    const matchesScope =
+      filterScope === "All" ||
+      (filterScope === "All Users" && (d.shareScope === "All Users" || (!d.shareScope && d.accessLevel?.includes("Team")))) ||
+      (filterScope === "Specific Users" && d.shareScope === "Specific Users") ||
+      (filterScope === "Private" && (d.shareScope === "Private" || d.accessLevel === "Admin Only"));
+
+    return matchesSearch
       && (filterCat === "All" || d.category === filterCat)
       && (filterPlatform === "All" || d.platform === filterPlatform)
-      && (filterAccess === "All" || d.accessLevel === filterAccess);
-  }), [links, search, filterCat, filterPlatform, filterAccess]);
+      && (filterAccess === "All" || d.accessLevel === filterAccess)
+      && matchesScope;
+  }), [links, search, filterCat, filterPlatform, filterAccess, filterScope]);
 
   const handleSave = async (data: Omit<DriveLink, "id">) => {
     setSaving(true);
@@ -726,66 +1037,191 @@ function DriveLinksTab({ links, loading, onAdd, onEdit, onDelete, autoOpenAdd, t
     try { await onDelete(deleteId); setDeleteId(null); } finally { setDeleting(false); }
   };
 
+  const copyLinkUrl = (id: string, url: string) => {
+    navigator.clipboard.writeText(url);
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 2500);
+  };
+
   return (
     <div className="space-y-4">
-      {modal && <DriveModal initial={modal.mode === "edit" ? modal.item : EMPTY_DRIVE} onSave={handleSave} onClose={() => !saving && setModal(null)} saving={saving} teamMembers={teamMembers} existingCategories={links.map((l) => l.category)} />}
-      {deleteId && <ConfirmDialog title="Remove File Link" message="This will permanently remove this file link." onConfirm={handleDelete} onCancel={() => !deleting && setDeleteId(null)} loading={deleting} />}
+      {modal && (
+        <DriveModal
+          initial={modal.mode === "edit" ? modal.item : makeEmptyDrive(userName)}
+          onSave={handleSave}
+          onClose={() => !saving && setModal(null)}
+          saving={saving}
+          userName={userName}
+          isPrivileged={isPrivileged}
+          teamMembers={teamMembers}
+          existingCategories={links.map((l) => l.category)}
+        />
+      )}
+      {deleteId && (
+        <ConfirmDialog
+          title="Remove File Link"
+          message="This will permanently remove this file link."
+          onConfirm={handleDelete}
+          onCancel={() => !deleting && setDeleteId(null)}
+          loading={deleting}
+        />
+      )}
 
+      {/* Filter & Search Bar */}
       <div className="flex flex-col sm:flex-row gap-3 flex-wrap items-start sm:items-center justify-between">
         <div className="relative flex-1 max-w-xs">
           <i className="fa-solid fa-magnifying-glass absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground" />
-          <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search files, owners…" className="pl-8 h-8 text-xs" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search files, owners, shared users…"
+            className="pl-8 h-8 text-xs"
+          />
         </div>
         <div className="flex flex-wrap gap-2 items-center">
-          <select className={SELECT_CLS} value={filterCat} onChange={(e) => setFilterCat(e.target.value)}>{categories.map((c) => <option key={c}>{c}</option>)}</select>
-          <select className={SELECT_CLS} value={filterPlatform} onChange={(e) => setFilterPlatform(e.target.value)}>{platforms.map((p) => <option key={p}>{p}</option>)}</select>
-          <select className={SELECT_CLS} value={filterAccess} onChange={(e) => setFilterAccess(e.target.value)}>{accessLevels.map((a) => <option key={a}>{a}</option>)}</select>
+          <select className={SELECT_CLS} value={filterCat} onChange={(e) => setFilterCat(e.target.value)}>
+            {categories.map((c) => <option key={c}>{c}</option>)}
+          </select>
+          <select className={SELECT_CLS} value={filterPlatform} onChange={(e) => setFilterPlatform(e.target.value)}>
+            {platforms.map((p) => <option key={p}>{p}</option>)}
+          </select>
+          <select className={SELECT_CLS} value={filterScope} onChange={(e) => setFilterScope(e.target.value)}>
+            <option value="All">All Audiences</option>
+            <option value="All Users">🌐 All Users</option>
+            <option value="Specific Users">👥 Specific Users</option>
+            <option value="Private">🔒 Private (Only Me)</option>
+          </select>
+          <select className={SELECT_CLS} value={filterAccess} onChange={(e) => setFilterAccess(e.target.value)}>
+            {accessLevels.map((a) => <option key={a}>{a}</option>)}
+          </select>
           <span className="text-xs text-muted-foreground whitespace-nowrap">{filtered.length} result{filtered.length !== 1 ? "s" : ""}</span>
-          <button onClick={() => setModal({ mode: "add" })} className="flex items-center gap-1.5 h-8 px-3 rounded-lg bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-colors cursor-pointer">
+          <button
+            onClick={() => setModal({ mode: "add" })}
+            className="flex items-center gap-1.5 h-8 px-3 rounded-lg bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-colors cursor-pointer shadow-sm"
+          >
             <i className="fa-solid fa-plus text-[10px]" /> Add Link
           </button>
         </div>
       </div>
 
+      {/* Drive Links Data Table */}
       <div className="overflow-x-auto rounded-xl border border-border">
         <table className="w-full text-xs">
           <thead>
             <tr className="bg-muted/60 border-b border-border">
-              {["File / Resource Name", "Category", "Platform", "Link", "Owner", "Access Level", "Last Updated", "Notes", ""].map((h) => (
+              {["File / Resource Name", "Category", "Platform", "Link", "Owner", "Audience / Sharing", "Access Level", "Last Updated", "Notes", ""].map((h) => (
                 <th key={h} className="text-left px-3 py-2.5 font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap text-[10px]">{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {loading ? Array.from({ length: 4 }).map((_, i) => <SkeletonRow key={i} cols={9} />) :
+            {loading ? Array.from({ length: 4 }).map((_, i) => <SkeletonRow key={i} cols={10} />) :
               filtered.length === 0 ? (
-                <tr><td colSpan={9} className="text-center py-12 text-muted-foreground"><i className="fa-solid fa-folder-open text-2xl mb-2 block opacity-30" /><p className="text-xs">{links.length === 0 ? "No file links yet. Add your first one!" : "No results match your filters."}</p></td></tr>
+                <tr>
+                  <td colSpan={10} className="text-center py-12 text-muted-foreground">
+                    <i className="fa-solid fa-folder-open text-2xl mb-2 block opacity-30" />
+                    <p className="text-xs">{links.length === 0 ? "No file links registered yet." : "No results match your filters."}</p>
+                  </td>
+                </tr>
               ) : (
-                filtered.map((row, idx) => (
-                  <tr key={row.id} className={cn("border-b border-border/60 hover:bg-muted/30 transition-colors group", idx % 2 === 0 ? "" : "bg-muted/10")}>
-                    <td className="px-3 py-2.5 font-medium text-foreground whitespace-nowrap max-w-[180px] truncate" title={row.name}>{row.name}</td>
-                    <td className="px-3 py-2.5 text-muted-foreground whitespace-nowrap">{row.category || "—"}</td>
-                    <td className="px-3 py-2.5 whitespace-nowrap"><span className="flex items-center gap-1.5"><i className={platformIcon(row.platform)} /><span className="text-muted-foreground">{row.platform}</span></span></td>
-                    <td className="px-3 py-2.5 max-w-[140px]">
-                      {row.link ? (
-                        <a href={row.link} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline flex items-center gap-1 truncate" title={row.link}>
-                          <i className="fa-solid fa-arrow-up-right-from-square text-[9px]" />
-                          <span className="truncate">{row.link.replace("https://", "").substring(0, 24)}…</span>
-                        </a>
-                      ) : <span className="text-muted-foreground italic">(uploaded file)</span>}
-                    </td>
-                    <td className="px-3 py-2.5 text-muted-foreground whitespace-nowrap">{row.owner || "—"}</td>
-                    <td className="px-3 py-2.5 whitespace-nowrap"><span className={statusBadge(row.accessLevel?.includes("Edit") ? "Active" : "Pending")}>{row.accessLevel || "—"}</span></td>
-                    <td className="px-3 py-2.5 text-muted-foreground whitespace-nowrap">{row.lastUpdated || "—"}</td>
-                    <td className="px-3 py-2.5 text-muted-foreground max-w-[160px] truncate" title={row.notes}>{row.notes || "—"}</td>
-                    <td className="px-3 py-2.5 whitespace-nowrap">
-                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button onClick={() => setModal({ mode: "edit", item: row })} className="w-6 h-6 rounded-md bg-muted hover:bg-accent flex items-center justify-center text-muted-foreground hover:text-foreground cursor-pointer" title="Edit"><i className="fa-solid fa-pen text-[9px]" /></button>
-                        <button onClick={() => setDeleteId(row.id)} className="w-6 h-6 rounded-md bg-muted hover:bg-red-500/10 flex items-center justify-center text-muted-foreground hover:text-red-500 cursor-pointer" title="Delete"><i className="fa-solid fa-trash text-[9px]" /></button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                filtered.map((row, idx) => {
+                  const isOwner = userName && (row.owner || "").toLowerCase() === userName.toLowerCase();
+                  const shareScope = row.shareScope || (row.accessLevel?.includes("Team") ? "All Users" : "Private");
+                  const sharedCount = (row.sharedWith || []).length;
+
+                  return (
+                    <tr key={row.id} className={cn("border-b border-border/60 hover:bg-muted/30 transition-colors group", idx % 2 === 0 ? "" : "bg-muted/10")}>
+                      <td className="px-3 py-2.5 font-medium text-foreground whitespace-nowrap max-w-[180px] truncate" title={row.name}>
+                        <span className="font-semibold text-foreground">{row.name}</span>
+                      </td>
+                      <td className="px-3 py-2.5 text-muted-foreground whitespace-nowrap">{row.category || "—"}</td>
+                      <td className="px-3 py-2.5 whitespace-nowrap">
+                        <span className="flex items-center gap-1.5">
+                          <i className={cn(platformIcon(row.platform), "text-xs text-primary")} />
+                          <span className="text-muted-foreground font-medium">{row.platform}</span>
+                        </span>
+                      </td>
+                      <td className="px-3 py-2.5 max-w-[160px]">
+                        {row.link ? (
+                          <div className="flex items-center gap-1.5">
+                            <a
+                              href={row.link}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-primary hover:underline flex items-center gap-1 truncate font-medium text-[11px]"
+                              title={row.link}
+                            >
+                              <i className="fa-solid fa-arrow-up-right-from-square text-[9px]" />
+                              <span className="truncate">{row.link.replace(/^https?:\/\//, "").substring(0, 22)}…</span>
+                            </a>
+                            <button
+                              type="button"
+                              onClick={() => copyLinkUrl(row.id, row.link)}
+                              className="text-muted-foreground hover:text-primary cursor-pointer p-0.5"
+                              title="Copy URL"
+                            >
+                              <i className={cn(copiedId === row.id ? "fa-solid fa-check text-emerald-500" : "fa-solid fa-copy text-[9px]")} />
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground italic text-[10px]">—</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2.5 text-muted-foreground whitespace-nowrap font-medium">
+                        <span className="text-foreground">{row.owner || "—"}</span>
+                        {isOwner && <span className="ml-1 text-[9px] font-bold text-primary bg-primary/10 px-1 py-0.2 rounded">You</span>}
+                      </td>
+                      <td className="px-3 py-2.5 whitespace-nowrap">
+                        {shareScope === "All Users" && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                            <i className="fa-solid fa-globe text-[9px]" /> All Users
+                          </span>
+                        )}
+                        {shareScope === "Specific Users" && (
+                          <span
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-primary/10 text-primary border border-primary/20 cursor-pointer"
+                            title={`Shared with: ${(row.sharedWith || []).join(", ") || "None"}`}
+                          >
+                            <i className="fa-solid fa-user-group text-[9px]" />
+                            {sharedCount > 0 ? `${sharedCount} member${sharedCount !== 1 ? "s" : ""}` : "Specific"}
+                          </span>
+                        )}
+                        {shareScope === "Private" && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                            <i className="fa-solid fa-lock text-[9px]" /> Private
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2.5 whitespace-nowrap">
+                        <span className={statusBadge(row.accessLevel?.includes("Edit") ? "Active" : "Pending")}>
+                          {row.accessLevel || "—"}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2.5 text-muted-foreground whitespace-nowrap text-[11px]">{row.lastUpdated || "—"}</td>
+                      <td className="px-3 py-2.5 text-muted-foreground max-w-[150px] truncate" title={row.notes}>
+                        {row.notes || "—"}
+                      </td>
+                      <td className="px-3 py-2.5 whitespace-nowrap">
+                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button
+                            onClick={() => setModal({ mode: "edit", item: row })}
+                            className="w-6 h-6 rounded-md bg-muted hover:bg-accent flex items-center justify-center text-muted-foreground hover:text-foreground cursor-pointer"
+                            title="Edit Link"
+                          >
+                            <i className="fa-solid fa-pen text-[9px]" />
+                          </button>
+                          <button
+                            onClick={() => setDeleteId(row.id)}
+                            className="w-6 h-6 rounded-md bg-muted hover:bg-red-500/10 flex items-center justify-center text-muted-foreground hover:text-red-500 cursor-pointer"
+                            title="Delete"
+                          >
+                            <i className="fa-solid fa-trash text-[9px]" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
           </tbody>
         </table>
@@ -1346,6 +1782,7 @@ const makeEmptyDevice = (assignedTo = "", department = "", assetTag = ""): Omit<
   warrantyExpiry: "",
   assignedTo,
   department,
+  location: "HQ - Main Office",
   os: "",
   lastSeen: new Date().toISOString().slice(0, 10),
   condition: "Good",
@@ -1438,6 +1875,18 @@ function DeviceModal({
     const defaults = ["Engineering", "Design", "Product", "Operations", "HR", "Marketing", "Sales", "Finance", "IT"];
     return Array.from(new Set([...defaults, ...fromTeam]));
   }, [teamMembers]);
+
+  const locationPresets = [
+    "HQ - Main Office",
+    "HQ - Floor 1",
+    "HQ - Floor 2",
+    "HQ - IT Lab",
+    "HQ - Server Room",
+    "HQ - Storage Room",
+    "Remote / WFH",
+    "Branch Office",
+    "Client Site",
+  ];
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
@@ -1619,6 +2068,45 @@ function DeviceModal({
               )}
             </div>
 
+            {/* Physical Location */}
+            <div className="col-span-2 space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
+                  <i className="fa-solid fa-location-dot text-primary text-[9px]" /> Physical Asset Location
+                </label>
+                <span className="text-[10px] text-muted-foreground">Quick select or type custom</span>
+              </div>
+              <div className="flex items-center gap-1 overflow-x-auto no-scrollbar pb-0.5">
+                {locationPresets.map((l) => (
+                  <button
+                    key={l}
+                    type="button"
+                    onClick={() => set("location", l)}
+                    className={cn(
+                      "px-2 py-0.5 text-[9px] font-semibold rounded-md border transition-all cursor-pointer whitespace-nowrap shrink-0",
+                      form.location === l
+                        ? "bg-primary text-primary-foreground border-primary shadow-xs"
+                        : "bg-muted/60 text-muted-foreground border-border hover:border-primary/50"
+                    )}
+                  >
+                    {l}
+                  </button>
+                ))}
+              </div>
+              <input
+                list="device-locations-datalist"
+                className={fieldCls}
+                value={form.location || ""}
+                onChange={(e) => set("location", e.target.value)}
+                placeholder="e.g. HQ - Floor 2, Remote / WFH, Server Room…"
+              />
+              <datalist id="device-locations-datalist">
+                {locationPresets.map((l) => (
+                  <option key={l} value={l} />
+                ))}
+              </datalist>
+            </div>
+
             {/* Condition */}
             <div>
               <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Condition</label>
@@ -1714,6 +2202,41 @@ function DeviceModal({
   );
 }
 
+const getLocationMeta = (loc?: string) => {
+  const l = (loc || "HQ - Main Office").toLowerCase();
+  if (l.includes("remote") || l.includes("wfh") || l.includes("home")) {
+    return { icon: "fa-solid fa-house-laptop", color: "text-amber-500", bg: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30", label: loc || "Remote / WFH" };
+  }
+  if (l.includes("server")) {
+    return { icon: "fa-solid fa-server", color: "text-violet-500", bg: "bg-violet-500/10 text-violet-600 dark:text-violet-400 border-violet-500/30", label: loc || "HQ - Server Room" };
+  }
+  if (l.includes("lab") || l.includes("test")) {
+    return { icon: "fa-solid fa-flask-vial", color: "text-emerald-500", bg: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30", label: loc || "HQ - IT Lab" };
+  }
+  if (l.includes("storage") || l.includes("warehouse")) {
+    return { icon: "fa-solid fa-boxes-stacked", color: "text-slate-400", bg: "bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/30", label: loc || "HQ - Storage Room" };
+  }
+  if (l.includes("branch")) {
+    return { icon: "fa-solid fa-code-branch", color: "text-sky-500", bg: "bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/30", label: loc || "Branch Office" };
+  }
+  return { icon: "fa-solid fa-building", color: "text-blue-500", bg: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30", label: loc || "HQ - Main Office" };
+};
+
+const getWarrantyMeta = (expiry?: string) => {
+  if (!expiry) return null;
+  const now = new Date();
+  const exp = new Date(expiry);
+  if (isNaN(exp.getTime())) return null;
+  const diffDays = Math.ceil((exp.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+  if (diffDays < 0) {
+    return { label: "Expired Warranty", cls: "bg-rose-500/10 text-rose-500 border-rose-500/30", icon: "fa-solid fa-triangle-exclamation" };
+  }
+  if (diffDays <= 45) {
+    return { label: `${diffDays}d warranty left`, cls: "bg-amber-500/10 text-amber-500 border-amber-500/30", icon: "fa-solid fa-clock" };
+  }
+  return { label: "Active Warranty", cls: "bg-emerald-500/10 text-emerald-500 border-emerald-500/30", icon: "fa-solid fa-shield-check" };
+};
+
 function DevicesTab({ devices, allDevices, nextAssetTags = {}, loading, onAdd, onEdit, onDelete, autoOpenAdd, userName, userDepartment, isPrivileged, teamMembers = [] }: {
   devices: Device[];        // filtered (user-scoped) — for display
   allDevices: Device[];     // full list — for asset tag generation
@@ -1731,12 +2254,16 @@ function DevicesTab({ devices, allDevices, nextAssetTags = {}, loading, onAdd, o
   const [search, setSearch] = useState("");
   const [filterType, setFilterType] = useState("All");
   const [filterStatus, setFilterStatus] = useState("All");
+  const [filterLocation, setFilterLocation] = useState("All");
   const [modal, setModal] = useState<{ mode: "add" } | { mode: "edit"; item: Device } | null>(null);
+  const [inspectDevice, setInspectDevice] = useState<Device | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [badgeDevice, setBadgeDevice] = useState<Device | null>(null);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [copiedTag, setCopiedTag] = useState(false);
+  const [copiedSerial, setCopiedSerial] = useState(false);
+  const [relocatingId, setRelocatingId] = useState<string | null>(null);
 
   useEffect(() => {
     if (autoOpenAdd) {
@@ -1745,12 +2272,25 @@ function DevicesTab({ devices, allDevices, nextAssetTags = {}, loading, onAdd, o
   }, [autoOpenAdd]);
 
   const types = useMemo(() => ["All", ...Array.from(new Set(devices.map((d) => d.type).filter(Boolean)))], [devices]);
+  const locations = useMemo(() => ["All", ...Array.from(new Set(devices.map((d) => d.location || "HQ - Main Office").filter(Boolean)))], [devices]);
+
+  const locationCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    devices.forEach((d) => {
+      const loc = d.location || "HQ - Main Office";
+      counts[loc] = (counts[loc] || 0) + 1;
+    });
+    return counts;
+  }, [devices]);
+
   const filtered = useMemo(() => devices.filter((d) => {
     const q = search.toLowerCase();
-    return (!q || d.assetTag.toLowerCase().includes(q) || d.brand?.toLowerCase().includes(q) || d.modelName?.toLowerCase().includes(q) || d.assignedTo?.toLowerCase().includes(q) || (d.serialNumber && d.serialNumber.toLowerCase().includes(q)))
+    const loc = d.location || "HQ - Main Office";
+    return (!q || d.assetTag.toLowerCase().includes(q) || d.brand?.toLowerCase().includes(q) || d.modelName?.toLowerCase().includes(q) || d.assignedTo?.toLowerCase().includes(q) || loc.toLowerCase().includes(q) || (d.serialNumber && d.serialNumber.toLowerCase().includes(q)))
       && (filterType === "All" || d.type === filterType)
-      && (filterStatus === "All" || d.status === filterStatus);
-  }), [devices, search, filterType, filterStatus]);
+      && (filterStatus === "All" || d.status === filterStatus)
+      && (filterLocation === "All" || loc === filterLocation);
+  }), [devices, search, filterType, filterStatus, filterLocation]);
 
   const handleSave = async (data: Omit<Device, "id">) => {
     setSaving(true);
@@ -1758,20 +2298,42 @@ function DevicesTab({ devices, allDevices, nextAssetTags = {}, loading, onAdd, o
       if (modal?.mode === "edit") await onEdit(modal.item.id, data);
       else await onAdd(data);
       setModal(null);
+      if (inspectDevice && modal?.mode === "edit" && modal.item.id === inspectDevice.id) {
+        setInspectDevice({ ...data, id: inspectDevice.id });
+      }
     } finally { setSaving(false); }
   };
 
   const handleDelete = async () => {
     if (!deleteId) return;
     setDeleting(true);
-    try { await onDelete(deleteId); setDeleteId(null); } finally { setDeleting(false); }
+    try {
+      await onDelete(deleteId);
+      if (inspectDevice?.id === deleteId) setInspectDevice(null);
+      setDeleteId(null);
+    } finally { setDeleting(false); }
   };
 
   const handleQuickStatusChange = async (device: Device, newStatus: Device["status"]) => {
     try {
       await onEdit(device.id, { ...device, status: newStatus });
+      if (inspectDevice?.id === device.id) {
+        setInspectDevice({ ...inspectDevice, status: newStatus });
+      }
     } catch {
       // handled by parent toast
+    }
+  };
+
+  const handleQuickRelocate = async (device: Device, newLocation: string) => {
+    try {
+      await onEdit(device.id, { ...device, location: newLocation });
+      if (inspectDevice?.id === device.id) {
+        setInspectDevice({ ...inspectDevice, location: newLocation });
+      }
+      setRelocatingId(null);
+    } catch {
+      // handled by parent
     }
   };
 
@@ -1780,6 +2342,22 @@ function DevicesTab({ devices, allDevices, nextAssetTags = {}, loading, onAdd, o
     setCopiedTag(true);
     setTimeout(() => setCopiedTag(false), 2500);
   };
+
+  const copySerial = (serial: string) => {
+    navigator.clipboard.writeText(serial);
+    setCopiedSerial(true);
+    setTimeout(() => setCopiedSerial(false), 2500);
+  };
+
+  const QUICK_LOCATIONS = [
+    "HQ - Floor 1",
+    "HQ - Floor 2",
+    "HQ - IT Lab",
+    "HQ - Server Room",
+    "HQ - Storage Room",
+    "Remote / WFH",
+    "Branch Office",
+  ];
 
   return (
     <div className="space-y-4">
@@ -1801,6 +2379,185 @@ function DevicesTab({ devices, allDevices, nextAssetTags = {}, loading, onAdd, o
         />
       )}
       {deleteId && <ConfirmDialog title="Remove Device" message="Permanently remove this device from inventory?" onConfirm={handleDelete} onCancel={() => !deleting && setDeleteId(null)} loading={deleting} />}
+
+      {/* ─── Device Inspection & Telemetry Drawer / Modal ─── */}
+      {inspectDevice && (
+        <div className="fixed inset-0 z-[65] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in">
+          <div className="w-full max-w-xl bg-card border border-border rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-150" onClick={(e) => e.stopPropagation()}>
+            {/* Header with gradient backdrop */}
+            <div className="relative p-5 border-b border-border bg-gradient-to-r from-primary/10 via-violet-500/10 to-blue-500/10">
+              <div className="flex items-start justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-xl bg-background border border-border flex items-center justify-center text-xl text-primary shadow-sm">
+                    <i className={deviceIcon(inspectDevice.type)} />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono font-black text-base text-foreground tracking-wider">{inspectDevice.assetTag}</span>
+                      <span className={statusBadge(inspectDevice.condition)}>{inspectDevice.condition}</span>
+                    </div>
+                    <h3 className="text-sm font-bold text-foreground mt-0.5">{inspectDevice.brand} {inspectDevice.modelName}</h3>
+                  </div>
+                </div>
+                <button onClick={() => setInspectDevice(null)} className="text-muted-foreground hover:text-foreground cursor-pointer p-1">
+                  <i className="fa-solid fa-xmark text-sm" />
+                </button>
+              </div>
+            </div>
+
+            {/* Content body */}
+            <div className="p-5 space-y-4 overflow-y-auto">
+              {/* Location & Quick Relocate Highlight Card */}
+              <div className="p-4 rounded-xl bg-muted/40 border border-border/80 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                    <i className="fa-solid fa-location-dot text-primary" /> Physical Location
+                  </span>
+                  {(() => {
+                    const locMeta = getLocationMeta(inspectDevice.location);
+                    return (
+                      <span className={cn("inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold border", locMeta.bg)}>
+                        <i className={locMeta.icon} />
+                        {locMeta.label}
+                      </span>
+                    );
+                  })()}
+                </div>
+                
+                {/* 1-Click Quick Move Location Bar */}
+                <div className="pt-2 border-t border-border/60">
+                  <p className="text-[10px] font-semibold text-muted-foreground mb-1.5">Quick Relocate Asset:</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {QUICK_LOCATIONS.map((loc) => {
+                      const isCurrent = (inspectDevice.location || "HQ - Main Office") === loc;
+                      return (
+                        <button
+                          key={loc}
+                          type="button"
+                          disabled={isCurrent}
+                          onClick={() => handleQuickRelocate(inspectDevice, loc)}
+                          className={cn(
+                            "px-2 py-1 rounded-lg text-[10px] font-semibold border transition-all cursor-pointer flex items-center gap-1",
+                            isCurrent
+                              ? "bg-primary text-primary-foreground border-primary opacity-90 cursor-default"
+                              : "bg-background text-muted-foreground border-border hover:border-primary hover:text-foreground hover:bg-muted/80"
+                          )}
+                        >
+                          <i className={getLocationMeta(loc).icon} />
+                          {loc}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              {/* Grid Information Matrix */}
+              <div className="grid grid-cols-2 gap-3 text-xs">
+                {/* Custodian / Assigned Employee */}
+                <div className="p-3 rounded-xl bg-muted/30 border border-border">
+                  <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block">Assigned Custodian</span>
+                  <div className="font-bold text-foreground mt-1 flex items-center gap-1.5">
+                    <i className="fa-solid fa-user-tie text-primary text-[11px]" />
+                    {inspectDevice.assignedTo || "Unassigned"}
+                  </div>
+                  <span className="text-[11px] text-muted-foreground block mt-0.5">{inspectDevice.department || "General"}</span>
+                </div>
+
+                {/* Operating System */}
+                <div className="p-3 rounded-xl bg-muted/30 border border-border">
+                  <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block">Operating System</span>
+                  <div className="font-bold text-foreground mt-1 flex items-center gap-1.5">
+                    <i className="fa-solid fa-microchip text-primary text-[11px]" />
+                    {inspectDevice.os || "N/A"}
+                  </div>
+                  <span className="text-[11px] text-muted-foreground block mt-0.5">Last Seen: {inspectDevice.lastSeen || "Today"}</span>
+                </div>
+
+                {/* Serial / IMEI Number */}
+                <div className="p-3 rounded-xl bg-muted/30 border border-border">
+                  <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block">Serial / IMEI</span>
+                  <div className="flex items-center justify-between mt-1">
+                    <span className="font-mono font-semibold text-foreground truncate">{inspectDevice.serialNumber || "—"}</span>
+                    {inspectDevice.serialNumber && (
+                      <button
+                        onClick={() => copySerial(inspectDevice.serialNumber!)}
+                        className="text-muted-foreground hover:text-primary cursor-pointer ml-1"
+                        title="Copy Serial"
+                      >
+                        <i className={cn(copiedSerial ? "fa-solid fa-check text-emerald-500" : "fa-solid fa-copy text-[10px]")} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Warranty Status */}
+                <div className="p-3 rounded-xl bg-muted/30 border border-border">
+                  <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block">Warranty Status</span>
+                  {(() => {
+                    const wMeta = getWarrantyMeta(inspectDevice.warrantyExpiry);
+                    if (!wMeta) return <span className="font-medium text-muted-foreground mt-1 block">Not logged</span>;
+                    return (
+                      <div className="mt-1 flex items-center gap-1.5">
+                        <span className={cn("inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold border", wMeta.cls)}>
+                          <i className={wMeta.icon} />
+                          {wMeta.label}
+                        </span>
+                      </div>
+                    );
+                  })()}
+                  {inspectDevice.warrantyExpiry && (
+                    <span className="text-[10px] text-muted-foreground block mt-0.5">Expires: {inspectDevice.warrantyExpiry}</span>
+                  )}
+                </div>
+              </div>
+
+              {/* Hardware Specifications */}
+              {inspectDevice.specs && (
+                <div className="p-3 rounded-xl bg-muted/30 border border-border">
+                  <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Hardware Specifications</span>
+                  <p className="text-xs text-foreground font-medium">{inspectDevice.specs}</p>
+                </div>
+              )}
+            </div>
+
+            {/* Footer action buttons */}
+            <div className="flex items-center justify-between gap-2 p-4 border-t border-border bg-muted/20 shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  setBadgeDevice(inspectDevice);
+                }}
+                className="h-8 px-3 rounded-lg border border-border bg-background hover:bg-muted text-xs font-semibold text-foreground flex items-center gap-1.5 cursor-pointer shadow-2xs"
+              >
+                <i className="fa-solid fa-print text-xs text-primary" /> Print Label
+              </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const d = inspectDevice;
+                    setInspectDevice(null);
+                    setModal({ mode: "edit", item: d });
+                  }}
+                  className="h-8 px-3 rounded-lg bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 flex items-center gap-1.5 cursor-pointer shadow-xs"
+                >
+                  <i className="fa-solid fa-pen text-xs" /> Edit Record
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDeleteId(inspectDevice.id)}
+                  className="h-8 px-2.5 rounded-lg border border-destructive/30 hover:bg-destructive/10 text-destructive text-xs font-semibold cursor-pointer"
+                  title="Delete Device"
+                >
+                  <i className="fa-solid fa-trash text-xs" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Printable Asset Badge / QR Modal */}
       {badgeDevice && (
@@ -1846,6 +2603,10 @@ function DevicesTab({ devices, allDevices, nextAssetTags = {}, loading, onAdd, o
                 <p className="text-muted-foreground text-[11px]">
                   Assigned: <strong className="text-foreground font-semibold">{badgeDevice.assignedTo || "Unassigned"}</strong> ({badgeDevice.department || "General"})
                 </p>
+                <p className="text-[11px] text-muted-foreground flex items-center gap-1">
+                  <i className="fa-solid fa-location-dot text-primary text-[10px]" />
+                  Location: <span className="text-foreground font-medium">{badgeDevice.location || "HQ - Main Office"}</span>
+                </p>
                 {badgeDevice.serialNumber && (
                   <p className="text-[10px] font-mono text-muted-foreground">
                     S/N: <span className="text-foreground">{badgeDevice.serialNumber}</span>
@@ -1881,28 +2642,72 @@ function DevicesTab({ devices, allDevices, nextAssetTags = {}, loading, onAdd, o
         </div>
       )}
 
-      {/* KPI Inventory Chips */}
-      <div className="flex flex-wrap gap-3 items-center">
-        {[
-          { label: "In Use", count: devices.filter((d) => d.status === "In Use").length, cls: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20" },
-          { label: "Available", count: devices.filter((d) => d.status === "Available").length, cls: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20" },
-          { label: "In Repair", count: devices.filter((d) => d.status === "In Repair").length, cls: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20" },
-          { label: "Retired", count: devices.filter((d) => d.status === "Retired").length, cls: "bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/20" },
-        ].map((chip) => (
-          <button key={chip.label} onClick={() => setFilterStatus(filterStatus === chip.label ? "All" : chip.label)} className={cn("flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-semibold cursor-pointer transition-all", chip.cls, filterStatus === chip.label ? "ring-2 ring-offset-1 ring-current" : "")}>
-            <span className="text-base font-bold leading-none">{chip.count}</span>{chip.label}
+      {/* KPI Inventory Chips & Location Breakdown */}
+      <div className="space-y-2.5">
+        <div className="flex flex-wrap gap-2.5 items-center">
+          {[
+            { label: "In Use", count: devices.filter((d) => d.status === "In Use").length, cls: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20" },
+            { label: "Available", count: devices.filter((d) => d.status === "Available").length, cls: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20" },
+            { label: "In Repair", count: devices.filter((d) => d.status === "In Repair").length, cls: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20" },
+            { label: "Retired", count: devices.filter((d) => d.status === "Retired").length, cls: "bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/20" },
+          ].map((chip) => (
+            <button key={chip.label} onClick={() => setFilterStatus(filterStatus === chip.label ? "All" : chip.label)} className={cn("flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-semibold cursor-pointer transition-all", chip.cls, filterStatus === chip.label ? "ring-2 ring-offset-1 ring-current" : "")}>
+              <span className="text-base font-bold leading-none">{chip.count}</span>{chip.label}
+            </button>
+          ))}
+          <span className="text-xs text-muted-foreground ml-auto">{devices.length} total assets</span>
+        </div>
+
+        {/* Location Quick Distribution Pills */}
+        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1">
+          <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider shrink-0 flex items-center gap-1 mr-1">
+            <i className="fa-solid fa-map-location-dot text-primary text-xs" /> Locations:
+          </span>
+          <button
+            onClick={() => setFilterLocation("All")}
+            className={cn(
+              "px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all cursor-pointer whitespace-nowrap shrink-0",
+              filterLocation === "All"
+                ? "bg-primary text-primary-foreground border-primary shadow-xs"
+                : "bg-muted/60 text-muted-foreground border-border hover:border-primary/50"
+            )}
+          >
+            All Locations ({devices.length})
           </button>
-        ))}
-        <span className="text-xs text-muted-foreground ml-auto">{devices.length} total assets</span>
+          {Object.entries(locationCounts).map(([loc, count]) => {
+            const locMeta = getLocationMeta(loc);
+            const isSelected = filterLocation === loc;
+            return (
+              <button
+                key={loc}
+                onClick={() => setFilterLocation(isSelected ? "All" : loc)}
+                className={cn(
+                  "px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all cursor-pointer whitespace-nowrap shrink-0 flex items-center gap-1.5",
+                  isSelected
+                    ? "bg-primary text-primary-foreground border-primary shadow-xs"
+                    : cn("bg-card text-foreground border-border hover:border-primary/50", locMeta.bg)
+                )}
+              >
+                <i className={cn(locMeta.icon, isSelected ? "text-primary-foreground" : locMeta.color)} />
+                <span>{loc}</span>
+                <span className={cn("text-[10px] px-1.5 py-0.2 rounded-full font-bold", isSelected ? "bg-black/20 text-white" : "bg-muted text-muted-foreground")}>
+                  {count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
+      {/* Filter & Action Bar */}
       <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between flex-wrap">
         <div className="relative flex-1 max-w-xs">
           <i className="fa-solid fa-magnifying-glass absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground" />
-          <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search asset tag, model, serial, user…" className="pl-8 h-8 text-xs" />
+          <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search asset tag, model, serial, location, user…" className="pl-8 h-8 text-xs" />
         </div>
         <div className="flex flex-wrap gap-2 items-center">
           <select className={SELECT_CLS} value={filterType} onChange={(e) => setFilterType(e.target.value)}>{types.map((t) => <option key={t}>{t}</option>)}</select>
+          <select className={SELECT_CLS} value={filterLocation} onChange={(e) => setFilterLocation(e.target.value)}>{locations.map((l) => <option key={l} value={l}>{l === "All" ? "All Locations" : l}</option>)}</select>
           <select className={SELECT_CLS} value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>{["All", "In Use", "Available", "In Repair", "Retired"].map((s) => <option key={s}>{s}</option>)}</select>
           <span className="text-xs text-muted-foreground">{filtered.length} device{filtered.length !== 1 ? "s" : ""}</span>
           <button onClick={() => setModal({ mode: "add" })} className="flex items-center gap-1.5 h-8 px-3 rounded-lg bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-colors cursor-pointer shadow-sm">
@@ -1911,11 +2716,12 @@ function DevicesTab({ devices, allDevices, nextAssetTags = {}, loading, onAdd, o
         </div>
       </div>
 
+      {/* Devices Data Table */}
       <div className="overflow-x-auto rounded-xl border border-border">
         <table className="w-full text-xs">
           <thead>
             <tr className="bg-muted/60 border-b border-border">
-              {["Asset Tag", "Type", "Brand / Model", "Assigned To", "Dept.", "OS", "Last Seen", "Condition", "Status", ""].map((h) => (
+              {["Asset Tag", "Type", "Brand / Model", "Assigned To", "Dept.", "Location", "Warranty", "Condition", "Status", ""].map((h) => (
                 <th key={h} className="text-left px-3 py-2.5 font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap text-[10px]">{h}</th>
               ))}
             </tr>
@@ -1925,54 +2731,109 @@ function DevicesTab({ devices, allDevices, nextAssetTags = {}, loading, onAdd, o
               filtered.length === 0 ? (
                 <tr><td colSpan={10} className="text-center py-12 text-muted-foreground"><i className="fa-solid fa-laptop text-2xl mb-2 block opacity-30" /><p className="text-xs">{devices.length === 0 ? "No devices registered yet." : "No results match."}</p></td></tr>
               ) : (
-                filtered.map((row, idx) => (
-                  <tr key={row.id} className={cn("border-b border-border/60 hover:bg-muted/30 transition-colors group", idx % 2 === 0 ? "" : "bg-muted/10")}>
-                    <td className="px-3 py-2.5 whitespace-nowrap">
-                      <button
-                        onClick={() => setBadgeDevice(row)}
-                        className="font-mono font-bold text-primary hover:underline flex items-center gap-1.5 cursor-pointer text-xs"
-                        title="Click to view & print hardware asset label"
-                      >
-                        <i className="fa-solid fa-qrcode text-[10px] opacity-70 group-hover:opacity-100" />
-                        {row.assetTag}
-                      </button>
-                    </td>
-                    <td className="px-3 py-2.5 whitespace-nowrap"><span className="flex items-center gap-1.5 text-muted-foreground"><i className={cn(deviceIcon(row.type), "text-xs")} />{row.type}</span></td>
-                    <td className="px-3 py-2.5 text-foreground whitespace-nowrap font-medium">
-                      <div>{row.brand} {row.modelName}</div>
-                      {row.specs && <div className="text-[10px] text-muted-foreground font-normal truncate max-w-[140px]">{row.specs}</div>}
-                    </td>
-                    <td className="px-3 py-2.5 text-muted-foreground whitespace-nowrap font-medium text-foreground">{row.assignedTo || "—"}</td>
-                    <td className="px-3 py-2.5 text-muted-foreground whitespace-nowrap">{row.department || "—"}</td>
-                    <td className="px-3 py-2.5 text-muted-foreground whitespace-nowrap">{row.os || "—"}</td>
-                    <td className="px-3 py-2.5 text-muted-foreground whitespace-nowrap">{row.lastSeen || "—"}</td>
-                    <td className="px-3 py-2.5 whitespace-nowrap"><span className={statusBadge(row.condition)}>{row.condition}</span></td>
-                    <td className="px-3 py-2.5 whitespace-nowrap">
-                      <select
-                        value={row.status}
-                        onChange={(e) => handleQuickStatusChange(row, e.target.value as Device["status"])}
-                        className={cn(
-                          "h-6 text-[10px] font-bold rounded-full px-2 py-0.5 border cursor-pointer focus:outline-none transition-all",
-                          row.status === "In Use" ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30" :
-                          row.status === "Available" ? "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30" :
-                          row.status === "In Repair" ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30" :
-                          "bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/30"
+                filtered.map((row, idx) => {
+                  const locMeta = getLocationMeta(row.location);
+                  const wMeta = getWarrantyMeta(row.warrantyExpiry);
+                  return (
+                    <tr key={row.id} className={cn("border-b border-border/60 hover:bg-muted/30 transition-colors group", idx % 2 === 0 ? "" : "bg-muted/10")}>
+                      <td className="px-3 py-2.5 whitespace-nowrap">
+                        <button
+                          onClick={() => setInspectDevice(row)}
+                          className="font-mono font-bold text-primary hover:underline flex items-center gap-1.5 cursor-pointer text-xs"
+                          title="Click to inspect asset details & telemetry"
+                        >
+                          <i className="fa-solid fa-laptop-code text-[10px] opacity-70 group-hover:opacity-100" />
+                          {row.assetTag}
+                        </button>
+                      </td>
+                      <td className="px-3 py-2.5 whitespace-nowrap">
+                        <span className="flex items-center gap-1.5 text-muted-foreground font-medium">
+                          <i className={cn(deviceIcon(row.type), "text-xs")} />
+                          {row.type}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2.5 text-foreground whitespace-nowrap font-medium">
+                        <div className="hover:text-primary cursor-pointer" onClick={() => setInspectDevice(row)}>{row.brand} {row.modelName}</div>
+                        {row.specs && <div className="text-[10px] text-muted-foreground font-normal truncate max-w-[140px]">{row.specs}</div>}
+                      </td>
+                      <td className="px-3 py-2.5 text-muted-foreground whitespace-nowrap font-medium text-foreground">{row.assignedTo || "—"}</td>
+                      <td className="px-3 py-2.5 text-muted-foreground whitespace-nowrap">{row.department || "—"}</td>
+                      <td className="px-3 py-2.5 whitespace-nowrap">
+                        <div className="relative inline-block">
+                          <button
+                            type="button"
+                            onClick={() => setRelocatingId(relocatingId === row.id ? null : row.id)}
+                            className={cn("inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg border text-[11px] font-semibold cursor-pointer hover:shadow-xs transition-all", locMeta.bg)}
+                            title="Click to quickly relocate device"
+                          >
+                            <i className={cn(locMeta.icon, locMeta.color)} />
+                            <span>{locMeta.label}</span>
+                            <i className="fa-solid fa-chevron-down text-[8px] opacity-60 ml-0.5" />
+                          </button>
+
+                          {/* Quick Relocate Inline Dropdown Popover */}
+                          {relocatingId === row.id && (
+                            <div className="absolute left-0 top-full mt-1 z-30 w-44 bg-card border border-border rounded-xl shadow-xl p-1.5 space-y-1 animate-in fade-in zoom-in-95">
+                              <p className="text-[9px] font-bold text-muted-foreground uppercase px-2 py-1">Relocate Asset</p>
+                              {QUICK_LOCATIONS.map((ql) => (
+                                <button
+                                  key={ql}
+                                  type="button"
+                                  onClick={() => handleQuickRelocate(row, ql)}
+                                  className={cn(
+                                    "w-full text-left px-2 py-1 rounded-lg text-[11px] font-semibold transition-colors cursor-pointer flex items-center gap-1.5",
+                                    (row.location || "HQ - Main Office") === ql
+                                      ? "bg-primary/15 text-primary"
+                                      : "hover:bg-muted text-foreground"
+                                  )}
+                                >
+                                  <i className={cn(getLocationMeta(ql).icon, "text-[10px]")} />
+                                  <span className="truncate">{ql}</span>
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-3 py-2.5 whitespace-nowrap">
+                        {wMeta ? (
+                          <span className={cn("inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold border", wMeta.cls)}>
+                            <i className={wMeta.icon} />
+                            {wMeta.label}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground text-[10px]">—</span>
                         )}
-                      >
-                        {["In Use", "Available", "In Repair", "Retired"].map((s) => (
-                          <option key={s} value={s}>{s}</option>
-                        ))}
-                      </select>
-                    </td>
-                    <td className="px-3 py-2.5 whitespace-nowrap">
-                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button onClick={() => setBadgeDevice(row)} className="w-6 h-6 rounded-md bg-muted hover:bg-accent flex items-center justify-center text-muted-foreground hover:text-foreground cursor-pointer" title="View Asset Badge"><i className="fa-solid fa-qrcode text-[9px]" /></button>
-                        <button onClick={() => setModal({ mode: "edit", item: row })} className="w-6 h-6 rounded-md bg-muted hover:bg-accent flex items-center justify-center text-muted-foreground hover:text-foreground cursor-pointer" title="Edit"><i className="fa-solid fa-pen text-[9px]" /></button>
-                        <button onClick={() => setDeleteId(row.id)} className="w-6 h-6 rounded-md bg-muted hover:bg-red-500/10 flex items-center justify-center text-muted-foreground hover:text-red-500 cursor-pointer" title="Delete"><i className="fa-solid fa-trash text-[9px]" /></button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                      </td>
+                      <td className="px-3 py-2.5 whitespace-nowrap"><span className={statusBadge(row.condition)}>{row.condition}</span></td>
+                      <td className="px-3 py-2.5 whitespace-nowrap">
+                        <select
+                          value={row.status}
+                          onChange={(e) => handleQuickStatusChange(row, e.target.value as Device["status"])}
+                          className={cn(
+                            "h-6 text-[10px] font-bold rounded-full px-2 py-0.5 border cursor-pointer focus:outline-none transition-all",
+                            row.status === "In Use" ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30" :
+                            row.status === "Available" ? "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30" :
+                            row.status === "In Repair" ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30" :
+                            "bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/30"
+                          )}
+                        >
+                          {["In Use", "Available", "In Repair", "Retired"].map((s) => (
+                            <option key={s} value={s}>{s}</option>
+                          ))}
+                        </select>
+                      </td>
+                      <td className="px-3 py-2.5 whitespace-nowrap">
+                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button onClick={() => setInspectDevice(row)} className="w-6 h-6 rounded-md bg-muted hover:bg-accent flex items-center justify-center text-muted-foreground hover:text-foreground cursor-pointer" title="Inspect Asset"><i className="fa-solid fa-eye text-[9px]" /></button>
+                          <button onClick={() => setBadgeDevice(row)} className="w-6 h-6 rounded-md bg-muted hover:bg-accent flex items-center justify-center text-muted-foreground hover:text-foreground cursor-pointer" title="View Asset Badge"><i className="fa-solid fa-qrcode text-[9px]" /></button>
+                          <button onClick={() => setModal({ mode: "edit", item: row })} className="w-6 h-6 rounded-md bg-muted hover:bg-accent flex items-center justify-center text-muted-foreground hover:text-foreground cursor-pointer" title="Edit"><i className="fa-solid fa-pen text-[9px]" /></button>
+                          <button onClick={() => setDeleteId(row.id)} className="w-6 h-6 rounded-md bg-muted hover:bg-red-500/10 flex items-center justify-center text-muted-foreground hover:text-red-500 cursor-pointer" title="Delete"><i className="fa-solid fa-trash text-[9px]" /></button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
           </tbody>
         </table>
@@ -2604,14 +3465,17 @@ export default function ITCommandCenterPage() {
   const addLink = async (data: Omit<DriveLink, "id">) => {
     const res = await apiFetch("/api/it/drive-links", { method: "POST", body: JSON.stringify(data) });
     const doc = res.link;
-    setLinks((p) => [{ ...doc, id: doc._id?.toString() || doc.id }, ...p]);
+    const item = doc ? { ...normalise(doc), id: doc._id?.toString() || doc.id } : { ...data, id: String(Date.now()) };
+    setLinks((p) => [item, ...p]);
+    await loadLinks();
     showToast("File link added", "success");
   };
 
   const editLink = async (id: string, data: Omit<DriveLink, "id">) => {
     const res = await apiFetch(`/api/it/drive-links/${id}`, { method: "PATCH", body: JSON.stringify(data) });
     const doc = res.link;
-    setLinks((p) => p.map((l) => l.id === id ? { ...doc, id } : l));
+    const item = doc ? { ...normalise(doc), id: doc._id?.toString() || id } : { ...data, id };
+    setLinks((p) => p.map((l) => (l.id === id ? item : l)));
     showToast("File link updated", "success");
   };
 
@@ -2692,7 +3556,8 @@ export default function ITCommandCenterPage() {
   const editDevice = async (id: string, data: Omit<Device, "id">) => {
     const res = await apiFetch(`/api/it/devices/${id}`, { method: "PATCH", body: JSON.stringify(data) });
     const doc = res.device;
-    setDevices((p) => p.map((d) => d.id === id ? { ...doc, id } : d));
+    const updatedItem = doc ? { ...normalise(doc), id: doc._id?.toString() || id } : { ...data, id };
+    setDevices((p) => p.map((d) => (d.id === id ? updatedItem : d)));
     showToast("Device updated", "success");
   };
 
@@ -2742,8 +3607,19 @@ export default function ITCommandCenterPage() {
     const filename = `it_${activeTab}_${getISTDateString()}.csv`;
 
     if (activeTab === "drive") {
-      headers = ["File / Resource Name", "Category", "Platform", "Link", "Owner", "Access Level", "Last Updated", "Notes"];
-      rows = links.map((l) => [l.name, l.category, l.platform, l.link, l.owner, l.accessLevel, l.lastUpdated, l.notes || ""]);
+      headers = ["File / Resource Name", "Category", "Platform", "Link", "Owner", "Audience / Sharing", "Shared With", "Access Level", "Last Updated", "Notes"];
+      rows = links.map((l) => [
+        l.name,
+        l.category,
+        l.platform,
+        l.link,
+        l.owner,
+        l.shareScope || (l.accessLevel?.includes("Team") ? "All Users" : "Private"),
+        (l.sharedWith || []).join("; "),
+        l.accessLevel,
+        l.lastUpdated,
+        l.notes || "",
+      ]);
     } else if (activeTab === "access") {
       headers = ["Tool / System", "Category", "Assignee", "Role", "Access Level", "Date Granted", "Status"];
       rows = access.map((a) => [a.tool, a.category, a.assignee, a.role, a.accessLevel, a.dateGranted, a.status]);
@@ -2751,8 +3627,8 @@ export default function ITCommandCenterPage() {
       headers = ["Tool Name", "Category", "Plan", "Cost/Month", "Seats", "Renewal Date", "Owner", "Status"];
       rows = subs.map((s) => [s.tool, s.category, s.plan, s.costPerMonth.toString(), (s.seats || 0).toString(), s.renewalDate, s.owner, s.status]);
     } else if (activeTab === "devices") {
-      headers = ["Asset Tag", "Type", "Brand", "Model", "Assigned To", "Department", "OS", "Condition", "Status", "Last Seen"];
-      rows = devices.map((d) => [d.assetTag, d.type, d.brand, d.modelName, d.assignedTo || "", d.department || "", d.os || "", d.condition, d.status, d.lastSeen || ""]);
+      headers = ["Asset Tag", "Type", "Brand", "Model", "Assigned To", "Department", "Location", "OS", "Condition", "Status", "Last Seen"];
+      rows = devices.map((d) => [d.assetTag, d.type, d.brand, d.modelName, d.assignedTo || "", d.department || "", d.location || "HQ - Main Office", d.os || "", d.condition, d.status, d.lastSeen || ""]);
     } else if (activeTab === "invoices") {
       headers = ["Invoice No", "Billed To Client", "Date", "Due Date", "Customer No", "Subtotal", "Tax", "Total", "Currency", "Status"];
       rows = invoices.map((i) => [i.invoiceNo, i.billedToName, i.invoiceDate, i.dueDate, i.customerNo, i.subtotal.toString(), i.taxAmount.toString(), i.total.toString(), i.currency, i.status]);
@@ -2848,7 +3724,7 @@ export default function ITCommandCenterPage() {
       {/* Tab Content */}
       <div>
         {activeTab === "overview" && <OverviewTab access={access} subscriptions={subs} devices={devices} loading={overallLoading} onNavigate={(tab) => setActiveTab(tab)} onQuickAction={handleQuickAction} allowedTabs={visibleTabs.map((t) => t.key).filter((k) => k !== "overview")} />}
-        {activeTab === "drive" && <DriveLinksTab links={links} loading={loadingLinks} onAdd={addLink} onEdit={editLink} onDelete={deleteLink} autoOpenAdd={autoOpenAddTab === "drive"} teamMembers={teamMembers} />}
+        {activeTab === "drive" && <DriveLinksTab links={links} loading={loadingLinks} onAdd={addLink} onEdit={editLink} onDelete={deleteLink} autoOpenAdd={autoOpenAddTab === "drive"} userName={user?.name} isPrivileged={isPrivileged} teamMembers={teamMembers} />}
         {activeTab === "access" && <AccessTab access={access} loading={loadingAccess} onAdd={addAccess} onEdit={editAccess} onDelete={deleteAccess} onToggleStatus={toggleAccessStatus} autoOpenAdd={autoOpenAddTab === "access"} teamMembers={teamMembers} />}
         {activeTab === "subscriptions" && <SubscriptionsTab subs={subs} loading={loadingSubs} onAdd={addSub} onEdit={editSub} onDelete={deleteSub} autoOpenAdd={autoOpenAddTab === "subscriptions"} teamMembers={teamMembers} />}
         {activeTab === "devices" && <DevicesTab devices={devices} allDevices={devices} nextAssetTags={nextAssetTags} loading={loadingDevices} onAdd={addDevice} onEdit={editDevice} onDelete={deleteDevice} autoOpenAdd={autoOpenAddTab === "devices"} userName={user?.name} userDepartment={user?.department} isPrivileged={isPrivileged} teamMembers={teamMembers} />}

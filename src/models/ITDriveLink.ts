@@ -9,6 +9,8 @@ export interface IITDriveLink extends Document {
   link: string;
   owner: string;
   accessLevel: string;
+  shareScope: "All Users" | "Specific Users" | "Private";
+  sharedWith: string[];
   lastUpdated: string;
   reviewFrequency: string;
   notes: string;
@@ -27,6 +29,12 @@ const ITDriveLinkSchema = new Schema<IITDriveLink>(
     link: { type: String, trim: true, default: "" },
     owner: { type: String, trim: true, default: "" },
     accessLevel: { type: String, trim: true, default: "View - Team" },
+    shareScope: {
+      type: String,
+      enum: ["All Users", "Specific Users", "Private"],
+      default: "All Users",
+    },
+    sharedWith: { type: [String], default: [] },
     lastUpdated: { type: String, default: () => new Date().toISOString().slice(0, 10) },
     reviewFrequency: { type: String, trim: true, default: "Monthly" },
     notes: { type: String, trim: true, default: "" },
@@ -36,6 +44,12 @@ const ITDriveLinkSchema = new Schema<IITDriveLink>(
 );
 
 ITDriveLinkSchema.index({ tenantId: 1, createdAt: -1 });
+ITDriveLinkSchema.index({ tenantId: 1, owner: 1 });
+ITDriveLinkSchema.index({ tenantId: 1, shareScope: 1 });
+
+if (mongoose.models.ITDriveLink && (!mongoose.models.ITDriveLink.schema.path("shareScope") || process.env.NODE_ENV !== "production")) {
+  delete (mongoose.models as any).ITDriveLink;
+}
 
 export const ITDriveLink: Model<IITDriveLink> =
   mongoose.models.ITDriveLink || mongoose.model<IITDriveLink>("ITDriveLink", ITDriveLinkSchema);

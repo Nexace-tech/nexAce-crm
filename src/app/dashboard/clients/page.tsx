@@ -11,7 +11,10 @@ import { Pagination } from "@/components/ui/pagination";
 import { usePermissions } from "@/hooks/usePermissions";
 import { BulkImportModal } from "@/components/operations/BulkImportModal";
 import HrWorkdeskDashboard from "@/components/operations/HrWorkdeskDashboard";
+import ReportsDashboard from "@/components/operations/ReportsDashboard";
 import { cn } from "@/lib/utils";
+
+export type OpsTabKey = "operations" | "hr" | "external" | "reports";
 
 interface ClientData {
   _id: string;
@@ -74,14 +77,23 @@ export default function OperationsPage() {
   const searchParams = useSearchParams();
   const { can, isAdmin, isOPS } = usePermissions();
   const tabParam = searchParams?.get("tab");
-  const initialTab: "operations" | "hr" | "external" =
-    tabParam === "external" || tabParam === "external-teams"
+  const initialTab: OpsTabKey =
+    tabParam === "reports"
+      ? "reports"
+      : tabParam === "external" || tabParam === "external-teams"
       ? "external"
       : tabParam === "hr"
       ? "hr"
       : "operations";
 
-  const [activeTab, setActiveTab] = useState<"operations" | "hr" | "external">(initialTab);
+  const [activeTab, setActiveTab] = useState<OpsTabKey>(initialTab);
+
+  useEffect(() => {
+    if (tabParam === "reports") setActiveTab("reports");
+    else if (tabParam === "hr") setActiveTab("hr");
+    else if (tabParam === "external" || tabParam === "external-teams") setActiveTab("external");
+    else if (tabParam === "operations") setActiveTab("operations");
+  }, [tabParam]);
   const [viewMode, setViewMode] = useState<"list" | "grid">("list");
 
   // HR Workdesk State
@@ -757,18 +769,26 @@ export default function OperationsPage() {
 
   return (
     <div className="space-y-8">
-      {/* Title */}
+      {/* Header - Styled consistently with IT Portal */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
-            <i className="fa-solid fa-list-check text-primary text-xl" /> Operation Portal
-          </h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            Every billable client project/retainer — scope, owner, budget, phase, and health.
-          </p>
+        <div className="flex items-center gap-3">
+          <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-primary/20 to-teal-500/20 text-primary flex items-center justify-center border border-primary/20 shadow-sm">
+            <i className="fa-solid fa-list-check text-base" />
+          </div>
+          <div>
+            <h1 className="text-xl font-bold text-foreground tracking-tight">OPS Portal</h1>
+            <p className="text-xs text-muted-foreground">
+              Operations control, client retainers, HR allocations, external vendors &amp; workspace reports
+            </p>
+          </div>
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            <span className="text-[10px] font-semibold">Live Data</span>
+          </div>
+
           {activeTab === "operations" && (
             <>
               <Button
@@ -819,53 +839,42 @@ export default function OperationsPage() {
         </div>
       </div>
 
-      {/* Operation Portal Sub-Navigation Tabs */}
-      <div className="flex border-b border-border space-x-2 overflow-x-auto no-scrollbar">
-        <button
-          type="button"
-          onClick={() => setActiveTab("operations")}
-          className={cn(
-            "px-4 py-2.5 text-sm font-semibold border-b-2 transition-all flex items-center gap-2 cursor-pointer shrink-0 whitespace-nowrap",
-            activeTab === "operations"
-              ? "border-primary text-primary bg-primary/10 rounded-t-md font-bold -mb-px"
-              : "border-transparent text-muted-foreground hover:text-foreground"
-          )}
-        >
-          <i className="fa-solid fa-list-check text-sm" /> Operations Control
-        </button>
-
-
-        <button
-          type="button"
-          onClick={() => setActiveTab("hr")}
-          className={cn(
-            "px-4 py-2.5 text-sm font-semibold border-b-2 transition-all flex items-center gap-2 cursor-pointer shrink-0 whitespace-nowrap",
-            activeTab === "hr"
-              ? "border-primary text-primary bg-primary/10 rounded-t-md font-bold -mb-px"
-              : "border-transparent text-muted-foreground hover:text-foreground"
-          )}
-        >
-          <i className="fa-solid fa-users-gear text-sm" /> HR Workdesk
-          <Badge variant="soft" color="primary" className="ml-1 text-[10px] px-1.5 py-0.2">
-            {hrAllocations.length}
-          </Badge>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveTab("external")}
-          className={cn(
-            "px-4 py-2.5 text-sm font-semibold border-b-2 transition-all flex items-center gap-2 cursor-pointer shrink-0 whitespace-nowrap",
-            activeTab === "external"
-              ? "border-primary text-primary bg-primary/10 rounded-t-md font-bold -mb-px"
-              : "border-transparent text-muted-foreground hover:text-foreground"
-          )}
-        >
-          <i className="fa-solid fa-building-user text-sm" /> External Teams
-          <Badge variant="soft" color="primary" className="ml-1 text-[10px] px-1.5 py-0.2">
-            {externalMembers.length}
-          </Badge>
-        </button>
+      {/* OPS Portal Tab Bar - Styled like IT Portal */}
+      <div className="flex items-center gap-1 p-1 bg-muted/60 rounded-xl border border-border overflow-x-auto no-scrollbar">
+        {[
+          { key: "operations", label: "Operations Control", icon: "fa-solid fa-list-check", count: projects.length },
+          { key: "hr", label: "HR Workdesk", icon: "fa-solid fa-users-gear", count: hrAllocations.length },
+          { key: "external", label: "External Teams", icon: "fa-solid fa-building-user", count: externalMembers.length },
+          { key: "reports", label: "Reports & Data Exports", icon: "fa-solid fa-file-lines" },
+        ].map((tab) => (
+          <button
+            key={tab.key}
+            id={`ops-tab-${tab.key}`}
+            onClick={() => {
+              setActiveTab(tab.key as OpsTabKey);
+              const url = new URL(window.location.href);
+              url.searchParams.set("tab", tab.key);
+              window.history.replaceState({}, "", url.toString());
+            }}
+            className={cn(
+              "flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition-all duration-200 whitespace-nowrap cursor-pointer",
+              activeTab === tab.key
+                ? "bg-card text-foreground shadow-sm border border-border font-bold"
+                : "text-muted-foreground hover:text-foreground hover:bg-card/60"
+            )}
+          >
+            <i className={cn(tab.icon, activeTab === tab.key ? "text-primary" : "text-muted-foreground")} />
+            <span>{tab.label}</span>
+            {tab.count !== undefined && (
+              <span className={cn(
+                "ml-1 text-[10px] px-1.5 py-0.2 rounded-full font-mono",
+                activeTab === tab.key ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground"
+              )}>
+                {tab.count}
+              </span>
+            )}
+          </button>
+        ))}
       </div>
 
       {/* Operations Control Tab View */}
@@ -1734,6 +1743,11 @@ export default function OperationsPage() {
             </CardContent>
           </Card>
         </div>
+      )}
+
+      {/* Reports & Data Exports Tab View */}
+      {activeTab === "reports" && (
+        <ReportsDashboard embedded={true} />
       )}
 
       {/* Allocate HR Resource Modal */}

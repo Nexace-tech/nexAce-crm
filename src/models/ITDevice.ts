@@ -12,6 +12,7 @@ export interface IITDevice extends Document {
   warrantyExpiry?: string;
   assignedTo: string;
   department: string;
+  location?: string;
   os: string;
   lastSeen: string;
   condition: "Excellent" | "Good" | "Fair" | "Poor";
@@ -34,6 +35,7 @@ const ITDeviceSchema = new Schema<IITDevice>(
     warrantyExpiry: { type: String, trim: true, default: "" },
     assignedTo: { type: String, trim: true, default: "—" },
     department: { type: String, trim: true, default: "—" },
+    location: { type: String, trim: true, default: "HQ - Main Office" },
     os: { type: String, trim: true, default: "" },
     lastSeen: { type: String, default: () => new Date().toISOString().slice(0, 10) },
     condition: {
@@ -56,5 +58,10 @@ ITDeviceSchema.index({ tenantId: 1, assetTag: 1 }, { unique: true, sparse: true 
 ITDeviceSchema.index({ tenantId: 1, serialNumber: 1 }, { sparse: true });
 ITDeviceSchema.index({ tenantId: 1, createdAt: -1 });
 
+if (mongoose.models.ITDevice && (!mongoose.models.ITDevice.schema.path("location") || process.env.NODE_ENV !== "production")) {
+  delete (mongoose.models as any).ITDevice;
+}
+
 export const ITDevice: Model<IITDevice> =
   mongoose.models.ITDevice || mongoose.model<IITDevice>("ITDevice", ITDeviceSchema);
+

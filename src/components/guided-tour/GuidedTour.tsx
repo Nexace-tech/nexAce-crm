@@ -104,7 +104,7 @@ const adminTourSteps: TourStep[] = [
   },
   {
     id: "clients_admin",
-    title: "Operation Portal, Sales & Bulk Import",
+    title: "OPS Portal, Sales & Bulk Import",
     subtitle: "Client Retainers, Sales Deals & Staffing Workdesk",
     description:
       "Manage client delivery accounts, sales deal pipelines, batch CSV/paste bulk data import, staff resource bench allocation, and external contractor teams.",

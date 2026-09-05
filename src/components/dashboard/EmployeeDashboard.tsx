@@ -554,8 +554,8 @@ export function EmployeeDashboard({ user }: { user: any }) {
             <Link href="/dashboard/projects">My Tasks</Link>
           </Button>
           <Button asChild variant="outline" size="sm">
-            <Link href="/dashboard/reports" className="gap-1 text-emerald-600 dark:text-emerald-400">
-              <i className="fa-solid fa-file-lines text-xs mr-1" /> Report
+            <Link href="/dashboard/clients?tab=reports" className="gap-1 text-emerald-600 dark:text-emerald-400">
+              <i className="fa-solid fa-file-lines text-xs mr-1" /> OPS Reports
             </Link>
           </Button>
         </div>

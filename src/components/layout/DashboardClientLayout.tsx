@@ -43,14 +43,13 @@ const featureSections: { title: string; items: MenuItem[] }[] = [
       { key: "team", name: "My Team", href: "/dashboard/team", icon: "fa-solid fa-users" },
       { key: "calendar", name: "Calendar & Timesheets", href: "/dashboard/calendar", icon: "fa-solid fa-calendar-days" },
       { key: "projects", name: "Projects & Drive", href: "/dashboard/projects", icon: "fa-solid fa-folder-tree" },
-      { key: "reports", name: "Report", href: "/dashboard/reports", icon: "fa-solid fa-file-lines" },
       { key: "chat", name: "Chat & Mail", href: "/dashboard/chat", icon: "fa-solid fa-comments" },
     ],
   },
   {
     title: "Operations & CRM",
     items: [
-      { key: "clients", name: "Operation Portal", href: "/dashboard/clients", icon: "fa-solid fa-list-check" },
+      { key: "clients", name: "OPS Portal", href: "/dashboard/clients", icon: "fa-solid fa-list-check" },
       { key: "finance", name: "Finance Portal", href: "/dashboard/finance", icon: "fa-solid fa-coins" },
       { key: "bd", name: "BD Portal", href: "/dashboard/bd", icon: "fa-solid fa-handshake" },
       { key: "referrals", name: "Referral Pipeline", href: "/dashboard/referrals", icon: "fa-solid fa-link" },
