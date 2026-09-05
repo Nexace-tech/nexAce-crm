@@ -2,18 +2,20 @@ import "server-only";
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 
-const rawSecret = process.env.SESSION_SECRET;
-if (!rawSecret) {
-  throw new Error(
-    "SESSION_SECRET environment variable is not set. This is required for secure session management."
-  );
+function getEncodedKey() {
+  const rawSecret = process.env.SESSION_SECRET;
+  if (!rawSecret) {
+    throw new Error(
+      "SESSION_SECRET environment variable is not set. This is required for secure session management."
+    );
+  }
+  if (process.env.NODE_ENV === "production" && rawSecret.length < 32) {
+    throw new Error(
+      "SESSION_SECRET is too short. A minimum length of 32 characters is required for HS256 JWT security in production."
+    );
+  }
+  return new TextEncoder().encode(rawSecret);
 }
-if (process.env.NODE_ENV === "production" && rawSecret.length < 32) {
-  throw new Error(
-    "SESSION_SECRET is too short. A minimum length of 32 characters is required for HS256 JWT security in production."
-  );
-}
-const encodedKey = new TextEncoder().encode(rawSecret);
 
 export interface SessionPayload {
   userId: string;
@@ -31,12 +33,12 @@ export async function encrypt(payload: EncryptPayload) {
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime("7d")
-    .sign(encodedKey);
+    .sign(getEncodedKey());
 }
 
 export async function decrypt(session: string | undefined = "") {
   try {
-    const { payload } = await jwtVerify(session, encodedKey, {
+    const { payload } = await jwtVerify(session, getEncodedKey(), {
       algorithms: ["HS256"],
     });
     return payload as unknown as SessionPayload;
