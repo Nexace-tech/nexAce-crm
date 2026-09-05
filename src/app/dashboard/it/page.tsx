@@ -959,6 +959,219 @@ function DriveModal({
   );
 }
 
+function DriveViewModal({
+  item,
+  onClose,
+  onEdit,
+  isPrivileged,
+  userName,
+}: {
+  item: DriveLink;
+  onClose: () => void;
+  onEdit?: () => void;
+  isPrivileged?: boolean;
+  userName?: string;
+}) {
+  const [copied, setCopied] = useState(false);
+  const isOwner = userName && (item.owner || "").toLowerCase() === userName.toLowerCase();
+  const canEdit = isPrivileged || isOwner;
+
+  const handleCopy = () => {
+    if (!item.link) return;
+    navigator.clipboard.writeText(item.link);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+      <div className="bg-card border border-border rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border bg-muted/30">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center text-lg shrink-0">
+              <i className={platformIcon(item.platform)} />
+            </div>
+            <div className="min-w-0">
+              <h3 className="text-sm font-bold text-foreground truncate">{item.name}</h3>
+              <p className="text-[11px] text-muted-foreground flex items-center gap-2">
+                <span>{item.platform}</span>
+                {item.category && (
+                  <>
+                    <span>•</span>
+                    <span>{item.category}</span>
+                  </>
+                )}
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-8 h-8 rounded-lg hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground cursor-pointer transition-colors"
+          >
+            <i className="fa-solid fa-xmark text-sm" />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="p-5 space-y-4 overflow-y-auto text-xs">
+          {/* Link Box */}
+          {item.link ? (
+            <div className="p-3.5 rounded-xl border border-border bg-muted/40 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Resource Link</span>
+                <button
+                  type="button"
+                  onClick={handleCopy}
+                  className="text-[11px] font-medium text-primary hover:underline flex items-center gap-1 cursor-pointer"
+                >
+                  <i className={copied ? "fa-solid fa-check text-emerald-500" : "fa-solid fa-copy text-[10px]"} />
+                  {copied ? "Copied" : "Copy Link"}
+                </button>
+              </div>
+              <div className="p-2.5 rounded-lg bg-background border border-border font-mono text-[11px] break-all text-foreground/90 selection:bg-primary/20">
+                {item.link}
+              </div>
+              <div className="pt-1">
+                <a
+                  href={item.link}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full inline-flex items-center justify-center gap-2 h-9 rounded-lg bg-primary text-primary-foreground font-semibold text-xs hover:bg-primary/90 transition-all shadow-sm cursor-pointer"
+                >
+                  <i className="fa-solid fa-arrow-up-right-from-square text-[11px]" />
+                  Open Link in New Tab
+                </a>
+              </div>
+            </div>
+          ) : (
+            <div className="p-3.5 rounded-xl border border-dashed border-border text-center text-muted-foreground text-xs">
+              <i className="fa-solid fa-link-slash mr-1.5 opacity-50" />
+              No URL link attached to this item
+            </div>
+          )}
+
+          {/* Details Grid */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="p-3 rounded-xl border border-border bg-muted/20">
+              <div className="text-[10px] uppercase font-semibold text-muted-foreground mb-1">Owner / Creator</div>
+              <div className="flex items-center gap-1.5 font-medium text-foreground">
+                <i className="fa-solid fa-user-circle text-primary text-xs" />
+                <span>{item.owner || "Unknown"}</span>
+                {isOwner && (
+                  <span className="text-[9px] font-bold text-primary bg-primary/10 px-1.5 py-0.5 rounded">You</span>
+                )}
+              </div>
+            </div>
+
+            <div className="p-3 rounded-xl border border-border bg-muted/20">
+              <div className="text-[10px] uppercase font-semibold text-muted-foreground mb-1">Access Level</div>
+              <div className="flex items-center gap-1.5 font-medium text-foreground">
+                <span className={statusBadge(item.accessLevel?.includes("Edit") ? "Active" : "Pending")}>
+                  {item.accessLevel || "Read Only"}
+                </span>
+              </div>
+            </div>
+
+            <div className="p-3 rounded-xl border border-border bg-muted/20 col-span-2">
+              <div className="text-[10px] uppercase font-semibold text-muted-foreground mb-1.5 flex items-center justify-between">
+                <span>Audience / Sharing</span>
+                <span className="font-semibold text-foreground">
+                  {item.shareScope || "Private"}
+                </span>
+              </div>
+              {item.shareScope === "All Users" ? (
+                <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2.5 py-1.5 rounded-lg border border-emerald-500/20">
+                  <i className="fa-solid fa-globe text-xs" />
+                  <span>Shared with all workspace team members</span>
+                </div>
+              ) : item.shareScope === "Specific Users" ? (
+                <div className="space-y-1.5">
+                  <div className="flex flex-wrap gap-1.5">
+                    {(item.sharedWith || []).length > 0 ? (
+                      item.sharedWith!.map((u) => (
+                        <span
+                          key={u}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-primary/10 text-primary border border-primary/20"
+                        >
+                          <i className="fa-solid fa-user text-[8px]" />
+                          {u}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="text-muted-foreground text-[11px] italic">No specific members selected</span>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400 bg-amber-500/10 px-2.5 py-1.5 rounded-lg border border-amber-500/20">
+                  <i className="fa-solid fa-lock text-xs" />
+                  <span>Private — Only visible to you and IT administrators</span>
+                </div>
+              )}
+            </div>
+
+            {item.lastUpdated && (
+              <div className="p-3 rounded-xl border border-border bg-muted/20">
+                <div className="text-[10px] uppercase font-semibold text-muted-foreground mb-1">Last Updated</div>
+                <div className="text-foreground font-medium flex items-center gap-1.5">
+                  <i className="fa-solid fa-calendar text-[11px] text-muted-foreground" />
+                  <span>{item.lastUpdated}</span>
+                </div>
+              </div>
+            )}
+
+            {item.category && (
+              <div className="p-3 rounded-xl border border-border bg-muted/20">
+                <div className="text-[10px] uppercase font-semibold text-muted-foreground mb-1">Category</div>
+                <div className="text-foreground font-medium flex items-center gap-1.5">
+                  <i className="fa-solid fa-tag text-[11px] text-primary" />
+                  <span>{item.category}</span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Notes */}
+          {item.notes && (
+            <div className="p-3.5 rounded-xl border border-border bg-muted/20 space-y-1">
+              <div className="text-[10px] uppercase font-semibold text-muted-foreground">Notes / Description</div>
+              <p className="text-foreground/90 whitespace-pre-wrap leading-relaxed">{item.notes}</p>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-between px-5 py-3 border-t border-border bg-muted/30">
+          <div>
+            {canEdit && onEdit && (
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onEdit();
+                }}
+                className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border border-border bg-background hover:bg-muted text-xs font-semibold text-foreground cursor-pointer transition-colors"
+              >
+                <i className="fa-solid fa-pen text-[10px]" />
+                Edit Link
+              </button>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="h-8 px-4 rounded-lg bg-secondary text-secondary-foreground text-xs font-semibold hover:bg-secondary/80 transition-colors cursor-pointer"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function DriveLinksTab({
   links,
   loading,
@@ -986,6 +1199,7 @@ function DriveLinksTab({
   const [filterAccess, setFilterAccess] = useState("All");
   const [filterScope, setFilterScope] = useState("All");
   const [modal, setModal] = useState<{ mode: "add" } | { mode: "edit"; item: DriveLink } | null>(null);
+  const [viewItem, setViewItem] = useState<DriveLink | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -1045,6 +1259,19 @@ function DriveLinksTab({
 
   return (
     <div className="space-y-4">
+      {viewItem && (
+        <DriveViewModal
+          item={viewItem}
+          onClose={() => setViewItem(null)}
+          onEdit={() => {
+            const itm = viewItem;
+            setViewItem(null);
+            setModal({ mode: "edit", item: itm });
+          }}
+          userName={userName}
+          isPrivileged={isPrivileged}
+        />
+      )}
       {modal && (
         <DriveModal
           initial={modal.mode === "edit" ? modal.item : makeEmptyDrive(userName)}
@@ -1109,8 +1336,16 @@ function DriveLinksTab({
         <table className="w-full text-xs">
           <thead>
             <tr className="bg-muted/60 border-b border-border">
-              {["File / Resource Name", "Category", "Platform", "Link", "Owner", "Audience / Sharing", "Access Level", "Last Updated", "Notes", ""].map((h) => (
-                <th key={h} className="text-left px-3 py-2.5 font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap text-[10px]">{h}</th>
+              {["File / Resource Name", "Category", "Platform", "Link", "Owner", "Audience / Sharing", "Access Level", "Last Updated", "Notes", "Actions"].map((h) => (
+                <th
+                  key={h}
+                  className={cn(
+                    "px-3 py-2.5 font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap text-[10px]",
+                    h === "Actions" ? "text-right pr-4" : "text-left"
+                  )}
+                >
+                  {h}
+                </th>
               ))}
             </tr>
           </thead>
@@ -1132,7 +1367,13 @@ function DriveLinksTab({
                   return (
                     <tr key={row.id} className={cn("border-b border-border/60 hover:bg-muted/30 transition-colors group", idx % 2 === 0 ? "" : "bg-muted/10")}>
                       <td className="px-3 py-2.5 font-medium text-foreground whitespace-nowrap max-w-[180px] truncate" title={row.name}>
-                        <span className="font-semibold text-foreground">{row.name}</span>
+                        <button
+                          type="button"
+                          onClick={() => setViewItem(row)}
+                          className="font-semibold text-foreground hover:text-primary transition-colors text-left cursor-pointer truncate max-w-full block"
+                        >
+                          {row.name}
+                        </button>
                       </td>
                       <td className="px-3 py-2.5 text-muted-foreground whitespace-nowrap">{row.category || "—"}</td>
                       <td className="px-3 py-2.5 whitespace-nowrap">
@@ -1201,22 +1442,48 @@ function DriveLinksTab({
                       <td className="px-3 py-2.5 text-muted-foreground max-w-[150px] truncate" title={row.notes}>
                         {row.notes || "—"}
                       </td>
-                      <td className="px-3 py-2.5 whitespace-nowrap">
-                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <td className="px-3 py-2.5 whitespace-nowrap text-right pr-4">
+                        <div className="flex items-center justify-end gap-1.5">
                           <button
-                            onClick={() => setModal({ mode: "edit", item: row })}
-                            className="w-6 h-6 rounded-md bg-muted hover:bg-accent flex items-center justify-center text-muted-foreground hover:text-foreground cursor-pointer"
-                            title="Edit Link"
+                            type="button"
+                            onClick={() => setViewItem(row)}
+                            className="inline-flex items-center gap-1 h-7 px-2.5 rounded-lg bg-primary/10 text-primary hover:bg-primary hover:text-primary-foreground text-xs font-semibold transition-all cursor-pointer shadow-2xs"
+                            title="View Link Details"
                           >
-                            <i className="fa-solid fa-pen text-[9px]" />
+                            <i className="fa-solid fa-eye text-[10px]" />
+                            <span>View</span>
                           </button>
-                          <button
-                            onClick={() => setDeleteId(row.id)}
-                            className="w-6 h-6 rounded-md bg-muted hover:bg-red-500/10 flex items-center justify-center text-muted-foreground hover:text-red-500 cursor-pointer"
-                            title="Delete"
-                          >
-                            <i className="fa-solid fa-trash text-[9px]" />
-                          </button>
+                          {row.link && (
+                            <a
+                              href={row.link}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="w-7 h-7 rounded-lg bg-muted/60 hover:bg-accent flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+                              title="Open link in new tab"
+                            >
+                              <i className="fa-solid fa-arrow-up-right-from-square text-[10px]" />
+                            </a>
+                          )}
+                          {(isPrivileged || isOwner) && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => setModal({ mode: "edit", item: row })}
+                                className="w-7 h-7 rounded-lg bg-muted/60 hover:bg-accent flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                                title="Edit Link"
+                              >
+                                <i className="fa-solid fa-pen text-[10px]" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setDeleteId(row.id)}
+                                className="w-7 h-7 rounded-lg bg-muted/60 hover:bg-red-500/10 flex items-center justify-center text-muted-foreground hover:text-red-500 transition-colors cursor-pointer"
+                                title="Delete Link"
+                              >
+                                <i className="fa-solid fa-trash text-[10px]" />
+                              </button>
+                            </>
+                          )}
                         </div>
                       </td>
                     </tr>
