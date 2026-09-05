@@ -22,6 +22,8 @@ interface IUser {
   departments?: string[];
   photoUrl?: string;
   phone?: string;
+  employmentType?: string;
+  salary?: number;
   managerId?: {
     _id: string;
     name: string;
@@ -43,6 +45,13 @@ export function UserManagementTab() {
   const [roleFilter, setRoleFilter] = useState<string>("All");
   const [statusFilter, setStatusFilter] = useState<string>("All");
 
+  // Floating Toast Notification
+  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
+  const showToast = (message: string, type: "success" | "error" = "success") => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3500);
+  };
+
   // Selection & Modal States
   const [selectedUser, setSelectedUser] = useState<IUser | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -56,11 +65,18 @@ export function UserManagementTab() {
     role: "Employee" as IUser["role"],
     status: "Active" as IUser["status"],
     department: "General",
+    employmentType: "Permanent",
+    salary: "" as string | number,
     newPassword: "",
   });
   const [formError, setFormError] = useState("");
   const [createdTempPassword, setCreatedTempPassword] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Organization Total Payroll Memo
+  const totalPayroll = useMemo(() => {
+    return users.reduce((sum, u) => sum + (Number(u.salary) || 0), 0);
+  }, [users]);
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -73,8 +89,8 @@ export function UserManagementTab() {
     try {
       setLoading(true);
       const [teamRes, permRes] = await Promise.all([
-        fetch("/api/team"),
-        fetch("/api/settings/permissions"),
+        fetch(`/api/team?_t=${Date.now()}`, { cache: "no-store" }),
+        fetch("/api/settings/permissions", { cache: "no-store" }),
       ]);
       if (teamRes.ok) {
         const data = await teamRes.json();
@@ -123,12 +139,15 @@ export function UserManagementTab() {
   // Open Edit Modal
   const handleOpenEdit = (user: IUser) => {
     setSelectedUser(user);
+    const userSal = (user as any).salary;
     setFormData({
       name: user.name,
       email: user.email,
       role: user.role,
       status: user.status || "Active",
       department: user.department || "General",
+      employmentType: (user as any).employmentType || "Permanent",
+      salary: userSal !== undefined && userSal !== null && Number(userSal) > 0 ? Number(userSal) : "",
       newPassword: "",
     });
     setFormError("");
@@ -144,16 +163,15 @@ export function UserManagementTab() {
       setIsSubmitting(true);
       setFormError("");
 
+      const numSalary = formData.salary === "" ? 0 : Number(formData.salary) || 0;
       const payload: any = {
         name: formData.name,
         role: formData.role,
         status: formData.status,
         department: formData.department,
+        employmentType: formData.employmentType,
+        salary: numSalary,
       };
-
-      if (formData.newPassword.trim()) {
-        payload.newPassword = formData.newPassword.trim();
-      }
 
       const res = await fetch(`/api/team/${selectedUser._id}`, {
         method: "PUT",
@@ -166,9 +184,16 @@ export function UserManagementTab() {
         throw new Error(data.error || "Failed to update user");
       }
 
+      // Optimistically update local users state immediately
+      const updatedUser = data.user || { ...selectedUser, ...payload };
+      setUsers((prev) =>
+        prev.map((u) => (u._id === selectedUser._id ? { ...u, ...updatedUser } : u))
+      );
+
       setShowEditModal(false);
       setSelectedUser(null);
-      fetchUsers();
+      showToast(`Profile & salary for ${formData.name} updated successfully!`, "success");
+      await fetchUsers();
     } catch (err: any) {
       setFormError(err.message || "Something went wrong");
     } finally {
@@ -183,6 +208,7 @@ export function UserManagementTab() {
       setIsSubmitting(true);
       setFormError("");
 
+      const numSalary = formData.salary === "" ? 0 : Number(formData.salary) || 0;
       const res = await fetch("/api/team", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -191,6 +217,8 @@ export function UserManagementTab() {
           email: formData.email,
           role: formData.role,
           department: formData.department,
+          employmentType: formData.employmentType,
+          salary: numSalary,
         }),
       });
 
@@ -201,15 +229,18 @@ export function UserManagementTab() {
 
       setCreatedTempPassword(data.tempPassword || null);
       setShowCreateModal(false);
+      showToast(`Employee ${formData.name} created successfully!`, "success");
       setFormData({
         name: "",
         email: "",
         role: "Employee",
         status: "Active",
         department: "General",
+        employmentType: "Permanent",
+        salary: "",
         newPassword: "",
       });
-      fetchUsers();
+      await fetchUsers();
     } catch (err: any) {
       setFormError(err.message || "Something went wrong");
     } finally {
@@ -233,9 +264,10 @@ export function UserManagementTab() {
 
       setShowDeleteModal(false);
       setSelectedUser(null);
-      fetchUsers();
+      showToast("User account deleted successfully.", "success");
+      await fetchUsers();
     } catch (err: any) {
-      alert(err.message || "Failed to delete user");
+      showToast(err.message || "Failed to delete user", "error");
     } finally {
       setIsSubmitting(false);
     }
@@ -277,6 +309,8 @@ export function UserManagementTab() {
                 role: "Employee",
                 status: "Active",
                 department: "General",
+                employmentType: "Permanent",
+                salary: "",
                 newPassword: "",
               });
               setFormError("");
@@ -291,57 +325,71 @@ export function UserManagementTab() {
       </div>
 
       {/* Quick Stats Grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <Card className="bg-card/50 border-border">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5">
+        <Card className="bg-card/50 border-border shadow-xs">
           <CardContent className="p-4 flex items-center justify-between">
             <div>
               <p className="text-xs text-muted-foreground font-medium">Total Accounts</p>
               <p className="text-2xl font-bold text-foreground mt-1">{users.length}</p>
             </div>
-            <div className="p-3 bg-blue-500/10 rounded-xl border border-blue-500/20 text-blue-500">
-              <i className="fa-solid fa-users text-lg" />
+            <div className="p-2.5 bg-blue-500/10 rounded-xl border border-blue-500/20 text-blue-500">
+              <i className="fa-solid fa-users text-base" />
             </div>
           </CardContent>
         </Card>
 
-        <Card className="bg-card/50 border-border">
+        <Card className="bg-card/50 border-border shadow-xs">
           <CardContent className="p-4 flex items-center justify-between">
             <div>
-              <p className="text-xs text-muted-foreground font-medium">Admins & Managers</p>
-              <p className="text-2xl font-bold text-amber-500 mt-1">
-                {users.filter((u) => u.role === "Admin" || u.role === "Manager").length}
-              </p>
-            </div>
-            <div className="p-3 bg-amber-500/10 rounded-xl border border-amber-500/20 text-amber-500">
-              <i className="fa-solid fa-user-shield text-lg" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-card/50 border-border">
-          <CardContent className="p-4 flex items-center justify-between">
-            <div>
-              <p className="text-xs text-muted-foreground font-medium">Active Users</p>
+              <p className="text-xs text-muted-foreground font-medium">Active Members</p>
               <p className="text-2xl font-bold text-emerald-500 mt-1">
                 {users.filter((u) => u.status === "Active" || !u.status).length}
               </p>
             </div>
-            <div className="p-3 bg-emerald-500/10 rounded-xl border border-emerald-500/20 text-emerald-500">
-              <i className="fa-solid fa-user-check text-lg" />
+            <div className="p-2.5 bg-emerald-500/10 rounded-xl border border-emerald-500/20 text-emerald-500">
+              <i className="fa-solid fa-user-check text-base" />
             </div>
           </CardContent>
         </Card>
 
-        <Card className="bg-card/50 border-border">
+        <Card className="bg-card/50 border-border shadow-xs">
           <CardContent className="p-4 flex items-center justify-between">
             <div>
-              <p className="text-xs text-muted-foreground font-medium">Pending & Suspended</p>
+              <p className="text-xs text-muted-foreground font-medium">Admins &amp; Leads</p>
+              <p className="text-2xl font-bold text-amber-500 mt-1">
+                {users.filter((u) => u.role === "Admin" || u.role === "Manager" || u.role === "OPS").length}
+              </p>
+            </div>
+            <div className="p-2.5 bg-amber-500/10 rounded-xl border border-amber-500/20 text-amber-500">
+              <i className="fa-solid fa-user-shield text-base" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-card/50 border-border shadow-xs">
+          <CardContent className="p-4 flex items-center justify-between">
+            <div>
+              <p className="text-xs text-muted-foreground font-medium">Monthly Payroll</p>
+              <p className="text-xl font-mono font-bold text-emerald-600 dark:text-emerald-400 mt-1">
+                ₹{totalPayroll.toLocaleString()}
+              </p>
+            </div>
+            <div className="p-2.5 bg-emerald-500/10 rounded-xl border border-emerald-500/20 text-emerald-500">
+              <i className="fa-solid fa-money-bill-trend-up text-base" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-card/50 border-border shadow-xs col-span-2 sm:col-span-1">
+          <CardContent className="p-4 flex items-center justify-between">
+            <div>
+              <p className="text-xs text-muted-foreground font-medium">Action Req. / Inactive</p>
               <p className="text-2xl font-bold text-rose-500 mt-1">
                 {users.filter((u) => u.status === "Pending" || u.status === "Suspended").length}
               </p>
             </div>
-            <div className="p-3 bg-rose-500/10 rounded-xl border border-rose-500/20 text-rose-500">
-              <i className="fa-solid fa-user-clock text-lg" />
+            <div className="p-2.5 bg-rose-500/10 rounded-xl border border-rose-500/20 text-rose-500">
+              <i className="fa-solid fa-user-clock text-base" />
             </div>
           </CardContent>
         </Card>
@@ -428,16 +476,17 @@ export function UserManagementTab() {
             <thead className="bg-muted/50 text-muted-foreground font-medium border-b border-border text-xs uppercase tracking-wider">
               <tr>
                 <th className="px-6 py-4">User</th>
-                <th className="px-6 py-4">Role</th>
+                <th className="px-6 py-4">Role &amp; Type</th>
                 <th className="px-6 py-4">Status</th>
                 <th className="px-6 py-4">Department</th>
+                <th className="px-6 py-4">Base Salary</th>
                 <th className="px-6 py-4 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border/60">
               {paginatedUsers.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-6 py-12 text-center text-muted-foreground">
+                  <td colSpan={6} className="px-6 py-12 text-center text-muted-foreground">
                     <i className="fa-solid fa-user-slash text-3xl mb-3 text-muted-foreground/60 block" />
                     No users matching your criteria were found.
                   </td>
@@ -474,30 +523,36 @@ export function UserManagementTab() {
                       </td>
 
                       <td className="px-6 py-4">
-                        <Badge
-                          className={cn(
-                            "font-medium border text-xs px-2.5 py-0.5",
-                            u.role === "Admin" && "bg-amber-500/10 text-amber-500 border-amber-500/20",
-                            u.role === "OPS" && "bg-emerald-500/10 text-emerald-500 border-emerald-500/20",
-                            u.role === "Manager" && "bg-purple-500/10 text-purple-500 border-purple-500/20",
-                            u.role === "HR" && "bg-pink-500/10 text-pink-500 border-pink-500/20",
-                            u.role === "Employee" && "bg-blue-500/10 text-blue-500 border-blue-500/20",
-                            !["Admin", "OPS", "Manager", "HR", "Employee"].includes(u.role) && "bg-indigo-500/10 text-indigo-500 border-indigo-500/20"
-                          )}
-                        >
-                          <i
+                        <div className="space-y-1">
+                          <Badge
                             className={cn(
-                              "mr-1.5 text-[10px]",
-                              u.role === "Admin" && "fa-solid fa-user-shield",
-                              u.role === "OPS" && "fa-solid fa-user-ninja",
-                              u.role === "Manager" && "fa-solid fa-user-gear",
-                              u.role === "HR" && "fa-solid fa-user-group",
-                              u.role === "Employee" && "fa-solid fa-user",
-                              !["Admin", "OPS", "Manager", "HR", "Employee"].includes(u.role) && "fa-solid fa-user-tag"
+                              "font-medium border text-xs px-2.5 py-0.5",
+                              u.role === "Admin" && "bg-amber-500/10 text-amber-500 border-amber-500/20",
+                              u.role === "OPS" && "bg-emerald-500/10 text-emerald-500 border-emerald-500/20",
+                              u.role === "Manager" && "bg-purple-500/10 text-purple-500 border-purple-500/20",
+                              u.role === "HR" && "bg-pink-500/10 text-pink-500 border-pink-500/20",
+                              u.role === "Employee" && "bg-blue-500/10 text-blue-500 border-blue-500/20",
+                              !["Admin", "OPS", "Manager", "HR", "Employee"].includes(u.role) && "bg-indigo-500/10 text-indigo-500 border-indigo-500/20"
                             )}
-                          />
-                          {u.role === "OPS" ? "OPS (SubAdmin)" : u.role}
-                        </Badge>
+                          >
+                            <i
+                              className={cn(
+                                "mr-1.5 text-[10px]",
+                                u.role === "Admin" && "fa-solid fa-user-shield",
+                                u.role === "OPS" && "fa-solid fa-user-ninja",
+                                u.role === "Manager" && "fa-solid fa-user-gear",
+                                u.role === "HR" && "fa-solid fa-user-group",
+                                u.role === "Employee" && "fa-solid fa-user",
+                                !["Admin", "OPS", "Manager", "HR", "Employee"].includes(u.role) && "fa-solid fa-user-tag"
+                              )}
+                            />
+                            {u.role === "OPS" ? "OPS (SubAdmin)" : u.role}
+                          </Badge>
+                          <div className="text-[11px] text-muted-foreground flex items-center gap-1 font-medium">
+                            <i className="fa-solid fa-briefcase text-[9px] text-primary/70" />
+                            {u.employmentType || "Permanent"}
+                          </div>
+                        </div>
                       </td>
 
                       <td className="px-6 py-4">
@@ -529,8 +584,23 @@ export function UserManagementTab() {
                         </span>
                       </td>
 
-                      <td className="px-6 py-4 text-foreground">
+                      <td className="px-6 py-4 text-foreground font-medium">
                         {u.department || "General"}
+                      </td>
+
+                      <td className="px-6 py-4">
+                        {u.salary && Number(u.salary) > 0 ? (
+                          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 font-mono font-bold text-xs text-emerald-600 dark:text-emerald-400">
+                            <i className="fa-solid fa-indian-rupee-sign text-[10px]" />
+                            <span>{Number(u.salary).toLocaleString()}</span>
+                            <span className="text-[10px] font-normal text-muted-foreground">/mo</span>
+                          </div>
+                        ) : (
+                          <span className="text-[11px] text-muted-foreground/60 italic flex items-center gap-1">
+                            <i className="fa-solid fa-circle-minus text-[10px] text-muted-foreground/40" />
+                            Not configured
+                          </span>
+                        )}
                       </td>
 
                       <td className="px-6 py-4 text-right">
@@ -590,117 +660,240 @@ export function UserManagementTab() {
 
       {/* Edit User Modal */}
       {showEditModal && selectedUser && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm">
-          <div className="bg-card border border-border rounded-2xl max-w-md w-full p-6 space-y-6 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-border pb-4">
-              <h3 className="text-lg font-bold text-foreground flex items-center gap-2">
-                <i className="fa-solid fa-user-pen text-primary" /> Manage User: {selectedUser.name}
-              </h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in" onClick={() => setShowEditModal(false)}>
+          <div className="bg-card border border-border rounded-2xl max-w-xl w-full p-6 space-y-5 shadow-2xl animate-in zoom-in-95 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between border-b border-border/80 pb-4">
+              <div className="flex items-center gap-3">
+                <Avatar className="h-11 w-11 border border-border/80 shadow-xs">
+                  <AvatarImage src={selectedUser.photoUrl} alt={selectedUser.name} />
+                  <AvatarFallback className="bg-primary/10 text-primary font-bold">
+                    {selectedUser.name.split(" ").map((n) => n[0]).join("").toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
+                <div>
+                  <h3 className="text-base font-bold text-foreground flex items-center gap-2">
+                    Manage User: {selectedUser.name}
+                    <Badge variant="outline" className="text-[10px] py-0 px-2 bg-primary/5 text-primary border-primary/20">
+                      {formData.role}
+                    </Badge>
+                  </h3>
+                  <p className="text-xs text-muted-foreground font-mono">{selectedUser.email}</p>
+                </div>
+              </div>
               <button
+                type="button"
                 onClick={() => setShowEditModal(false)}
-                className="text-muted-foreground hover:text-foreground"
+                className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors cursor-pointer"
               >
-                <i className="fa-solid fa-xmark text-lg" />
+                <i className="fa-solid fa-xmark text-base" />
               </button>
             </div>
 
             {formError && (
-              <div className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-xl text-rose-500 text-sm flex items-center gap-2">
+              <div className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-xl text-rose-500 text-xs flex items-center gap-2">
                 <i className="fa-solid fa-triangle-exclamation" /> {formError}
               </div>
             )}
 
             <form onSubmit={handleEditSubmit} className="space-y-4">
-              <div>
-                <label className="text-xs text-muted-foreground font-medium block mb-1">Full Name</label>
-                <Input
-                  type="text"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  required
-                  className="bg-background border-input text-foreground"
-                />
-              </div>
-
-              <div>
-                <label className="text-xs text-muted-foreground font-medium block mb-1">Email Address</label>
-                <Input
-                  type="email"
-                  value={formData.email}
-                  disabled
-                  className="bg-muted/50 border-input text-muted-foreground cursor-not-allowed"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-xs text-muted-foreground font-medium block mb-1">System Role</label>
-                  <select
-                    value={formData.role}
-                    onChange={(e) => setFormData({ ...formData, role: e.target.value as any })}
-                    className="w-full bg-background border border-input text-foreground text-sm rounded-xl p-2.5 focus:border-primary focus:outline-none"
-                  >
-                    {availableRoles.map((r) => (
-                      <option key={r} value={r}>
-                        {r === "OPS" ? "OPS (SubAdmin)" : r}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="text-xs text-muted-foreground font-medium block mb-1">Account Status</label>
-                  <select
-                    value={formData.status}
-                    onChange={(e) => setFormData({ ...formData, status: e.target.value as any })}
-                    className="w-full bg-background border border-input text-foreground text-sm rounded-xl p-2.5 focus:border-primary focus:outline-none"
-                  >
-                    <option value="Active">Active</option>
-                    <option value="Pending">Pending</option>
-                    <option value="On Leave">On Leave</option>
-                    <option value="Suspended">Suspended</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="text-xs text-muted-foreground font-medium block mb-1">Department</label>
-                <Input
-                  type="text"
-                  value={formData.department}
-                  onChange={(e) => setFormData({ ...formData, department: e.target.value })}
-                  className="bg-background border-input text-foreground"
-                />
-              </div>
-
-              <div>
-                <label className="text-xs text-muted-foreground font-medium block mb-1">
-                  Reset Password (Optional)
+              {/* Personal Details */}
+              <div className="space-y-3 p-3.5 bg-muted/20 rounded-xl border border-border/60">
+                <label className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                  <i className="fa-solid fa-user-circle text-primary text-xs" /> Account Identity
                 </label>
-                <Input
-                  type="password"
-                  placeholder="Enter new password to override..."
-                  value={formData.newPassword}
-                  onChange={(e) => setFormData({ ...formData, newPassword: e.target.value })}
-                  className="bg-background border-input text-foreground placeholder:text-muted-foreground"
-                />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-xs text-muted-foreground font-medium block">Full Name</label>
+                    <Input
+                      type="text"
+                      value={formData.name}
+                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                      required
+                      className="bg-background border-input text-foreground text-xs h-9"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs text-muted-foreground font-medium block">Department</label>
+                    <Input
+                      type="text"
+                      value={formData.department}
+                      onChange={(e) => setFormData({ ...formData, department: e.target.value })}
+                      className="bg-background border-input text-foreground text-xs h-9"
+                    />
+                  </div>
+                </div>
               </div>
 
-              <div className="flex justify-end gap-3 pt-4 border-t border-border">
+              {/* Roles & Status */}
+              <div className="space-y-3 p-3.5 bg-muted/20 rounded-xl border border-border/60">
+                <label className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                  <i className="fa-solid fa-user-shield text-amber-500 text-xs" /> Role &amp; Access Status
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-xs text-muted-foreground font-medium block">System Role</label>
+                    <select
+                      value={formData.role}
+                      onChange={(e) => setFormData({ ...formData, role: e.target.value as any })}
+                      className="w-full bg-background border border-input text-foreground text-xs rounded-lg px-3 h-9 focus:border-primary focus:outline-none"
+                    >
+                      {availableRoles.map((r) => (
+                        <option key={r} value={r}>
+                          {r === "OPS" ? "OPS (SubAdmin)" : r}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs text-muted-foreground font-medium block">Account Status</label>
+                    <select
+                      value={formData.status}
+                      onChange={(e) => setFormData({ ...formData, status: e.target.value as any })}
+                      className="w-full bg-background border border-input text-foreground text-xs rounded-lg px-3 h-9 focus:border-primary focus:outline-none"
+                    >
+                      <option value="Active">Active</option>
+                      <option value="Pending">Pending</option>
+                      <option value="On Leave">On Leave</option>
+                      <option value="Suspended">Suspended</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Employment & Compensation */}
+              <div className="space-y-3 p-3.5 bg-emerald-500/5 dark:bg-emerald-950/20 rounded-xl border border-emerald-500/20">
+                <div className="flex items-center justify-between pb-1 border-b border-emerald-500/10">
+                  <label className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                    <i className="fa-solid fa-money-bill-wave text-emerald-500 text-xs" /> Employment &amp; Compensation
+                  </label>
+                  <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
+                    <i className="fa-solid fa-lock text-[9px]" /> Admin Defined
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-xs text-muted-foreground font-medium block">Employment Type</label>
+                    <select
+                      value={formData.employmentType}
+                      onChange={(e) => setFormData({ ...formData, employmentType: e.target.value })}
+                      className="w-full bg-background border border-input text-foreground text-xs rounded-lg px-3 h-9 focus:border-primary focus:outline-none"
+                    >
+                      <option value="Permanent">Full Time (Permanent)</option>
+                      <option value="Freelancer">Freelancer</option>
+                      <option value="Part-Time">Part-Time</option>
+                      <option value="Contractor">Contractor</option>
+                      <option value="Intern">Intern</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs text-muted-foreground font-medium block">
+                      Monthly Base Salary (₹)
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-mono font-bold text-muted-foreground pointer-events-none">
+                        ₹
+                      </span>
+                      <Input
+                        type="number"
+                        min="0"
+                        placeholder="50000"
+                        value={formData.salary}
+                        onChange={(e) => setFormData({ ...formData, salary: e.target.value })}
+                        className="bg-background border-input text-foreground font-mono font-bold text-xs h-9 pl-7"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Quick Salary Preset Buttons */}
+                <div className="space-y-1.5 pt-1">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="text-[10px] text-muted-foreground font-medium mr-1">Quick presets:</span>
+                    {[25000, 35000, 50000, 75000, 100000, 150000].map((preset) => (
+                      <button
+                        key={preset}
+                        type="button"
+                        onClick={() => setFormData({ ...formData, salary: preset })}
+                        className={cn(
+                          "text-[10px] px-2 py-0.5 rounded-md border font-mono transition-all cursor-pointer",
+                          Number(formData.salary) === preset
+                            ? "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border-emerald-500/40 font-bold shadow-xs"
+                            : "bg-background text-muted-foreground hover:text-foreground hover:bg-muted border-border"
+                        )}
+                      >
+                        ₹{preset >= 100000 ? `${preset / 100000}L` : `${preset / 1000}k`}
+                      </button>
+                    ))}
+                    {formData.salary !== "" && Number(formData.salary) > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setFormData({ ...formData, salary: "" })}
+                        className="text-[10px] px-1.5 py-0.5 text-rose-500 hover:text-rose-600 hover:bg-rose-500/10 rounded transition-colors cursor-pointer"
+                        title="Clear salary"
+                      >
+                        <i className="fa-solid fa-xmark text-[9px]" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Live Financial Projection Breakdown */}
+                {Number(formData.salary) > 0 && (
+                  <div className="p-2.5 bg-background/80 border border-emerald-500/20 rounded-xl grid grid-cols-3 gap-2 text-center animate-in fade-in">
+                    <div>
+                      <span className="text-[10px] text-muted-foreground block">Monthly Base</span>
+                      <span className="text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                        ₹{Number(formData.salary).toLocaleString()}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-muted-foreground block">Annual CTC</span>
+                      <span className="text-xs font-mono font-bold text-foreground">
+                        ₹{(Number(formData.salary) * 12).toLocaleString()}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-muted-foreground block">Est. Daily (26d)</span>
+                      <span className="text-xs font-mono font-bold text-muted-foreground">
+                        ~₹{Math.round(Number(formData.salary) / 26).toLocaleString()}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                <div className="p-2 bg-primary/5 border border-primary/10 rounded-lg flex items-start gap-2 text-[11px] text-muted-foreground">
+                  <i className="fa-solid fa-circle-info text-[10px] text-primary mt-0.5 shrink-0" />
+                  <span>
+                    The monthly base salary set here is locked for the user and automatically synchronizes with their self-service invoice generator and attendance salary claims.
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2.5 pt-3 border-t border-border">
                 <Button
                   type="button"
                   variant="outline"
+                  size="sm"
                   onClick={() => setShowEditModal(false)}
-                  className="border-border text-foreground hover:bg-muted"
+                  className="border-border text-foreground hover:bg-muted cursor-pointer"
                 >
                   Cancel
                 </Button>
                 <Button
                   type="submit"
+                  size="sm"
                   disabled={isSubmitting}
-                  className="bg-primary hover:bg-primary/90 text-primary-foreground font-medium"
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold cursor-pointer gap-2"
                 >
-                  {isSubmitting ? "Saving..." : "Save Changes"}
+                  {isSubmitting ? (
+                    <><i className="fa-solid fa-spinner fa-spin text-xs" /> Saving Changes...</>
+                  ) : (
+                    <><i className="fa-solid fa-check text-xs" /> Save Changes</>
+                  )}
                 </Button>
               </div>
             </form>
@@ -728,98 +921,223 @@ export function UserManagementTab() {
 
       {/* Create User Modal */}
       {showCreateModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm">
-          <div className="bg-card border border-border rounded-2xl max-w-md w-full p-6 space-y-6 shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-card border border-border rounded-2xl max-w-xl w-full p-6 space-y-5 shadow-2xl">
+            {/* Header */}
             <div className="flex items-center justify-between border-b border-border pb-4">
-              <h3 className="text-lg font-bold text-foreground flex items-center gap-2">
-                <i className="fa-solid fa-user-plus text-primary" /> Add New User
-              </h3>
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary">
+                  <i className="fa-solid fa-user-plus text-base" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-foreground">Add New Team Member</h3>
+                  <p className="text-xs text-muted-foreground">Configure profile, roles, and compensation structure</p>
+                </div>
+              </div>
               <button
+                type="button"
                 onClick={() => setShowCreateModal(false)}
-                className="text-muted-foreground hover:text-foreground"
+                className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
               >
-                <i className="fa-solid fa-xmark text-lg" />
+                <i className="fa-solid fa-xmark text-sm" />
               </button>
             </div>
 
             {formError && (
-              <div className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-xl text-rose-500 text-sm flex items-center gap-2">
+              <div className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-xl text-rose-500 text-xs flex items-center gap-2">
                 <i className="fa-solid fa-triangle-exclamation" /> {formError}
               </div>
             )}
 
             <form onSubmit={handleCreateSubmit} className="space-y-4">
-              <div>
-                <label className="text-xs text-muted-foreground font-medium block mb-1">Full Name</label>
-                <Input
-                  type="text"
-                  placeholder="e.g. John Doe"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  required
-                  className="bg-background border-input text-foreground"
-                />
+              {/* Account Information */}
+              <div className="space-y-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs text-muted-foreground font-medium block mb-1">Full Name</label>
+                    <Input
+                      type="text"
+                      placeholder="e.g. Rahul Sharma"
+                      value={formData.name}
+                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                      required
+                      className="bg-background border-input text-foreground text-xs h-9"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground font-medium block mb-1">Email Address</label>
+                    <Input
+                      type="email"
+                      placeholder="rahul@nexace.com"
+                      value={formData.email}
+                      onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                      required
+                      className="bg-background border-input text-foreground text-xs h-9"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs text-muted-foreground font-medium block mb-1">System Role</label>
+                    <select
+                      value={formData.role}
+                      onChange={(e) => setFormData({ ...formData, role: e.target.value as any })}
+                      className="w-full bg-background border border-input text-foreground text-xs rounded-lg px-2.5 h-9 focus:border-primary focus:outline-none cursor-pointer"
+                    >
+                      {availableRoles.map((r) => (
+                        <option key={r} value={r}>
+                          {r === "OPS" ? "OPS (SubAdmin)" : r}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground font-medium block mb-1">Department</label>
+                    <Input
+                      type="text"
+                      placeholder="Engineering / Sales / Support"
+                      value={formData.department}
+                      onChange={(e) => setFormData({ ...formData, department: e.target.value })}
+                      className="bg-background border-input text-foreground text-xs h-9"
+                    />
+                  </div>
+                </div>
               </div>
 
-              <div>
-                <label className="text-xs text-muted-foreground font-medium block mb-1">Email Address</label>
-                <Input
-                  type="email"
-                  placeholder="e.g. john@company.com"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  required
-                  className="bg-background border-input text-foreground"
-                />
-              </div>
+              {/* Compensation & Employment Structure */}
+              <div className="p-3.5 bg-muted/40 border border-border/80 rounded-xl space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 text-xs font-semibold text-foreground">
+                    <i className="fa-solid fa-indian-rupee-sign text-emerald-500" />
+                    <span>Compensation & Employment Structure</span>
+                  </div>
+                  <span className="text-[10px] text-muted-foreground bg-background px-2 py-0.5 rounded border border-border">
+                    Admin Controlled
+                  </span>
+                </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-xs text-muted-foreground font-medium block mb-1">System Role</label>
-                  <select
-                    value={formData.role}
-                    onChange={(e) => setFormData({ ...formData, role: e.target.value as any })}
-                    className="w-full bg-background border border-input text-foreground text-sm rounded-xl p-2.5 focus:border-primary focus:outline-none"
-                  >
-                    {availableRoles.map((r) => (
-                      <option key={r} value={r}>
-                        {r === "OPS" ? "OPS (SubAdmin)" : r}
-                      </option>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs text-muted-foreground font-medium block mb-1">Employment Type</label>
+                    <select
+                      value={formData.employmentType}
+                      onChange={(e) => setFormData({ ...formData, employmentType: e.target.value })}
+                      className="w-full bg-background border border-input text-foreground text-xs rounded-lg px-2.5 h-9 focus:border-primary focus:outline-none cursor-pointer"
+                    >
+                      <option value="Permanent">Full Time (Permanent)</option>
+                      <option value="Freelancer">Freelancer</option>
+                      <option value="Part-Time">Part-Time</option>
+                      <option value="Contractor">Contractor</option>
+                      <option value="Intern">Intern</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="text-xs text-muted-foreground font-medium block mb-1">
+                      Monthly Base Salary (₹)
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-muted-foreground">
+                        ₹
+                      </span>
+                      <Input
+                        type="number"
+                        min="0"
+                        placeholder="50000"
+                        value={formData.salary}
+                        onChange={(e) => setFormData({ ...formData, salary: e.target.value })}
+                        className="bg-background border-input text-foreground font-mono font-bold text-xs h-9 pl-7"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Quick Salary Preset Buttons */}
+                <div className="space-y-1.5 pt-1">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="text-[10px] text-muted-foreground font-medium mr-1">Quick presets:</span>
+                    {[25000, 35000, 50000, 75000, 100000, 150000].map((preset) => (
+                      <button
+                        key={preset}
+                        type="button"
+                        onClick={() => setFormData({ ...formData, salary: preset })}
+                        className={cn(
+                          "text-[10px] px-2 py-0.5 rounded-md border font-mono transition-all cursor-pointer",
+                          Number(formData.salary) === preset
+                            ? "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border-emerald-500/40 font-bold shadow-xs"
+                            : "bg-background text-muted-foreground hover:text-foreground hover:bg-muted border-border"
+                        )}
+                      >
+                        ₹{preset >= 100000 ? `${preset / 100000}L` : `${preset / 1000}k`}
+                      </button>
                     ))}
-                  </select>
+                    {formData.salary !== "" && Number(formData.salary) > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setFormData({ ...formData, salary: "" })}
+                        className="text-[10px] px-1.5 py-0.5 text-rose-500 hover:text-rose-600 hover:bg-rose-500/10 rounded transition-colors cursor-pointer"
+                        title="Clear salary"
+                      >
+                        <i className="fa-solid fa-xmark text-[9px]" />
+                      </button>
+                    )}
+                  </div>
                 </div>
 
-                <div>
-                  <label className="text-xs text-muted-foreground font-medium block mb-1">Department</label>
-                  <Input
-                    type="text"
-                    placeholder="Engineering"
-                    value={formData.department}
-                    onChange={(e) => setFormData({ ...formData, department: e.target.value })}
-                    className="bg-background border-input text-foreground"
-                  />
+                {/* Live Financial Projection Breakdown */}
+                {Number(formData.salary) > 0 && (
+                  <div className="p-2.5 bg-background/80 border border-emerald-500/20 rounded-xl grid grid-cols-3 gap-2 text-center animate-in fade-in">
+                    <div>
+                      <span className="text-[10px] text-muted-foreground block">Monthly Base</span>
+                      <span className="text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                        ₹{Number(formData.salary).toLocaleString()}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-muted-foreground block">Annual CTC</span>
+                      <span className="text-xs font-mono font-bold text-foreground">
+                        ₹{(Number(formData.salary) * 12).toLocaleString()}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-muted-foreground block">Est. Daily (26d)</span>
+                      <span className="text-xs font-mono font-bold text-muted-foreground">
+                        ~₹{Math.round(Number(formData.salary) / 26).toLocaleString()}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                <div className="p-2 bg-primary/5 border border-primary/10 rounded-lg flex items-start gap-2 text-[11px] text-muted-foreground">
+                  <i className="fa-solid fa-circle-info text-[10px] text-primary mt-0.5 shrink-0" />
+                  <span>
+                    A strong temporary password will be automatically generated upon creation. The employee must set their own password on first login.
+                  </span>
                 </div>
               </div>
 
-              <p className="text-xs text-muted-foreground italic">
-                * A strong, random temporary password is generated and shown after creation. The user must reset it on first login.
-              </p>
-
-              <div className="flex justify-end gap-3 pt-4 border-t border-border">
+              <div className="flex justify-end gap-2.5 pt-3 border-t border-border">
                 <Button
                   type="button"
                   variant="outline"
+                  size="sm"
                   onClick={() => setShowCreateModal(false)}
-                  className="border-border text-foreground hover:bg-muted"
+                  className="border-border text-foreground hover:bg-muted cursor-pointer"
                 >
                   Cancel
                 </Button>
                 <Button
                   type="submit"
+                  size="sm"
                   disabled={isSubmitting}
-                  className="bg-primary hover:bg-primary/90 text-primary-foreground font-medium"
+                  className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold cursor-pointer gap-2"
                 >
-                  {isSubmitting ? "Creating..." : "Create User"}
+                  {isSubmitting ? (
+                    <><i className="fa-solid fa-spinner fa-spin text-xs" /> Creating User...</>
+                  ) : (
+                    <><i className="fa-solid fa-user-plus text-xs" /> Create Team Member</>
+                  )}
                 </Button>
               </div>
             </form>
@@ -829,7 +1147,7 @@ export function UserManagementTab() {
 
       {/* Delete Confirmation Modal */}
       {showDeleteModal && selectedUser && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm animate-in fade-in">
           <div className="bg-card border border-border rounded-2xl max-w-md w-full p-6 space-y-6 shadow-2xl">
             <div className="flex items-center gap-3 text-rose-500">
               <div className="p-3 bg-rose-500/10 rounded-xl border border-rose-500/20">
@@ -849,19 +1167,41 @@ export function UserManagementTab() {
               <Button
                 variant="outline"
                 onClick={() => setShowDeleteModal(false)}
-                className="border-border text-foreground hover:bg-muted"
+                className="border-border text-foreground hover:bg-muted cursor-pointer"
               >
                 Cancel
               </Button>
               <Button
                 onClick={handleDeleteUser}
                 disabled={isSubmitting}
-                className="bg-rose-600 hover:bg-rose-700 text-white font-medium"
+                className="bg-rose-600 hover:bg-rose-700 text-white font-medium cursor-pointer"
               >
                 {isSubmitting ? "Deleting..." : "Delete User"}
               </Button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Floating Toast Notification */}
+      {toast && (
+        <div
+          className={cn(
+            "fixed bottom-6 right-6 z-50 flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-2xl border text-xs font-semibold backdrop-blur-md animate-in fade-in slide-in-from-bottom-2 transition-all",
+            toast.type === "success"
+              ? "bg-emerald-950/95 text-emerald-300 border-emerald-500/40 shadow-emerald-950/50"
+              : "bg-rose-950/95 text-rose-300 border-rose-500/40 shadow-rose-950/50"
+          )}
+        >
+          <i
+            className={cn(
+              "text-sm",
+              toast.type === "success"
+                ? "fa-solid fa-circle-check text-emerald-400"
+                : "fa-solid fa-triangle-exclamation text-rose-400"
+            )}
+          />
+          <span>{toast.message}</span>
         </div>
       )}
     </div>

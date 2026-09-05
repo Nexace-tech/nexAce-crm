@@ -131,7 +131,7 @@ export async function GET(request: Request) {
 
     return NextResponse.json({ users: usersWithAttendance }, {
       headers: {
-        "Cache-Control": "private, max-age=10, stale-while-revalidate=30"
+        "Cache-Control": "no-store, max-age=0, must-revalidate"
       }
     });
   } catch (error: unknown) {
@@ -230,6 +230,8 @@ export async function POST(request: Request) {
           bio: item.bio || "",
           phone: item.phone || "",
           photoUrl: item.photoUrl || "",
+          employmentType: item.employmentType || "Permanent",
+          salary: Number(item.salary) || 0,
           status: "Active",
           forcePasswordReset: true,
         });
@@ -275,7 +277,7 @@ export async function POST(request: Request) {
     }
 
     // Single member insert payload
-    const { name, email, role, department, departments, managerId, skills, bio, phone, photoUrl } = body;
+    const { name, email, role, department, departments, managerId, skills, bio, phone, photoUrl, employmentType, salary } = body;
 
     if (!name || !email) {
       return NextResponse.json({ error: "Name and email are required fields" }, { status: 400 });
@@ -323,6 +325,8 @@ export async function POST(request: Request) {
       bio: bio || "",
       phone: phone || "",
       photoUrl: photoUrl || "",
+      employmentType: employmentType || "Permanent",
+      salary: Number(salary) || 0,
       status: "Active",
       forcePasswordReset: true,
     });

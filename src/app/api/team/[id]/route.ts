@@ -215,6 +215,13 @@ export async function PUT(request: Request, { params }: RouteParams) {
       }
       if (body.shiftTime !== undefined) user.shiftTime = body.shiftTime;
       if (body.shiftName !== undefined) user.shiftName = body.shiftName;
+      if (body.employmentType !== undefined) user.employmentType = body.employmentType;
+      if (body.salary !== undefined) {
+        const salNum = Number(body.salary) || 0;
+        user.salary = salNum;
+        user.set("salary", salNum);
+        user.markModified("salary");
+      }
     }
 
     // Personal profile meta updates (Allowed for Self and Permitted editors)
@@ -237,6 +244,14 @@ export async function PUT(request: Request, { params }: RouteParams) {
 
     await user.save();
 
+    // Explicit direct MongoDB update to guarantee salary & employmentType are saved even if Mongoose model schema was cached
+    if (canEditOthers && (body.salary !== undefined || body.employmentType !== undefined)) {
+      const directUpdate: any = {};
+      if (body.salary !== undefined) directUpdate.salary = Number(body.salary) || 0;
+      if (body.employmentType !== undefined) directUpdate.employmentType = body.employmentType;
+      await User.updateOne({ _id: user._id }, { $set: directUpdate });
+    }
+
     // If user edited their own profile critical credentials, clean up old session and re-mint cookie
     if (isSelf && (body.name || body.email || body.role)) {
       try {
@@ -254,9 +269,9 @@ export async function PUT(request: Request, { params }: RouteParams) {
       }
     }
 
-    // Never return the password hash to the client
-    const { passwordHash: _ph, ...safeUser } = user.toObject();
-    return NextResponse.json({ success: true, user: safeUser });
+    // Never return the password hash to the client - fetch fresh document to ensure all fields like salary are returned
+    const freshUser = await User.findById(user._id).select("-passwordHash").lean();
+    return NextResponse.json({ success: true, user: freshUser || user.toObject() });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Internal Server Error";
     console.error("API PUT Single Team error:", error);

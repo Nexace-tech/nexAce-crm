@@ -20,6 +20,7 @@ export interface IUser extends Document {
   shiftTime?: string;
   shiftName?: string;
   employmentType?: string;
+  salary?: number;
   socialLinks?: {
     linkedin?: string;
     twitter?: string;
@@ -53,6 +54,7 @@ const UserSchema: Schema = new Schema({
   shiftTime: { type: String, default: "09:00 AM - 05:00 PM" },
   shiftName: { type: String, default: "Standard Day Shift" },
   employmentType: { type: String, default: "Permanent", trim: true },
+  salary: { type: Number, default: 0 },
   socialLinks: {
     linkedin: { type: String, default: "" },
     twitter: { type: String, default: "" },
@@ -71,5 +73,10 @@ const UserSchema: Schema = new Schema({
 UserSchema.index({ email: 1, tenantId: 1 }, { unique: true });
 // Compound index for tenant user listing & role filtering
 UserSchema.index({ tenantId: 1, role: 1 });
+
+// Force invalidate in-memory Mongoose model cache if schema updated
+if (mongoose.models.User && !mongoose.models.User.schema.path("salary")) {
+  delete (mongoose.models as any).User;
+}
 
 export const User: Model<IUser> = mongoose.models.User || mongoose.model<IUser>("User", UserSchema);

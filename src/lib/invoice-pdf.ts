@@ -267,9 +267,12 @@ export function generateInvoicePdfDoc(invoice: InvoicePdfData): jsPDF {
   const tableData = invoice.items.map((item, idx) => [
     (idx + 1).toString(),
     item.description,
-    item.quantity.toString(),
-    `${currencySymbol}${item.unitPrice.toLocaleString()}`,
-    `${currencySymbol}${item.amount.toLocaleString()}`,
+    item.unitPrice < 0
+      ? `-${currencySymbol}${Math.abs(item.unitPrice).toLocaleString()}`
+      : `${currencySymbol}${item.unitPrice.toLocaleString()}`,
+    item.amount < 0
+      ? `-${currencySymbol}${Math.abs(item.amount).toLocaleString()}`
+      : `${currencySymbol}${item.amount.toLocaleString()}`,
   ]);
 
   autoTable(doc, {

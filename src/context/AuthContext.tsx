@@ -18,6 +18,7 @@ interface UserProfile {
   shiftName?: string;
   shiftTime?: string;
   employmentType?: string;
+  salary?: number;
   workplace?: string;
   location?: string;
   status?: string;

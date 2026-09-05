@@ -51,6 +51,34 @@ const generateDeptCode = (name: string): string => {
   }
 };
 
+const formatEmploymentType = (type?: string): string => {
+  if (!type) return "Full Time";
+  const lower = type.toLowerCase().trim();
+  if (lower === "permanent" || lower === "full-time" || lower === "full time") return "Full Time";
+  if (lower === "freelancer" || lower === "freelance") return "Freelancer";
+  if (lower === "part-time" || lower === "part time") return "Part-Time";
+  if (lower === "contractor" || lower === "contract") return "Contractor";
+  if (lower === "intern" || lower === "internship") return "Intern";
+  return type;
+};
+
+const getEmploymentTypeStyle = (type?: string): string => {
+  const lower = (type || "").toLowerCase().trim();
+  if (lower.includes("free")) {
+    return "bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/30";
+  }
+  if (lower.includes("part")) {
+    return "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30";
+  }
+  if (lower.includes("intern")) {
+    return "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30";
+  }
+  if (lower.includes("contract")) {
+    return "bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border-cyan-500/30";
+  }
+  return "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30";
+};
+
 export default function TeamDashboardPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -58,6 +86,10 @@ export default function TeamDashboardPage() {
   const { canAccessModule, loading: permLoading } = usePermissions();
   const [users, setUsers] = useState<any[]>([]);
   const [departmentsList, setDepartmentsList] = useState<IDepartmentItem[]>([]);
+  const [editEmploymentType, setEditEmploymentType] = useState("Permanent");
+  const [addEmploymentType, setAddEmploymentType] = useState("Permanent");
+  const [editSalary, setEditSalary] = useState("0");
+  const [addSalary, setAddSalary] = useState("0");
   const [loading, setLoading] = useState(true);
   const [deptLoading, setDeptLoading] = useState(false);
   const [mounted, setMounted] = useState(false);
@@ -213,7 +245,9 @@ export default function TeamDashboardPage() {
   const fetchTeam = async () => {
     setLoading(true);
     try {
-      const response = await fetch(`/api/team?department=${departmentFilter}&search=${searchQuery}`);
+      const response = await fetch(`/api/team?department=${departmentFilter}&search=${searchQuery}&_t=${Date.now()}`, {
+        cache: "no-store"
+      });
       if (response.ok) {
         const data = await response.json();
         setUsers(data.users || []);
@@ -440,6 +474,8 @@ export default function TeamDashboardPage() {
         updateData.department = editDepts[0] || "General";
         updateData.role = editRole;
         updateData.managerId = editManagerId || null;
+        updateData.employmentType = editEmploymentType;
+        updateData.salary = Number(editSalary) || 0;
       }
 
       const response = await fetch(`/api/team/${selectedMember._id}`, {
@@ -563,6 +599,8 @@ export default function TeamDashboardPage() {
           department: addDepts[0] || "General",
           managerId: addManagerId || undefined,
           skills: skillsArray,
+          employmentType: addEmploymentType,
+          salary: Number(addSalary) || 0,
         }),
       });
 
@@ -576,6 +614,8 @@ export default function TeamDashboardPage() {
         setAddEmail("");
         setAddSkills("");
         setAddManagerId("");
+        setAddEmploymentType("Permanent");
+        setAddSalary("0");
          await fetchTeam();
          if (!data.tempPassword) {
            setTimeout(() => {
@@ -685,6 +725,8 @@ export default function TeamDashboardPage() {
         : [member.department || "Engineering"];
       setEditDepts(userDepts);
       setEditRole(member.role || "Employee");
+      setEditEmploymentType(member.employmentType || "Permanent");
+      setEditSalary(member.salary !== undefined ? String(member.salary) : "0");
       const mgrId = member.managerId?._id
         ? String(member.managerId._id)
         : member.managerId
@@ -1106,7 +1148,21 @@ export default function TeamDashboardPage() {
                             <h3 className="font-semibold text-sm text-foreground truncate group-hover:text-primary transition-colors">
                               {member.name}
                             </h3>
-                            <p className="text-xs text-muted-foreground truncate">{member.role}</p>
+                            <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+                              <p className="text-xs text-muted-foreground truncate">{member.role}</p>
+                              {isAdmin && (
+                                <span
+                                  className={cn(
+                                    "inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold border",
+                                    getEmploymentTypeStyle(member.employmentType)
+                                  )}
+                                  title={`Employment Type: ${formatEmploymentType(member.employmentType)}`}
+                                >
+                                  <i className="fa-solid fa-briefcase text-[8px] mr-1" />
+                                  {formatEmploymentType(member.employmentType)}
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </div>
 
@@ -1249,6 +1305,7 @@ export default function TeamDashboardPage() {
                       <th className="p-4 font-semibold">Employee</th>
                       <th className="p-4 font-semibold">Departments</th>
                       <th className="p-4 font-semibold">Role</th>
+                      {isAdmin && <th className="p-4 font-semibold">Type</th>}
                       <th className="p-4 font-semibold">Social Profiles</th>
                       <th className="p-4 font-semibold">Reporting Line</th>
                       <th className="p-4 font-semibold">Status</th>
@@ -1309,6 +1366,19 @@ export default function TeamDashboardPage() {
                             </div>
                           </td>
                           <td className="p-4 text-muted-foreground">{member.role}</td>
+                          {isAdmin && (
+                            <td className="p-4">
+                              <span
+                                className={cn(
+                                  "inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border",
+                                  getEmploymentTypeStyle(member.employmentType)
+                                )}
+                              >
+                                <i className="fa-solid fa-briefcase text-[10px] mr-1" />
+                                {formatEmploymentType(member.employmentType)}
+                              </span>
+                            </td>
+                          )}
                           <td className="p-4" onClick={(e) => e.stopPropagation()}>
                             {member.socialLinks && (member.socialLinks.linkedin || member.socialLinks.twitter || member.socialLinks.github || member.socialLinks.website || member.socialLinks.instagram || member.socialLinks.facebook) ? (
                               <div className="flex items-center gap-1.5">
@@ -1919,8 +1989,8 @@ export default function TeamDashboardPage() {
               </button>
             </div>
 
-            {/* Read-only profile info: join date, status, reporting line */}
-            <div className="grid grid-cols-3 gap-3 p-3.5 rounded-xl bg-muted/40 border border-border text-xs">
+            {/* Read-only profile info: join date, status, reporting line, employment type */}
+            <div className={cn("grid gap-3 p-3.5 rounded-xl bg-muted/40 border border-border text-xs", isAdmin ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-3")}>
               <div className="space-y-0.5">
                 <p className="text-muted-foreground font-medium">Status</p>
                 <Badge
@@ -1931,6 +2001,20 @@ export default function TeamDashboardPage() {
                   {selectedMember.status || "Active"}
                 </Badge>
               </div>
+              {isAdmin && (
+                <div className="space-y-0.5">
+                  <p className="text-muted-foreground font-medium">Employee Type</p>
+                  <span
+                    className={cn(
+                      "inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold border",
+                      getEmploymentTypeStyle(selectedMember.employmentType)
+                    )}
+                  >
+                    <i className="fa-solid fa-briefcase text-[10px] mr-1" />
+                    {formatEmploymentType(selectedMember.employmentType)}
+                  </span>
+                </div>
+              )}
               <div className="space-y-0.5">
                 <p className="text-muted-foreground font-medium">Join Date</p>
                 <p className="font-semibold text-foreground">
@@ -1953,6 +2037,18 @@ export default function TeamDashboardPage() {
                   })()}
                 </p>
               </div>
+              {isAdmin && (
+                <div className="space-y-0.5">
+                  <p className="text-muted-foreground font-medium flex items-center gap-1">
+                    <i className="fa-solid fa-lock text-[10px] text-emerald-500" /> Base Salary
+                  </p>
+                  <p className="font-semibold text-foreground font-mono">
+                    {selectedMember.salary && selectedMember.salary > 0
+                      ? `₹${Number(selectedMember.salary).toLocaleString()}/mo`
+                      : "Not Configured (₹0)"}
+                  </p>
+                </div>
+              )}
             </div>
 
             <form onSubmit={handleUpdateProfile} className="space-y-4">
@@ -1983,6 +2079,38 @@ export default function TeamDashboardPage() {
                       <option value="OPS">OPS (SubAdmin)</option>
                       <option value="Admin">Admin</option>
                     </select>
+                  </div>
+                )}
+                {isAdmin && (
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-foreground">Employee Type</label>
+                    <select
+                      value={editEmploymentType}
+                      onChange={(e) => setEditEmploymentType(e.target.value)}
+                      className="w-full h-9 px-3 text-sm bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                    >
+                      <option value="Permanent">Full Time (Permanent)</option>
+                      <option value="Freelancer">Freelancer</option>
+                      <option value="Part-Time">Part-Time</option>
+                      <option value="Contractor">Contractor</option>
+                      <option value="Intern">Intern</option>
+                    </select>
+                  </div>
+                )}
+                {isAdmin && (
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-foreground flex items-center justify-between">
+                      <span>Monthly Base Salary</span>
+                      <span className="text-[10px] text-emerald-500 font-bold">Fixed / Permanent</span>
+                    </label>
+                    <Input
+                      type="number"
+                      min="0"
+                      placeholder="e.g. 50000"
+                      value={editSalary}
+                      onChange={(e) => setEditSalary(e.target.value)}
+                      className="h-9 text-sm"
+                    />
                   </div>
                 )}
                 {isAdmin && (
@@ -2152,6 +2280,36 @@ export default function TeamDashboardPage() {
               <div className="space-y-1">
                 <label className="text-xs font-semibold text-foreground">Skills (comma-separated)</label>
                 <Input value={addSkills} onChange={(e) => setAddSkills(e.target.value)} placeholder="React, Python, Design" />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-foreground">Employment Type</label>
+                <select
+                  value={addEmploymentType}
+                  onChange={(e) => setAddEmploymentType(e.target.value)}
+                  className="w-full h-9 px-3 text-sm bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                >
+                  <option value="Permanent">Full Time (Permanent)</option>
+                  <option value="Freelancer">Freelancer</option>
+                  <option value="Part-Time">Part-Time</option>
+                  <option value="Contractor">Contractor</option>
+                  <option value="Intern">Intern</option>
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-foreground flex items-center justify-between">
+                  <span>Monthly Base Salary</span>
+                  <span className="text-[10px] text-emerald-500 font-bold">Fixed / Permanent</span>
+                </label>
+                <Input
+                  type="number"
+                  min="0"
+                  placeholder="e.g. 50000"
+                  value={addSalary}
+                  onChange={(e) => setAddSalary(e.target.value)}
+                  className="h-9 text-sm"
+                />
               </div>
 
               <div className="flex justify-end gap-2 pt-3 border-t border-border">
