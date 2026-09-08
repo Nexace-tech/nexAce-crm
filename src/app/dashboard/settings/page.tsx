@@ -80,6 +80,11 @@ function SettingsPageContent() {
   const [instagram, setInstagram] = useState("");
   const [facebook, setFacebook] = useState("");
 
+  const [bankName, setBankName] = useState("");
+  const [accountNo, setAccountNo] = useState("");
+  const [ifscCode, setIfscCode] = useState("");
+  const [upiId, setUpiId] = useState("");
+
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -165,6 +170,10 @@ function SettingsPageContent() {
       setWebsite(user.socialLinks?.website || "");
       setInstagram(user.socialLinks?.instagram || "");
       setFacebook(user.socialLinks?.facebook || "");
+      setBankName(user.bankDetails?.bankName || "");
+      setAccountNo(user.bankDetails?.accountNo || "");
+      setIfscCode(user.bankDetails?.ifscCode || "");
+      setUpiId(user.bankDetails?.upiId || "");
     }
   }, [user]);
 
@@ -575,6 +584,12 @@ function SettingsPageContent() {
       bio,
       skills: skillsArray,
       socialLinks: { linkedin, twitter, github, website, instagram, facebook },
+      bankDetails: {
+        bankName: bankName.trim(),
+        accountNo: accountNo.trim(),
+        ifscCode: ifscCode.trim().toUpperCase(),
+        upiId: upiId.trim(),
+      },
       code: ""
     };
 
@@ -617,6 +632,12 @@ function SettingsPageContent() {
       bio,
       skills: skillsArray,
       socialLinks: { linkedin, twitter, github, website, instagram, facebook },
+      bankDetails: {
+        bankName: bankName.trim(),
+        accountNo: accountNo.trim(),
+        ifscCode: ifscCode.trim().toUpperCase(),
+        upiId: upiId.trim(),
+      },
       code: ""
     };
     const emailChanged = email.toLowerCase() !== (user.email || "").toLowerCase();
@@ -1725,6 +1746,55 @@ function SettingsPageContent() {
                       value={facebook}
                       onChange={(e) => setFacebook(e.target.value)}
                       placeholder="https://facebook.com/username"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Salary Disbursement & Bank Details */}
+              <div className="pt-4 border-t border-border space-y-3">
+                <div>
+                  <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                    <i className="fa-solid fa-building-columns text-emerald-500" /> Salary Disbursement &amp; Bank Details
+                  </h4>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Your personal banking details used for salary credit, monthly disbursements, and self-service invoices.
+                  </p>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-foreground">Bank Name</label>
+                    <Input
+                      value={bankName}
+                      onChange={(e) => setBankName(e.target.value)}
+                      placeholder="e.g. HDFC Bank, State Bank of India"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-foreground">Account Number</label>
+                    <Input
+                      value={accountNo}
+                      onChange={(e) => setAccountNo(e.target.value)}
+                      placeholder="e.g. 501002345678"
+                      className="font-mono"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-foreground">IFSC / Routing Code</label>
+                    <Input
+                      value={ifscCode}
+                      onChange={(e) => setIfscCode(e.target.value.toUpperCase())}
+                      placeholder="e.g. HDFC0001234"
+                      className="font-mono uppercase"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-foreground">UPI ID (Optional)</label>
+                    <Input
+                      value={upiId}
+                      onChange={(e) => setUpiId(e.target.value)}
+                      placeholder="e.g. username@okhdfcbank"
+                      className="font-mono"
                     />
                   </div>
                 </div>

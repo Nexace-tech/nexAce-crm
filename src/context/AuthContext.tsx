@@ -19,6 +19,12 @@ interface UserProfile {
   shiftTime?: string;
   employmentType?: string;
   salary?: number;
+  bankDetails?: {
+    bankName?: string;
+    accountNo?: string;
+    ifscCode?: string;
+    upiId?: string;
+  };
   workplace?: string;
   location?: string;
   status?: string;

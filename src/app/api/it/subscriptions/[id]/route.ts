@@ -54,6 +54,22 @@ export async function PATCH(
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
+    // Auto-generate invoice if cost > 0
+    let generatedInvoice = null;
+    if (updated.costPerMonth > 0) {
+      try {
+        const { autoGenerateSubscriptionInvoice } = await import("@/lib/it-subscription-invoice");
+        generatedInvoice = await autoGenerateSubscriptionInvoice({
+          sub: updated,
+          tenantObjectId,
+          userObjectId,
+          userName: session.userName,
+        });
+      } catch (invErr) {
+        console.error("autoGenerateSubscriptionInvoice update error:", invErr);
+      }
+    }
+
     await ActivityLog.create({
       tenantId: tenantObjectId,
       userId: userObjectId,
@@ -64,7 +80,7 @@ export async function PATCH(
       details: `Updated subscription "${updated.tool}" — status: ${updated.status}`,
     });
 
-    return NextResponse.json({ subscription: updated });
+    return NextResponse.json({ subscription: updated, invoice: generatedInvoice });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Internal Server Error";
     console.error("PATCH /api/it/subscriptions/[id] error:", error);

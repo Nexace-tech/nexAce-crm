@@ -128,6 +128,19 @@ export async function GET() {
     // Check and notify for expiring subscriptions automatically
     await checkAndNotifyExpiringSubscriptions(tenantObjectId);
 
+    // Automatically synchronize & generate official invoices for all subscriptions with cost
+    try {
+      const { autoGenerateAllSubscriptionInvoices } = await import("@/lib/it-subscription-invoice");
+      await autoGenerateAllSubscriptionInvoices({
+        tenantObjectId,
+        userObjectId: isPrivileged ? userObjectId : undefined,
+        userName: session.userName,
+        ownerFilter: !isPrivileged ? session.userName : undefined,
+      });
+    } catch (err) {
+      console.error("autoGenerateAllSubscriptionInvoices error:", err);
+    }
+
     const filter: Record<string, unknown> = { tenantId: tenantObjectId };
     if (!isPrivileged) {
       filter.$or = [{ createdBy: userObjectId }, { owner: session.userName }];
@@ -181,6 +194,22 @@ export async function POST(request: Request) {
       createdBy: userObjectId,
     });
 
+    // Auto-generate invoice for this subscription if cost > 0
+    let generatedInvoice = null;
+    if (doc.costPerMonth > 0) {
+      try {
+        const { autoGenerateSubscriptionInvoice } = await import("@/lib/it-subscription-invoice");
+        generatedInvoice = await autoGenerateSubscriptionInvoice({
+          sub: doc,
+          tenantObjectId,
+          userObjectId,
+          userName: session.userName,
+        });
+      } catch (invErr) {
+        console.error("autoGenerateSubscriptionInvoice error:", invErr);
+      }
+    }
+
     await ActivityLog.create({
       tenantId: tenantObjectId,
       userId: userObjectId,
@@ -191,7 +220,7 @@ export async function POST(request: Request) {
       details: `Added subscription for "${tool.trim()}" (${plan || "N/A"}) at ₹${costPerMonth || 0}/mo`,
     });
 
-    return NextResponse.json({ subscription: doc }, { status: 201 });
+    return NextResponse.json({ subscription: doc, invoice: generatedInvoice }, { status: 201 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Internal Server Error";
     console.error("POST /api/it/subscriptions error:", error);

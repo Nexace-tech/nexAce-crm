@@ -271,10 +271,10 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
     billedToName: user?.tenantId?.name || "NexAce Technologies CRM",
     billedToAddress: "Headquarters - 100 Innovation Way, Suite 400",
     billedToEmail: user?.tenantId?.slug ? `finance@${user.tenantId.slug}.com` : "finance@nexace.com",
-    bankName: "",
-    accountNo: "",
-    ifscCode: "",
-    upiId: "",
+    bankName: user?.bankDetails?.bankName || "",
+    accountNo: user?.bankDetails?.accountNo || "",
+    ifscCode: user?.bankDetails?.ifscCode || "",
+    upiId: user?.bankDetails?.upiId || "",
     notes: `Monthly contractual salary claim for ${new Date(now.getFullYear(), now.getMonth(), 1).toLocaleString("default", { month: "long", year: "numeric" })}. Verified biometric & shift attendance attached.`,
   });
 
@@ -609,6 +609,10 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
         department: user.department || prev.department || "General",
         employmentType: user.employmentType || "Permanent",
         monthlySalary: (user as any)?.salary !== undefined && (user as any)?.salary !== null ? Number((user as any).salary) : prev.monthlySalary,
+        bankName: user.bankDetails?.bankName || prev.bankName || "",
+        accountNo: user.bankDetails?.accountNo || prev.accountNo || "",
+        ifscCode: user.bankDetails?.ifscCode || prev.ifscCode || "",
+        upiId: user.bankDetails?.upiId || prev.upiId || "",
         billedToName: companyName,
         billedToEmail: user.tenantId?.slug ? `finance@${user.tenantId.slug}.com` : "finance@nexace.com",
       }));

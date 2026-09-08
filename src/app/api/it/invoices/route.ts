@@ -18,19 +18,41 @@ export async function GET() {
 
     await connectToDatabase();
 
+    // Auto-generate invoices for any active/renewed subscriptions
+    try {
+      const { autoGenerateAllSubscriptionInvoices } = await import("@/lib/it-subscription-invoice");
+      await autoGenerateAllSubscriptionInvoices({
+        tenantObjectId,
+        userObjectId: isPrivileged ? userObjectId : undefined,
+        userName: session.userName,
+        ownerFilter: !isPrivileged ? session.userName : undefined,
+      });
+    } catch (invErr) {
+      console.error("autoGenerateAllSubscriptionInvoices in invoices GET error:", invErr);
+    }
+
     let query: Record<string, any> = { tenantId: tenantObjectId };
 
     if (!isPrivileged) {
-      const userDoc = await User.findById(userObjectId).select("email").lean();
-      const userEmail = (userDoc as { email?: string } | null)?.email;
-      const orConditions: any[] = [{ createdBy: userObjectId }];
+      const userDoc = await User.findById(userObjectId).select("name email").lean();
+      const userEmail = (userDoc as { email?: string; name?: string } | null)?.email?.trim();
+      const userName = (userDoc as { email?: string; name?: string } | null)?.name?.trim() || session.userName?.trim();
+
+      const orConditions: any[] = [];
+      if (userName) {
+        const escapedName = userName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        orConditions.push({ billedToName: new RegExp(`^${escapedName}$`, "i") });
+      }
       if (userEmail) {
-        orConditions.push({ businessEmail: new RegExp(`^${userEmail.trim()}$`, "i") });
+        const escapedEmail = userEmail.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        orConditions.push({ billedToEmail: new RegExp(`^${escapedEmail}$`, "i") });
       }
-      if (session.userName) {
-        orConditions.push({ businessName: new RegExp(`^${session.userName.trim()}$`, "i") });
+
+      if (orConditions.length > 0) {
+        query.$or = orConditions;
+      } else {
+        query.billedToName = "__NO_USER__";
       }
-      query.$or = orConditions;
     }
 
     const invoices = await ITInvoice.find(query).sort({ createdAt: -1 }).lean();

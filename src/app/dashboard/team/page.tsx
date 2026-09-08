@@ -144,6 +144,10 @@ export default function TeamDashboardPage() {
   const [editSocialWebsite, setEditSocialWebsite] = useState("");
   const [editSocialInstagram, setEditSocialInstagram] = useState("");
   const [editSocialFacebook, setEditSocialFacebook] = useState("");
+  const [editBankName, setEditBankName] = useState("");
+  const [editAccountNo, setEditAccountNo] = useState("");
+  const [editIfscCode, setEditIfscCode] = useState("");
+  const [editUpiId, setEditUpiId] = useState("");
   const [isUpdating, setIsUpdating] = useState(false);
 
   // Pagination state for Team Directory
@@ -467,6 +471,12 @@ export default function TeamDashboardPage() {
           instagram: editSocialInstagram,
           facebook: editSocialFacebook,
         },
+        bankDetails: {
+          bankName: editBankName.trim(),
+          accountNo: editAccountNo.trim(),
+          ifscCode: editIfscCode.trim().toUpperCase(),
+          upiId: editUpiId.trim(),
+        },
       };
 
       if (isAdmin) {
@@ -739,6 +749,10 @@ export default function TeamDashboardPage() {
       setEditSocialWebsite(member.socialLinks?.website || "");
       setEditSocialInstagram(member.socialLinks?.instagram || "");
       setEditSocialFacebook(member.socialLinks?.facebook || "");
+      setEditBankName(member.bankDetails?.bankName || "");
+      setEditAccountNo(member.bankDetails?.accountNo || "");
+      setEditIfscCode(member.bankDetails?.ifscCode || "");
+      setEditUpiId(member.bankDetails?.upiId || "");
       setIsEditingBio(false);
     }
   };
@@ -2191,6 +2205,51 @@ export default function TeamDashboardPage() {
                       <i className="fa-brands fa-facebook text-blue-600" /> Facebook
                     </label>
                     <Input value={editSocialFacebook} onChange={(e) => setEditSocialFacebook(e.target.value)} placeholder="https://facebook.com/..." className="h-8 text-xs" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Salary Disbursement & Bank Details */}
+              <div className="pt-2 border-t border-border space-y-2">
+                <label className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                  <i className="fa-solid fa-building-columns text-emerald-500 text-xs" /> Salary Disbursement &amp; Bank Details
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-medium text-muted-foreground">Bank Name</label>
+                    <Input
+                      value={editBankName}
+                      onChange={(e) => setEditBankName(e.target.value)}
+                      placeholder="e.g. HDFC Bank, State Bank of India"
+                      className="h-8 text-xs"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-medium text-muted-foreground">Account Number</label>
+                    <Input
+                      value={editAccountNo}
+                      onChange={(e) => setEditAccountNo(e.target.value)}
+                      placeholder="e.g. 501002345678"
+                      className="h-8 text-xs font-mono"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-medium text-muted-foreground">IFSC / Routing Code</label>
+                    <Input
+                      value={editIfscCode}
+                      onChange={(e) => setEditIfscCode(e.target.value.toUpperCase())}
+                      placeholder="e.g. HDFC0001234"
+                      className="h-8 text-xs font-mono uppercase"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-medium text-muted-foreground">UPI ID (Optional)</label>
+                    <Input
+                      value={editUpiId}
+                      onChange={(e) => setEditUpiId(e.target.value)}
+                      placeholder="e.g. username@okhdfcbank"
+                      className="h-8 text-xs font-mono"
+                    />
                   </div>
                 </div>
               </div>

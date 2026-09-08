@@ -27,6 +27,8 @@ interface DriveLink {
   notes: string;
 }
 
+export type TabKey = "overview" | "drive" | "access" | "subscriptions" | "devices" | "invoices";
+
 interface AccessEntry {
   id: string;
   tool: string;
@@ -1871,8 +1873,21 @@ function SubModal({ initial, onSave, onClose, saving }: {
   );
 }
 
-function SubscriptionsTab({ subs, loading, onAdd, onEdit, onDelete, autoOpenAdd, teamMembers = [] }: {
-  subs: Subscription[]; loading: boolean;
+function SubscriptionsTab({
+  subs,
+  invoices = [],
+  onNavigate,
+  loading,
+  onAdd,
+  onEdit,
+  onDelete,
+  autoOpenAdd,
+  teamMembers = [],
+}: {
+  subs: Subscription[];
+  invoices?: Invoice[];
+  onNavigate?: (tab: TabKey) => void;
+  loading: boolean;
   onAdd: (d: Omit<Subscription, "id">) => Promise<void>;
   onEdit: (id: string, d: Omit<Subscription, "id">) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
@@ -1949,34 +1964,72 @@ function SubscriptionsTab({ subs, loading, onAdd, onEdit, onDelete, autoOpenAdd,
         <table className="w-full text-xs">
           <thead>
             <tr className="bg-muted/60 border-b border-border">
-              {["Tool", "Category", "Plan", "Cost/Month", "Seats", "Renewal Date", "Owner", "Status", ""].map((h) => (
+              {["Tool", "Category", "Plan", "Cost/Month", "Seats", "Renewal Date", "Owner", "Status", "Generated Invoice", ""].map((h) => (
                 <th key={h} className="text-left px-3 py-2.5 font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap text-[10px]">{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {loading ? Array.from({ length: 4 }).map((_, i) => <SkeletonRow key={i} cols={9} />) :
+            {loading ? Array.from({ length: 4 }).map((_, i) => <SkeletonRow key={i} cols={10} />) :
               filtered.length === 0 ? (
-                <tr><td colSpan={9} className="text-center py-12 text-muted-foreground"><i className="fa-solid fa-box-open text-2xl mb-2 block opacity-30" /><p className="text-xs">{subs.length === 0 ? "No subscriptions yet." : "No results match."}</p></td></tr>
+                <tr><td colSpan={10} className="text-center py-12 text-muted-foreground"><i className="fa-solid fa-box-open text-2xl mb-2 block opacity-30" /><p className="text-xs">{subs.length === 0 ? "No subscriptions yet." : "No results match."}</p></td></tr>
               ) : (
-                filtered.map((row, idx) => (
-                  <tr key={row.id} className={cn("border-b border-border/60 hover:bg-muted/30 transition-colors group", idx % 2 === 0 ? "" : "bg-muted/10")}>
-                    <td className="px-3 py-2.5 font-semibold text-foreground whitespace-nowrap">{row.tool}</td>
-                    <td className="px-3 py-2.5 text-muted-foreground whitespace-nowrap">{row.category || "—"}</td>
-                    <td className="px-3 py-2.5 text-muted-foreground whitespace-nowrap">{row.plan || "—"}</td>
-                    <td className="px-3 py-2.5 font-semibold text-foreground whitespace-nowrap">{formatCurrency(row.costPerMonth)}</td>
-                    <td className="px-3 py-2.5 text-muted-foreground text-center whitespace-nowrap">{row.seats}</td>
-                    <td className={cn("px-3 py-2.5 whitespace-nowrap font-medium", (row.status === "Expiring Soon" || row.status === "Expired") ? "text-orange-500" : "text-muted-foreground")}>{row.renewalDate || "—"}</td>
-                    <td className="px-3 py-2.5 text-muted-foreground whitespace-nowrap">{row.owner || "—"}</td>
-                    <td className="px-3 py-2.5 whitespace-nowrap"><span className={statusBadge(row.status)}>{row.status}</span></td>
-                    <td className="px-3 py-2.5 whitespace-nowrap">
-                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button onClick={() => setModal({ mode: "edit", item: row })} className="w-6 h-6 rounded-md bg-muted hover:bg-accent flex items-center justify-center text-muted-foreground hover:text-foreground cursor-pointer" title="Edit"><i className="fa-solid fa-pen text-[9px]" /></button>
-                        <button onClick={() => setDeleteId(row.id)} className="w-6 h-6 rounded-md bg-muted hover:bg-red-500/10 flex items-center justify-center text-muted-foreground hover:text-red-500 cursor-pointer" title="Delete"><i className="fa-solid fa-trash text-[9px]" /></button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                filtered.map((row, idx) => {
+                  const toolSlug = row.tool.replace(/[^a-zA-Z0-9]/g, "").toUpperCase().slice(0, 6);
+                  const matchingInvoice = invoices.find(
+                    (inv) =>
+                      (inv as any).subscriptionId === row.id ||
+                      inv.customerNo === `SUB-${row.id.slice(-6).toUpperCase()}` ||
+                      inv.invoiceNo.toUpperCase().includes(`INV-SUB-${toolSlug}`)
+                  );
+
+                  return (
+                    <tr key={row.id} className={cn("border-b border-border/60 hover:bg-muted/30 transition-colors group", idx % 2 === 0 ? "" : "bg-muted/10")}>
+                      <td className="px-3 py-2.5 font-semibold text-foreground whitespace-nowrap">{row.tool}</td>
+                      <td className="px-3 py-2.5 text-muted-foreground whitespace-nowrap">{row.category || "—"}</td>
+                      <td className="px-3 py-2.5 text-muted-foreground whitespace-nowrap">{row.plan || "—"}</td>
+                      <td className="px-3 py-2.5 font-semibold text-foreground whitespace-nowrap">{formatCurrency(row.costPerMonth)}</td>
+                      <td className="px-3 py-2.5 text-muted-foreground text-center whitespace-nowrap">{row.seats}</td>
+                      <td className={cn("px-3 py-2.5 whitespace-nowrap font-medium", (row.status === "Expiring Soon" || row.status === "Expired") ? "text-orange-500" : "text-muted-foreground")}>{row.renewalDate || "—"}</td>
+                      <td className="px-3 py-2.5 text-muted-foreground whitespace-nowrap">{row.owner || "—"}</td>
+                      <td className="px-3 py-2.5 whitespace-nowrap"><span className={statusBadge(row.status)}>{row.status}</span></td>
+                      <td className="px-3 py-2.5 whitespace-nowrap">
+                        {matchingInvoice ? (
+                          <button
+                            type="button"
+                            onClick={() => onNavigate?.("invoices")}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold bg-primary/10 text-primary border border-primary/20 hover:bg-primary hover:text-primary-foreground transition-all cursor-pointer shadow-2xs"
+                            title={`View Invoice: ${matchingInvoice.invoiceNo} (${matchingInvoice.status})`}
+                          >
+                            <i className="fa-solid fa-file-invoice-dollar text-[10px]" />
+                            <span className="truncate max-w-[140px]">{matchingInvoice.invoiceNo}</span>
+                            <span className={cn("text-[9px] px-1 rounded font-normal uppercase", statusBadge(matchingInvoice.status))}>
+                              {matchingInvoice.status}
+                            </span>
+                          </button>
+                        ) : row.costPerMonth > 0 ? (
+                          <button
+                            type="button"
+                            onClick={() => onNavigate?.("invoices")}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-medium bg-muted/60 text-muted-foreground hover:text-primary hover:bg-primary/10 cursor-pointer transition-colors"
+                            title="Click to view all generated subscription invoices"
+                          >
+                            <i className="fa-solid fa-file-invoice text-[9px] text-primary" />
+                            <span>Auto-billing</span>
+                          </button>
+                        ) : (
+                          <span className="text-muted-foreground text-[10px] italic">Free Tool</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2.5 whitespace-nowrap">
+                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button onClick={() => setModal({ mode: "edit", item: row })} className="w-6 h-6 rounded-md bg-muted hover:bg-accent flex items-center justify-center text-muted-foreground hover:text-foreground cursor-pointer" title="Edit"><i className="fa-solid fa-pen text-[9px]" /></button>
+                          <button onClick={() => setDeleteId(row.id)} className="w-6 h-6 rounded-md bg-muted hover:bg-red-500/10 flex items-center justify-center text-muted-foreground hover:text-red-500 cursor-pointer" title="Delete"><i className="fa-solid fa-trash text-[9px]" /></button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
           </tbody>
         </table>
@@ -2832,25 +2885,33 @@ function DevicesTab({
               </button>
 
               <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    const d = inspectDevice;
-                    setInspectDevice(null);
-                    setModal({ mode: "edit", item: d });
-                  }}
-                  className="h-8 px-3 rounded-lg bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 flex items-center gap-1.5 cursor-pointer shadow-xs"
-                >
-                  <i className="fa-solid fa-pen text-xs" /> Edit Record
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setDeleteId(inspectDevice.id)}
-                  className="h-8 px-2.5 rounded-lg border border-destructive/30 hover:bg-destructive/10 text-destructive text-xs font-semibold cursor-pointer"
-                  title="Delete Device"
-                >
-                  <i className="fa-solid fa-trash text-xs" />
-                </button>
+                {isPrivileged && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const d = inspectDevice;
+                        setInspectDevice(null);
+                        setModal({ mode: "edit", item: d });
+                      }}
+                      className="h-8 px-3 rounded-lg bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 flex items-center gap-1.5 cursor-pointer shadow-xs"
+                    >
+                      <i className="fa-solid fa-pen text-xs" /> Edit Record
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const id = inspectDevice.id;
+                        setInspectDevice(null);
+                        setDeleteId(id);
+                      }}
+                      className="h-8 px-2.5 rounded-lg border border-destructive/30 hover:bg-destructive/10 text-destructive text-xs font-semibold cursor-pointer"
+                      title="Delete Device"
+                    >
+                      <i className="fa-solid fa-trash text-xs" />
+                    </button>
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -2938,83 +2999,88 @@ function DevicesTab({
         </div>
       )}
 
-      {/* ─── Premium KPI Stat Card Ribbon ─── */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-3">
-        {[
-          { label: "Total Fleet", count: devices.length, filter: "All", icon: "fa-solid fa-laptop", color: "text-primary", bg: "from-primary/10 to-primary/5", border: "border-primary/20", sub: "All registered assets" },
-          { label: "In Active Use", count: inUseCount, filter: "In Use", icon: "fa-solid fa-user-check", color: "text-emerald-500", bg: "from-emerald-500/10 to-emerald-500/5", border: "border-emerald-500/20", sub: `${devices.length > 0 ? Math.round((inUseCount / devices.length) * 100) : 0}% of inventory` },
-          { label: "Available Ready", count: availableCount, filter: "Available", icon: "fa-solid fa-boxes-stacked", color: "text-blue-500", bg: "from-blue-500/10 to-blue-500/5", border: "border-blue-500/20", sub: "Ready for deployment" },
-          { label: "In Repair", count: inRepairCount, filter: "In Repair", icon: "fa-solid fa-wrench", color: "text-amber-500", bg: "from-amber-500/10 to-amber-500/5", border: "border-amber-500/20", sub: "Under maintenance" },
-          { label: "Retired / Scrap", count: retiredCount, filter: "Retired", icon: "fa-solid fa-box-archive", color: "text-slate-400", bg: "from-slate-500/10 to-slate-500/5", border: "border-slate-500/20", sub: "Decommissioned" },
-        ].map((card) => {
-          const isActive = filterStatus === card.filter || (card.filter === "All" && filterStatus === "All");
-          return (
-            <div
-              key={card.label}
-              onClick={() => setFilterStatus(card.filter)}
-              className={cn(
-                "relative p-3.5 rounded-xl border bg-gradient-to-br transition-all cursor-pointer group shadow-2xs hover:shadow-md",
-                card.bg,
-                isActive ? "ring-2 ring-primary border-primary shadow-sm" : "border-border hover:border-primary/40"
-              )}
-            >
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground group-hover:text-foreground transition-colors">
-                  {card.label}
-                </span>
-                <i className={cn(card.icon, card.color, "text-xs group-hover:scale-110 transition-transform")} />
-              </div>
-              <div className="mt-2 flex items-baseline justify-between">
-                <span className="text-2xl font-black text-foreground tabular-nums tracking-tight">{card.count}</span>
-                <span className="text-[10px] text-muted-foreground font-medium truncate max-w-[90px]">{card.sub}</span>
-              </div>
-            </div>
-          );
-        })}
-      </div>
+      {/* ─── Admin / Privileged Only: Fleet KPI Stat Card Ribbon & Location Ribbon ─── */}
+      {isPrivileged && (
+        <>
+          {/* ─── Premium KPI Stat Card Ribbon ─── */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-3">
+            {[
+              { label: "Total Fleet", count: devices.length, filter: "All", icon: "fa-solid fa-laptop", color: "text-primary", bg: "from-primary/10 to-primary/5", border: "border-primary/20", sub: "All registered assets" },
+              { label: "In Active Use", count: inUseCount, filter: "In Use", icon: "fa-solid fa-user-check", color: "text-emerald-500", bg: "from-emerald-500/10 to-emerald-500/5", border: "border-emerald-500/20", sub: `${devices.length > 0 ? Math.round((inUseCount / devices.length) * 100) : 0}% of inventory` },
+              { label: "Available Ready", count: availableCount, filter: "Available", icon: "fa-solid fa-boxes-stacked", color: "text-blue-500", bg: "from-blue-500/10 to-blue-500/5", border: "border-blue-500/20", sub: "Ready for deployment" },
+              { label: "In Repair", count: inRepairCount, filter: "In Repair", icon: "fa-solid fa-wrench", color: "text-amber-500", bg: "from-amber-500/10 to-amber-500/5", border: "border-amber-500/20", sub: "Under maintenance" },
+              { label: "Retired / Scrap", count: retiredCount, filter: "Retired", icon: "fa-solid fa-box-archive", color: "text-slate-400", bg: "from-slate-500/10 to-slate-500/5", border: "border-slate-500/20", sub: "Decommissioned" },
+            ].map((card) => {
+              const isActive = filterStatus === card.filter || (card.filter === "All" && filterStatus === "All");
+              return (
+                <div
+                  key={card.label}
+                  onClick={() => setFilterStatus(card.filter)}
+                  className={cn(
+                    "relative p-3.5 rounded-xl border bg-gradient-to-br transition-all cursor-pointer group shadow-2xs hover:shadow-md",
+                    card.bg,
+                    isActive ? "ring-2 ring-primary border-primary shadow-sm" : "border-border hover:border-primary/40"
+                  )}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground group-hover:text-foreground transition-colors">
+                      {card.label}
+                    </span>
+                    <i className={cn(card.icon, card.color, "text-xs group-hover:scale-110 transition-transform")} />
+                  </div>
+                  <div className="mt-2 flex items-baseline justify-between">
+                    <span className="text-2xl font-black text-foreground tabular-nums tracking-tight">{card.count}</span>
+                    <span className="text-[10px] text-muted-foreground font-medium truncate max-w-[90px]">{card.sub}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
 
-      {/* ─── Location Distribution Ribbon ─── */}
-      <div className="p-2.5 rounded-xl bg-muted/40 border border-border/80 flex items-center gap-2 overflow-x-auto no-scrollbar">
-        <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider shrink-0 flex items-center gap-1.5 px-2">
-          <i className="fa-solid fa-location-dot text-primary text-xs" /> Locations:
-        </span>
-        <button
-          onClick={() => setFilterLocation("All")}
-          className={cn(
-            "px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer whitespace-nowrap shrink-0 flex items-center gap-1.5",
-            filterLocation === "All"
-              ? "bg-primary text-primary-foreground border-primary shadow-xs"
-              : "bg-background text-muted-foreground border-border hover:border-primary/50 hover:text-foreground"
-          )}
-        >
-          <span>All Locations</span>
-          <span className={cn("text-[10px] px-1.5 py-0.2 rounded-full font-bold", filterLocation === "All" ? "bg-black/20 text-white" : "bg-muted text-muted-foreground")}>
-            {devices.length}
-          </span>
-        </button>
-        {Object.entries(locationCounts).map(([loc, count]) => {
-          const locMeta = getLocationMeta(loc);
-          const isSelected = filterLocation === loc;
-          return (
+          {/* ─── Location Distribution Ribbon ─── */}
+          <div className="p-2.5 rounded-xl bg-muted/40 border border-border/80 flex items-center gap-2 overflow-x-auto no-scrollbar">
+            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider shrink-0 flex items-center gap-1.5 px-2">
+              <i className="fa-solid fa-location-dot text-primary text-xs" /> Locations:
+            </span>
             <button
-              key={loc}
-              onClick={() => setFilterLocation(isSelected ? "All" : loc)}
+              onClick={() => setFilterLocation("All")}
               className={cn(
                 "px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer whitespace-nowrap shrink-0 flex items-center gap-1.5",
-                isSelected
+                filterLocation === "All"
                   ? "bg-primary text-primary-foreground border-primary shadow-xs"
-                  : cn("bg-background text-foreground border-border hover:border-primary/50", locMeta.bg)
+                  : "bg-background text-muted-foreground border-border hover:border-primary/50 hover:text-foreground"
               )}
             >
-              <i className={cn(locMeta.icon, isSelected ? "text-primary-foreground" : locMeta.color, "text-xs")} />
-              <span className="truncate">{loc}</span>
-              <span className={cn("text-[10px] px-1.5 py-0.2 rounded-full font-bold", isSelected ? "bg-black/20 text-white" : "bg-muted text-muted-foreground")}>
-                {count}
+              <span>All Locations</span>
+              <span className={cn("text-[10px] px-1.5 py-0.2 rounded-full font-bold", filterLocation === "All" ? "bg-black/20 text-white" : "bg-muted text-muted-foreground")}>
+                {devices.length}
               </span>
             </button>
-          );
-        })}
-      </div>
+            {Object.entries(locationCounts).map(([loc, count]) => {
+              const locMeta = getLocationMeta(loc);
+              const isSelected = filterLocation === loc;
+              return (
+                <button
+                  key={loc}
+                  onClick={() => setFilterLocation(isSelected ? "All" : loc)}
+                  className={cn(
+                    "px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer whitespace-nowrap shrink-0 flex items-center gap-1.5",
+                    isSelected
+                      ? "bg-primary text-primary-foreground border-primary shadow-xs"
+                      : cn("bg-background text-foreground border-border hover:border-primary/50", locMeta.bg)
+                  )}
+                >
+                  <i className={cn(locMeta.icon, isSelected ? "text-primary-foreground" : locMeta.color, "text-xs")} />
+                  <span className="truncate">{loc}</span>
+                  <span className={cn("text-[10px] px-1.5 py-0.2 rounded-full font-bold", isSelected ? "bg-black/20 text-white" : "bg-muted text-muted-foreground")}>
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </>
+      )}
 
       {/* ─── Search, Filters & View Mode Switcher ─── */}
       <div className="flex flex-col sm:flex-row gap-2.5 items-start sm:items-center justify-between flex-wrap">
@@ -3041,15 +3107,19 @@ function DevicesTab({
           <select className={SELECT_CLS} value={filterType} onChange={(e) => setFilterType(e.target.value)}>
             {types.map((t) => <option key={t} value={t}>{t === "All" ? "All Types" : t}</option>)}
           </select>
-          <select className={SELECT_CLS} value={filterLocation} onChange={(e) => setFilterLocation(e.target.value)}>
-            {locations.map((l) => <option key={l} value={l}>{l === "All" ? "All Locations" : l}</option>)}
-          </select>
-          <select className={SELECT_CLS} value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
-            {["All", "In Use", "Available", "In Repair", "Retired"].map((s) => <option key={s} value={s}>{s === "All" ? "All Statuses" : s}</option>)}
-          </select>
-          <select className={SELECT_CLS} value={filterCondition} onChange={(e) => setFilterCondition(e.target.value)}>
-            {conditions.map((c) => <option key={c} value={c}>{c === "All" ? "All Conditions" : c}</option>)}
-          </select>
+          {isPrivileged && (
+            <>
+              <select className={SELECT_CLS} value={filterLocation} onChange={(e) => setFilterLocation(e.target.value)}>
+                {locations.map((l) => <option key={l} value={l}>{l === "All" ? "All Locations" : l}</option>)}
+              </select>
+              <select className={SELECT_CLS} value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
+                {["All", "In Use", "Available", "In Repair", "Retired"].map((s) => <option key={s} value={s}>{s === "All" ? "All Statuses" : s}</option>)}
+              </select>
+              <select className={SELECT_CLS} value={filterCondition} onChange={(e) => setFilterCondition(e.target.value)}>
+                {conditions.map((c) => <option key={c} value={c}>{c === "All" ? "All Conditions" : c}</option>)}
+              </select>
+            </>
+          )}
 
           {/* View Mode Toggle */}
           <div className="flex items-center p-0.5 rounded-lg border border-border bg-muted/40">
@@ -3078,12 +3148,14 @@ function DevicesTab({
           </div>
 
           <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">{filtered.length} device{filtered.length !== 1 ? "s" : ""}</span>
-          <button
-            onClick={() => setModal({ mode: "add" })}
-            className="flex items-center gap-1.5 h-8 px-3.5 rounded-lg bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-all cursor-pointer shadow-sm hover:shadow"
-          >
-            <i className="fa-solid fa-plus text-[10px]" /> Register Device
-          </button>
+          {isPrivileged && (
+            <button
+              onClick={() => setModal({ mode: "add" })}
+              className="flex items-center gap-1.5 h-8 px-3.5 rounded-lg bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-all cursor-pointer shadow-sm hover:shadow"
+            >
+              <i className="fa-solid fa-plus text-[10px]" /> Register Device
+            </button>
+          )}
         </div>
       </div>
 
@@ -3199,22 +3271,26 @@ function DevicesTab({
                   >
                     <i className="fa-solid fa-qrcode" />
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => setModal({ mode: "edit", item: d })}
-                    className="h-7 w-7 rounded-lg border border-border bg-background hover:bg-muted text-muted-foreground hover:text-foreground flex items-center justify-center text-xs cursor-pointer"
-                    title="Edit"
-                  >
-                    <i className="fa-solid fa-pen" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setDeleteId(d.id)}
-                    className="h-7 w-7 rounded-lg border border-border bg-background hover:bg-destructive/10 text-muted-foreground hover:text-destructive flex items-center justify-center text-xs cursor-pointer"
-                    title="Delete"
-                  >
-                    <i className="fa-solid fa-trash" />
-                  </button>
+                  {isPrivileged && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setModal({ mode: "edit", item: d })}
+                        className="h-7 w-7 rounded-lg border border-border bg-background hover:bg-muted text-muted-foreground hover:text-foreground flex items-center justify-center text-xs cursor-pointer"
+                        title="Edit"
+                      >
+                        <i className="fa-solid fa-pen" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDeleteId(d.id)}
+                        className="h-7 w-7 rounded-lg border border-border bg-background hover:bg-destructive/10 text-muted-foreground hover:text-destructive flex items-center justify-center text-xs cursor-pointer"
+                        title="Delete"
+                      >
+                        <i className="fa-solid fa-trash" />
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
             );
@@ -3297,42 +3373,49 @@ function DevicesTab({
 
                     {/* Physical Location with Inline Quick Relocate Dropdown */}
                     <td className="px-3.5 py-2.5 whitespace-nowrap">
-                      <div className="relative inline-block">
-                        <button
-                          type="button"
-                          onClick={() => setRelocatingId(relocatingId === row.id ? null : row.id)}
-                          className={cn("inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[11px] font-semibold cursor-pointer hover:shadow-xs transition-all", locMeta.bg)}
-                          title="Click to relocate device"
-                        >
+                      {isPrivileged ? (
+                        <div className="relative inline-block">
+                          <button
+                            type="button"
+                            onClick={() => setRelocatingId(relocatingId === row.id ? null : row.id)}
+                            className={cn("inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[11px] font-semibold cursor-pointer hover:shadow-xs transition-all", locMeta.bg)}
+                            title="Click to relocate device"
+                          >
+                            <i className={cn(locMeta.icon, locMeta.color)} />
+                            <span>{locMeta.label}</span>
+                            <i className="fa-solid fa-chevron-down text-[8px] opacity-60 ml-0.5" />
+                          </button>
+
+                          {relocatingId === row.id && (
+                            <div className="absolute left-0 top-full mt-1.5 z-30 w-48 bg-card border border-border rounded-xl shadow-2xl p-1.5 space-y-1 animate-in fade-in zoom-in-95">
+                              <p className="text-[9px] font-bold text-muted-foreground uppercase px-2 py-1 flex items-center gap-1">
+                                <i className="fa-solid fa-arrows-split-up-and-left text-primary" /> Relocate Asset
+                              </p>
+                              {QUICK_LOCATIONS.map((ql) => (
+                                <button
+                                  key={ql}
+                                  type="button"
+                                  onClick={() => handleQuickRelocate(row, ql)}
+                                  className={cn(
+                                    "w-full text-left px-2 py-1 rounded-lg text-[11px] font-semibold transition-colors cursor-pointer flex items-center gap-1.5",
+                                    (row.location || "HQ - Main Office") === ql
+                                      ? "bg-primary/15 text-primary"
+                                      : "hover:bg-muted text-foreground"
+                                  )}
+                                >
+                                  <i className={cn(getLocationMeta(ql).icon, "text-[10px]")} />
+                                  <span className="truncate">{ql}</span>
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <span className={cn("inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[11px] font-semibold", locMeta.bg)}>
                           <i className={cn(locMeta.icon, locMeta.color)} />
                           <span>{locMeta.label}</span>
-                          <i className="fa-solid fa-chevron-down text-[8px] opacity-60 ml-0.5" />
-                        </button>
-
-                        {relocatingId === row.id && (
-                          <div className="absolute left-0 top-full mt-1.5 z-30 w-48 bg-card border border-border rounded-xl shadow-2xl p-1.5 space-y-1 animate-in fade-in zoom-in-95">
-                            <p className="text-[9px] font-bold text-muted-foreground uppercase px-2 py-1 flex items-center gap-1">
-                              <i className="fa-solid fa-arrows-split-up-and-left text-primary" /> Relocate Asset
-                            </p>
-                            {QUICK_LOCATIONS.map((ql) => (
-                              <button
-                                key={ql}
-                                type="button"
-                                onClick={() => handleQuickRelocate(row, ql)}
-                                className={cn(
-                                  "w-full text-left px-2 py-1 rounded-lg text-[11px] font-semibold transition-colors cursor-pointer flex items-center gap-1.5",
-                                  (row.location || "HQ - Main Office") === ql
-                                    ? "bg-primary/15 text-primary"
-                                    : "hover:bg-muted text-foreground"
-                                )}
-                              >
-                                <i className={cn(getLocationMeta(ql).icon, "text-[10px]")} />
-                                <span className="truncate">{ql}</span>
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                      </div>
+                        </span>
+                      )}
                     </td>
 
                     {/* Warranty */}
@@ -3356,21 +3439,35 @@ function DevicesTab({
 
                     {/* Status */}
                     <td className="px-3.5 py-2.5 whitespace-nowrap">
-                      <select
-                        value={row.status}
-                        onChange={(e) => handleQuickStatusChange(row, e.target.value as Device["status"])}
-                        className={cn(
-                          "h-6 text-[10px] font-bold rounded-full px-2 py-0.5 border cursor-pointer focus:outline-none transition-all",
-                          row.status === "In Use" ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30" :
-                          row.status === "Available" ? "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30" :
-                          row.status === "In Repair" ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30" :
-                          "bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/30"
-                        )}
-                      >
-                        {["In Use", "Available", "In Repair", "Retired"].map((s) => (
-                          <option key={s} value={s}>{s}</option>
-                        ))}
-                      </select>
+                      {isPrivileged ? (
+                        <select
+                          value={row.status}
+                          onChange={(e) => handleQuickStatusChange(row, e.target.value as Device["status"])}
+                          className={cn(
+                            "h-6 text-[10px] font-bold rounded-full px-2 py-0.5 border cursor-pointer focus:outline-none transition-all",
+                            row.status === "In Use" ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30" :
+                            row.status === "Available" ? "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30" :
+                            row.status === "In Repair" ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30" :
+                            "bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/30"
+                          )}
+                        >
+                          {["In Use", "Available", "In Repair", "Retired"].map((s) => (
+                            <option key={s} value={s}>{s}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <span
+                          className={cn(
+                            "inline-flex items-center gap-1 h-6 text-[10px] font-bold rounded-full px-2.5 py-0.5 border",
+                            row.status === "In Use" ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30" :
+                            row.status === "Available" ? "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30" :
+                            row.status === "In Repair" ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30" :
+                            "bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/30"
+                          )}
+                        >
+                          {row.status}
+                        </span>
+                      )}
                     </td>
 
                     {/* Action Toolbar */}
@@ -3390,20 +3487,24 @@ function DevicesTab({
                         >
                           <i className="fa-solid fa-qrcode text-[10px]" />
                         </button>
-                        <button
-                          onClick={() => setModal({ mode: "edit", item: row })}
-                          className="w-7 h-7 rounded-lg bg-muted hover:bg-accent flex items-center justify-center text-muted-foreground hover:text-foreground cursor-pointer shadow-2xs"
-                          title="Edit"
-                        >
-                          <i className="fa-solid fa-pen text-[10px]" />
-                        </button>
-                        <button
-                          onClick={() => setDeleteId(row.id)}
-                          className="w-7 h-7 rounded-lg bg-muted hover:bg-red-500/10 flex items-center justify-center text-muted-foreground hover:text-red-500 cursor-pointer shadow-2xs"
-                          title="Delete"
-                        >
-                          <i className="fa-solid fa-trash text-[10px]" />
-                        </button>
+                        {isPrivileged && (
+                          <>
+                            <button
+                              onClick={() => setModal({ mode: "edit", item: row })}
+                              className="w-7 h-7 rounded-lg bg-muted hover:bg-accent flex items-center justify-center text-muted-foreground hover:text-foreground cursor-pointer shadow-2xs"
+                              title="Edit"
+                            >
+                              <i className="fa-solid fa-pen text-[10px]" />
+                            </button>
+                            <button
+                              onClick={() => setDeleteId(row.id)}
+                              className="w-7 h-7 rounded-lg bg-muted hover:bg-red-500/10 flex items-center justify-center text-muted-foreground hover:text-red-500 cursor-pointer shadow-2xs"
+                              title="Delete"
+                            >
+                              <i className="fa-solid fa-trash text-[10px]" />
+                            </button>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -3638,12 +3739,15 @@ function InvoiceModal({ initial, onSave, onClose, saving }: { initial: Omit<Invo
   );
 }
 
-function InvoicesTab({ invoices, loading, onAdd, onEdit, onDelete, autoOpenAdd }: {
+function InvoicesTab({ invoices, loading, onAdd, onEdit, onDelete, autoOpenAdd, isPrivileged, userName, userEmail }: {
   invoices: Invoice[]; loading: boolean;
   onAdd: (d: Omit<Invoice, "id">) => Promise<void>;
   onEdit: (id: string, d: Omit<Invoice, "id">) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
   autoOpenAdd?: boolean;
+  isPrivileged?: boolean;
+  userName?: string;
+  userEmail?: string;
 }) {
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("All");
@@ -3668,7 +3772,21 @@ function InvoicesTab({ invoices, loading, onAdd, onEdit, onDelete, autoOpenAdd }
     return cust.startsWith("EXT-") || notes.includes("proposal") || (billedTo.includes("external") && !cust.startsWith("EMP-")) || (inv as any).category === "Client Billing";
   };
 
-  const itInvoices = useMemo(() => invoices.filter((inv) => !isExternalITInvoice(inv)), [invoices]);
+  const itInvoices = useMemo(() => {
+    return invoices.filter((inv) => {
+      if (isExternalITInvoice(inv)) return false;
+      if (!isPrivileged) {
+        const u = (userName || "").trim().toLowerCase();
+        const em = (userEmail || "").trim().toLowerCase();
+        const billed = (inv.billedToName || "").trim().toLowerCase();
+        const billedEm = (inv.billedToEmail || "").trim().toLowerCase();
+        const matchName = Boolean(u && (billed === u || billed.includes(u)));
+        const matchEmail = Boolean(em && billedEm === em);
+        return matchName || matchEmail;
+      }
+      return true;
+    });
+  }, [invoices, isPrivileged, userName, userEmail]);
 
   const filtered = useMemo(() => itInvoices.filter((inv) => {
     const q = search.toLowerCase();
@@ -3866,9 +3984,11 @@ function InvoicesTab({ invoices, loading, onAdd, onEdit, onDelete, autoOpenAdd }
             <option value="This Year">This Year</option>
           </select>
           <span className="text-xs text-muted-foreground">{filtered.length} invoice{filtered.length !== 1 ? "s" : ""}</span>
-          <button onClick={() => setModal({ mode: "add" })} className="flex items-center gap-1.5 h-8 px-3 rounded-lg bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-colors cursor-pointer">
-            <i className="fa-solid fa-plus text-[10px]" /> Create Invoice
-          </button>
+          {isPrivileged && (
+            <button onClick={() => setModal({ mode: "add" })} className="flex items-center gap-1.5 h-8 px-3 rounded-lg bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-colors cursor-pointer">
+              <i className="fa-solid fa-plus text-[10px]" /> Create Invoice
+            </button>
+          )}
         </div>
       </div>
 
@@ -3899,8 +4019,12 @@ function InvoicesTab({ invoices, loading, onAdd, onEdit, onDelete, autoOpenAdd }
                     <td className="px-3 py-2.5 whitespace-nowrap">
                       <div className="flex items-center gap-1.5">
                         <button onClick={() => setPreviewItem(row)} className="px-2 py-1 rounded bg-muted hover:bg-accent text-muted-foreground hover:text-foreground text-[10px] font-semibold flex items-center gap-1 cursor-pointer transition-colors" title="Preview Invoice"><i className="fa-solid fa-eye text-[9px]" /> Preview</button>
-                        <button onClick={() => setModal({ mode: "edit", item: row })} className="w-6 h-6 rounded-md bg-muted hover:bg-accent flex items-center justify-center text-muted-foreground hover:text-foreground cursor-pointer" title="Edit"><i className="fa-solid fa-pen text-[9px]" /></button>
-                        <button onClick={() => setDeleteId(row.id)} className="w-6 h-6 rounded-md bg-muted hover:bg-red-500/10 flex items-center justify-center text-muted-foreground hover:text-red-500 cursor-pointer" title="Delete"><i className="fa-solid fa-trash text-[9px]" /></button>
+                        {isPrivileged && (
+                          <>
+                            <button onClick={() => setModal({ mode: "edit", item: row })} className="w-6 h-6 rounded-md bg-muted hover:bg-accent flex items-center justify-center text-muted-foreground hover:text-foreground cursor-pointer" title="Edit"><i className="fa-solid fa-pen text-[9px]" /></button>
+                            <button onClick={() => setDeleteId(row.id)} className="w-6 h-6 rounded-md bg-muted hover:bg-red-500/10 flex items-center justify-center text-muted-foreground hover:text-red-500 cursor-pointer" title="Delete"><i className="fa-solid fa-trash text-[9px]" /></button>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -3914,8 +4038,6 @@ function InvoicesTab({ invoices, loading, onAdd, onEdit, onDelete, autoOpenAdd }
 }
 
 // ─── Main Page ─────────────────────────────────────────────────────────────────
-
-type TabKey = "overview" | "drive" | "access" | "subscriptions" | "devices" | "invoices";
 
 const TABS: { key: TabKey; label: string; icon: string }[] = [
   { key: "overview", label: "Overview", icon: "fa-solid fa-gauge-high" },
@@ -4001,7 +4123,7 @@ export default function ITCommandCenterPage() {
 
   const loadInvoices = useCallback(async () => {
     try {
-      const data = await apiFetch("/api/it/invoices");
+      const data = await apiFetch(`/api/it/invoices?_t=${Date.now()}`);
       setInvoices((data.invoices || []).map((d: any) => ({ ...normalise(d), id: d._id?.toString() || d.id })));
     } catch (e: any) { showToast(e.message || "Failed to load invoices", "error"); }
     finally { setLoadingInvoices(false); }
@@ -4027,6 +4149,12 @@ export default function ITCommandCenterPage() {
     loadInvoices();
     loadTeamMembers();
   }, [loadLinks, loadAccess, loadSubs, loadDevices, loadInvoices, loadTeamMembers]);
+
+  useEffect(() => {
+    if (activeTab === "invoices") {
+      loadInvoices();
+    }
+  }, [activeTab, loadInvoices]);
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -4170,8 +4298,8 @@ export default function ITCommandCenterPage() {
       if (tab.key === "access") return isAdmin || isOPS || can("manageITAccess") || can("viewITPortal");
       if (tab.key === "subscriptions") return isAdmin || isOPS || can("manageITSubscriptions") || can("viewITPortal");
       if (tab.key === "devices") return isAdmin || isOPS || can("manageITDevices") || can("viewITPortal");
-      // Invoices tab: only privileged users (Admin / OPS)
-      if (tab.key === "invoices") return isPrivileged || can("manageITInvoices");
+      // Invoices tab: accessible to privileged users or any user with IT portal access
+      if (tab.key === "invoices") return isPrivileged || can("manageITInvoices") || can("viewITPortal");
       return true;
     });
   }, [isAdmin, isOPS, isPrivileged, can]);
@@ -4231,8 +4359,19 @@ export default function ITCommandCenterPage() {
     showToast(`Exported ${activeTab} CSV`, "info");
   };
 
-  // ─── Server already returns user-scoped data — no client-side filtering needed ─
-  const totalRecords = links.length + access.length + subs.length + devices.length + (isPrivileged ? invoices.length : 0);
+  // ─── Server already returns user-scoped data — apply defensive client filter ─
+  const userInvoicesCount = useMemo(() => {
+    if (isPrivileged) return invoices.length;
+    const u = (user?.name || "").trim().toLowerCase();
+    const em = (user?.email || "").trim().toLowerCase();
+    return invoices.filter((inv) => {
+      const billed = (inv.billedToName || "").trim().toLowerCase();
+      const billedEm = (inv.billedToEmail || "").trim().toLowerCase();
+      return (u && (billed === u || billed.includes(u))) || (em && billedEm === em);
+    }).length;
+  }, [invoices, isPrivileged, user?.name, user?.email]);
+
+  const totalRecords = links.length + access.length + subs.length + devices.length + userInvoicesCount;
   const overallLoading = loadingLinks && loadingAccess && loadingSubs && loadingDevices && loadingInvoices;
 
   return (
@@ -4301,9 +4440,33 @@ export default function ITCommandCenterPage() {
         {activeTab === "overview" && <OverviewTab access={access} subscriptions={subs} devices={devices} loading={overallLoading} onNavigate={(tab) => setActiveTab(tab)} onQuickAction={handleQuickAction} allowedTabs={visibleTabs.map((t) => t.key).filter((k) => k !== "overview")} />}
         {activeTab === "drive" && <DriveLinksTab links={links} loading={loadingLinks} onAdd={addLink} onEdit={editLink} onDelete={deleteLink} autoOpenAdd={autoOpenAddTab === "drive"} userName={user?.name} isPrivileged={isPrivileged} teamMembers={teamMembers} />}
         {activeTab === "access" && <AccessTab access={access} loading={loadingAccess} onAdd={addAccess} onEdit={editAccess} onDelete={deleteAccess} onToggleStatus={toggleAccessStatus} autoOpenAdd={autoOpenAddTab === "access"} teamMembers={teamMembers} />}
-        {activeTab === "subscriptions" && <SubscriptionsTab subs={subs} loading={loadingSubs} onAdd={addSub} onEdit={editSub} onDelete={deleteSub} autoOpenAdd={autoOpenAddTab === "subscriptions"} teamMembers={teamMembers} />}
+        {activeTab === "subscriptions" && (
+          <SubscriptionsTab
+            subs={subs}
+            invoices={invoices}
+            onNavigate={(tab) => setActiveTab(tab)}
+            loading={loadingSubs}
+            onAdd={addSub}
+            onEdit={editSub}
+            onDelete={deleteSub}
+            autoOpenAdd={autoOpenAddTab === "subscriptions"}
+            teamMembers={teamMembers}
+          />
+        )}
         {activeTab === "devices" && <DevicesTab devices={devices} allDevices={devices} nextAssetTags={nextAssetTags} loading={loadingDevices} onAdd={addDevice} onEdit={editDevice} onDelete={deleteDevice} autoOpenAdd={autoOpenAddTab === "devices"} userName={user?.name} userDepartment={user?.department} isPrivileged={isPrivileged} teamMembers={teamMembers} />}
-        {activeTab === "invoices" && isPrivileged && <InvoicesTab invoices={invoices} loading={loadingInvoices} onAdd={addInvoice} onEdit={editInvoice} onDelete={deleteInvoice} autoOpenAdd={autoOpenAddTab === "invoices"} />}
+        {activeTab === "invoices" && (
+          <InvoicesTab
+            invoices={invoices}
+            loading={loadingInvoices}
+            onAdd={addInvoice}
+            onEdit={editInvoice}
+            onDelete={deleteInvoice}
+            autoOpenAdd={autoOpenAddTab === "invoices"}
+            isPrivileged={isPrivileged}
+            userName={user?.name}
+            userEmail={user?.email}
+          />
+        )}
       </div>
     </div>
   );

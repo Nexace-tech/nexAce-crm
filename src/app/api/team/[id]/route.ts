@@ -240,15 +240,31 @@ export async function PUT(request: Request, { params }: RouteParams) {
           facebook: body.socialLinks.facebook || "",
         };
       }
+      if (body.bankDetails !== undefined) {
+        user.bankDetails = {
+          bankName: (body.bankDetails.bankName || "").trim(),
+          accountNo: (body.bankDetails.accountNo || "").trim(),
+          ifscCode: (body.bankDetails.ifscCode || "").trim().toUpperCase(),
+          upiId: (body.bankDetails.upiId || "").trim(),
+        };
+      }
     }
 
     await user.save();
 
-    // Explicit direct MongoDB update to guarantee salary & employmentType are saved even if Mongoose model schema was cached
-    if (canEditOthers && (body.salary !== undefined || body.employmentType !== undefined)) {
-      const directUpdate: any = {};
-      if (body.salary !== undefined) directUpdate.salary = Number(body.salary) || 0;
-      if (body.employmentType !== undefined) directUpdate.employmentType = body.employmentType;
+    // Explicit direct MongoDB update to guarantee salary, employmentType & bankDetails are saved even if Mongoose model schema was cached
+    const directUpdate: any = {};
+    if (canEditOthers && body.salary !== undefined) directUpdate.salary = Number(body.salary) || 0;
+    if (canEditOthers && body.employmentType !== undefined) directUpdate.employmentType = body.employmentType;
+    if (body.bankDetails !== undefined) {
+      directUpdate.bankDetails = {
+        bankName: (body.bankDetails.bankName || "").trim(),
+        accountNo: (body.bankDetails.accountNo || "").trim(),
+        ifscCode: (body.bankDetails.ifscCode || "").trim().toUpperCase(),
+        upiId: (body.bankDetails.upiId || "").trim(),
+      };
+    }
+    if (Object.keys(directUpdate).length > 0) {
       await User.updateOne({ _id: user._id }, { $set: directUpdate });
     }
 

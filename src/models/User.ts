@@ -21,6 +21,12 @@ export interface IUser extends Document {
   shiftName?: string;
   employmentType?: string;
   salary?: number;
+  bankDetails?: {
+    bankName?: string;
+    accountNo?: string;
+    ifscCode?: string;
+    upiId?: string;
+  };
   socialLinks?: {
     linkedin?: string;
     twitter?: string;
@@ -55,6 +61,12 @@ const UserSchema: Schema = new Schema({
   shiftName: { type: String, default: "Standard Day Shift" },
   employmentType: { type: String, default: "Permanent", trim: true },
   salary: { type: Number, default: 0 },
+  bankDetails: {
+    bankName: { type: String, default: "", trim: true },
+    accountNo: { type: String, default: "", trim: true },
+    ifscCode: { type: String, default: "", trim: true },
+    upiId: { type: String, default: "", trim: true },
+  },
   socialLinks: {
     linkedin: { type: String, default: "" },
     twitter: { type: String, default: "" },
@@ -75,7 +87,7 @@ UserSchema.index({ email: 1, tenantId: 1 }, { unique: true });
 UserSchema.index({ tenantId: 1, role: 1 });
 
 // Force invalidate in-memory Mongoose model cache if schema updated
-if (mongoose.models.User && !mongoose.models.User.schema.path("salary")) {
+if (mongoose.models.User && (!mongoose.models.User.schema.path("salary") || !mongoose.models.User.schema.path("bankDetails"))) {
   delete (mongoose.models as any).User;
 }
 

@@ -25,6 +25,7 @@ export interface ITimesheetEntry {
 
 export interface IITInvoice extends Document {
   tenantId: mongoose.Types.ObjectId;
+  subscriptionId?: mongoose.Types.ObjectId;
   invoiceNo: string;
   invoiceDate: string;
   dueDate: string;
@@ -98,6 +99,7 @@ const TimesheetEntrySchema = new Schema<ITimesheetEntry>({
 const ITInvoiceSchema = new Schema<IITInvoice>(
   {
     tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true, index: true },
+    subscriptionId: { type: Schema.Types.ObjectId, ref: "ITSubscription", default: null, index: true },
     invoiceNo: { type: String, required: true, trim: true },
     invoiceDate: { type: String, required: true, default: () => new Date().toISOString().slice(0, 10) },
     dueDate: { type: String, required: true, default: () => new Date().toISOString().slice(0, 10) },
@@ -150,6 +152,10 @@ const ITInvoiceSchema = new Schema<IITInvoice>(
 ITInvoiceSchema.index({ tenantId: 1, invoiceNo: 1 }, { unique: true, sparse: true });
 ITInvoiceSchema.index({ tenantId: 1, status: 1 });
 ITInvoiceSchema.index({ tenantId: 1, createdAt: -1 });
+
+if (mongoose.models.ITInvoice) {
+  delete (mongoose.models as any).ITInvoice;
+}
 
 export const ITInvoice: Model<IITInvoice> =
   mongoose.models.ITInvoice || mongoose.model<IITInvoice>("ITInvoice", ITInvoiceSchema);
