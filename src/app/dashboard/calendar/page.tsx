@@ -2114,7 +2114,7 @@ function CalendarPageContent() {
               {/* Whole Day Summary Pills */}
               {(() => {
                 const targetLogs = selectedDateFilter
-                  ? attendanceHistory.filter((log) => new Date(log.date).toISOString().split("T")[0] === selectedDateFilter)
+                  ? attendanceHistory.filter((log) => getISTDateString(new Date(log.date)) === selectedDateFilter)
                   : attendanceHistory;
 
                 const totalStaff = targetLogs.length;
@@ -2145,7 +2145,7 @@ function CalendarPageContent() {
 
             {(() => {
               const filteredHistory = selectedDateFilter
-                ? attendanceHistory.filter((log) => new Date(log.date).toISOString().split("T")[0] === selectedDateFilter)
+                ? attendanceHistory.filter((log) => getISTDateString(new Date(log.date)) === selectedDateFilter)
                 : attendanceHistory;
 
               const totalItems = filteredHistory.length;

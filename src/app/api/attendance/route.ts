@@ -4,12 +4,17 @@ import { connectToDatabase } from "@/lib/db";
 import { Attendance } from "@/models/Attendance";
 import mongoose from "mongoose";
 
-// Helper to get normalized date at UTC midnight — prevents timezone mismatch
-// between server (UTC) and employees in other timezones (e.g. IST UTC+5:30)
+// Helper to get the current date normalized to IST (UTC+5:30) midnight expressed as UTC.
+// This ensures records created on the same IST calendar day always share the same `date` key
+// in MongoDB, regardless of what UTC date the server happens to be on at that moment.
+// e.g. a clock-in at 1:14 AM IST on Mon 7 Sept should map to 2026-09-07, not 2026-09-06.
+const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000; // UTC+5:30
+
 function getTodayDateNormalized(): Date {
-  const today = new Date();
-  today.setUTCHours(0, 0, 0, 0);
-  return today;
+  // Shift "now" into IST, floor to midnight IST, then shift back to UTC for storage.
+  const now = new Date();
+  const istMidnight = new Date(Math.floor((now.getTime() + IST_OFFSET_MS) / 86400000) * 86400000 - IST_OFFSET_MS);
+  return istMidnight;
 }
 
 const SHIFT_TARGET_HOURS = 8.0;
