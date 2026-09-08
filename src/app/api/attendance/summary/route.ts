@@ -27,21 +27,39 @@ export async function GET(request: Request) {
 
     const { searchParams } = new URL(request.url);
 
-    // ------ Date range defaults: Mon of current week to today ------
-    const todayUTC = new Date();
-    todayUTC.setUTCHours(23, 59, 59, 999);
+    // IST offset
+    const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
 
-    const monday = new Date();
-    const dayOfWeek = monday.getDay(); // 0=Sun
-    const daysBack = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-    monday.setDate(monday.getDate() - daysBack);
-    monday.setHours(0, 0, 0, 0);
+    // Helper: parse a YYYY-MM-DD param as IST day start (expressed in UTC)
+    const parseISTDayStart = (yyyymmdd: string): Date => {
+      const [y, m, d] = yyyymmdd.split("-").map(Number);
+      // Build a UTC timestamp that represents midnight IST for that calendar date
+      const utcMs = Date.UTC(y, m - 1, d) - IST_OFFSET_MS;
+      return new Date(utcMs);
+    };
+    // End of IST day = start + 24h
+    const parseISTDayEnd = (yyyymmdd: string): Date =>
+      new Date(parseISTDayStart(yyyymmdd).getTime() + 86400000);
+
+    // ------ Date range defaults: Mon of current IST week to end of today IST ------
+    const nowIST     = new Date(Date.now() + IST_OFFSET_MS);
+    const dayOfWeek  = nowIST.getUTCDay(); // 0=Sun in UTC but we've shifted to IST
+    const daysBack   = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+    const mondayIST  = new Date(nowIST.getTime() - daysBack * 86400000);
+    // IST Monday midnight → UTC
+    const defaultFrom = new Date(
+      Date.UTC(mondayIST.getUTCFullYear(), mondayIST.getUTCMonth(), mondayIST.getUTCDate()) - IST_OFFSET_MS
+    );
+    // End of today IST
+    const defaultTo = new Date(
+      Date.UTC(nowIST.getUTCFullYear(), nowIST.getUTCMonth(), nowIST.getUTCDate()) - IST_OFFSET_MS + 86400000
+    );
 
     const fromParam = searchParams.get("from");
     const toParam   = searchParams.get("to");
 
-    const fromDate = fromParam ? new Date(fromParam + "T00:00:00.000Z") : monday;
-    const toDate   = toParam   ? new Date(toParam   + "T23:59:59.999Z") : todayUTC;
+    const fromDate = fromParam ? parseISTDayStart(fromParam) : defaultFrom;
+    const toDate   = toParam   ? parseISTDayEnd(toParam)     : defaultTo;
 
     const userIdParam = searchParams.get("userId");
     const limitParam  = parseInt(searchParams.get("limit") ?? "500", 10);
@@ -50,7 +68,7 @@ export async function GET(request: Request) {
     // Build attendance query
     const filter: Record<string, unknown> = {
       tenantId: new mongoose.Types.ObjectId(session.tenantId),
-      date: { $gte: fromDate, $lte: toDate },
+      date: { $gte: fromDate, $lt: toDate },
     };
 
     // Non-elevated users only see their own records
@@ -72,9 +90,19 @@ export async function GET(request: Request) {
       { name: string; email: string; role: string; department: string; daysPresent: number; totalRegular: number; totalOvertime: number; lastLogin: Date | null }
     > = {};
 
+    // Deduplicate same-IST-day records per user before aggregating
+    // (handles legacy duplicate documents created by the old UTC-midnight normalization)
+    const seenDayKeys = new Set<string>();
+
     records.forEach((r: any) => {
       const u = typeof r.userId === "object" ? r.userId : null;
       const uid = u?._id?.toString() ?? r.userId?.toString() ?? "unknown";
+
+      // Compute IST calendar date string for this record
+      const istDay = new Date(new Date(r.date).getTime() + IST_OFFSET_MS).toISOString().split("T")[0];
+      const dayKey = `${uid}__${istDay}`;
+      const isDuplicate = seenDayKeys.has(dayKey);
+
       if (!userAggMap[uid]) {
         userAggMap[uid] = {
           name: u?.name ?? "Employee",
@@ -87,7 +115,12 @@ export async function GET(request: Request) {
           lastLogin: null,
         };
       }
-      userAggMap[uid].daysPresent += 1;
+
+      // Only count daysPresent once per IST day
+      if (!isDuplicate) {
+        seenDayKeys.add(dayKey);
+        userAggMap[uid].daysPresent += 1;
+      }
 
       let reg = r.regularHours ?? 0;
       let ot = r.overtimeHours ?? 0;

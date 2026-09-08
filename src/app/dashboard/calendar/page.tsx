@@ -133,6 +133,58 @@ function CalendarPageContent() {
     return { reg, ot, total: reg + ot };
   };
 
+  /**
+   * Merge multiple attendance records that fall on the same IST calendar day into one.
+   * This handles any legacy duplicate documents in the DB.
+   * - clockIn  → earliest across the group
+   * - clockOut → latest (or null if any session is still Active)
+   * - regularHours / overtimeHours → sum across group
+   * - All other fields taken from the most-recent record in the group
+   */
+  const mergeAttendanceByISTDay = (logs: any[]): any[] => {
+    const IST_OFF = 5.5 * 60 * 60 * 1000;
+    const grouped = new Map<string, any[]>();
+
+    logs.forEach((log) => {
+      // Build a composite key: IST date string + userId (string or object id)
+      const uid = typeof log.userId === "object" ? (log.userId?._id ?? log.userId) : log.userId;
+      const istDay = new Date(new Date(log.date).getTime() + IST_OFF)
+        .toISOString().split("T")[0];
+      const key = `${istDay}__${uid}`;
+      if (!grouped.has(key)) grouped.set(key, []);
+      grouped.get(key)!.push(log);
+    });
+
+    const merged: any[] = [];
+    grouped.forEach((group) => {
+      if (group.length === 1) {
+        merged.push(group[0]);
+        return;
+      }
+      // Sort by clockIn ascending so earliest is first
+      group.sort((a, b) => new Date(a.clockIn).getTime() - new Date(b.clockIn).getTime());
+      const base = { ...group[group.length - 1] }; // start from the latest record
+      base._id     = group[0]._id;                  // keep the first _id for key stability
+      base.clockIn = group[0].clockIn;               // earliest clock-in
+      // clockOut: null/undefined if any session is still active, otherwise the latest
+      const anyActive = group.some((g) => !g.clockOut);
+      base.clockOut = anyActive
+        ? undefined
+        : group.reduce((latest: any, g: any) =>
+            new Date(g.clockOut).getTime() > new Date(latest).getTime() ? g.clockOut : latest,
+            group[0].clockOut
+          );
+      base.regularHours  = group.reduce((s: number, g: any) => s + (g.regularHours  || 0), 0);
+      base.overtimeHours = group.reduce((s: number, g: any) => s + (g.overtimeHours || 0), 0);
+      merged.push(base);
+    });
+
+    // Restore original sort order (most recent first)
+    merged.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime() ||
+      new Date(b.clockIn).getTime() - new Date(a.clockIn).getTime());
+    return merged;
+  };
+
   const fetchLoginHoursSummary = async (from?: string, to?: string) => {
     if (!isAdmin && !isOPS) return;
     setSummaryLoading(true);
@@ -188,9 +240,11 @@ function CalendarPageContent() {
   };
 
   const exportAttendanceToCSV = () => {
+    // Merge same-day duplicates before export so CSV rows are clean
+    const mergedAll = mergeAttendanceByISTDay(attendanceHistory);
     const targetLogs = selectedDateFilter
-      ? attendanceHistory.filter((log) => getISTDateString(new Date(log.date)) === selectedDateFilter)
-      : attendanceHistory;
+      ? mergedAll.filter((log) => getISTDateString(new Date(log.date)) === selectedDateFilter)
+      : mergedAll;
 
     if (!targetLogs || targetLogs.length === 0) {
       showToast("No shift log data available for the selected date filter!", "error");
@@ -209,10 +263,10 @@ function CalendarPageContent() {
       const statusStr = `"${log.status || 'Present'}"`;
       const clockInStr = `"${log.clockIn ? formatISTTime(log.clockIn) : '--'}"`;
       const clockOutStr = `"${log.clockOut ? formatISTTime(log.clockOut) : (log.clockIn ? 'Active' : '--')}"`;
-      const regHrs = log.regularHours || 0;
-      const otHrs = log.overtimeHours || 0;
+      const { reg: regHrs, ot: otHrs } = getLogHours(log);
 
-      csvRows.push([empName, empEmail, empRole, dateStr, statusStr, clockInStr, clockOutStr, regHrs, otHrs].join(","));
+      csvRows.push([empName, empEmail, empRole, dateStr, statusStr, clockInStr, clockOutStr,
+        regHrs.toFixed(2), otHrs.toFixed(2)].join(","));
     });
 
     const blob = new Blob([csvRows.join("\n")], { type: "text/csv;charset=utf-8;" });
@@ -2075,9 +2129,9 @@ function CalendarPageContent() {
                 <div className="flex items-center gap-1.5">
                   <Button
                     size="sm"
-                    variant={selectedDateFilter === new Date().toISOString().split("T")[0] ? "default" : "outline"}
+                    variant={selectedDateFilter === getISTDateString() ? "default" : "outline"}
                     onClick={() => {
-                      setSelectedDateFilter(new Date().toISOString().split("T")[0]);
+                      setSelectedDateFilter(getISTDateString());
                       setAttendancePage(1);
                     }}
                     className="h-8 px-2.5 text-xs cursor-pointer"
@@ -2086,9 +2140,9 @@ function CalendarPageContent() {
                   </Button>
                   <Button
                     size="sm"
-                    variant={selectedDateFilter === new Date(Date.now() - 86400000).toISOString().split("T")[0] ? "default" : "outline"}
+                    variant={selectedDateFilter === getISTDateString(new Date(Date.now() - 86400000)) ? "default" : "outline"}
                     onClick={() => {
-                      setSelectedDateFilter(new Date(Date.now() - 86400000).toISOString().split("T")[0]);
+                      setSelectedDateFilter(getISTDateString(new Date(Date.now() - 86400000)));
                       setAttendancePage(1);
                     }}
                     className="h-8 px-2.5 text-xs cursor-pointer"
@@ -2113,9 +2167,10 @@ function CalendarPageContent() {
 
               {/* Whole Day Summary Pills */}
               {(() => {
+                const mergedHistory = mergeAttendanceByISTDay(attendanceHistory);
                 const targetLogs = selectedDateFilter
-                  ? attendanceHistory.filter((log) => getISTDateString(new Date(log.date)) === selectedDateFilter)
-                  : attendanceHistory;
+                  ? mergedHistory.filter((log) => getISTDateString(new Date(log.date)) === selectedDateFilter)
+                  : mergedHistory;
 
                 const totalStaff = targetLogs.length;
                 const totalRegHours = targetLogs.reduce((acc: number, log: any) => acc + getLogHours(log).reg, 0);
@@ -2144,9 +2199,10 @@ function CalendarPageContent() {
             </div>
 
             {(() => {
+              const mergedHistory = mergeAttendanceByISTDay(attendanceHistory);
               const filteredHistory = selectedDateFilter
-                ? attendanceHistory.filter((log) => getISTDateString(new Date(log.date)) === selectedDateFilter)
-                : attendanceHistory;
+                ? mergedHistory.filter((log) => getISTDateString(new Date(log.date)) === selectedDateFilter)
+                : mergedHistory;
 
               const totalItems = filteredHistory.length;
               const totalPages = Math.ceil(totalItems / attendanceRowsPerPage) || 1;
@@ -2229,10 +2285,27 @@ function CalendarPageContent() {
                                   {log.clockOut ? new Date(log.clockOut).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }) : (log.clockIn ? "Active" : "--")}
                                 </td>
                                 <td className="py-3 px-3 text-right font-mono font-bold text-foreground">
-                                  {getLogHours(log).reg.toFixed(1)} hrs
+                                  {(() => {
+                                    // For the active today-row, show live seconds from the timer
+                                    const isLiveRow = !log.clockOut && attendanceToday &&
+                                      String(log._id) === String(attendanceToday._id);
+                                    if (isLiveRow && totalSecondsWorked > 0) {
+                                      const liveHrs = Math.min(totalSecondsWorked / 3600, 8);
+                                      return <span className="text-primary animate-pulse">{liveHrs.toFixed(1)} hrs</span>;
+                                    }
+                                    return <>{getLogHours(log).reg.toFixed(1)} hrs</>;
+                                  })()}
                                 </td>
                                 <td className="py-3 px-3 text-right font-mono font-semibold text-amber-500">
-                                  {getLogHours(log).ot > 0 ? `+${getLogHours(log).ot.toFixed(1)} hrs` : "0 hrs"}
+                                  {(() => {
+                                    const isLiveRow = !log.clockOut && attendanceToday &&
+                                      String(log._id) === String(attendanceToday._id);
+                                    if (isLiveRow && totalSecondsWorked > 0) {
+                                      const liveOt = Math.max(0, totalSecondsWorked / 3600 - 8);
+                                      return liveOt > 0 ? <span className="animate-pulse">+{liveOt.toFixed(1)} hrs</span> : <>0 hrs</>;
+                                    }
+                                    return <>{getLogHours(log).ot > 0 ? `+${getLogHours(log).ot.toFixed(1)} hrs` : "0 hrs"}</>;
+                                  })()}
                                 </td>
                               </tr>
                             );
@@ -2952,10 +3025,12 @@ function CalendarPageContent() {
               const empObj = typeof selectedAttendanceLog.userId === "object" ? selectedAttendanceLog.userId : null;
               const empId = empObj?._id || selectedAttendanceLog.userId;
               
-              const empLogs = attendanceHistory.filter((h) => {
-                const hId = typeof h.userId === "object" ? h.userId?._id : h.userId;
-                return String(hId) === String(empId);
-              });
+              const empLogs = mergeAttendanceByISTDay(
+                attendanceHistory.filter((h) => {
+                  const hId = typeof h.userId === "object" ? h.userId?._id : h.userId;
+                  return String(hId) === String(empId);
+                })
+              );
 
               const formatDuration = (hrsNum: number) => {
                 const totalMins = Math.round(hrsNum * 60);
