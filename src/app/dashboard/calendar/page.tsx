@@ -12,6 +12,14 @@ import { Preloader } from "@/components/ui/Preloader";
 import { cn, formatISTDate, formatISTTime, getISTDateString } from "@/lib/utils";
 
 import { useTabPersistence } from "@/hooks/useTabPersistence";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 import { TeamShiftOverviewCard } from "@/components/dashboard/TeamShiftOverviewCard";
 
 function CalendarPageContent() {
@@ -926,6 +934,217 @@ function CalendarPageContent() {
     setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
   };
 
+  const exportCalendarToCSV = (scope: "month" | "all" = "month") => {
+    let targetEvents = [...events];
+    if (scope === "month") {
+      const targetMonth = currentDate.getMonth();
+      const targetYear = currentDate.getFullYear();
+      targetEvents = targetEvents.filter((evt) => {
+        const start = new Date(evt.startDate);
+        const end = new Date(evt.endDate || evt.startDate);
+        return (
+          (start.getMonth() === targetMonth && start.getFullYear() === targetYear) ||
+          (end.getMonth() === targetMonth && end.getFullYear() === targetYear) ||
+          (start <= new Date(targetYear, targetMonth + 1, 0) && end >= new Date(targetYear, targetMonth, 1))
+        );
+      });
+    }
+
+    if (filterType !== "All") {
+      targetEvents = targetEvents.filter((e) => e.type === filterType);
+    }
+
+    if (targetEvents.length === 0) {
+      showToast("No calendar events found to export for this selection.", "error");
+      return;
+    }
+
+    const headers = [
+      "Event Title",
+      "Event Type",
+      "Source",
+      "Start Date",
+      "Start Time (IST)",
+      "End Date",
+      "End Time (IST)",
+      "Department",
+      "Organizer / Assignee",
+      "Priority",
+      "Status",
+      "Description",
+    ];
+
+    const rows = targetEvents.map((evt) => {
+      const startDateObj = evt.startDate ? new Date(evt.startDate) : null;
+      const endDateObj = evt.endDate ? new Date(evt.endDate) : null;
+      const userName = typeof evt.userId === "object" ? evt.userId?.name || "Unassigned" : "Team Member";
+      const cleanDesc = (evt.description || "").replace(/[\r\n]+/g, " ").trim();
+
+      return [
+        evt.title || "Untitled",
+        evt.type || "General",
+        evt.source || (evt.isSynced ? "synced_task" : "manual_event"),
+        startDateObj ? formatISTDate(startDateObj) : "N/A",
+        startDateObj ? formatISTTime(startDateObj) : "N/A",
+        endDateObj ? formatISTDate(endDateObj) : "N/A",
+        endDateObj ? formatISTTime(endDateObj) : "N/A",
+        evt.department || "All",
+        userName,
+        evt.priority || "Normal",
+        evt.taskStatus || "Active",
+        cleanDesc,
+      ];
+    });
+
+    const csv = "\uFEFF" + [
+      headers.map((h) => `"${h}"`).join(","),
+      ...rows.map((r) => r.map((c) => `"${(c ?? "").toString().replace(/"/g, '""')}"`).join(",")),
+    ].join("\n");
+
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    const scopeLabel = scope === "month" ? `${monthsNames[currentDate.getMonth()]}_${currentDate.getFullYear()}` : "All_Events";
+    link.setAttribute("download", `Calendar_Schedule_${scopeLabel}_${new Date().toISOString().split("T")[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    showToast(`Exported ${targetEvents.length} calendar event(s) to CSV!`, "success");
+  };
+
+  const exportCalendarToICS = (scope: "month" | "all" = "month") => {
+    let targetEvents = [...events];
+    if (scope === "month") {
+      const targetMonth = currentDate.getMonth();
+      const targetYear = currentDate.getFullYear();
+      targetEvents = targetEvents.filter((evt) => {
+        const start = new Date(evt.startDate);
+        const end = new Date(evt.endDate || evt.startDate);
+        return (
+          (start.getMonth() === targetMonth && start.getFullYear() === targetYear) ||
+          (end.getMonth() === targetMonth && end.getFullYear() === targetYear) ||
+          (start <= new Date(targetYear, targetMonth + 1, 0) && end >= new Date(targetYear, targetMonth, 1))
+        );
+      });
+    }
+
+    if (filterType !== "All") {
+      targetEvents = targetEvents.filter((e) => e.type === filterType);
+    }
+
+    if (targetEvents.length === 0) {
+      showToast("No calendar events found to export for this selection.", "error");
+      return;
+    }
+
+    const formatICSDate = (date: Date) => {
+      return date.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+    };
+
+    const icsLines = [
+      "BEGIN:VCALENDAR",
+      "VERSION:2.0",
+      "PRODID:-//NexAce CRM//Calendar Schedule//EN",
+      "CALSCALE:GREGORIAN",
+      "METHOD:PUBLISH",
+    ];
+
+    targetEvents.forEach((evt) => {
+      const start = evt.startDate ? new Date(evt.startDate) : new Date();
+      let end = evt.endDate ? new Date(evt.endDate) : new Date(start.getTime() + 60 * 60 * 1000);
+      if (end <= start) {
+        end = new Date(start.getTime() + 60 * 60 * 1000);
+      }
+
+      const uid = `${evt._id || Math.random().toString(36).substring(2)}@nexace.crm`;
+      const title = (evt.title || "Untitled Event").replace(/[,;\\]/g, " ");
+      const desc = (evt.description || "").replace(/[\r\n]+/g, "\\n").replace(/[,;\\]/g, " ");
+      const userName = typeof evt.userId === "object" ? evt.userId?.name || "" : "";
+
+      icsLines.push("BEGIN:VEVENT");
+      icsLines.push(`UID:${uid}`);
+      icsLines.push(`DTSTAMP:${formatICSDate(new Date())}`);
+      icsLines.push(`DTSTART:${formatICSDate(start)}`);
+      icsLines.push(`DTEND:${formatICSDate(end)}`);
+      icsLines.push(`SUMMARY:${title}`);
+      if (desc) icsLines.push(`DESCRIPTION:${desc}${userName ? ` (Organizer: ${userName})` : ""}`);
+      if (evt.type) icsLines.push(`CATEGORIES:${evt.type}`);
+      if (evt.department) icsLines.push(`LOCATION:${evt.department} Department`);
+      icsLines.push("STATUS:CONFIRMED");
+      icsLines.push("END:VEVENT");
+    });
+
+    icsLines.push("END:VCALENDAR");
+
+    const blob = new Blob([icsLines.join("\r\n")], { type: "text/calendar;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    const scopeLabel = scope === "month" ? `${monthsNames[currentDate.getMonth()]}_${currentDate.getFullYear()}` : "All_Events";
+    link.setAttribute("download", `Calendar_Schedule_${scopeLabel}_${new Date().toISOString().split("T")[0]}.ics`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    showToast(`Exported ${targetEvents.length} event(s) to iCalendar (.ics) format!`, "success");
+  };
+
+  const exportSprintsToCSV = () => {
+    if (sprints.length === 0) {
+      showToast("No sprints available to export.", "error");
+      return;
+    }
+
+    const headers = [
+      "Sprint ID",
+      "Sprint Name",
+      "Goal",
+      "Status",
+      "Start Date",
+      "End Date",
+      "Tasks Count",
+      "Completed Tasks",
+      "Created At"
+    ];
+
+    const rows = sprints.map((s) => {
+      const taskCount = Array.isArray(s.tasks) ? s.tasks.length : (s.taskIds?.length || 0);
+      const completedCount = Array.isArray(s.tasks)
+        ? s.tasks.filter((t: any) => t.status === "Done").length
+        : 0;
+
+      return [
+        s._id,
+        s.name || "Untitled Sprint",
+        (s.goal || "").replace(/[\r\n]+/g, " ").trim(),
+        s.status || "Draft",
+        s.startDate ? formatISTDate(new Date(s.startDate)) : "N/A",
+        s.endDate ? formatISTDate(new Date(s.endDate)) : "N/A",
+        taskCount,
+        completedCount,
+        s.createdAt ? formatISTDate(new Date(s.createdAt)) : "",
+      ];
+    });
+
+    const csv = "\uFEFF" + [
+      headers.map((h) => `"${h}"`).join(","),
+      ...rows.map((r) => r.map((c) => `"${(c ?? "").toString().replace(/"/g, '""')}"`).join(",")),
+    ].join("\n");
+
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", `Sprints_Report_${new Date().toISOString().split("T")[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    showToast(`Exported ${sprints.length} sprint(s) to CSV!`, "success");
+  };
+
   if (!mounted || authLoading) {
     return <Preloader label="Loading Calendar & Operations..." />;
   }
@@ -958,15 +1177,49 @@ function CalendarPageContent() {
 
         <div className="flex items-center gap-2">
           {activeTab === "calendar" && (
-            <Button color="primary" size="sm" onClick={() => handleOpenScheduleEventModal()} className="gap-2 font-semibold">
-              <i className="fa-solid fa-plus text-xs" /> Schedule Event
-            </Button>
+            <div className="flex items-center gap-2">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" className="gap-2 font-semibold">
+                    <i className="fa-solid fa-file-export text-xs text-primary" /> Export Calendar
+                    <i className="fa-solid fa-chevron-down text-[10px] ml-0.5 opacity-70" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56">
+                  <DropdownMenuLabel className="text-xs text-muted-foreground">Export Calendar Schedule</DropdownMenuLabel>
+                  <DropdownMenuItem onClick={() => exportCalendarToCSV("month")} className="gap-2 cursor-pointer text-xs">
+                    <i className="fa-solid fa-file-csv text-emerald-500" /> Current Month (CSV)
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => exportCalendarToCSV("all")} className="gap-2 cursor-pointer text-xs">
+                    <i className="fa-solid fa-file-excel text-emerald-600" /> All Events (CSV)
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => exportCalendarToICS("month")} className="gap-2 cursor-pointer text-xs">
+                    <i className="fa-solid fa-calendar-arrow-down text-primary" /> Current Month (.ics / iCal)
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => exportCalendarToICS("all")} className="gap-2 cursor-pointer text-xs">
+                    <i className="fa-solid fa-calendar-plus text-primary" /> All Events (.ics / iCal)
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              <Button color="primary" size="sm" onClick={() => handleOpenScheduleEventModal()} className="gap-2 font-semibold">
+                <i className="fa-solid fa-plus text-xs" /> Schedule Event
+              </Button>
+            </div>
           )}
 
-          {activeTab === "sprints" && (isAdmin || isOPS || currentUser?.role === "Manager" || can("createSprints")) && (
-            <Button color="primary" size="sm" onClick={() => setShowSprintModal(true)} className="gap-2 font-semibold cursor-pointer">
-              <i className="fa-solid fa-rocket text-xs" /> Plan Sprint
-            </Button>
+          {activeTab === "sprints" && (
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={exportSprintsToCSV} className="gap-1.5 text-xs font-semibold">
+                <i className="fa-solid fa-file-csv text-emerald-500 text-xs" /> Export Sprints
+              </Button>
+              {(isAdmin || isOPS || currentUser?.role === "Manager" || can("createSprints")) && (
+                <Button color="primary" size="sm" onClick={() => setShowSprintModal(true)} className="gap-2 font-semibold cursor-pointer">
+                  <i className="fa-solid fa-rocket text-xs" /> Plan Sprint
+                </Button>
+              )}
+            </div>
           )}
         </div>
       </div>
@@ -1057,33 +1310,6 @@ function CalendarPageContent() {
                     <i className="fa-regular fa-circle-dot text-xs" /> Today
                   </Button>
                 )}
-              </div>
-
-              <div className="flex items-center gap-3">
-                <select
-                  value={filterType}
-                  onChange={(e) => setFilterType(e.target.value)}
-                  className="h-8 px-2.5 text-xs bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary font-medium"
-                >
-                  <option value="All">All Event Types</option>
-                  <option value="Meeting">Meetings</option>
-                  <option value="Holiday">Holidays</option>
-                  <option value="Birthday">Birthdays</option>
-                  <option value="Deadline">Deadlines</option>
-                  <option value="Personal">Personal</option>
-                </select>
-
-                <select
-                  value={filterDept}
-                  onChange={(e) => setFilterDept(e.target.value)}
-                  className="h-8 px-2.5 text-xs bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary font-medium"
-                >
-                  <option value="All">All Departments</option>
-                  <option value="Management">Management</option>
-                  <option value="Engineering">Engineering</option>
-                  <option value="Design">Design</option>
-                  <option value="Marketing">Marketing</option>
-                </select>
               </div>
             </div>
 
@@ -1287,9 +1513,21 @@ function CalendarPageContent() {
                   <i className="fa-solid fa-chart-pie text-primary text-sm" />
                   <h3 className="text-sm font-bold text-foreground">Event Category Breakdown & Donut Analytics</h3>
                 </div>
-                <Badge variant="outline" className="text-[10px] font-semibold bg-primary/10 text-primary border-primary/30">
-                  {events.length} Total Schedule Events
-                </Badge>
+                <div className="flex items-center gap-2">
+                  {filterType !== "All" && (
+                    <button
+                      onClick={() => setFilterType("All")}
+                      className="flex items-center gap-1.5 h-7 px-2.5 rounded-md text-[11px] font-semibold text-rose-500 border border-rose-500/30 bg-rose-500/10 hover:bg-rose-500/20 transition-colors cursor-pointer"
+                    >
+                      <i className="fa-solid fa-xmark text-[10px]" /> Clear Filter
+                    </button>
+                  )}
+                  <Badge variant="outline" className="text-[10px] font-semibold bg-primary/10 text-primary border-primary/30">
+                    {filterType === "All"
+                      ? `${events.length} Total Schedule Events`
+                      : `${events.filter((e) => e.type === filterType).length} ${filterType} Events`}
+                  </Badge>
+                </div>
               </div>
 
               {(() => {
