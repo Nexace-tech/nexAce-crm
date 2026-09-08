@@ -3,7 +3,7 @@ import mongoose, { Schema, Document, Model } from "mongoose";
 export interface IHRDocument extends Document {
   tenantId: mongoose.Types.ObjectId;
   title: string;
-  category: "Offer Letter" | "NDA" | "KRA Agreement" | "Policy" | "Tax Document" | "Other";
+  category: "Offer Letter" | "NDA" | "KRA Agreement" | "Policy" | "Tax Document" | "Contract" | "Document" | "Other";
   fileUrl: string;
   fileSize?: string;
   targetUserId?: mongoose.Types.ObjectId;
@@ -20,7 +20,7 @@ const HRDocumentSchema = new Schema(
     title: { type: String, required: true, trim: true },
     category: {
       type: String,
-      enum: ["Offer Letter", "NDA", "KRA Agreement", "Policy", "Tax Document", "Other"],
+      enum: ["Offer Letter", "NDA", "KRA Agreement", "Policy", "Tax Document", "Contract", "Document", "Other"],
       default: "Other",
     },
     fileUrl: { type: String, required: true },
@@ -34,6 +34,10 @@ const HRDocumentSchema = new Schema(
 );
 
 HRDocumentSchema.index({ tenantId: 1, targetUserId: 1 });
+
+if (mongoose.models && mongoose.models.HRDocument) {
+  delete (mongoose.models as any).HRDocument;
+}
 
 export const HRDocument: Model<IHRDocument> =
   mongoose.models.HRDocument ||

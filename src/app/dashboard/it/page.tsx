@@ -8,6 +8,7 @@ import { cn, formatISTDate, getISTDateString } from "@/lib/utils";
 import { useTabPersistence } from "@/hooks/useTabPersistence";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useAuth } from "@/hooks/useAuth";
+import { downloadInvoicePdf } from "@/lib/invoice-pdf";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -83,6 +84,7 @@ interface Invoice {
   invoiceNo: string;
   invoiceDate: string;
   dueDate: string;
+  paidDate?: string;
   customerNo: string;
   businessName: string;
   businessAddress: string;
@@ -99,6 +101,16 @@ interface Invoice {
   currency: string;
   status: "Draft" | "Sent" | "Pending" | "Paid" | "Overdue" | "Archived" | "Cancelled";
   notes?: string;
+  paymentDetails?: {
+    method?: string;
+    paidAt?: string | Date;
+    paidBy?: string;
+    transactionId?: string;
+    upiId?: string;
+    screenshotUrl?: string;
+  };
+  createdAt?: string | Date;
+  updatedAt?: string | Date;
 }
 
 // ─── API Helpers ─────────────────────────────────────────────────────────────
@@ -3541,6 +3553,7 @@ const EMPTY_INVOICE: Omit<Invoice, "id"> = {
   total: 1180,
   currency: "INR",
   status: "Draft",
+  paidDate: "",
   notes: "Payment due upon receipt.",
 };
 
@@ -3625,10 +3638,33 @@ function InvoiceModal({ initial, onSave, onClose, saving }: { initial: Omit<Invo
               </div>
               <div>
                 <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Status</label>
-                <select className={cn(fieldCls, "cursor-pointer")} value={form.status} onChange={(e) => setFormKey("status", e.target.value)}>
+                <select
+                  className={cn(fieldCls, "cursor-pointer")}
+                  value={form.status}
+                  onChange={(e) => {
+                    const nextStatus = e.target.value as any;
+                    setFormKey("status", nextStatus);
+                    if (nextStatus === "Paid" && !form.paidDate) {
+                      setFormKey("paidDate", new Date().toISOString().slice(0, 10));
+                    }
+                  }}
+                >
                   {["Draft", "Sent", "Pending", "Paid", "Overdue", "Archived", "Cancelled"].map((s) => <option key={s}>{s}</option>)}
                 </select>
               </div>
+              {form.status === "Paid" && (
+                <div>
+                  <label className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wide block mb-1 flex items-center gap-1">
+                    <i className="fa-solid fa-circle-check text-[10px]" /> Paid Date *
+                  </label>
+                  <input
+                    type="date"
+                    className={cn(fieldCls, "border-emerald-500/40 bg-emerald-500/5 text-emerald-600 dark:text-emerald-400 font-medium")}
+                    value={form.paidDate || form.invoiceDate || new Date().toISOString().slice(0, 10)}
+                    onChange={(e) => setFormKey("paidDate", e.target.value)}
+                  />
+                </div>
+              )}
               <div>
                 <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1">Invoice Date *</label>
                 <input type="date" className={fieldCls} value={form.invoiceDate} onChange={(e) => setFormKey("invoiceDate", e.target.value)} />
@@ -3910,29 +3946,152 @@ function InvoicesTab({ invoices, loading, onAdd, onEdit, onDelete, autoOpenAdd, 
             </div>
 
             {/* Dates & Subtotal / Total Calculation Summary */}
-            <div className="flex flex-col sm:flex-row justify-between sm:items-end gap-4 border-t border-border dark:border-slate-800 pt-4 text-xs">
-              <div className="space-y-1">
-                <p className="text-[10px] font-bold text-muted-foreground dark:text-slate-400 uppercase tracking-wider">Invoice Timeline</p>
-                <p className="text-foreground dark:text-slate-200 font-medium">
-                  <span className="text-muted-foreground">Issued:</span> <strong className="font-semibold text-foreground">{previewItem.invoiceDate}</strong> • <span className="text-muted-foreground">Due:</span> <strong className="font-semibold text-foreground">{previewItem.dueDate}</strong>
-                </p>
-              </div>
+            {(() => {
+              let paidDateStr = previewItem.paidDate;
+              if (!paidDateStr && previewItem.paymentDetails?.paidAt) {
+                try {
+                  paidDateStr = new Date(previewItem.paymentDetails.paidAt).toISOString().slice(0, 10);
+                } catch {}
+              }
+              if (!paidDateStr && previewItem.status === "Paid") {
+                if (previewItem.updatedAt) {
+                  try {
+                    paidDateStr = new Date(previewItem.updatedAt).toISOString().slice(0, 10);
+                  } catch {}
+                }
+                if (!paidDateStr) {
+                  paidDateStr = previewItem.dueDate || previewItem.invoiceDate || "";
+                }
+              }
 
-              <div className="text-right space-y-1 bg-muted/30 dark:bg-slate-800/50 p-3 rounded-xl border border-border/60 dark:border-slate-700/60">
-                <p className="text-xs text-muted-foreground dark:text-slate-300">
-                  Subtotal: <strong className="font-mono text-foreground">{formatCurrency(previewItem.subtotal || 0, previewItem.currency)}</strong> | Tax ({previewItem.taxRate}%): <strong className="font-mono text-foreground">{formatCurrency(previewItem.taxAmount || 0, previewItem.currency)}</strong>
-                </p>
-                <p className="text-xl font-black text-emerald-500 dark:text-emerald-400 tracking-tight pt-1">
-                  Total: {formatCurrency(previewItem.total || 0, previewItem.currency)}
-                </p>
-              </div>
-            </div>
+              const isPaid = previewItem.status === "Paid" || Boolean(previewItem.paidDate) || Boolean(previewItem.paymentDetails?.paidAt);
+
+              return (
+                <div className="grid grid-cols-1 sm:grid-cols-12 gap-4 border-t border-border dark:border-slate-800 pt-5 text-xs">
+                  {/* Timeline Cards Block (span 7) */}
+                  <div className="sm:col-span-7 bg-muted/30 dark:bg-slate-800/40 p-4 rounded-xl border border-border/70 dark:border-slate-800 flex flex-col justify-between gap-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-bold text-muted-foreground dark:text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                        <i className="fa-regular fa-clock text-[10px] text-primary" /> Invoice Timeline
+                      </span>
+                      {isPaid ? (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/25">
+                          <i className="fa-solid fa-circle-check text-[9px]" /> Paid & Settled
+                        </span>
+                      ) : previewItem.status === "Overdue" ? (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-rose-500/10 text-rose-500 border border-rose-500/25">
+                          <i className="fa-solid fa-triangle-exclamation text-[9px]" /> Overdue
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/25">
+                          <i className="fa-regular fa-clock text-[9px]" /> Pending Payment
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Milestone Chips */}
+                    <div className="grid grid-cols-3 gap-2">
+                      <div className="p-2.5 rounded-lg bg-card dark:bg-slate-900 border border-border/60 dark:border-slate-700/60 space-y-0.5">
+                        <p className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wide">Issued Date</p>
+                        <p className="text-xs font-bold text-foreground font-mono truncate">{previewItem.invoiceDate || "—"}</p>
+                      </div>
+
+                      <div className="p-2.5 rounded-lg bg-card dark:bg-slate-900 border border-border/60 dark:border-slate-700/60 space-y-0.5">
+                        <p className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wide">Due Date</p>
+                        <p className="text-xs font-bold text-foreground font-mono truncate">{previewItem.dueDate || "—"}</p>
+                      </div>
+
+                      <div className={cn(
+                        "p-2.5 rounded-lg border transition-colors space-y-0.5",
+                        isPaid && paidDateStr
+                          ? "bg-emerald-500/10 dark:bg-emerald-500/15 border-emerald-500/30 text-emerald-600 dark:text-emerald-400"
+                          : "bg-card/50 dark:bg-slate-900/50 border-border/40 opacity-70"
+                      )}>
+                        <p className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wide">Paid Date</p>
+                        <p className="text-xs font-bold font-mono truncate flex items-center gap-1">
+                          {isPaid && paidDateStr ? (
+                            <>
+                              <i className="fa-solid fa-check text-[9px] text-emerald-500 shrink-0" />
+                              <span>{paidDateStr}</span>
+                            </>
+                          ) : (
+                            <span className="text-muted-foreground font-normal">Unpaid</span>
+                          )}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Financial Calculation Block (span 5) */}
+                  <div className="sm:col-span-5 bg-muted/40 dark:bg-slate-800/60 p-4 rounded-xl border border-border/80 dark:border-slate-700/80 flex flex-col justify-between gap-3">
+                    <div className="space-y-1.5 text-xs">
+                      <div className="flex justify-between text-muted-foreground dark:text-slate-300">
+                        <span>Subtotal:</span>
+                        <strong className="font-mono text-foreground font-semibold">
+                          {formatCurrency(previewItem.subtotal || 0, previewItem.currency)}
+                        </strong>
+                      </div>
+                      <div className="flex justify-between text-muted-foreground dark:text-slate-300">
+                        <span>Tax ({previewItem.taxRate || 0}%):</span>
+                        <strong className="font-mono text-foreground font-semibold">
+                          {formatCurrency(previewItem.taxAmount || 0, previewItem.currency)}
+                        </strong>
+                      </div>
+                    </div>
+
+                    <div className="border-t border-border/70 dark:border-slate-700/70 pt-2 flex items-baseline justify-between">
+                      <span className="text-xs font-bold text-foreground uppercase tracking-wide">Total:</span>
+                      <span className="text-xl font-black text-emerald-500 dark:text-emerald-400 font-mono tracking-tight">
+                        {formatCurrency(previewItem.total || 0, previewItem.currency)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Footer Buttons */}
-            <div className="flex justify-end gap-2 border-t border-border dark:border-slate-800 pt-4">
+            <div className="flex items-center justify-between gap-3 border-t border-border dark:border-slate-800 pt-4">
               <button
+                type="button"
+                onClick={() => {
+                  try {
+                    downloadInvoicePdf({
+                      invoiceNo: previewItem.invoiceNo,
+                      invoiceDate: previewItem.invoiceDate,
+                      dueDate: previewItem.dueDate,
+                      customerNo: previewItem.customerNo,
+                      businessName: previewItem.businessName,
+                      businessAddress: previewItem.businessAddress,
+                      businessEmail: previewItem.businessEmail,
+                      billedToName: previewItem.billedToName,
+                      billedToAddress: previewItem.billedToAddress,
+                      billedToEmail: previewItem.billedToEmail,
+                      items: previewItem.items || [],
+                      subtotal: previewItem.subtotal || 0,
+                      taxRate: previewItem.taxRate || 0,
+                      taxAmount: previewItem.taxAmount || 0,
+                      total: previewItem.total || 0,
+                      currency: previewItem.currency || "INR",
+                      status: previewItem.status,
+                      notes: previewItem.notes,
+                      paymentDetails: previewItem.paymentDetails,
+                    });
+                  } catch (e) {
+                    console.error("Failed to download PDF", e);
+                  }
+                }}
+                className="px-4 py-2 rounded-xl border border-border bg-card hover:bg-muted text-xs font-semibold text-foreground transition-all cursor-pointer shadow-2xs flex items-center gap-2"
+                title="Download Invoice PDF"
+              >
+                <i className="fa-solid fa-file-arrow-down text-primary text-xs" />
+                <span>Download PDF</span>
+              </button>
+
+              <button
+                type="button"
                 onClick={() => setPreviewItem(null)}
-                className="px-5 py-2 rounded-xl border border-border bg-muted/60 hover:bg-muted text-xs font-bold text-foreground transition-all cursor-pointer shadow-xs"
+                className="px-6 py-2 rounded-xl bg-muted/80 hover:bg-muted text-xs font-bold text-foreground transition-all cursor-pointer shadow-xs"
               >
                 Close
               </button>
@@ -4015,7 +4174,15 @@ function InvoicesTab({ invoices, loading, onAdd, onEdit, onDelete, autoOpenAdd, 
                     <td className="px-3 py-2.5 text-muted-foreground whitespace-nowrap">{row.dueDate}</td>
                     <td className="px-3 py-2.5 font-mono text-muted-foreground whitespace-nowrap">{row.customerNo || "—"}</td>
                     <td className="px-3 py-2.5 font-bold text-foreground whitespace-nowrap">{formatCurrency(row.total || 0, row.currency)}</td>
-                    <td className="px-3 py-2.5 whitespace-nowrap"><span className={statusBadge(row.status)}>{row.status}</span></td>
+                    <td className="px-3 py-2.5 whitespace-nowrap">
+                      <span className={statusBadge(row.status)}>{row.status}</span>
+                      {row.status === "Paid" && (
+                        <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-mono mt-0.5 flex items-center gap-1 font-semibold">
+                          <i className="fa-solid fa-check text-[8px]" />
+                          <span>{row.paidDate || (row.paymentDetails?.paidAt ? new Date(row.paymentDetails.paidAt).toISOString().slice(0, 10) : (row.dueDate || row.invoiceDate))}</span>
+                        </p>
+                      )}
+                    </td>
                     <td className="px-3 py-2.5 whitespace-nowrap">
                       <div className="flex items-center gap-1.5">
                         <button onClick={() => setPreviewItem(row)} className="px-2 py-1 rounded bg-muted hover:bg-accent text-muted-foreground hover:text-foreground text-[10px] font-semibold flex items-center gap-1 cursor-pointer transition-colors" title="Preview Invoice"><i className="fa-solid fa-eye text-[9px]" /> Preview</button>

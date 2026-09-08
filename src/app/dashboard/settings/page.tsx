@@ -13,9 +13,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { BrokenPhotoPlaceholder, BrokenPhotoBanner } from "@/components/ui/BrokenPhotoPlaceholder";
 import { cn, generateSecurePassword } from "@/lib/utils";
 import { useTabPersistence } from "@/hooks/useTabPersistence";
-import { UserManagementTab } from "@/components/settings/UserManagementTab";
 import { RoleDataControlTab } from "@/components/settings/RoleDataControlTab";
-import { ShiftAndStatusTab } from "@/components/settings/ShiftAndStatusTab";
 import { SelfServiceInvoiceTab } from "@/components/settings/SelfServiceInvoiceTab";
 
 function SettingsPageContent() {
@@ -24,10 +22,10 @@ function SettingsPageContent() {
   const { user, loading: authLoading, refreshUser } = useAuth();
   const { can, isAdmin, isOPS } = usePermissions();
 
-  const [activeTab, setActiveTab] = useTabPersistence<"profile" | "security" | "invoice" | "users" | "shifts" | "subscription" | "permissions" | "organization">(
+  const [activeTab, setActiveTab] = useTabPersistence<"profile" | "security" | "invoice" | "subscription" | "permissions" | "organization">(
     "settings_active_tab_v2",
     "profile",
-    ["profile", "security", "invoice", "users", "shifts", "subscription", "permissions", "organization"]
+    ["profile", "security", "invoice", "subscription", "permissions", "organization"]
   );
 
   // Sync tab with URL searchParams and handle redirection for moved tabs
@@ -47,7 +45,13 @@ function SettingsPageContent() {
       return;
     }
 
-    if (["profile", "security", "invoice", "users", "shifts", "subscription", "permissions", "organization"].includes(tabParam)) {
+    // Users and Shifts have been moved to OPS Portal
+    if (tabParam === "users" || tabParam === "shifts") {
+      router.replace(`/dashboard/clients?tab=${tabParam}`);
+      return;
+    }
+
+    if (["profile", "security", "invoice", "subscription", "permissions", "organization"].includes(tabParam)) {
       setActiveTab(tabParam as any);
     }
   }, [searchParams, router, setActiveTab]);
@@ -55,7 +59,7 @@ function SettingsPageContent() {
   // Sync tab with custom event from banners
   useEffect(() => {
     const handleTabSwitch = (e: any) => {
-      if (e.detail && e.detail !== activeTab && ["profile", "security", "invoice", "users", "shifts", "subscription", "permissions", "organization"].includes(e.detail)) {
+      if (e.detail && e.detail !== activeTab && ["profile", "security", "invoice", "subscription", "permissions", "organization"].includes(e.detail)) {
         setActiveTab(e.detail);
       }
     };
@@ -183,9 +187,6 @@ function SettingsPageContent() {
         setActiveTab("profile");
       }
       if (activeTab === "permissions" && !can("manageRolePermissions") && !isAdmin) {
-        setActiveTab("profile");
-      }
-      if (activeTab === "users" && !can("manageUsers") && !isAdmin) {
         setActiveTab("profile");
       }
       if (activeTab === "subscription" && !can("viewBillingSubscription") && !isAdmin) {
@@ -870,33 +871,6 @@ function SettingsPageContent() {
           </button>
         )}
 
-        {(can("manageUsers") || isAdmin || isOPS) && (
-          <button
-            onClick={() => setActiveTab("users")}
-            className={cn(
-              "px-3 py-2 text-xs sm:text-sm font-medium rounded-lg transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
-              activeTab === "users"
-                ? "bg-background text-primary shadow-xs font-bold border border-border"
-                : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
-            )}
-          >
-            <i className="fa-solid fa-users text-primary text-sm" /> Users
-          </button>
-        )}
-
-        {(can("manageShifts") || isAdmin || isOPS) && (
-          <button
-            onClick={() => setActiveTab("shifts")}
-            className={cn(
-              "px-3 py-2 text-xs sm:text-sm font-medium rounded-lg transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
-              activeTab === "shifts"
-                ? "bg-background text-primary shadow-xs font-bold border border-border"
-                : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
-            )}
-          >
-            <i className="fa-solid fa-clock text-amber-500 text-sm" /> Shifts &amp; Status
-          </button>
-        )}
 
         {(can("manageRoles") || isAdmin || isOPS) && (
           <button
@@ -929,16 +903,8 @@ function SettingsPageContent() {
 
       {/* Active Tab Content with Smooth Transition */}
       <div key={activeTab} className="animate-in fade-in-50 slide-in-from-bottom-2 duration-300 ease-out transition-all">
-        {/* TAB: USER MANAGEMENT */}
-        {activeTab === "users" && (can("manageUsers") || isAdmin) && <UserManagementTab />}
-
         {/* TAB: SELF-SERVICE INVOICE GENERATOR */}
         {activeTab === "invoice" && <SelfServiceInvoiceTab showToast={showToast} />}
-
-        {/* TAB: SHIFTS & EMPLOYMENT TYPES */}
-        {activeTab === "shifts" && (can("manageShifts") || isAdmin) && (
-          <ShiftAndStatusTab isAdmin={can("manageShifts") || isAdmin} showToast={showToast} />
-        )}
 
         {/* TAB: ORGANIZATION DETAILS (Admin & OPS only) */}
         {activeTab === "organization" && (isAdmin || isOPS) && (

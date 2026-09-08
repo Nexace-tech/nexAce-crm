@@ -12,9 +12,11 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { BulkImportModal } from "@/components/operations/BulkImportModal";
 import HrWorkdeskDashboard from "@/components/operations/HrWorkdeskDashboard";
 import ReportsDashboard from "@/components/operations/ReportsDashboard";
+import { UserManagementTab } from "@/components/settings/UserManagementTab";
+import { ShiftAndStatusTab } from "@/components/settings/ShiftAndStatusTab";
 import { cn } from "@/lib/utils";
 
-export type OpsTabKey = "operations" | "hr" | "external" | "reports";
+export type OpsTabKey = "operations" | "hr" | "external" | "reports" | "users" | "shifts";
 
 interface ClientData {
   _id: string;
@@ -84,6 +86,10 @@ export default function OperationsPage() {
       ? "external"
       : tabParam === "hr"
       ? "hr"
+      : tabParam === "users"
+      ? "users"
+      : tabParam === "shifts"
+      ? "shifts"
       : "operations";
 
   const [activeTab, setActiveTab] = useState<OpsTabKey>(initialTab);
@@ -92,8 +98,17 @@ export default function OperationsPage() {
     if (tabParam === "reports") setActiveTab("reports");
     else if (tabParam === "hr") setActiveTab("hr");
     else if (tabParam === "external" || tabParam === "external-teams") setActiveTab("external");
+    else if (tabParam === "users") setActiveTab("users");
+    else if (tabParam === "shifts") setActiveTab("shifts");
     else if (tabParam === "operations") setActiveTab("operations");
   }, [tabParam]);
+
+  // Toast state (used by ShiftAndStatusTab)
+  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
+  const showToast = (message: string, type: "success" | "error" = "success") => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 4000);
+  };
   const [viewMode, setViewMode] = useState<"list" | "grid">("list");
 
   // HR Workdesk State
@@ -769,6 +784,20 @@ export default function OperationsPage() {
 
   return (
     <div className="space-y-8">
+      {/* Toast Notification */}
+      {toast && (
+        <div
+          className={`fixed bottom-5 right-5 z-[200] flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-xl text-sm font-medium animate-in slide-in-from-bottom-3 ${
+            toast.type === "success"
+              ? "bg-emerald-600 text-white"
+              : "bg-red-600 text-white"
+          }`}
+        >
+          {toast.type === "success" ? <i className="fa-solid fa-circle-check text-base" /> : <i className="fa-solid fa-circle-exclamation text-base" />}
+          {toast.message}
+        </div>
+      )}
+
       {/* Header - Styled consistently with IT Portal */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
@@ -846,6 +875,8 @@ export default function OperationsPage() {
           { key: "hr", label: "HR Workdesk", icon: "fa-solid fa-users-gear", count: hrAllocations.length },
           { key: "external", label: "External Teams", icon: "fa-solid fa-building-user", count: externalMembers.length },
           { key: "reports", label: "Reports & Data Exports", icon: "fa-solid fa-file-lines" },
+          ...((can("manageUsers") || isAdmin || isOPS) ? [{ key: "users", label: "User Management", icon: "fa-solid fa-users" }] : []),
+          ...((can("manageShifts") || isAdmin || isOPS) ? [{ key: "shifts", label: "Shifts & Status", icon: "fa-solid fa-clock" }] : []),
         ].map((tab) => (
           <button
             key={tab.key}
@@ -1748,6 +1779,16 @@ export default function OperationsPage() {
       {/* Reports & Data Exports Tab View */}
       {activeTab === "reports" && (
         <ReportsDashboard embedded={true} />
+      )}
+
+      {/* TAB: USER MANAGEMENT (moved from Settings) */}
+      {activeTab === "users" && (can("manageUsers") || isAdmin) && (
+        <UserManagementTab />
+      )}
+
+      {/* TAB: SHIFTS & STATUS (moved from Settings) */}
+      {activeTab === "shifts" && (can("manageShifts") || isAdmin) && (
+        <ShiftAndStatusTab isAdmin={can("manageShifts") || isAdmin} showToast={showToast} />
       )}
 
       {/* Allocate HR Resource Modal */}

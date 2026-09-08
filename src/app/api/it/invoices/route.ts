@@ -91,6 +91,7 @@ export async function POST(request: Request) {
       total,
       currency,
       status,
+      paidDate,
       notes,
       shiftAttendance,
       timesheetEntries,
@@ -127,6 +128,7 @@ export async function POST(request: Request) {
       total: Number(total) || 0,
       currency: currency || "INR",
       status: status || "Draft",
+      paidDate: paidDate || (status === "Paid" ? new Date().toISOString().slice(0, 10) : ""),
       notes: notes || "",
       // Structured shift clock & timesheet data for admin visibility
       shiftAttendance: shiftAttendance || null,

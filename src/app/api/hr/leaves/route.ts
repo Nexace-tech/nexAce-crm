@@ -3,6 +3,8 @@ import { connectToDatabase } from "@/lib/db";
 import { LeaveRequest } from "@/models/LeaveRequest";
 import { requireTenantSession, isAuthError } from "@/lib/auth-guard";
 
+import { isSubAdminRole } from "@/lib/roles";
+
 export async function GET() {
   try {
     const authResult = await requireTenantSession();
@@ -12,9 +14,8 @@ export async function GET() {
 
     const filter: any = { tenantId: tenantObjectId };
 
-    // Employees only see their own leaves; Managers/Admins/OPS see all
-    const isAdminOrManager = session.role === "Admin" || session.role === "Manager" || session.role === "OPS";
-    if (!isAdminOrManager) {
+    const isPrivileged = session.role === "Admin" || session.role === "Manager" || session.role === "HR" || session.role === "OPS" || isSubAdminRole(session.role);
+    if (!isPrivileged) {
       filter.userId = userObjectId;
     }
 

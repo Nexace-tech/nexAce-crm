@@ -44,6 +44,7 @@ export interface IITInvoice extends Document {
   total: number;
   currency: string;
   status: "Draft" | "Sent" | "Pending" | "Paid" | "Overdue" | "Archived" | "Cancelled";
+  paidDate?: string;
   notes?: string;
   // Payment confirmation details (captured when admin marks as Paid)
   paymentDetails?: {
@@ -122,6 +123,7 @@ const ITInvoiceSchema = new Schema<IITInvoice>(
       enum: ["Draft", "Sent", "Pending", "Paid", "Overdue", "Archived", "Cancelled"],
       default: "Draft",
     },
+    paidDate: { type: String, trim: true, default: "" },
     notes: { type: String, trim: true, default: "" },
     paymentDetails: {
       method: { type: String, enum: ["Bank Transfer", "UPI", "Cash"], default: null },

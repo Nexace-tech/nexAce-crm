@@ -93,8 +93,14 @@ export async function PATCH(
       }
     }
 
-    // Build final update body — insert processed paymentDetails
+    // Build final update body — insert processed paymentDetails and paidDate
     const updateBody = { ...body, ...(paymentDetails ? { paymentDetails } : {}) };
+
+    if (body.status === "Paid" && !body.paidDate && !(previousInvoice as any).paidDate) {
+      updateBody.paidDate = new Date().toISOString().slice(0, 10);
+    } else if (body.paidDate) {
+      updateBody.paidDate = body.paidDate;
+    }
 
     const updated = await ITInvoice.findOneAndUpdate(
       { _id: id, tenantId: tenantObjectId },

@@ -48,8 +48,8 @@ export default function NotificationsPage() {
         setNotifications(data.notifications || []);
         setUnreadCount(data.unreadCount || 0);
       }
-    } catch (err) {
-      console.error("Fetch notifications error:", err);
+    } catch {
+      // Quietly handle transient network disconnect
     } finally {
       setLoading(false);
     }
@@ -57,7 +57,11 @@ export default function NotificationsPage() {
 
   useEffect(() => {
     fetchNotifications();
-    const interval = setInterval(fetchNotifications, 5000);
+    const interval = setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+      if (typeof navigator !== "undefined" && !navigator.onLine) return;
+      fetchNotifications();
+    }, 8000);
     return () => clearInterval(interval);
   }, []);
 

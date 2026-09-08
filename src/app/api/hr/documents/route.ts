@@ -3,6 +3,8 @@ import { connectToDatabase } from "@/lib/db";
 import { HRDocument } from "@/models/HRDocument";
 import { requireTenantSession, isAuthError } from "@/lib/auth-guard";
 
+import { isSubAdminRole } from "@/lib/roles";
+
 export async function GET(req: Request) {
   try {
     const authResult = await requireTenantSession();
@@ -12,7 +14,8 @@ export async function GET(req: Request) {
     await connectToDatabase();
     const query: any = { tenantId: tenantObjectId };
 
-    if (session.role === "Employee") {
+    const isPrivileged = session.role === "Admin" || session.role === "Manager" || session.role === "HR" || session.role === "OPS" || isSubAdminRole(session.role);
+    if (!isPrivileged) {
       query.$or = [
         { isRestricted: false },
         { targetUserId: userObjectId },

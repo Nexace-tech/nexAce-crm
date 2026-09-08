@@ -4,6 +4,8 @@ import { HRCase } from "@/models/HRCase";
 import { requireTenantSession, isAuthError } from "@/lib/auth-guard";
 import { notify, notifyAdmins } from "@/lib/notify";
 
+import { isSubAdminRole } from "@/lib/roles";
+
 export async function GET() {
   try {
     const authResult = await requireTenantSession();
@@ -12,7 +14,8 @@ export async function GET() {
     await connectToDatabase();
 
     const filter: any = { tenantId: tenantObjectId };
-    if (session.role === "Employee") {
+    const isPrivileged = session.role === "Admin" || session.role === "Manager" || session.role === "HR" || session.role === "OPS" || isSubAdminRole(session.role);
+    if (!isPrivileged) {
       filter.userId = authResult.userObjectId;
     }
 

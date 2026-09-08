@@ -2,12 +2,13 @@ import { NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/db";
 import { User } from "@/models/User";
 import { requireTenantSession, isAuthError } from "@/lib/auth-guard";
+import { isSubAdminRole } from "@/lib/roles";
 
 export async function GET(req: Request) {
   try {
     const authResult = await requireTenantSession();
     if (isAuthError(authResult)) return authResult;
-    const { tenantObjectId } = authResult;
+    const { tenantObjectId, session, userObjectId } = authResult;
 
     await connectToDatabase();
     const { searchParams } = new URL(req.url);
@@ -15,6 +16,12 @@ export async function GET(req: Request) {
     const role = searchParams.get("role");
 
     const query: any = { tenantId: tenantObjectId };
+
+    const isPrivileged = session.role === "Admin" || session.role === "Manager" || session.role === "HR" || session.role === "OPS" || isSubAdminRole(session.role);
+    if (!isPrivileged) {
+      query._id = userObjectId;
+    }
+
     if (department && department !== "All") {
       query.$or = [{ department }, { departments: department }];
     }
