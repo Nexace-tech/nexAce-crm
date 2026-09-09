@@ -231,8 +231,8 @@ export async function POST(request: Request) {
 
     const taskLinkUrl = `/dashboard/projects?projectId=${projectId}&taskId=${newTask._id}&tab=kanban`;
 
-    // Real-time Notification for Assignee
-    if (assignee) {
+    // Real-time Notification for Assignee (only if assigned to someone else, never for self-assignment)
+    if (assignee && String(assignee) !== String(session.userId)) {
       await notify(session.tenantId, assignee, {
         title: "New Task Assigned",
         message: `${session.userName} assigned you task: '${title}'`,
@@ -241,13 +241,18 @@ export async function POST(request: Request) {
       });
     }
 
-    // Notify Admins of task creation
-    await notifyAdmins(session.tenantId, {
-      title: "Task Created",
-      message: `${session.userName} created task: '${title}' (${status || "To Do"})`,
-      type: "task",
-      linkUrl: taskLinkUrl,
-    });
+    // Notify Admins of task creation (exclude creator)
+    await notifyAdmins(
+      session.tenantId,
+      {
+        title: "Task Created",
+        message: `${session.userName} created task: '${title}' (${status || "To Do"})`,
+        type: "task",
+        linkUrl: taskLinkUrl,
+      },
+      ["Admin"],
+      session.userId
+    );
 
     return NextResponse.json({ success: true, task: newTask }, { status: 201 });
   } catch (error: unknown) {
@@ -364,8 +369,8 @@ export async function PUT(request: Request) {
       const taskProjId = task.projectId?._id?.toString() || task.projectId?.toString() || "";
       const taskLinkUrl = `/dashboard/projects?projectId=${taskProjId}&taskId=${task._id}&tab=kanban`;
 
-      // Notify the newly assigned user
-      if (assignee) {
+      // Notify the newly assigned user (only if assigned to someone else, never for self-assignment)
+      if (assignee && String(assignee) !== String(session.userId)) {
         await notify(session.tenantId, assignee, {
           title: "Task Assigned to You",
           message: `${session.userName} assigned you task: '${task.title}'`,
@@ -534,13 +539,18 @@ export async function DELETE(request: Request) {
       details: `Deleted task '${task.title}'`,
     });
 
-    // Notify Admins on task deletion
-    await notifyAdmins(session.tenantId, {
-      title: "Task Deleted",
-      message: `${session.userName} deleted task: '${task.title}'`,
-      type: "task",
-      linkUrl: "/dashboard/projects",
-    });
+    // Notify Admins on task deletion (exclude deleter)
+    await notifyAdmins(
+      session.tenantId,
+      {
+        title: "Task Deleted",
+        message: `${session.userName} deleted task: '${task.title}'`,
+        type: "task",
+        linkUrl: "/dashboard/projects",
+      },
+      ["Admin"],
+      session.userId
+    );
 
     return NextResponse.json({ success: true, message: "Task deleted successfully" });
   } catch (error: unknown) {

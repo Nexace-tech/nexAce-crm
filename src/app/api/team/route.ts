@@ -123,7 +123,7 @@ export async function GET(request: Request) {
         ...u,
         isOnline,
         isClockedIn,
-        clockInTime: att?.clockIn || null,
+        clockInTime: att ? (att.originalClockIn || att.clockIn || null) : null,
         clockOutTime: att?.clockOut || null,
         attendanceStatus: isClockedIn ? "Active" : att?.clockOut ? "Shift Ended" : "Off Shift"
       };

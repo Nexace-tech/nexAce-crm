@@ -521,7 +521,7 @@ export function generateAndDownloadPDF(options: PDFReportOptions) {
       return [
         log.date ? formatISTDate(log.date) : "--",
         shiftT,
-        log.clockIn ? formatISTTime(log.clockIn) : "--",
+        (log.originalClockIn || log.clockIn) ? formatISTTime(log.originalClockIn ?? log.clockIn) : "--",
         log.clockOut && log.clockOut !== "Active" ? formatISTTime(log.clockOut) : log.clockIn ? "Active" : "--",
         `${total.toFixed(2)}h`,
         `${reg.toFixed(2)}h`,

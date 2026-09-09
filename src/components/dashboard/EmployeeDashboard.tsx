@@ -55,7 +55,8 @@ export function EmployeeDashboard({ user }: { user: any }) {
         if (data.attendance && data.attendance.clockIn && !data.attendance.clockOut) {
           setClockedIn(true);
           setClockInIso(data.attendance.clockIn);
-          const clockInDate = new Date(data.attendance.clockIn);
+          const displayClockIn = data.attendance.originalClockIn || data.attendance.clockIn;
+          const clockInDate = new Date(displayClockIn);
           setClockTime(clockInDate.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: true }));
         } else {
           setClockedIn(false);
@@ -337,7 +338,7 @@ export function EmployeeDashboard({ user }: { user: any }) {
         const shiftName = user?.shiftName || "Standard Day Shift";
         const shiftTime = user?.shiftTime || "09:00 AM - 05:00 PM";
         const dateStr = log.date ? formatISTDate(log.date) : "";
-        const clockInStr = log.clockIn ? formatISTTime(log.clockIn) : "--";
+        const clockInStr = (log.originalClockIn || log.clockIn) ? formatISTTime(log.originalClockIn ?? log.clockIn) : "--";
         const clockOutStr = log.clockOut && log.clockOut !== "Active" ? formatISTTime(log.clockOut) : (log.clockIn ? "Active Shift" : "--");
 
         const { reg, ot, total } = getLogHours(log);

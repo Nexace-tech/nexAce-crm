@@ -4,6 +4,8 @@ export interface IAttendance extends Document {
   userId: mongoose.Types.ObjectId;
   date: Date; // Normalized to midnight UTC
   clockIn: Date;
+  originalClockIn?: Date; // Preserved original clock-in
+  lastResumedAt?: Date; // Timestamp of when the shift was resumed for active segment calculation
   clockOut?: Date;
   regularHours?: number;
   overtimeHours?: number;
@@ -18,6 +20,9 @@ const AttendanceSchema = new Schema<IAttendance>(
     userId: { type: Schema.Types.ObjectId, ref: "User", required: true },
     date: { type: Date, required: true },
     clockIn: { type: Date, required: true },
+    // Preserved across break/resume — always shows the original clock-in time of the day
+    originalClockIn: { type: Date },
+    lastResumedAt: { type: Date },
     clockOut: { type: Date },
     regularHours: { type: Number, default: 0 },
     overtimeHours: { type: Number, default: 0 },

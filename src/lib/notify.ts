@@ -34,7 +34,8 @@ interface NotifyPayload {
 export async function notify(
   tenantId: mongoose.Types.ObjectId | string,
   recipients: mongoose.Types.ObjectId | string | (mongoose.Types.ObjectId | string)[] | "broadcast",
-  payload: NotifyPayload
+  payload: NotifyPayload,
+  excludeUserId?: mongoose.Types.ObjectId | string
 ): Promise<void> {
   try {
     await connectToDatabase();
@@ -59,6 +60,11 @@ export async function notify(
           ? new mongoose.Types.ObjectId(recipients)
           : new mongoose.Types.ObjectId(recipients.toString()),
       ];
+    }
+
+    if (excludeUserId) {
+      const exStr = excludeUserId.toString();
+      recipientIds = recipientIds.filter((id) => id.toString() !== exStr);
     }
 
     if (recipientIds.length === 0) return;

@@ -209,7 +209,7 @@ export function TeamShiftOverviewCard() {
         return [
           `"${formatISTDate(r.date)}"`,
           `"${formatISTDate(r.date, { weekday: "long" })}"`,
-          `"${fmtTime(r.clockIn)}"`,
+          `"${fmtTime(r.originalClockIn ?? r.clockIn)}"`,
           `"${r.clockOut ? fmtTime(r.clockOut) : (r.clockIn ? "Active" : "")}"`,
           `"${dur}"`,
           r.regularHours ?? 0,
@@ -1193,7 +1193,7 @@ export function TeamShiftOverviewCard() {
                           <div className="flex items-center gap-2">
                             <div className="text-center shrink-0">
                               <p className="text-[9px] text-muted-foreground uppercase font-semibold">In</p>
-                              <p className="font-mono font-black text-emerald-500 text-sm leading-none">{fmtTime(h.clockIn)}</p>
+                              <p className="font-mono font-black text-emerald-500 text-sm leading-none">{fmtTime(h.originalClockIn ?? h.clockIn)}</p>
                             </div>
 
                             <div className="flex-1 relative flex items-center">

@@ -363,7 +363,7 @@ export default function ReportsDashboard({ embedded = true }: ReportsDashboardPr
     const rows = filteredShiftLogs.map((log) => {
       const empName = typeof log.userId === "object" ? log.userId?.name : currentUser?.name || "Employee";
       const shiftName = typeof log.userId === "object" ? log.userId?.shiftName : currentUser?.shiftName || "Day Shift";
-      const inTime = log.clockIn ? formatISTTime(log.clockIn) : "-";
+      const inTime = (log.originalClockIn || log.clockIn) ? formatISTTime(log.originalClockIn ?? log.clockIn) : "-";
       const outTime = log.clockOut && log.clockOut !== "Active" ? formatISTTime(log.clockOut) : "Active";
       const hrs = getLogHours(log);
       const isOnline = log.clockIn && (!log.clockOut || log.clockOut === "Active");
@@ -441,7 +441,7 @@ export default function ReportsDashboard({ embedded = true }: ReportsDashboardPr
           return {
             date: log.date ? formatISTDate(log.date) : "-",
             employeeName: empName,
-            punchIn: log.clockIn ? formatISTTime(log.clockIn) : "-",
+            punchIn: (log.originalClockIn || log.clockIn) ? formatISTTime(log.originalClockIn ?? log.clockIn) : "-",
             punchOut: log.clockOut && log.clockOut !== "Active" ? formatISTTime(log.clockOut) : "Active",
             totalHours: hrs.total,
             status: log.status || "Present",
@@ -1050,7 +1050,7 @@ export default function ReportsDashboard({ embedded = true }: ReportsDashboardPr
                     {filteredShiftLogs.map((log) => {
                       const empName = typeof log.userId === "object" ? log.userId?.name : currentUser?.name || "Employee";
                       const shiftName = typeof log.userId === "object" ? log.userId?.shiftName : currentUser?.shiftName || "Day Shift";
-                      const inTime = log.clockIn ? formatISTTime(log.clockIn) : "-";
+                      const inTime = (log.originalClockIn || log.clockIn) ? formatISTTime(log.originalClockIn ?? log.clockIn) : "-";
                       const isOnline = log.clockIn && (!log.clockOut || log.clockOut === "Active");
                       const outTime = isOnline ? "Active" : log.clockOut ? formatISTTime(log.clockOut) : "-";
                       const hrs = getLogHours(log);
