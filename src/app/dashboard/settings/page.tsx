@@ -15,12 +15,13 @@ import { cn, generateSecurePassword } from "@/lib/utils";
 import { useTabPersistence } from "@/hooks/useTabPersistence";
 import { RoleDataControlTab } from "@/components/settings/RoleDataControlTab";
 import { SelfServiceInvoiceTab } from "@/components/settings/SelfServiceInvoiceTab";
+import { AccessRestricted } from "@/components/ui/AccessRestricted";
 
 function SettingsPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, loading: authLoading, refreshUser } = useAuth();
-  const { can, isAdmin, isOPS } = usePermissions();
+  const { can, isAdmin, isOPS, canAccessModule, loading: permLoading } = usePermissions();
 
   const [activeTab, setActiveTab] = useTabPersistence<"profile" | "security" | "invoice" | "subscription" | "permissions" | "organization">(
     "settings_active_tab_v2",
@@ -787,6 +788,10 @@ function SettingsPageContent() {
     return <Preloader label="Redirecting to Login..." />;
   }
 
+  if (!permLoading && !canAccessModule("settings")) {
+    return <AccessRestricted moduleName="Settings" icon="fa-solid fa-gear" />;
+  }
+
   return (
     <div className="space-y-6 w-full">
       {/* Toast Notification */}
@@ -820,11 +825,11 @@ function SettingsPageContent() {
       </div>
 
       {/* Settings Navigation Tabs */}
-      <div className="flex flex-wrap items-center gap-1.5 p-1.5 bg-muted/40 dark:bg-muted/20 rounded-xl border border-border/80">
+      <div className="flex items-center gap-1.5 p-1.5 bg-muted/40 dark:bg-muted/20 rounded-xl border border-border/80 overflow-x-auto no-scrollbar flex-nowrap sm:flex-wrap">
         <button
           onClick={() => setActiveTab("profile")}
           className={cn(
-            "px-3 py-2 text-xs sm:text-sm font-medium rounded-lg transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
+            "px-3 py-2 text-xs sm:text-sm font-medium rounded-lg transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap shrink-0 sm:shrink",
             activeTab === "profile"
               ? "bg-background text-primary shadow-xs font-bold border border-border"
               : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
@@ -836,7 +841,7 @@ function SettingsPageContent() {
         <button
           onClick={() => setActiveTab("security")}
           className={cn(
-            "px-3 py-2 text-xs sm:text-sm font-medium rounded-lg transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
+            "px-3 py-2 text-xs sm:text-sm font-medium rounded-lg transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap shrink-0 sm:shrink",
             activeTab === "security"
               ? "bg-background text-primary shadow-xs font-bold border border-border"
               : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
@@ -848,7 +853,7 @@ function SettingsPageContent() {
         <button
           onClick={() => setActiveTab("invoice")}
           className={cn(
-            "px-3 py-2 text-xs sm:text-sm font-medium rounded-lg transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
+            "px-3 py-2 text-xs sm:text-sm font-medium rounded-lg transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap shrink-0 sm:shrink",
             activeTab === "invoice"
               ? "bg-background text-primary shadow-xs font-bold border border-border"
               : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
@@ -861,7 +866,7 @@ function SettingsPageContent() {
           <button
             onClick={() => setActiveTab("organization")}
             className={cn(
-              "px-3 py-2 text-xs sm:text-sm font-medium rounded-lg transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
+              "px-3 py-2 text-xs sm:text-sm font-medium rounded-lg transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap shrink-0 sm:shrink",
               activeTab === "organization"
                 ? "bg-background text-primary shadow-xs font-bold border border-border"
                 : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
@@ -876,7 +881,7 @@ function SettingsPageContent() {
           <button
             onClick={() => setActiveTab("permissions")}
             className={cn(
-              "px-3 py-2 text-xs sm:text-sm font-medium rounded-lg transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
+              "px-3 py-2 text-xs sm:text-sm font-medium rounded-lg transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap shrink-0 sm:shrink",
               activeTab === "permissions"
                 ? "bg-background text-primary shadow-xs font-bold border border-border"
                 : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
@@ -890,7 +895,7 @@ function SettingsPageContent() {
           <button
             onClick={() => setActiveTab("subscription")}
             className={cn(
-              "px-3 py-2 text-xs sm:text-sm font-medium rounded-lg transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
+              "px-3 py-2 text-xs sm:text-sm font-medium rounded-lg transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap shrink-0 sm:shrink",
               activeTab === "subscription"
                 ? "bg-background text-primary shadow-xs font-bold border border-border"
                 : "text-muted-foreground hover:text-foreground hover:bg-muted/60"

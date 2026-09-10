@@ -6,9 +6,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { usePermissions } from "@/hooks/usePermissions";
+import { AccessRestricted } from "@/components/ui/AccessRestricted";
 
 export default function SalesWorkdeskPage() {
-  const { can, isAdmin, isOPS } = usePermissions();
+  const { can, isAdmin, isOPS, canAccessModule, loading: permLoading } = usePermissions();
 
   // ── State ──
   const [salesDeals, setSalesDeals] = useState<SalesDeal[]>([]);
@@ -172,6 +173,10 @@ export default function SalesWorkdeskPage() {
 
   const inputCls = "h-9 text-sm bg-background border-input focus:ring-1 focus:ring-primary";
   const labelCls = "text-xs font-semibold text-muted-foreground uppercase tracking-wide";
+
+  if (!permLoading && !canAccessModule("sales")) {
+    return <AccessRestricted moduleName="Sales Workdesk" icon="fa-solid fa-handshake" />;
+  }
 
   return (
     <div className="space-y-8">

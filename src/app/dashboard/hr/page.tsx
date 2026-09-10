@@ -12,6 +12,7 @@ import { useTabPersistence } from "@/hooks/useTabPersistence";
 import { usePermissions } from "@/hooks/usePermissions";
 import { isSubAdminRole } from "@/lib/roles";
 import { HRTasksTab } from "@/components/hr/HRTasksTab";
+import { AccessRestricted } from "@/components/ui/AccessRestricted";
 
 interface LeaveData {
   _id: string; userId: string; userName: string;
@@ -35,7 +36,7 @@ const EMPLOYMENT_TYPE_CONFIG: Record<string, { badge: string; icon: string }> = 
 
 export default function HRPage() {
   const { user, loading: authLoading } = useAuth();
-  const { can, isAdmin, isOPS } = usePermissions();
+  const { can, isAdmin, isOPS, canAccessModule, loading: permLoading } = usePermissions();
   const [activeTab, setActiveTab] = useTabPersistence<
     "directory" | "tasks" | "checklists" | "leaves" | "vault" | "cases" | "appraisals" | "probation" | "sandbox"
   >(
@@ -885,6 +886,9 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
     const isUpcoming = probationEnd.getTime() - Date.now() < 30 * 24 * 60 * 60 * 1000 && probationEnd.getTime() > Date.now();
     return { ...u, joinDate, probationEnd, isUpcoming };
   });
+  if (!permLoading && !canAccessModule("hr")) {
+    return <AccessRestricted moduleName="HR Portal" icon="fa-solid fa-users-gear" />;
+  }
 
   return (
     <div className="space-y-6">

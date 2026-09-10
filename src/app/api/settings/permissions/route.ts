@@ -11,16 +11,17 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, Record<string, boolean>> =
     team: true,
     calendar: true,
     projects: true,
-    reports: true,
     chat: true,
-    hr: true,
-    goals: true,
-    analytics: true,
     clients: true,
     sales: true,
+    bd: true,
     finance: true,
-    it: true,
     referrals: true,
+    goals: true,
+    hr: true,
+    it: true,
+    analytics: true,
+    notifications: true,
     settings: true,
   },
   Manager: {
@@ -28,16 +29,17 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, Record<string, boolean>> =
     team: true,
     calendar: true,
     projects: true,
-    reports: true,
     chat: true,
-    hr: true,
-    goals: true,
-    analytics: false,
     clients: false,
     sales: true,
+    bd: true,
     finance: false,
-    it: false,
     referrals: true,
+    goals: true,
+    hr: true,
+    it: false,
+    analytics: false,
+    notifications: true,
     settings: true,
   },
   HR: {
@@ -45,16 +47,17 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, Record<string, boolean>> =
     team: true,
     calendar: true,
     projects: true,
-    reports: true,
     chat: true,
-    hr: true,
-    goals: true,
-    analytics: false,
     clients: false,
     sales: false,
+    bd: false,
     finance: false,
-    it: false,
-    referrals: false,
+    referrals: true,
+    goals: true,
+    hr: true,
+    it: true,
+    analytics: true,
+    notifications: true,
     settings: true,
   },
   Employee: {
@@ -62,16 +65,17 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, Record<string, boolean>> =
     team: true,
     calendar: true,
     projects: true,
-    reports: true,
     chat: true,
-    hr: true,
-    goals: false,
-    analytics: false,
     clients: false,
     sales: false,
+    bd: false,
     finance: false,
-    it: false,
     referrals: true,
+    goals: true,
+    hr: true,
+    it: false,
+    analytics: false,
+    notifications: true,
     settings: true,
   },
 };
@@ -103,12 +107,18 @@ export const DEFAULT_FEATURE_PERMISSIONS: Record<string, Record<string, boolean>
     viewAnalyticsDashboard: true, viewAuditLogs: true, exportReports: true, viewSecurityEvents: true,
     // CRM & Clients
     viewClients: true, createClients: true, editClients: true, deleteClients: true, viewDeals: true, manageDeals: true, exportClientData: true, manageClientContacts: true,
+    // Sales Workdesk
+    viewSalesWorkdesk: true, createSalesDeals: true, editSalesDeals: true, deleteSalesDeals: true, changeDealStages: true,
+    // BD & Leads
+    viewBD: true, createLeads: true, editLeads: true, deleteLeads: true, importLeads: true, exportLeads: true, viewProposals: true, createProposals: true, editProposals: true, deleteProposals: true, sendProposals: true,
     // Finance & Invoices
     viewFinancePortal: true, viewInvoices: true, createInvoices: true, approveInvoices: true, confirmInvoicePayments: true, exportInvoices: true, manageExpenses: true, viewExpenseReports: true,
     // IT & Infrastructure
     viewITPortal: true, manageITAccess: true, manageITSubscriptions: true, manageITDevices: true, manageITInvoices: true,
     // Referrals
     submitReferral: true, viewOwnReferrals: true, viewAllReferrals: true, manageReferrals: true,
+    // Notifications
+    viewNotifications: true, deleteNotifications: true,
     // Admin & Users
     manageUsers: false, changeUserRoles: false, resetUserPasswords: false, viewBillingSubscription: false, manageBilling: false,
     // Settings
@@ -139,12 +149,18 @@ export const DEFAULT_FEATURE_PERMISSIONS: Record<string, Record<string, boolean>
     viewAnalyticsDashboard: true, viewAuditLogs: false, exportReports: true, viewSecurityEvents: false,
     // CRM & Clients
     viewClients: false, createClients: false, editClients: false, deleteClients: false, viewDeals: false, manageDeals: false, exportClientData: false, manageClientContacts: false,
+    // Sales Workdesk
+    viewSalesWorkdesk: true, createSalesDeals: true, editSalesDeals: true, deleteSalesDeals: false, changeDealStages: true,
+    // BD & Leads
+    viewBD: true, createLeads: true, editLeads: true, deleteLeads: false, importLeads: true, exportLeads: true, viewProposals: true, createProposals: true, editProposals: true, deleteProposals: false, sendProposals: true,
     // Finance & Invoices
     viewFinancePortal: false, viewInvoices: false, createInvoices: true, approveInvoices: false, confirmInvoicePayments: false, exportInvoices: true, manageExpenses: false, viewExpenseReports: false,
     // IT & Infrastructure
     viewITPortal: false, manageITAccess: false, manageITSubscriptions: false, manageITDevices: false, manageITInvoices: false,
     // Referrals
     submitReferral: true, viewOwnReferrals: true, viewAllReferrals: false, manageReferrals: false,
+    // Notifications
+    viewNotifications: true, deleteNotifications: false,
     // Admin & Users
     manageUsers: false, changeUserRoles: false, resetUserPasswords: false, viewBillingSubscription: false, manageBilling: false,
     // Settings
@@ -158,7 +174,7 @@ export const DEFAULT_FEATURE_PERMISSIONS: Record<string, Record<string, boolean>
     // Calendar & Time
     logOwnTimesheet: true, editOwnTimesheet: true, viewTeamTimesheets: true, approveTimesheets: true, manageShifts: false, exportTimesheets: true, viewShiftCalendar: true, clockInOut: true,
     // Projects
-    viewProjects: false, createProjects: false, deleteProjects: false, assignTasksToOthers: false, changeTaskStatus: false, commentOnTasks: false, deleteTaskComments: false, manageProjectWiki: false, viewProjectGantt: false, exportProjectData: false,
+    viewProjects: true, createProjects: false, deleteProjects: false, assignTasksToOthers: false, changeTaskStatus: false, commentOnTasks: true, deleteTaskComments: false, manageProjectWiki: true, viewProjectGantt: false, exportProjectData: false,
     // Sprints
     createSprints: false, deleteSprints: false, moveBetweenSprints: false, completeSprints: false,
     // Drive
@@ -168,19 +184,25 @@ export const DEFAULT_FEATURE_PERMISSIONS: Record<string, Record<string, boolean>
     // HR & Leave
     applyLeave: true, viewOwnLeaveStatus: true, viewTeamLeave: true, approveLeave: true, manageOnboarding: true, viewHRCases: true, createHRCases: true, viewHROnboarding: true, manageHRCases: true,
     // Appraisals
-    viewOwnAppraisal: true, submitSelfReview: true, reviewTeamAppraisals: false, manageAppraisalCycles: true,
+    viewOwnAppraisal: true, submitSelfReview: true, reviewTeamAppraisals: true, manageAppraisalCycles: true,
     // Goals & OKRs
     viewGoals: true, createGoals: false, editGoals: false, deleteGoals: false, sendKudos: true, manageSurveys: true, viewSurveyResults: true, submitSurveyResponses: true,
     // Analytics
-    viewAnalyticsDashboard: false, viewAuditLogs: false, exportReports: true, viewSecurityEvents: false,
+    viewAnalyticsDashboard: true, viewAuditLogs: false, exportReports: true, viewSecurityEvents: false,
     // CRM & Clients
     viewClients: false, createClients: false, editClients: false, deleteClients: false, viewDeals: false, manageDeals: false, exportClientData: false, manageClientContacts: false,
+    // Sales Workdesk
+    viewSalesWorkdesk: false, createSalesDeals: false, editSalesDeals: false, deleteSalesDeals: false, changeDealStages: false,
+    // BD & Leads
+    viewBD: false, createLeads: false, editLeads: false, deleteLeads: false, importLeads: false, exportLeads: false, viewProposals: false, createProposals: false, editProposals: false, deleteProposals: false, sendProposals: false,
     // Finance & Invoices
     viewFinancePortal: false, viewInvoices: false, createInvoices: true, approveInvoices: false, confirmInvoicePayments: false, exportInvoices: true, manageExpenses: false, viewExpenseReports: false,
     // IT & Infrastructure
-    viewITPortal: false, manageITAccess: false, manageITSubscriptions: false, manageITDevices: false, manageITInvoices: false,
+    viewITPortal: true, manageITAccess: false, manageITSubscriptions: false, manageITDevices: true, manageITInvoices: false,
     // Referrals
-    submitReferral: false, viewOwnReferrals: false, viewAllReferrals: false, manageReferrals: false,
+    submitReferral: true, viewOwnReferrals: true, viewAllReferrals: true, manageReferrals: true,
+    // Notifications
+    viewNotifications: true, deleteNotifications: false,
     // Admin & Users — HR cannot manage user accounts, roles, or billing
     manageUsers: false, changeUserRoles: false, resetUserPasswords: false, viewBillingSubscription: false, manageBilling: false,
     // Settings — HR can only access own profile & password settings
@@ -211,12 +233,18 @@ export const DEFAULT_FEATURE_PERMISSIONS: Record<string, Record<string, boolean>
     viewAnalyticsDashboard: false, viewAuditLogs: false, exportReports: false, viewSecurityEvents: false,
     // CRM & Clients
     viewClients: false, createClients: false, editClients: false, deleteClients: false, viewDeals: false, manageDeals: false, exportClientData: false, manageClientContacts: false,
+    // Sales Workdesk
+    viewSalesWorkdesk: false, createSalesDeals: false, editSalesDeals: false, deleteSalesDeals: false, changeDealStages: false,
+    // BD & Leads
+    viewBD: false, createLeads: false, editLeads: false, deleteLeads: false, importLeads: false, exportLeads: false, viewProposals: false, createProposals: false, editProposals: false, deleteProposals: false, sendProposals: false,
     // Finance & Invoices
     viewFinancePortal: false, viewInvoices: false, createInvoices: true, approveInvoices: false, confirmInvoicePayments: false, exportInvoices: true, manageExpenses: false, viewExpenseReports: false,
     // IT & Infrastructure
     viewITPortal: false, manageITAccess: false, manageITSubscriptions: false, manageITDevices: false, manageITInvoices: false,
     // Referrals
     submitReferral: true, viewOwnReferrals: true, viewAllReferrals: false, manageReferrals: false,
+    // Notifications
+    viewNotifications: true, deleteNotifications: false,
     // Admin & Users
     manageUsers: false, changeUserRoles: false, resetUserPasswords: false, viewBillingSubscription: false, manageBilling: false,
     // Settings
@@ -289,6 +317,8 @@ export async function GET() {
     return NextResponse.json({
       permissions: permissionsMap,
       featurePermissions: featurePermissionsMap,
+      defaultPermissions: DEFAULT_ROLE_PERMISSIONS,
+      defaultFeaturePermissions: DEFAULT_FEATURE_PERMISSIONS,
       customRoles,
     });
   } catch (error: unknown) {
@@ -299,8 +329,11 @@ export async function GET() {
 }
 
 /**
- * POST: Update or create module & granular feature action permissions for a role (Admin only).
- * Body: { role: string, isCustom?: boolean, modulePermissions: { ... }, featurePermissions: { ... } }
+ * POST: Update, reset, or import module & granular feature action permissions for a role (Admin only).
+ * Body:
+ *   - Normal: { role: string, isCustom?: boolean, modulePermissions: { ... }, featurePermissions: { ... } }
+ *   - Reset:  { action: "reset", role: string }
+ *   - Import: { action: "bulk-import", policies: { [role]: { modulePermissions, featurePermissions, isCustom } } }
  */
 export async function POST(request: Request) {
   try {
@@ -313,7 +346,33 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Forbidden: Admin access required" }, { status: 403 });
     }
 
-    const { role, isCustom, modulePermissions, featurePermissions } = await request.json();
+    const body = await request.json();
+    await connectToDatabase();
+
+    // 1. Bulk Import Action
+    if (body.action === "bulk-import" && body.policies && typeof body.policies === "object") {
+      const tenantObjectId = new mongoose.Types.ObjectId(session.tenantId);
+      const entries = Object.entries(body.policies);
+      for (const [rName, policyData] of entries) {
+        if (!rName || rName === "Admin") continue;
+        const p = policyData as any;
+        await RolePermission.findOneAndUpdate(
+          { tenantId: tenantObjectId, role: rName.trim() },
+          {
+            $set: {
+              role: rName.trim(),
+              isCustom: p.isCustom ?? !["OPS", "Manager", "HR", "Employee"].includes(rName.trim()),
+              modulePermissions: p.modulePermissions || {},
+              featurePermissions: p.featurePermissions || {},
+            },
+          },
+          { upsert: true }
+        );
+      }
+      return NextResponse.json({ success: true, message: "Bulk policies imported successfully" });
+    }
+
+    const { role, isCustom, modulePermissions, featurePermissions, action } = body;
 
     if (!role || typeof role !== "string" || !role.trim()) {
       return NextResponse.json({ error: "Invalid role specified" }, { status: 400 });
@@ -325,8 +384,31 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Admin role permissions cannot be altered" }, { status: 400 });
     }
 
-    await connectToDatabase();
+    const tenantObjectId = new mongoose.Types.ObjectId(session.tenantId);
 
+    // 2. Reset to System Defaults Action
+    if (action === "reset") {
+      if (["OPS", "Manager", "HR", "Employee"].includes(cleanRole)) {
+        await RolePermission.deleteOne({
+          tenantId: tenantObjectId,
+          role: cleanRole,
+        });
+      } else {
+        // For custom roles, reset to Employee template
+        await RolePermission.findOneAndUpdate(
+          { tenantId: tenantObjectId, role: cleanRole },
+          {
+            $set: {
+              modulePermissions: DEFAULT_ROLE_PERMISSIONS.Employee,
+              featurePermissions: DEFAULT_FEATURE_PERMISSIONS.Employee,
+            },
+          }
+        );
+      }
+      return NextResponse.json({ success: true, message: `Reset '${cleanRole}' policy to defaults` });
+    }
+
+    // 3. Normal Update / Save Action
     const updatePayload: any = {
       role: cleanRole,
     };
@@ -337,7 +419,7 @@ export async function POST(request: Request) {
 
     const updatedDoc = await RolePermission.findOneAndUpdate(
       {
-        tenantId: new mongoose.Types.ObjectId(session.tenantId),
+        tenantId: tenantObjectId,
         role: cleanRole,
       },
       {

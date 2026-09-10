@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn, getNotificationTargetUrl } from "@/lib/utils";
 import { usePermissions } from "@/hooks/usePermissions";
+import { AccessRestricted } from "@/components/ui/AccessRestricted";
 
 interface NotifItem {
   _id: string;
@@ -24,7 +25,7 @@ interface NotifItem {
 export default function NotificationsPage() {
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
-  const { can, isAdmin, isOPS } = usePermissions();
+  const { can, isAdmin, isOPS, canAccessModule, loading: permLoading } = usePermissions();
   const [notifications, setNotifications] = useState<NotifItem[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -237,6 +238,10 @@ export default function NotificationsPage() {
 
   if (authLoading || loading) {
     return <Preloader label="Loading Notification Center..." />;
+  }
+
+  if (!permLoading && !canAccessModule("notifications")) {
+    return <AccessRestricted moduleName="Notification Center" icon="fa-solid fa-bell" />;
   }
 
   return (

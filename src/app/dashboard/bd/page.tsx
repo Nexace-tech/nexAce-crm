@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useAuth } from "@/hooks/useAuth";
+import { AccessRestricted } from "@/components/ui/AccessRestricted";
 import { LeadDetailPanel, CURRENCY_OPTIONS, getCurrencySymbol } from "@/components/bd/LeadDetailPanel";
 import { LeadImportModal } from "@/components/bd/LeadImportModal";
 import type { Lead } from "@/components/bd/LeadDetailPanel";
@@ -1252,15 +1253,8 @@ export default function BDPortalPage() {
 
   const inputCls = "h-9 text-sm bg-background border-input focus:ring-1 focus:ring-primary";
   const labelCls = "text-xs font-semibold text-muted-foreground uppercase tracking-wide";
-
-  const hasAccess = isAdmin || isOPS || canAccessModule("bd") || canAccessModule("finance") || can("viewFinancePortal");
-  if (!permLoading && !hasAccess) return (
-    <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6 space-y-4">
-      <div className="w-16 h-16 rounded-2xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-500 text-2xl"><i className="fa-solid fa-shield-halved" /></div>
-      <h2 className="text-xl font-bold text-foreground">Access Restricted</h2>
-      <p className="text-sm text-muted-foreground max-w-md">You do not have permission to view the BD Portal.</p>
-    </div>
-  );
+  const hasAccess = canAccessModule("bd");
+  if (!permLoading && !hasAccess) return <AccessRestricted moduleName="BD Portal" icon="fa-solid fa-briefcase" />;
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">

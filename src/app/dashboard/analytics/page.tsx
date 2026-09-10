@@ -10,9 +10,10 @@ import { cn } from "@/lib/utils";
 import { useTabPersistence } from "@/hooks/useTabPersistence";
 import { Pagination } from "@/components/ui/pagination";
 import { usePermissions } from "@/hooks/usePermissions";
+import { AccessRestricted } from "@/components/ui/AccessRestricted";
 
 export default function AnalyticsPage() {
-  const { can, isAdmin, isOPS } = usePermissions();
+  const { can, isAdmin, isOPS, canAccessModule, loading: permLoading } = usePermissions();
   const [activeTab, setActiveTab] = useTabPersistence<"overview" | "manager" | "performance" | "audit">(
     "analytics_active_tab",
     "overview",
@@ -152,6 +153,10 @@ export default function AnalyticsPage() {
 
   if (loading) {
     return <Preloader label="Generating Workspace Analytics & Logs..." />;
+  }
+
+  if (!permLoading && !canAccessModule("analytics")) {
+    return <AccessRestricted moduleName="Analytics & Audit" icon="fa-solid fa-chart-line" />;
   }
 
   return (

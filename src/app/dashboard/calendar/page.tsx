@@ -22,9 +22,11 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { TeamShiftOverviewCard } from "@/components/dashboard/TeamShiftOverviewCard";
 
+import { AccessRestricted } from "@/components/ui/AccessRestricted";
+
 function CalendarPageContent() {
   const { user: currentUser, loading: authLoading } = useAuth();
-  const { can, isAdmin, isOPS } = usePermissions();
+  const { can, canAccessModule, isAdmin, isOPS, loading: permLoading } = usePermissions();
   const [activeTab, setActiveTab] = useTabPersistence<"calendar" | "sprints" | "timesheets" | "attendance">(
     "calendar_active_tab",
     "calendar",
@@ -1240,8 +1242,12 @@ function CalendarPageContent() {
     showToast(`Exported ${sprints.length} sprint(s) to CSV!`, "success");
   };
 
-  if (!mounted || authLoading) {
+  if (!mounted || authLoading || permLoading) {
     return <Preloader label="Loading Calendar & Operations..." />;
+  }
+
+  if (currentUser && !canAccessModule("calendar")) {
+    return <AccessRestricted moduleName="Calendar & Timesheets" icon="fa-solid fa-calendar-days" />;
   }
 
   return (

@@ -44,14 +44,16 @@ const featureSections: { title: string; items: MenuItem[] }[] = [
       { key: "calendar", name: "Calendar & Timesheets", href: "/dashboard/calendar", icon: "fa-solid fa-calendar-days" },
       { key: "projects", name: "Projects & Drive", href: "/dashboard/projects", icon: "fa-solid fa-folder-tree" },
       { key: "chat", name: "Chat & Mail", href: "/dashboard/chat", icon: "fa-solid fa-comments" },
+      { key: "notifications", name: "Notification Center", href: "/dashboard/notifications", icon: "fa-solid fa-bell" },
     ],
   },
   {
     title: "Operations & CRM",
     items: [
       { key: "clients", name: "OPS Portal", href: "/dashboard/clients", icon: "fa-solid fa-list-check" },
+      { key: "sales", name: "Sales Workdesk", href: "/dashboard/sales", icon: "fa-solid fa-handshake" },
+      { key: "bd", name: "BD Portal", href: "/dashboard/bd", icon: "fa-solid fa-briefcase" },
       { key: "finance", name: "Finance Portal", href: "/dashboard/finance", icon: "fa-solid fa-coins" },
-      { key: "bd", name: "BD Portal", href: "/dashboard/bd", icon: "fa-solid fa-handshake" },
       { key: "referrals", name: "Referral Pipeline", href: "/dashboard/referrals", icon: "fa-solid fa-link" },
       { key: "goals", name: "Goals & OKRs", href: "/dashboard/goals", icon: "fa-solid fa-bullseye" },
     ],
@@ -59,7 +61,7 @@ const featureSections: { title: string; items: MenuItem[] }[] = [
   {
     title: "Management & HR",
     items: [
-      { key: "hr", name: "HR Portal", href: "/dashboard/hr", icon: "fa-solid fa-briefcase" },
+      { key: "hr", name: "HR Portal", href: "/dashboard/hr", icon: "fa-solid fa-user-tie" },
       { key: "it", name: "IT Portal", href: "/dashboard/it", icon: "fa-solid fa-terminal" },
       { key: "analytics", name: "Analytics Logs", href: "/dashboard/analytics", icon: "fa-solid fa-chart-line" },
       { key: "settings", name: "Settings & Security", href: "/dashboard/settings", icon: "fa-solid fa-gear" },
@@ -95,6 +97,12 @@ export function DashboardClientLayout({ session, menuItems, isPending = false, c
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
+  useEffect(() => {
+    const handleOpenTour = () => setTourOpen(true);
+    window.addEventListener("open-guided-tour", handleOpenTour);
+    return () => window.removeEventListener("open-guided-tour", handleOpenTour);
   }, []);
 
   useEffect(() => {

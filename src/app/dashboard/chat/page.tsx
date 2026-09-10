@@ -112,10 +112,11 @@ const REACTION_COLOR_MAP: Record<string, string> = {
 import { useTabPersistence } from "@/hooks/useTabPersistence";
 import { useAuthContext } from "@/context/AuthContext";
 import { usePermissions } from "@/hooks/usePermissions";
+import { AccessRestricted } from "@/components/ui/AccessRestricted";
 
 export default function CommunicationHub() {
   const { user } = useAuthContext();
-  const { can, canAccessModule, isAdmin, isOPS } = usePermissions();
+  const { can, canAccessModule, isAdmin, isOPS, loading: permLoading } = usePermissions();
   const [activeTab, setActiveTab] = useTabPersistence<"chat" | "mail" | "whatsapp" | "video" | "announcements" | "settings">(
     "chat_active_tab",
     "chat",
@@ -847,6 +848,10 @@ export default function CommunicationHub() {
   };
 
   const selectedWaThread = waThreads.find((w) => w.id === selectedWaId);
+
+  if (!permLoading && !canAccessModule("chat")) {
+    return <AccessRestricted moduleName="Chat & Messaging" icon="fa-solid fa-comments" />;
+  }
 
   return (
     <div className="space-y-6">

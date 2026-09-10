@@ -10,6 +10,7 @@ import { Pagination } from "@/components/ui/pagination";
 import { cn } from "@/lib/utils";
 import { useTabPersistence } from "@/hooks/useTabPersistence";
 import { usePermissions } from "@/hooks/usePermissions";
+import { AccessRestricted } from "@/components/ui/AccessRestricted";
 
 interface IStageHistory {
   status: string;
@@ -56,7 +57,7 @@ const STAGE_CONFIG: Record<string, { label: string; bg: string; text: string; bo
 };
 
 export default function ReferralsPage() {
-  const { can, isAdmin, isOPS } = usePermissions();
+  const { can, isAdmin, isOPS, canAccessModule, loading: permLoading } = usePermissions();
 
   const [viewMode, setViewMode] = useTabPersistence<"kanban" | "grid">("referrals_view_mode", "kanban", ["kanban", "grid"]);
 
@@ -250,6 +251,10 @@ export default function ReferralsPage() {
 
   if (loading) {
     return <Preloader label="Loading Candidate Referral Pipeline..." />;
+  }
+
+  if (!permLoading && !canAccessModule("referrals")) {
+    return <AccessRestricted moduleName="Referral Portal" icon="fa-solid fa-link" />;
   }
 
   const canManage = isAdmin || isOPS || can("manageReferrals");

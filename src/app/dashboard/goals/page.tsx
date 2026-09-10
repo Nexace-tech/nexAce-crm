@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { usePermissions } from "@/hooks/usePermissions";
+import { AccessRestricted } from "@/components/ui/AccessRestricted";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -75,7 +76,7 @@ interface MeetingData {
 
 export default function GoalsPage() {
   const { user } = useAuth();
-  const { can, isAdmin, isOPS } = usePermissions();
+  const { can, isAdmin, isOPS, canAccessModule, loading: permLoading } = usePermissions();
   const [activeTab, setActiveTab] = useTabPersistence<"okrs" | "kudos" | "surveys" | "one_on_ones">(
     "goals_active_tab",
     "okrs",
@@ -417,6 +418,10 @@ export default function GoalsPage() {
 
   if (loading) {
     return <Preloader label="Loading Goals & OKRs..." />;
+  }
+
+  if (!permLoading && !canAccessModule("goals")) {
+    return <AccessRestricted moduleName="Goals & Feedback" icon="fa-solid fa-bullseye" />;
   }
 
   return (

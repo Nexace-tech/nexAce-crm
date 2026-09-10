@@ -12,11 +12,12 @@ import { Preloader } from "@/components/ui/Preloader";
 import { cn, getISTDateString } from "@/lib/utils";
 
 import { useTabPersistence } from "@/hooks/useTabPersistence";
+import { AccessRestricted } from "@/components/ui/AccessRestricted";
 
 export default function ProjectsPage() {
   const { user: currentUser, loading: authLoading } = useAuth();
   const searchParams = useSearchParams();
-  const { can, isAdmin, isOPS } = usePermissions();
+  const { can, canAccessModule, isAdmin, isOPS, loading: permLoading } = usePermissions();
   const [activeTab, setActiveTab] = useTabPersistence<"kanban" | "gantt" | "wiki" | "drive" | "workload" | "history">(
     "projects_active_tab",
     "kanban",
@@ -891,8 +892,12 @@ export default function ProjectsPage() {
     showToast("Exported project history CSV successfully", "success");
   };
 
-  if (!mounted || authLoading) {
+  if (!mounted || authLoading || permLoading) {
     return <Preloader label="Loading Projects Workspace..." />;
+  }
+
+  if (currentUser && !canAccessModule("projects")) {
+    return <AccessRestricted moduleName="Projects & Drive" icon="fa-solid fa-folder-tree" />;
   }
 
   return (

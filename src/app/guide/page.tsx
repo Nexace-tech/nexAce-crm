@@ -4,6 +4,7 @@ import React, { useState, useMemo, useEffect, useCallback } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
+import { GuidedTour } from "@/components/guided-tour/GuidedTour";
 import styles from "./guide.module.css";
 
 interface StepItem {
@@ -325,10 +326,50 @@ const MODULES: ModuleItem[] = [
     ],
   },
 
-  // ── 6. OPS Portal, Sales & Clients ──────────────────────────────────
+  // ── 6. Notification Center & Broadcasts ───────────────────────────────────
+  {
+    id: "notifications",
+    name: "Notification Center & Broadcasts",
+    path: "/dashboard/notifications",
+    icon: "fa-bell",
+    color: "#f43f5e",
+    tag: "Alerts & Feeds",
+    category: "Core",
+    screenshot: "/screenshots/guide_overview.png",
+    screenshotCaption: "Notification Activity Feed with Filter Tabs and System Broadcast Center",
+    quickStats: [
+      { label: "Delivery", value: "Real-time" },
+      { label: "Feed Filters", value: "4 Notice Types" },
+      { label: "Broadcasts", value: "Instant Popup" },
+    ],
+    description: "Comprehensive workspace activity feed, personal task mentions, leave notices, and instant company-wide broadcast memos.",
+    steps: [
+      {
+        title: "How to Filter & Review Personal Notifications",
+        purpose: "Stay updated on relevant mentions, task assignments, and approval decisions.",
+        instructions: [
+          "Navigate to /dashboard/notifications to view your personal activity stream.",
+          "Use the category filter tabs: 'All', 'Unread', 'Tasks', 'Chat & Mentions', or 'HR & Leaves' to focus on high-priority notices.",
+          "Click directly on any notification card to jump to the corresponding task, leave record, or discussion thread.",
+          "Click 'Mark All as Read' in the top right to clear unread badges instantly.",
+        ],
+      },
+      {
+        title: "How to Dispatch Global Workspace Broadcasts (Admin & OPS)",
+        purpose: "Instantly broadcast urgent notices or company memos to all active team members.",
+        instructions: [
+          "In the Notification Center, click '+ New Broadcast Announcement'.",
+          "Enter Announcement Headline, select Severity (Info, Warning, Critical), and input the message body.",
+          "Click 'Send Broadcast'. All currently logged-in users receive a persistent modal banner alert.",
+        ],
+      },
+    ],
+  },
+
+  // ── 7. OPS Portal & Retainers ─────────────────────────────────────────────
   {
     id: "clients",
-    name: "OPS Portal, Sales & Clients",
+    name: "OPS Portal & Retainers",
     path: "/dashboard/clients",
     icon: "fa-list-check",
     color: "#14b8a6",
@@ -393,7 +434,124 @@ const MODULES: ModuleItem[] = [
     ],
   },
 
-  // ── 7. Candidate Referral Pipeline ─────────────────────────────────────────
+  // ── 8. Sales Workdesk & Deals ─────────────────────────────────────────────
+  {
+    id: "sales",
+    name: "Sales Workdesk & Deals",
+    path: "/dashboard/sales",
+    icon: "fa-handshake",
+    color: "#6366f1",
+    tag: "Deal Pipeline",
+    category: "Operations & IT",
+    screenshot: "/screenshots/operations_portal.png",
+    screenshotCaption: "Multi-stage Sales Deal Pipeline with Weighted Valuations and Owner Assignments",
+    quickStats: [
+      { label: "Pipeline", value: "Kanban & Table" },
+      { label: "Forecast", value: "Weighted Value" },
+      { label: "Currencies", value: "USD, INR, EUR, GBP" },
+    ],
+    description: "Manage sales opportunities across lifecycle stages, track win probabilities, revenue forecasts, and account executive deal quotas.",
+    steps: [
+      {
+        title: "How to Create & Track Deals in the Pipeline",
+        purpose: "Progress opportunities through structured pipeline stages to close revenue.",
+        instructions: [
+          "Navigate to /dashboard/sales and click the '+ Create Deal' button.",
+          "Enter Client Name, Deal Title, Estimated Value, Currency, Probability percentage, and Expected Close Date.",
+          "Assign an Account Executive / Deal Owner from your team roster.",
+          "Drag deal cards across stages: Prospecting -> Discovery -> Proposal Sent -> Negotiation -> Closed Won / Closed Lost.",
+        ],
+      },
+      {
+        title: "How to Forecast Revenue & Track Win/Loss Ratios",
+        purpose: "Analyze pipeline health and projected cash receipts.",
+        instructions: [
+          "Review the top Summary Metric Cards: Total Pipeline Value, Weighted Revenue Forecast, and Average Deal Size.",
+          "Filter by Deal Owner, Stage, or Date Range to pinpoint pipeline velocity and conversion bottlenecks.",
+        ],
+      },
+    ],
+  },
+
+  // ── 9. BD Portal & Proposals ──────────────────────────────────────────────
+  {
+    id: "bd",
+    name: "BD Portal & Proposals",
+    path: "/dashboard/bd",
+    icon: "fa-briefcase",
+    color: "#3b82f6",
+    tag: "Lead Sourcing",
+    category: "Operations & IT",
+    screenshot: "/screenshots/operations_portal.png",
+    screenshotCaption: "Business Development Portal with Inbound Lead Tracking and Custom PDF Proposals",
+    quickStats: [
+      { label: "Lead Stages", value: "Inquiry to Proposal" },
+      { label: "Proposals", value: "Automated PDF" },
+      { label: "Targets", value: "Monthly Quotas" },
+    ],
+    description: "Capture inbound leads, qualify prospects, generate professional client proposals, and preview PDF agreements.",
+    steps: [
+      {
+        title: "How to Log Inbound Leads & Qualify Prospects",
+        purpose: "Capture business inquiries and assess client technical and financial fit.",
+        instructions: [
+          "In /dashboard/bd, click '+ Add Lead' and enter Lead Name, Organization, Source, and Estimated Scope.",
+          "Update Qualification Status: New Inquiry -> Qualified -> Scope Documented -> Proposal Drafted.",
+          "Record internal qualification notes regarding client scope and delivery requirements.",
+        ],
+      },
+      {
+        title: "How to Generate & Export Client Proposals",
+        purpose: "Build itemized proposals with milestone payment terms and PDF preview.",
+        instructions: [
+          "In the Proposals tab, click '+ Generate Proposal', choose the qualified lead, and set milestone deliverables.",
+          "Click 'Preview Proposal PDF' to review formatting and terms.",
+          "Click 'Send Proposal' or 'Export PDF' to deliver to the client.",
+        ],
+      },
+    ],
+  },
+
+  // ── 10. Finance Portal & Invoicing ────────────────────────────────────────
+  {
+    id: "finance",
+    name: "Finance Portal & Invoicing",
+    path: "/dashboard/finance",
+    icon: "fa-coins",
+    color: "#eab308",
+    tag: "Billing & Cash Flow",
+    category: "Operations & IT",
+    screenshot: "/screenshots/settings_security.png",
+    screenshotCaption: "Finance Portal with Client Invoices, Expense Tracking, and Cash Flow Receipts",
+    quickStats: [
+      { label: "Invoices", value: "Itemized PDF Export" },
+      { label: "Expenses", value: "Departmental Logs" },
+      { label: "Currencies", value: "Multi-currency" },
+    ],
+    description: "Issue itemized client billing invoices, record operational expenses by department, download PDF invoices, and track payment receipts.",
+    steps: [
+      {
+        title: "How to Create & Export Client Invoices",
+        purpose: "Generate branded invoices with itemized deliverables, taxes, and payment terms.",
+        instructions: [
+          "Navigate to /dashboard/finance and click '+ Create Invoice'.",
+          "Select Billed Client, Invoice Date, Payment Terms (Net 15, Net 30), and Currency (USD/INR).",
+          "Add itemized service line items with Descriptions, Hours/Units, and Unit Rates.",
+          "Click 'Save Invoice', then click 'Download PDF' or 'Print' to export the client invoice.",
+        ],
+      },
+      {
+        title: "How to Record Operational Expenses & Receipts",
+        purpose: "Track department expenditures with attached receipts for audit compliance.",
+        instructions: [
+          "In the Expenses tab, click '+ Record Expense', select Department (Engineering, Marketing, HR, Ops), Category, and Amount.",
+          "Attach digital receipts (PNG/PDF) and submit for management sign-off.",
+        ],
+      },
+    ],
+  },
+
+  // ── 11. Candidate Referral Pipeline ────────────────────────────────────────
   {
     id: "referrals",
     name: "Candidate Referral Pipeline",
@@ -810,8 +968,8 @@ const CATEGORY_SUMMARIES = [
     name: "Core" as const,
     icon: "fa-gauge-high",
     color: "#6366f1",
-    desc: "Dashboard, Team, Chat, Settings",
-    moduleIds: ["overview", "team", "chat", "settings"],
+    desc: "Dashboard, Team, Chat, Notifications, Settings",
+    moduleIds: ["overview", "team", "chat", "notifications", "settings"],
   },
   {
     name: "Agile & Projects" as const,
@@ -831,10 +989,36 @@ const CATEGORY_SUMMARIES = [
     name: "Operations & IT" as const,
     icon: "fa-server",
     color: "#f43f5e",
-    desc: "Clients, IT Assets, Analytics",
-    moduleIds: ["clients", "it", "analytics"],
+    desc: "Clients, Sales, BD, Finance, IT, Analytics",
+    moduleIds: ["clients", "sales", "bd", "finance", "it", "analytics"],
   },
 ];
+
+const ROLE_MODULE_MAP: Record<string, string[]> = {
+  All: [
+    "overview", "team", "calendar", "projects", "chat", "notifications",
+    "clients", "sales", "bd", "finance", "referrals", "goals",
+    "hr", "it", "analytics", "settings"
+  ],
+  Admin: [
+    "overview", "team", "calendar", "projects", "chat", "notifications",
+    "clients", "sales", "bd", "finance", "referrals", "goals",
+    "hr", "it", "analytics", "settings"
+  ],
+  "SubAdmin / OPS": [
+    "overview", "team", "calendar", "projects", "chat", "notifications",
+    "clients", "sales", "bd", "finance", "referrals", "goals",
+    "hr", "it", "analytics", "settings"
+  ],
+  "HR Specialist": [
+    "overview", "team", "calendar", "projects", "chat", "notifications",
+    "referrals", "goals", "hr", "it", "analytics", "settings"
+  ],
+  Employee: [
+    "overview", "team", "calendar", "projects", "chat", "notifications",
+    "referrals", "goals", "hr", "settings"
+  ],
+};
 
 function getReadingTime(steps: StepItem[]): string {
   const totalWords = steps.reduce((acc, s) => {
@@ -852,6 +1036,7 @@ function getReadingTime(steps: StepItem[]): string {
 export default function GuidePage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("All");
+  const [selectedRoleFilter, setSelectedRoleFilter] = useState<string>("All");
   const [activeSection, setActiveSection] = useState<string>("overview");
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -859,6 +1044,7 @@ export default function GuidePage() {
   const [openFaqIdx, setOpenFaqIdx] = useState<number | null>(null);
   const [copiedAnchor, setCopiedAnchor] = useState<string | null>(null);
   const [currentUser, setCurrentUser] = useState<{ name: string; role?: string } | null>(null);
+  const [tourOpen, setTourOpen] = useState(false);
 
   useEffect(() => {
     fetch("/api/auth/me")
@@ -928,7 +1114,9 @@ export default function GuidePage() {
   }, []);
 
   const filteredModules = useMemo(() => {
+    const roleAllowedIds = ROLE_MODULE_MAP[selectedRoleFilter] || ROLE_MODULE_MAP.All;
     return MODULES.filter((m) => {
+      if (!roleAllowedIds.includes(m.id)) return false;
       const matchesCat = selectedCategory === "All" || m.category === selectedCategory;
       const q = searchQuery.toLowerCase().trim();
       if (!q) return matchesCat;
@@ -943,7 +1131,7 @@ export default function GuidePage() {
         );
       return matchesCat && matchesSearch;
     });
-  }, [searchQuery, selectedCategory]);
+  }, [searchQuery, selectedCategory, selectedRoleFilter]);
 
   return (
     <div className={styles.container}>
@@ -981,6 +1169,15 @@ export default function GuidePage() {
           <Link href="/" className={styles.navLink}>
             <i className="fa-solid fa-house" /> Home
           </Link>
+          <button
+            type="button"
+            onClick={() => setTourOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-[#00c5a0]/40 bg-[#00c5a0]/15 text-[#00c5a0] hover:bg-[#00c5a0]/25 text-xs font-semibold cursor-pointer transition-colors shadow-2xs"
+            title="Launch Guided Product Tour"
+          >
+            <i className="fa-solid fa-compass text-xs" />
+            <span>Product Tour</span>
+          </button>
           {currentUser ? (
             <>
               <span className={styles.userBadge}>
@@ -1020,10 +1217,22 @@ export default function GuidePage() {
           for every tool and module in NexAce CRM.
         </p>
 
+        {/* Live Tour CTA Strip */}
+        <div className="flex items-center justify-center gap-3 mb-6">
+          <button
+            type="button"
+            onClick={() => setTourOpen(true)}
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#00c5a0] to-[#0ea5e9] text-slate-950 font-bold text-xs sm:text-sm shadow-lg shadow-[#00c5a0]/20 hover:opacity-95 transition-all cursor-pointer hover:scale-105"
+          >
+            <i className="fa-solid fa-compass text-sm" />
+            <span>Launch Live Interactive Tour ({selectedRoleFilter})</span>
+          </button>
+        </div>
+
         {/* Hero Stats Strip */}
         <div className={styles.heroStats}>
           {[
-            { icon: "fa-cubes", value: "13", label: "Modules" },
+            { icon: "fa-cubes", value: "16", label: "Modules" },
             { icon: "fa-wand-magic-sparkles", value: "50+", label: "Features" },
             { icon: "fa-users-gear", value: "5", label: "User Roles" },
             { icon: "fa-building-columns", value: "\u221e", label: "Workspaces" },
@@ -1062,6 +1271,30 @@ export default function GuidePage() {
                 className={`${styles.categoryPill} ${selectedCategory === c ? styles.categoryPillActive : ""}`}
               >
                 {c}
+              </button>
+            ))}
+          </div>
+
+          {/* Role Filter Selector */}
+          <div className={styles.roleFilterRow}>
+            <span className={styles.roleFilterLabel}>
+              <i className="fa-solid fa-filter" /> View for Role:
+            </span>
+            {[
+              { id: "All", label: "All Modules (16)", icon: "fa-solid fa-layer-group" },
+              { id: "Admin", label: "Admin (16)", icon: "fa-solid fa-crown" },
+              { id: "SubAdmin / OPS", label: "SubAdmin / OPS (16)", icon: "fa-solid fa-user-tie" },
+              { id: "HR Specialist", label: "HR Specialist (12)", icon: "fa-solid fa-briefcase" },
+              { id: "Employee", label: "Employee (10)", icon: "fa-solid fa-user" },
+            ].map((r) => (
+              <button
+                key={r.id}
+                type="button"
+                onClick={() => setSelectedRoleFilter(r.id)}
+                className={`${styles.rolePill} ${selectedRoleFilter === r.id ? styles.rolePillActive : ""}`}
+              >
+                <i className={r.icon} />
+                <span>{r.label}</span>
               </button>
             ))}
           </div>
@@ -1256,20 +1489,47 @@ export default function GuidePage() {
                   icon: "fa-user",
                   desc: "Daily clock-in/out work timer, task execution, weekly timesheet logging, peer kudos, and candidate referrals.",
                 },
-              ].map((r) => (
-                <div key={r.role} className={styles.roleCard}>
-                  <div className={styles.roleIconWrap} style={{ background: r.color + "18", color: r.color }}>
-                    <i className={`fa-solid ${r.icon}`} />
+              ].map((r) => {
+                const targetFilter =
+                  r.role === "Sub Admin / OPS"
+                    ? "SubAdmin / OPS"
+                    : r.role === "HR"
+                    ? "HR Specialist"
+                    : r.role;
+                const isSelected = selectedRoleFilter === targetFilter;
+                return (
+                  <div
+                    key={r.role}
+                    className={`${styles.roleCard} ${isSelected ? styles.roleCardActive : ""} cursor-pointer`}
+                    onClick={() => {
+                      setSelectedRoleFilter(targetFilter);
+                      document.getElementById("modules-section")?.scrollIntoView({ behavior: "smooth" });
+                    }}
+                    role="button"
+                    tabIndex={0}
+                    title={`Click to view modules for ${r.role}`}
+                  >
+                    <div className={styles.roleIconWrap} style={{ background: r.color + "18", color: r.color }}>
+                      <i className={`fa-solid ${r.icon}`} />
+                    </div>
+                    <div className="flex items-center justify-between w-full">
+                      <h3 className={styles.roleTitle}>{r.role}</h3>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border border-border/60 text-muted-foreground group-hover:text-primary">
+                        {r.role === "Employee" ? "10 Modules" : r.role === "HR" ? "12 Modules" : "16 Modules"}
+                      </span>
+                    </div>
+                    <p className={styles.roleCardDesc}>{r.desc}</p>
+                    <span className="text-xs font-semibold text-primary mt-2 inline-flex items-center gap-1">
+                      Explore {r.role} View <i className="fa-solid fa-arrow-right text-[10px]" />
+                    </span>
                   </div>
-                  <h3 className={styles.roleTitle}>{r.role}</h3>
-                  <p className={styles.roleCardDesc}>{r.desc}</p>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </section>
 
           {/* Modules Detailed Step-by-Step Breakdown */}
-          <section className={styles.modulesSection}>
+          <section id="modules-section" className={styles.modulesSection}>
             <div className={styles.sectionHeading}>
               <span className={styles.sectionTag}>
                 <i className="fa-solid fa-list-ol" /> Visual Walkthroughs & Action Items
@@ -1505,6 +1765,13 @@ export default function GuidePage() {
           <Link href="/dashboard" className={styles.footerLink}>Dashboard</Link>
         </div>
       </footer>
+
+      {/* Interactive Guided Tour Modal */}
+      <GuidedTour
+        isOpen={tourOpen}
+        onClose={() => setTourOpen(false)}
+        role={selectedRoleFilter === "All" ? currentUser?.role || "Admin" : selectedRoleFilter}
+      />
     </div>
   );
 }

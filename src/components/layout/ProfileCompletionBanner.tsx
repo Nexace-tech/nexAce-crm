@@ -50,14 +50,54 @@ export function ProfileCompletionBanner() {
 
   // Detect newly added user profile checklist (only if password reset is already completed)
   useEffect(() => {
-    if (user && !user.forcePasswordReset && isProfileIncomplete) {
-      const hasSeenModal = sessionStorage.getItem(`profile_welcome_seen_${user._id}`);
+    if (user && !user.forcePasswordReset && isProfileIncomplete && user._id) {
+      const hasSeenModal = localStorage.getItem(`profile_welcome_seen_${user._id}`);
       if (!hasSeenModal) {
         setIsNewUserModalOpen(true);
-        sessionStorage.setItem(`profile_welcome_seen_${user._id}`, "true");
+        localStorage.setItem(`profile_welcome_seen_${user._id}`, "true");
       }
     }
   }, [user?._id, user?.forcePasswordReset, isProfileIncomplete]);
+
+  // Restore dismiss state for profile banner (persists across refreshes, re-shows if there's a new update)
+  const currentMissingKey = missingFields.join(",");
+
+  useEffect(() => {
+    if (user?._id && typeof window !== "undefined") {
+      try {
+        const stored = localStorage.getItem(`profile_banner_dismissed_${user._id}`);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          // If user previously dismissed and missingFields have not changed, stay dismissed.
+          // If there is a new update (missing fields changed), re-show banner!
+          if (parsed?.missingFieldsKey === currentMissingKey) {
+            setDismissed(true);
+          } else {
+            setDismissed(false);
+          }
+        }
+      } catch {
+        // ignore parse error
+      }
+    }
+  }, [user?._id, currentMissingKey]);
+
+  const handleDismissProfileBanner = () => {
+    setDismissed(true);
+    if (user?._id && typeof window !== "undefined") {
+      try {
+        localStorage.setItem(
+          `profile_banner_dismissed_${user._id}`,
+          JSON.stringify({
+            dismissedAt: Date.now(),
+            missingFieldsKey: currentMissingKey,
+          })
+        );
+      } catch {
+        // ignore storage error
+      }
+    }
+  };
 
   // Restore per-session dismiss state for password banner
   useEffect(() => {
@@ -199,7 +239,17 @@ export function ProfileCompletionBanner() {
         <div className="relative overflow-hidden rounded-2xl border border-amber-500/30 bg-gradient-to-r from-amber-500/10 via-primary/10 to-indigo-500/10 p-4 shadow-sm backdrop-blur-md transition-all">
           <div className="absolute -right-12 -top-12 h-32 w-32 rounded-full bg-amber-500/15 blur-2xl pointer-events-none" />
 
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
+          {/* Quick Dismiss Button */}
+          <button
+            onClick={handleDismissProfileBanner}
+            className="absolute top-3 right-3 sm:top-3.5 sm:right-3.5 text-muted-foreground hover:text-foreground p-1 rounded-md hover:bg-muted/50 transition-colors cursor-pointer"
+            title="Dismiss reminder"
+            aria-label="Dismiss reminder"
+          >
+            <i className="fa-solid fa-xmark text-xs" />
+          </button>
+
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 pr-6 sm:pr-8">
             <div className="flex items-start gap-3 min-w-0">
               <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0 border border-amber-500/30 shadow-xs mt-0.5 sm:mt-0">
                 <i className="fa-solid fa-id-card text-lg" />
@@ -223,7 +273,7 @@ export function ProfileCompletionBanner() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setDismissed(true)}
+                onClick={handleDismissProfileBanner}
                 className="flex-1 sm:flex-initial h-8 px-3 text-xs text-muted-foreground hover:text-foreground cursor-pointer"
               >
                 Remind Later

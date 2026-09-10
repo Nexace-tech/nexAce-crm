@@ -3,6 +3,7 @@
 import React, { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
+import { usePermissions } from "@/hooks/usePermissions";
 import { AdminDashboard } from "@/components/dashboard/AdminDashboard";
 import { SubAdminDashboard } from "@/components/dashboard/SubAdminDashboard";
 import { ManagerDashboard } from "@/components/dashboard/ManagerDashboard";
@@ -10,10 +11,12 @@ import { HRDashboard } from "@/components/dashboard/HRDashboard";
 import { EmployeeDashboard } from "@/components/dashboard/EmployeeDashboard";
 import { PendingApprovalDashboard } from "@/components/dashboard/PendingApprovalDashboard";
 import { Preloader } from "@/components/ui/Preloader";
+import { AccessRestricted } from "@/components/ui/AccessRestricted";
 import { isSubAdminRole } from "@/lib/roles";
 
 export default function DashboardHome() {
   const { user, loading } = useAuth();
+  const { canAccessModule, loading: permLoading } = usePermissions();
   const router = useRouter();
 
   useEffect(() => {
@@ -22,8 +25,13 @@ export default function DashboardHome() {
     }
   }, [loading, user, router]);
 
-  if (loading || !user) {
+  if (loading || !user || permLoading) {
     return <Preloader label={loading ? "Loading Workspace Dashboard" : "Redirecting to Login..."} />;
+  }
+
+  // Check if user has permission to access the Overview Dashboard module
+  if (!canAccessModule("overview")) {
+    return <AccessRestricted moduleName="Overview Dashboard" icon="fa-solid fa-chart-simple" />;
   }
 
   const role = user.role?.toLowerCase();

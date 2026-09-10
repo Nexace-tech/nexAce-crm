@@ -95,14 +95,41 @@ export function NotificationBell() {
         const freshUnread: number = data.unreadCount || 0;
 
         if (isFirstFetchRef.current) {
-          // On login: show catch-up toast if there are unread notifications
+          // On login / page load: show catch-up toast only if there are unread notifications
+          // and the user hasn't already dismissed them, unless new updates arrived since dismissal.
           isFirstFetchRef.current = false;
           prevIdsRef.current = new Set(freshNotifs.map((n) => n._id));
           setNotifications(freshNotifs);
           setUnreadCount(freshUnread);
+
           if (freshUnread > 0) {
-            setCatchUpCount(freshUnread);
-            setShowCatchUp(true);
+            let shouldShow = true;
+            try {
+              if (typeof window !== "undefined") {
+                const key = `nexace_catchup_dismissed_${user?._id || "default"}`;
+                const raw = localStorage.getItem(key);
+                if (raw) {
+                  const dismissed = JSON.parse(raw);
+                  const latestFresh = freshNotifs[0];
+                  const latestFreshTime = latestFresh?.createdAt ? new Date(latestFresh.createdAt).getTime() : 0;
+                  const dismissedTime = dismissed.latestCreatedAt ? new Date(dismissed.latestCreatedAt).getTime() : 0;
+                  const hasNewerNotif = latestFresh && latestFresh._id !== dismissed.latestId && latestFreshTime > dismissedTime;
+                  const countIncreased = freshUnread > (dismissed.unreadCount ?? 0);
+
+                  // If no newer notification arrived and unread count did not increase, user already dismissed this batch
+                  if (!hasNewerNotif && !countIncreased) {
+                    shouldShow = false;
+                  }
+                }
+              }
+            } catch {
+              // ignore storage errors
+            }
+
+            if (shouldShow) {
+              setCatchUpCount(freshUnread);
+              setShowCatchUp(true);
+            }
           }
           return;
         }
@@ -213,10 +240,37 @@ export function NotificationBell() {
     }
   }, [latestToast]);
 
+  const recordCatchUpDismissal = (targetNotifs?: NotifItem[], targetCount?: number) => {
+    try {
+      if (typeof window !== "undefined") {
+        const key = `nexace_catchup_dismissed_${user?._id || "default"}`;
+        const notifList = targetNotifs !== undefined ? targetNotifs : notifications;
+        const latest = notifList[0];
+        const record = {
+          latestId: latest?._id || null,
+          latestCreatedAt: latest?.createdAt || null,
+          unreadCount: targetCount !== undefined ? targetCount : unreadCount,
+          dismissedAt: Date.now(),
+        };
+        localStorage.setItem(key, JSON.stringify(record));
+      }
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleDismissCatchUp = () => {
+    setShowCatchUp(false);
+    recordCatchUpDismissal();
+  };
+
   // Auto-dismiss catch-up toast after 8 seconds
   useEffect(() => {
     if (showCatchUp) {
-      const timer = setTimeout(() => setShowCatchUp(false), 8000);
+      const timer = setTimeout(() => {
+        setShowCatchUp(false);
+        recordCatchUpDismissal();
+      }, 8000);
       return () => clearTimeout(timer);
     }
   }, [showCatchUp]);
@@ -373,7 +427,7 @@ export function NotificationBell() {
 
       {/* ── Login Catch-Up Toast ── */}
       {showCatchUp && !open && (
-        <div className="fixed top-5 right-5 z-[300] max-w-sm w-full bg-card border-2 border-primary/40 rounded-xl shadow-2xl p-4 animate-in fade-in slide-in-from-top-4 flex items-start gap-3 bg-gradient-to-r from-card via-card to-primary/5">
+        <div className="fixed top-4 right-4 left-4 sm:left-auto sm:right-5 sm:top-5 z-[300] sm:max-w-sm bg-card border-2 border-primary/40 rounded-xl shadow-2xl p-4 animate-in fade-in slide-in-from-top-4 flex items-start gap-3 bg-gradient-to-r from-card via-card to-primary/5">
           <div className="p-2.5 rounded-lg bg-primary/10 shrink-0">
             <i className="fa-solid fa-inbox text-base text-primary" />
           </div>
@@ -383,13 +437,13 @@ export function NotificationBell() {
               You have <span className="text-primary font-bold">{catchUpCount}</span> unread notification{catchUpCount !== 1 ? "s" : ""} since your last visit.
             </p>
             <button
-              onClick={() => { setShowCatchUp(false); setOpen(true); }}
+              onClick={() => { handleDismissCatchUp(); setOpen(true); }}
               className="inline-flex items-center gap-1 text-[11px] font-bold text-primary hover:underline mt-2 cursor-pointer"
             >
               View All <i className="fa-solid fa-arrow-right text-[10px]" />
             </button>
           </div>
-          <button onClick={() => setShowCatchUp(false)} className="text-muted-foreground hover:text-foreground p-0.5 cursor-pointer shrink-0">
+          <button onClick={handleDismissCatchUp} className="text-muted-foreground hover:text-foreground p-0.5 cursor-pointer shrink-0">
             <i className="fa-solid fa-xmark text-xs" />
           </button>
         </div>
@@ -397,7 +451,7 @@ export function NotificationBell() {
 
       {/* ── Live Real-time Toast Banner ── */}
       {latestToast && (
-        <div className="fixed top-5 right-5 z-[200] max-w-sm w-full bg-card border-2 border-primary/50 text-foreground p-4 rounded-xl shadow-2xl animate-in fade-in slide-in-from-top-4 flex items-start gap-3 bg-gradient-to-r from-card via-card to-primary/5">
+        <div className="fixed top-4 right-4 left-4 sm:left-auto sm:right-5 sm:top-5 z-[200] sm:max-w-sm bg-card border-2 border-primary/50 text-foreground p-4 rounded-xl shadow-2xl animate-in fade-in slide-in-from-top-4 flex items-start gap-3 bg-gradient-to-r from-card via-card to-primary/5">
           <div className={cn("p-2.5 rounded-lg shrink-0", getTypeCfg(latestToast.type).bg)}>
             <i className={cn(getTypeCfg(latestToast.type).icon, getTypeCfg(latestToast.type).color, "text-base")} />
           </div>

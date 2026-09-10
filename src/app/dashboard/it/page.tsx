@@ -9,6 +9,7 @@ import { useTabPersistence } from "@/hooks/useTabPersistence";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useAuth } from "@/hooks/useAuth";
 import { downloadInvoicePdf } from "@/lib/invoice-pdf";
+import { AccessRestricted } from "@/components/ui/AccessRestricted";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -4216,7 +4217,7 @@ const TABS: { key: TabKey; label: string; icon: string }[] = [
 ];
 
 export default function ITCommandCenterPage() {
-  const { can, isAdmin, isOPS } = usePermissions();
+  const { can, isAdmin, isOPS, canAccessModule, loading: permLoading } = usePermissions();
   const { user } = useAuth();
   const isPrivileged = isAdmin || isOPS;
   const [activeTab, setActiveTab] = useTabPersistence<TabKey>("it_command_center_tab", "overview", ["overview", "drive", "access", "subscriptions", "devices", "invoices"]);
@@ -4540,6 +4541,10 @@ export default function ITCommandCenterPage() {
 
   const totalRecords = links.length + access.length + subs.length + devices.length + userInvoicesCount;
   const overallLoading = loadingLinks && loadingAccess && loadingSubs && loadingDevices && loadingInvoices;
+
+  if (!permLoading && !canAccessModule("it")) {
+    return <AccessRestricted moduleName="IT Portal" icon="fa-solid fa-laptop-code" />;
+  }
 
   return (
     <div className="space-y-6">

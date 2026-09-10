@@ -89,13 +89,13 @@ export function usePermissions() {
 
     // Default fallback access for modules before explicit customization in settings
     const defaultModulesByRole: Record<string, string[]> = {
-      Employee: ["overview", "team", "calendar", "projects", "chat", "hr", "referrals", "settings"],
-      HR: ["overview", "team", "calendar", "projects", "chat", "hr", "goals", "settings"],
-      Manager: ["overview", "team", "calendar", "projects", "chat", "hr", "goals", "sales", "referrals", "settings"],
-      OPS: ["overview", "team", "calendar", "projects", "chat", "hr", "goals", "analytics", "clients", "sales", "finance", "it", "referrals", "settings"],
+      Employee: ["overview", "team", "calendar", "projects", "chat", "notifications", "referrals", "goals", "hr", "settings"],
+      HR: ["overview", "team", "calendar", "projects", "chat", "notifications", "referrals", "goals", "hr", "it", "analytics", "settings"],
+      Manager: ["overview", "team", "calendar", "projects", "chat", "notifications", "sales", "bd", "referrals", "goals", "hr", "settings"],
+      OPS: ["overview", "team", "calendar", "projects", "chat", "notifications", "clients", "sales", "bd", "finance", "referrals", "goals", "hr", "it", "analytics", "settings"],
     };
     const roleKey = normalizeRoleKey(user.role);
-    const allowedDefaults = defaultModulesByRole[roleKey] || defaultModulesByRole[user.role] || ["overview", "team", "calendar", "projects", "chat", "settings"];
+    const allowedDefaults = defaultModulesByRole[roleKey] || defaultModulesByRole[user.role] || ["overview", "team", "calendar", "projects", "chat", "notifications", "settings"];
     return allowedDefaults.includes(moduleKey);
   };
 

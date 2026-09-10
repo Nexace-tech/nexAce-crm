@@ -15,6 +15,7 @@ import ReportsDashboard from "@/components/operations/ReportsDashboard";
 import { UserManagementTab } from "@/components/settings/UserManagementTab";
 import { ShiftAndStatusTab } from "@/components/settings/ShiftAndStatusTab";
 import { cn } from "@/lib/utils";
+import { AccessRestricted } from "@/components/ui/AccessRestricted";
 
 export type OpsTabKey = "operations" | "hr" | "external" | "reports" | "users" | "shifts";
 
@@ -77,7 +78,7 @@ interface ExternalMember {
 
 export default function OperationsPage() {
   const searchParams = useSearchParams();
-  const { can, isAdmin, isOPS } = usePermissions();
+  const { can, isAdmin, isOPS, canAccessModule, loading: permLoading } = usePermissions();
   const tabParam = searchParams?.get("tab");
   const initialTab: OpsTabKey =
     tabParam === "reports"
@@ -781,6 +782,10 @@ export default function OperationsPage() {
       return matchesSearch && matchesStatus && matchesCat;
     });
   }, [externalMembers, externalSearch, externalStatusFilter, externalCategoryFilter]);
+
+  if (!permLoading && !canAccessModule("clients")) {
+    return <AccessRestricted moduleName="OPS Portal" icon="fa-solid fa-list-check" />;
+  }
 
   return (
     <div className="space-y-8">

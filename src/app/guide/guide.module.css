@@ -370,6 +370,65 @@
   box-shadow: 0 3px 10px rgba(99, 102, 241, 0.3);
 }
 
+.roleFilterRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px dashed rgba(203, 213, 225, 0.6);
+}
+:global(.dark) .roleFilterRow {
+  border-top-color: rgba(71, 85, 105, 0.5);
+}
+
+.roleFilterLabel {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #64748b;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+:global(.dark) .roleFilterLabel {
+  color: #94a3b8;
+}
+
+.rolePill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.85rem;
+  border-radius: 9999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  border: 1px solid #cbd5e1;
+  background: rgba(255, 255, 255, 0.85);
+  color: #334155;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+:global(.dark) .rolePill {
+  background: rgba(30, 41, 59, 0.75);
+  border-color: #475569;
+  color: #cbd5e1;
+}
+.rolePill:hover {
+  border-color: #00c5a0;
+  color: #00c5a0;
+}
+.rolePillActive {
+  background: linear-gradient(135deg, #00c5a0, #0ea5e9) !important;
+  border-color: transparent !important;
+  color: #0f172a !important;
+  font-weight: 700;
+  box-shadow: 0 3px 12px rgba(0, 197, 160, 0.3);
+}
+
 /* ── Two-Column Layout (Sidebar + Content) ── */
 .guideLayout {
   position: relative;
@@ -621,6 +680,13 @@
 }
 .roleCard:hover {
   transform: translateY(-3px);
+  border-color: #00c5a0;
+  box-shadow: 0 4px 14px rgba(0, 197, 160, 0.15);
+}
+.roleCardActive {
+  border-color: #00c5a0 !important;
+  box-shadow: 0 0 0 2px rgba(0, 197, 160, 0.3), 0 6px 18px rgba(0, 197, 160, 0.18) !important;
+  background: rgba(0, 197, 160, 0.05) !important;
 }
 .roleIconWrap {
   width: 32px;
