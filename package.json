@@ -6,9 +6,14 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "cap:sync": "cap sync",
+    "cap:build": "next build && cap sync",
+    "cap:android": "cap open android",
+    "cap:ios": "cap open ios"
   },
   "dependencies": {
+    "@capacitor/core": "^8.5.1",
     "@iconify/react": "^5.0.1",
     "@radix-ui/react-avatar": "^1.2.6",
     "@radix-ui/react-dialog": "^1.1.23",
@@ -35,6 +40,9 @@
     "tailwindcss": "^4.0.7"
   },
   "devDependencies": {
+    "@capacitor/android": "^8.5.1",
+    "@capacitor/cli": "^8.5.1",
+    "@capacitor/ios": "^8.5.1",
     "@tailwindcss/postcss": "^4.0.7",
     "@types/bcryptjs": "^2.4.6",
     "@types/node": "^20",

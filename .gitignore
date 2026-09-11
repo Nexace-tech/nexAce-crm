@@ -14,3 +14,14 @@ README.md
 USER_MANUAL.md
 public/uploads/proposals/1788502716397-gl0ll-WhatsApp_Image_2026-09-04_at_12.24.21_AM.jpeg
 public/uploads/proposals/1788514321908-ooq95-Invoice_INV-EMP-702112-1.pdf
+
+# Mobile Native Build Artifacts
+android/app/build/
+android/build/
+android/.gradle/
+android/.idea/
+android/captures/
+ios/App/build/
+ios/App/Pods/
+ios/App/.symlinks/
+
