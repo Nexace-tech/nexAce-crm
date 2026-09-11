@@ -4,6 +4,7 @@ import React from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
+import { NativeService } from "@/lib/native/nativeService";
 
 interface MobileBottomNavProps {
   onOpenMenu: () => void;
@@ -20,6 +21,7 @@ export function MobileBottomNav({ onOpenMenu, isMenuOpen = false }: MobileBottom
 
   const handleCheckInClick = (e: React.MouseEvent) => {
     e.preventDefault();
+    NativeService.haptic("medium");
     if (pathname === "/dashboard") {
       const el = document.getElementById("attendance-widget") || document.querySelector('[data-attendance-widget="true"]');
       if (el) {
@@ -49,6 +51,7 @@ export function MobileBottomNav({ onOpenMenu, isMenuOpen = false }: MobileBottom
         {/* Tab 1: Home */}
         <Link
           href="/dashboard"
+          onClick={() => NativeService.haptic("light")}
           className={cn(
             "flex flex-1 flex-col items-center justify-center py-1 rounded-xl transition-all duration-150 active:scale-95 no-underline",
             isHomeActive
@@ -68,6 +71,7 @@ export function MobileBottomNav({ onOpenMenu, isMenuOpen = false }: MobileBottom
         {/* Tab 2: Tasks & Projects */}
         <Link
           href="/dashboard/projects"
+          onClick={() => NativeService.haptic("light")}
           className={cn(
             "flex flex-1 flex-col items-center justify-center py-1 rounded-xl transition-all duration-150 active:scale-95 no-underline",
             isTasksActive
@@ -102,6 +106,7 @@ export function MobileBottomNav({ onOpenMenu, isMenuOpen = false }: MobileBottom
         {/* Tab 4: Chat & Communications */}
         <Link
           href="/dashboard/chat"
+          onClick={() => NativeService.haptic("light")}
           className={cn(
             "flex flex-1 flex-col items-center justify-center py-1 rounded-xl transition-all duration-150 active:scale-95 no-underline",
             isChatActive
@@ -121,7 +126,10 @@ export function MobileBottomNav({ onOpenMenu, isMenuOpen = false }: MobileBottom
         {/* Tab 5: More Drawer Menu */}
         <button
           type="button"
-          onClick={onOpenMenu}
+          onClick={() => {
+            NativeService.haptic("medium");
+            onOpenMenu();
+          }}
           aria-label="Open Workspace Modules Menu"
           className={cn(
             "flex flex-1 flex-col items-center justify-center py-1 rounded-xl transition-all duration-150 active:scale-95 cursor-pointer",

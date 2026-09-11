@@ -66,5 +66,11 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Used to capture document vault uploads and expense receipts.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Used to upload receipts and profile photos from your photo library.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Used to verify workplace location during shift clock-in and attendance check-ins.</string>
 </dict>
 </plist>

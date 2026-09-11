@@ -7,6 +7,16 @@ export interface IAttendance extends Document {
   originalClockIn?: Date; // Preserved original clock-in
   lastResumedAt?: Date; // Timestamp of when the shift was resumed for active segment calculation
   clockOut?: Date;
+  clockInLocation?: {
+    latitude: number;
+    longitude: number;
+    accuracy?: number;
+  };
+  clockOutLocation?: {
+    latitude: number;
+    longitude: number;
+    accuracy?: number;
+  };
   regularHours?: number;
   overtimeHours?: number;
   status: "Present" | "On Leave" | "Absent";
@@ -24,6 +34,16 @@ const AttendanceSchema = new Schema<IAttendance>(
     originalClockIn: { type: Date },
     lastResumedAt: { type: Date },
     clockOut: { type: Date },
+    clockInLocation: {
+      latitude: { type: Number },
+      longitude: { type: Number },
+      accuracy: { type: Number },
+    },
+    clockOutLocation: {
+      latitude: { type: Number },
+      longitude: { type: Number },
+      accuracy: { type: Number },
+    },
     regularHours: { type: Number, default: 0 },
     overtimeHours: { type: Number, default: 0 },
     status: {

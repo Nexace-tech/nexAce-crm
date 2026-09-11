@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { cn, formatISTTime, formatISTDate, getISTDateString, APP_TIMEZONE } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
 import { usePermissions } from "@/hooks/usePermissions";
+import { NativeService } from "@/lib/native/nativeService";
 
 function getNowInIST(): { hours: number; minutes: number } {
   const nowStr = new Date().toLocaleTimeString("en-US", { timeZone: APP_TIMEZONE, hour12: false, hour: "2-digit", minute: "2-digit" });
@@ -390,16 +391,36 @@ export function TeamShiftOverviewCard() {
   const handleQuickClockAction = async () => {
     setClocking(true);
     try {
+      NativeService.haptic("medium");
       const action = isCurrentlyClockedIn ? "out" : "in";
+
+      let location: { latitude: number; longitude: number; accuracy?: number } | undefined;
+      try {
+        const coords = await NativeService.getLocation();
+        if (coords) {
+          location = {
+            latitude: coords.latitude,
+            longitude: coords.longitude,
+            accuracy: coords.accuracy,
+          };
+        }
+      } catch (locErr) {
+        console.warn("Location capture skipped/failed:", locErr);
+      }
+
       const res = await fetch("/api/attendance", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action }),
+        body: JSON.stringify({ action, location }),
       });
       if (res.ok) {
+        NativeService.haptic("success");
         await fetchTeamShifts();
+      } else {
+        NativeService.haptic("error");
       }
     } catch (err) {
+      NativeService.haptic("error");
       console.error("Clock action failed:", err);
     } finally {
       setClocking(false);
@@ -447,6 +468,7 @@ export function TeamShiftOverviewCard() {
 
             <Button
               size="sm"
+              data-attendance-widget="true"
               onClick={handleQuickClockAction}
               disabled={clocking}
               className={cn(

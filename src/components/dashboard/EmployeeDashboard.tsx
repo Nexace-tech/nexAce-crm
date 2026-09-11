@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { usePermissions } from "@/hooks/usePermissions";
 import { cn, formatISTDate, formatISTTime, getISTDateString } from "@/lib/utils";
 import { generateAndDownloadPDF } from "@/lib/pdfReportGenerator";
+import { NativeService } from "@/lib/native/nativeService";
 
 export function EmployeeDashboard({ user }: { user: any }) {
   const { can } = usePermissions();
@@ -136,17 +137,47 @@ export function EmployeeDashboard({ user }: { user: any }) {
   const handleToggleClock = async () => {
     const action = clockedIn ? "out" : "in";
     try {
+      NativeService.haptic("medium");
       setClocking(true);
+
+      // Best-effort geolocation capture
+      let location: { latitude: number; longitude: number; accuracy?: number } | undefined;
+      try {
+        const coords = await NativeService.getLocation();
+        if (coords) {
+          location = {
+            latitude: coords.latitude,
+            longitude: coords.longitude,
+            accuracy: coords.accuracy,
+          };
+        }
+      } catch (locErr) {
+        console.warn("Location capture skipped/failed:", locErr);
+      }
+
       const res = await fetch("/api/attendance", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action }),
+        body: JSON.stringify({ action, location }),
       });
       if (res.ok) {
+        NativeService.haptic("success");
         await fetchAttendanceStatus();
+        showToast(
+          action === "in"
+            ? `Successfully clocked in! ${location ? "📍 Location verified." : ""}`
+            : "Successfully clocked out for today.",
+          "success"
+        );
+      } else {
+        NativeService.haptic("error");
+        const errData = await res.json().catch(() => ({}));
+        showToast(errData.error || "Failed to update attendance.", "error");
       }
     } catch (err) {
+      NativeService.haptic("error");
       console.error("Failed to toggle clock state:", err);
+      showToast("Network or server error while clocking.", "error");
     } finally {
       setClocking(false);
     }
@@ -662,6 +693,8 @@ export function EmployeeDashboard({ user }: { user: any }) {
                 </Button>
 
                 <Button
+                  id="attendance-widget"
+                  data-attendance-widget="true"
                   color={clockedIn ? "destructive" : "primary"}
                   size="sm"
                   onClick={handleToggleClock}

@@ -37,6 +37,7 @@ export interface IUser extends Document {
   };
    lastActiveAt?: Date;
    forcePasswordReset?: boolean;
+   deviceTokens?: string[];
    createdAt: Date;
  }
 
@@ -77,6 +78,7 @@ const UserSchema: Schema = new Schema({
   },
    lastActiveAt: { type: Date, default: Date.now },
    forcePasswordReset: { type: Boolean, default: false },
+   deviceTokens: [{ type: String }],
    createdAt: { type: Date, default: Date.now }
 });
 

@@ -104,7 +104,7 @@ export async function POST(request: Request) {
     }
 
     const body     = await request.json();
-    const { action } = body;
+    const { action, location } = body;
 
     if (!action || !["in", "out", "resume"].includes(action)) {
       return NextResponse.json({ error: "Action must be 'in', 'out', or 'resume'" }, { status: 400 });
@@ -117,6 +117,12 @@ export async function POST(request: Request) {
     const { start: dayStart, end: dayEnd } = getISTDayRange();
     const todayDate = getTodayDateNormalized();
     const now       = new Date();
+
+    const sanitizedLocation = location?.latitude && location?.longitude ? {
+      latitude: Number(location.latitude),
+      longitude: Number(location.longitude),
+      accuracy: location.accuracy ? Number(location.accuracy) : undefined,
+    } : undefined;
 
     if (action === "in") {
       // Prevent duplicate clock-ins: check the FULL IST day range, not just exact date.
@@ -139,6 +145,9 @@ export async function POST(request: Request) {
         }
         existing.lastResumedAt = now;
         existing.clockOut      = undefined;
+        if (sanitizedLocation) {
+          existing.clockInLocation = sanitizedLocation;
+        }
         await existing.save();
         return NextResponse.json({ success: true, attendance: existing, message: "Shift resumed and merged with today's record!" });
       }
@@ -148,6 +157,7 @@ export async function POST(request: Request) {
         date:            todayDate,
         clockIn:         now,
         originalClockIn: now, // preserved across all break/resume cycles
+        clockInLocation: sanitizedLocation,
         regularHours:    0,
         overtimeHours:   0,
         status:          "Present",
@@ -169,6 +179,10 @@ export async function POST(request: Request) {
       }
       if (record.clockOut) {
         return NextResponse.json({ error: "You have already clocked out for today" }, { status: 400 });
+      }
+
+      if (sanitizedLocation) {
+        record.clockOutLocation = sanitizedLocation;
       }
 
       let totalAccumulated: number;

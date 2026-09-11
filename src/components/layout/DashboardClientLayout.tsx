@@ -12,6 +12,8 @@ import { GuidedTour } from "@/components/guided-tour/GuidedTour";
 import { ProfileCompletionBanner } from "@/components/layout/ProfileCompletionBanner";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import { MobileBottomNav } from "@/components/layout/MobileBottomNav";
+import { OfflineBanner } from "@/components/layout/OfflineBanner";
+import { NativeService } from "@/lib/native/nativeService";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
 
@@ -133,8 +135,16 @@ export function DashboardClientLayout({ session, menuItems, isPending = false, c
     return pathname.startsWith(hrefPath);
   };
 
+  useEffect(() => {
+    if (user?._id) {
+      NativeService.initPushNotifications().catch(() => {});
+    }
+  }, [user?._id]);
+
   return (
     <div className="flex min-h-screen bg-slate-50 dark:bg-[#11161d] text-slate-900 dark:text-slate-100 transition-colors duration-200">
+      {/* ── Offline Network Banner ── */}
+      <OfflineBanner />
 
       {/* Mobile Overlay */}
       {mobileOpen && (
