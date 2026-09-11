@@ -1767,11 +1767,13 @@ export default function GuidePage() {
       </footer>
 
       {/* Interactive Guided Tour Modal */}
-      <GuidedTour
-        isOpen={tourOpen}
-        onClose={() => setTourOpen(false)}
-        role={selectedRoleFilter === "All" ? currentUser?.role || "Admin" : selectedRoleFilter}
-      />
+      {tourOpen && (
+        <GuidedTour
+          isOpen={tourOpen}
+          onClose={() => setTourOpen(false)}
+          role={selectedRoleFilter === "All" ? currentUser?.role || "Admin" : selectedRoleFilter}
+        />
+      )}
     </div>
   );
 }
