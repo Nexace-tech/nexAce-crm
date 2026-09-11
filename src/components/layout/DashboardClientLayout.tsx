@@ -11,6 +11,7 @@ import { CommandPalette } from "@/components/layout/CommandPalette";
 import { GuidedTour } from "@/components/guided-tour/GuidedTour";
 import { ProfileCompletionBanner } from "@/components/layout/ProfileCompletionBanner";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
+import { MobileBottomNav } from "@/components/layout/MobileBottomNav";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
 
@@ -375,12 +376,15 @@ export function DashboardClientLayout({ session, menuItems, isPending = false, c
         <CommandPalette open={commandPaletteOpen} onClose={() => setCommandPaletteOpen(false)} />
 
         {/* ── Page Body ────────────────────────────────────────────────── */}
-        <main className="flex-1 p-3.5 sm:p-6 overflow-y-auto bg-slate-50 dark:bg-[#11161d] text-slate-900 dark:text-slate-100 transition-colors duration-200">
+        <main className="flex-1 p-3.5 sm:p-6 pb-24 lg:pb-6 overflow-y-auto bg-slate-50 dark:bg-[#11161d] text-slate-900 dark:text-slate-100 transition-colors duration-200">
           <div className="max-w-7xl mx-auto">
             <ProfileCompletionBanner />
             {children}
           </div>
         </main>
+
+        {/* ── Mobile Bottom Navigation Bar (Fixed 5-Tab Dock) ── */}
+        <MobileBottomNav onOpenMenu={() => setMobileOpen(true)} isMenuOpen={mobileOpen} />
       </div>
     </div>
   );
