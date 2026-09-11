@@ -21,7 +21,11 @@ android/build/
 android/.gradle/
 android/.idea/
 android/captures/
+android/local.properties
 ios/App/build/
 ios/App/Pods/
 ios/App/.symlinks/
+*.apk
+*.aab
+
 
