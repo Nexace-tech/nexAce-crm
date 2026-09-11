@@ -183,14 +183,14 @@ export function AdminDashboard({ user }: { user: any }) {
       if (revTab === "Yearly" && summaryData.charts.yearly) return summaryData.charts.yearly;
     }
     return revTab === "Weekly" ? defaultWeeklyData : revTab === "Monthly" ? defaultMonthlyData : defaultYearlyData;
-  }, [summaryData?.charts, revTab]);
+  }, [summaryData, revTab]);
 
   const dynamicTrafficData = useMemo(() => {
     if (summaryData?.trafficSources && summaryData.trafficSources.length > 0) {
       return summaryData.trafficSources;
     }
     return fallbackTrafficData;
-  }, [summaryData?.trafficSources]);
+  }, [summaryData]);
 
   const pipelineStats = summaryData?.pipelineStats || [
     { stage: "Lead", amount: "$20,010", deals: "80 Deals", color: "#00c5a0" },
@@ -225,7 +225,7 @@ export function AdminDashboard({ user }: { user: any }) {
       }));
     }
     return fallbackDeals;
-  }, [summaryData?.deals, user?.name]);
+  }, [summaryData, user?.name]);
 
   // Dynamic Revenue Title Number
   const revSummaryLabel = useMemo(() => {

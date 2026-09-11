@@ -24,8 +24,6 @@ export function BulkImportModal({ isOpen, onClose, onSuccess, defaultTarget = "c
   const [successMessage, setSuccessMessage] = useState("");
   const [filterQuery, setFilterQuery] = useState("");
 
-  if (!isOpen) return null;
-
   // ── CSV Template Generator ──────────────────────────────────────────────────
   const handleDownloadTemplate = () => {
     let headers: string[] = [];
@@ -133,7 +131,7 @@ export function BulkImportModal({ isOpen, onClose, onSuccess, defaultTarget = "c
         const values: string[] = [];
         let match;
         while ((match = regex.exec(line)) !== null) {
-          let val = match[1] !== undefined ? match[1].replace(/""/g, '"') : match[2];
+          const val = match[1] !== undefined ? match[1].replace(/""/g, '"') : match[2];
           if (val !== undefined) values.push(val.trim());
         }
 
@@ -217,6 +215,8 @@ export function BulkImportModal({ isOpen, onClose, onSuccess, defaultTarget = "c
       (r.deliveryOwner && r.deliveryOwner.toLowerCase().includes(q))
     );
   }, [parsedRows, filterQuery]);
+
+  if (!isOpen) return null;
 
   // ── Submit Bulk Import ──────────────────────────────────────────────────────
   const handleBulkSubmit = async () => {

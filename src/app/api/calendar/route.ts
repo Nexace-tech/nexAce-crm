@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/session";
+import { requireTenantSession, isAuthError } from "@/lib/auth-guard";
 import { connectToDatabase } from "@/lib/db";
 import { Event } from "@/models/Event";
 import { Task } from "@/models/Task";
@@ -23,18 +23,15 @@ const MAX_EVENT_DURATION_DAYS = 90; // Prevent accidentally-huge events
  */
 export async function GET(request: Request) {
   try {
-    const session = await getSession();
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const authResult = await requireTenantSession();
+    if (isAuthError(authResult)) return authResult;
+    const { session, tenantObjectId, userObjectId } = authResult;
 
     const { searchParams } = new URL(request.url);
     const department    = searchParams.get("department") || "";
 
     await connectToDatabase();
 
-    const tenantObjectId = new mongoose.Types.ObjectId(session.tenantId);
-    const userObjectId   = new mongoose.Types.ObjectId(session.userId);
     const isElevated     = ["Admin", "OPS", "Manager"].includes(session.role);
     const now            = new Date();
 
@@ -205,10 +202,9 @@ export async function GET(request: Request) {
  */
 export async function POST(request: Request) {
   try {
-    const session = await getSession();
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const authResult = await requireTenantSession();
+    if (isAuthError(authResult)) return authResult;
+    const { session, tenantObjectId, userObjectId } = authResult;
 
     const body = await request.json();
     const { title, description, type, startDate, endDate, department } = body;
@@ -253,8 +249,8 @@ export async function POST(request: Request) {
       startDate:   start,
       endDate:     end,
       department:  department || "All",
-      userId:      new mongoose.Types.ObjectId(session.userId),
-      tenantId:    new mongoose.Types.ObjectId(session.tenantId),
+      userId:      userObjectId,
+      tenantId:    tenantObjectId,
     });
 
     const populated = await newEvent.populate("userId", "name role photoUrl department");

@@ -18,7 +18,7 @@ export async function GET() {
     const announcements = await Announcement.find({ tenantId: tenantObjectId }).sort({
       pinned: -1,
       createdAt: -1,
-    });
+    }).lean();
 
     return NextResponse.json({ announcements });
   } catch (error: unknown) {

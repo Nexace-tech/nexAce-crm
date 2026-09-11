@@ -24,7 +24,7 @@ export async function GET() {
     let meetings = await OneOnOneMeeting.find({
       tenantId: tenantIdObj,
       $or: [{ managerId: userIdObj }, { employeeId: userIdObj }],
-    }).sort({ scheduledDate: -1 });
+    }).sort({ scheduledDate: -1 }).lean();
 
     // Seed default sample 1:1 meeting if empty
     if (meetings.length === 0) {
@@ -32,7 +32,7 @@ export async function GET() {
       const colleague = await User.findOne({
         tenantId: tenantIdObj,
         _id: { $ne: userIdObj },
-      });
+      }).lean();
 
       const otherUserId = colleague ? colleague._id : userIdObj;
       const otherUserName = colleague ? colleague.name : "Teammate";
@@ -86,7 +86,7 @@ export async function POST(request: Request) {
     await connectToDatabase();
     const tenantIdObj = new mongoose.Types.ObjectId(session.tenantId);
 
-    const employeeUser = await User.findOne({ _id: employeeId, tenantId: tenantIdObj });
+    const employeeUser = await User.findOne({ _id: employeeId, tenantId: tenantIdObj }).lean();
     if (!employeeUser) {
       return NextResponse.json({ error: "Selected employee not found in workspace" }, { status: 404 });
     }

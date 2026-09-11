@@ -51,7 +51,8 @@ export async function GET() {
 
     const projects = await Project.find(query)
       .populate("members", "name role photoUrl")
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .lean();
 
     return NextResponse.json({ projects });
   } catch (error: unknown) {

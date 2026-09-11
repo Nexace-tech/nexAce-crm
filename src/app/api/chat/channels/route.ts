@@ -22,7 +22,7 @@ export async function GET() {
     const { tenantObjectId, userObjectId } = authResult;
     await connectToDatabase();
 
-    let channels = await Channel.find({ tenantId: tenantObjectId }).sort({ isPinned: -1, name: 1 });
+    let channels = await Channel.find({ tenantId: tenantObjectId }).sort({ isPinned: -1, name: 1 }).lean();
 
     // Seed defaults if empty
     if (channels.length === 0) {
@@ -158,7 +158,7 @@ export async function DELETE(request: Request) {
 
     await connectToDatabase();
 
-    const channel = await Channel.findOne({ _id: channelId, tenantId: tenantObjectId });
+    const channel = await Channel.findOne({ _id: channelId, tenantId: tenantObjectId }).lean();
 
     if (!channel) {
       return NextResponse.json({ error: "Channel not found" }, { status: 404 });

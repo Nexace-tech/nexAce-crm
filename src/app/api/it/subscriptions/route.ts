@@ -27,7 +27,7 @@ async function checkAndNotifyExpiringSubscriptions(tenantObjectId: mongoose.Type
       tenantId: tenantObjectId,
       status: { $ne: "Cancelled" },
       renewalDate: { $exists: true, $ne: "" },
-    });
+    }).lean();
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -61,7 +61,7 @@ async function checkAndNotifyExpiringSubscriptions(tenantObjectId: mongoose.Type
           tenantId: tenantObjectId,
           title: notifTitle,
           createdAt: { $gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) },
-        });
+        }).lean();
 
         if (!existingNotif) {
           const recipients = await User.find({
@@ -70,7 +70,7 @@ async function checkAndNotifyExpiringSubscriptions(tenantObjectId: mongoose.Type
               { role: { $in: ["Admin", "OPS", "Sub Admin"] } },
               ...(sub.createdBy ? [{ _id: sub.createdBy }] : []),
             ],
-          }).select("_id email name");
+          }).select("_id email name").lean();
 
           const uniqueRecipients = Array.from(new Map(recipients.map((r) => [r._id.toString(), r])).values());
 

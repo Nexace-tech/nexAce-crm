@@ -23,7 +23,7 @@ export interface AuthenticatedContext {
 export async function requireTenantSession(
   allowedRoles?: string[]
 ): Promise<AuthenticatedContext | NextResponse> {
-  const session = await getSession();
+  const session = await getSession(true); // DB revalidation happens below in requireTenantSession()
 
   if (!session || !session.userId || !session.tenantId) {
     return NextResponse.json({ error: "Unauthorized access" }, { status: 401 });

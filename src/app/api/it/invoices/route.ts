@@ -31,7 +31,7 @@ export async function GET() {
       console.error("autoGenerateAllSubscriptionInvoices in invoices GET error:", invErr);
     }
 
-    let query: Record<string, any> = { tenantId: tenantObjectId };
+    const query: Record<string, any> = { tenantId: tenantObjectId };
 
     if (!isPrivileged) {
       const userDoc = await User.findById(userObjectId).select("name email").lean();
@@ -103,7 +103,7 @@ export async function POST(request: Request) {
 
     await connectToDatabase();
 
-    const existing = await ITInvoice.findOne({ tenantId: tenantObjectId, invoiceNo: invoiceNo.trim() });
+    const existing = await ITInvoice.findOne({ tenantId: tenantObjectId, invoiceNo: invoiceNo.trim() }).lean();
     if (existing) {
       return NextResponse.json({ error: `Invoice with number ${invoiceNo} already exists.` }, { status: 400 });
     }
@@ -151,7 +151,7 @@ export async function POST(request: Request) {
       const admins = await User.find({
         tenantId: tenantObjectId,
         role: { $in: ["Admin", "OPS", "Manager"] },
-      }).select("_id");
+      }).select("_id").lean();
 
       // Collect IDs already notified to avoid duplicates
       const notifiedIds = new Set<string>();

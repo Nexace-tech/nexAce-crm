@@ -21,7 +21,7 @@ export default function DashboardHome() {
 
   useEffect(() => {
     if (!loading && !user) {
-      router.push("/login");
+      router.replace("/login");
     }
   }, [loading, user, router]);
 

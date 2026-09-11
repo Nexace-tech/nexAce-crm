@@ -58,7 +58,8 @@ export async function GET(request: Request) {
 
       const pendingEntries = await TimeEntry.find(query)
         .populate("userId", "name role department photoUrl")
-        .sort({ date: 1 });
+        .sort({ date: 1 })
+        .lean();
 
       return NextResponse.json({ entries: pendingEntries });
     }
@@ -93,7 +94,8 @@ export async function GET(request: Request) {
 
     const entries = await TimeEntry.find(query)
       .populate("userId", "name role department photoUrl")
-      .sort({ date: -1 });
+      .sort({ date: -1 })
+      .lean();
 
     return NextResponse.json({ entries });
   } catch (error: unknown) {
@@ -259,7 +261,7 @@ export async function PUT(request: Request) {
     const targetEntries = await TimeEntry.find({
       _id: { $in: entryIds.map((id) => new mongoose.Types.ObjectId(id)) },
       tenantId: new mongoose.Types.ObjectId(session.tenantId),
-    }).select("userId");
+    }).select("userId").lean();
 
     // Verify and update matching entries belonging to the tenant
     const result = await TimeEntry.updateMany(

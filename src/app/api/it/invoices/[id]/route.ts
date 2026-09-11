@@ -120,7 +120,7 @@ export async function PATCH(
           ...(updated.billedToEmail ? [{ email: updated.billedToEmail.toLowerCase() }] : []),
           ...(updated.createdBy ? [{ _id: updated.createdBy }] : []),
         ],
-      });
+      }).lean();
 
       if (internalUser) {
         const isPaid = updated.status === "Paid";

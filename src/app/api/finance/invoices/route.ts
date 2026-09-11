@@ -14,7 +14,7 @@ export async function GET() {
 
     await connectToDatabase();
 
-    let invoices = await FinanceInvoice.find({ tenantId: tenantObjectId }).sort({ createdAt: -1 }).lean();
+    const invoices = await FinanceInvoice.find({ tenantId: tenantObjectId }).sort({ createdAt: -1 }).lean();
 
     // Fetch ITInvoices (Employee Invoices) as well
     const { ITInvoice } = await import("@/models/ITInvoice");

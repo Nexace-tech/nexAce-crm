@@ -157,7 +157,7 @@ export default function HrWorkdeskDashboard({
 
   // ── Filtered & Sorted Allocations ──
   const filteredAndSortedAllocations = useMemo(() => {
-    let result = allocations.filter((item) => {
+    const result = allocations.filter((item) => {
       const q = searchQuery.toLowerCase().trim();
       const matchSearch =
         !q ||

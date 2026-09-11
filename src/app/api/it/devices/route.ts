@@ -156,10 +156,10 @@ export async function POST(request: Request) {
     }
 
     // Check for collision against database records; if taken, automatically assign the next unique number
-    let exists = await ITDevice.findOne({ tenantId: tenantObjectId, assetTag: resolvedAssetTag });
+    let exists = await ITDevice.findOne({ tenantId: tenantObjectId, assetTag: resolvedAssetTag }).lean();
     if (exists) {
       resolvedAssetTag = await getNextAssetTag(tenantObjectId, selectedType);
-      exists = await ITDevice.findOne({ tenantId: tenantObjectId, assetTag: resolvedAssetTag });
+      exists = await ITDevice.findOne({ tenantId: tenantObjectId, assetTag: resolvedAssetTag }).lean();
       if (exists) {
         // Fallback with timestamp suffix to guarantee 100% collision-free persistence
         const code = DEVICE_TYPE_CODE[selectedType] || "OTH";

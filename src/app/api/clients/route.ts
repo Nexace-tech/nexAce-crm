@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
+import { getSession } from "@/lib/session";
 import { connectToDatabase } from "@/lib/db";
 import { Client } from "@/models/Client";
-import { getSession } from "@/lib/session";
 import { getUserDataScope } from "@/lib/dataScope";
 import { isSubAdminRole } from "@/lib/roles";
 import mongoose from "mongoose";
@@ -37,7 +37,7 @@ export async function GET() {
       ];
     }
 
-    const clients = await Client.find(queryCondition).sort({ createdAt: -1 });
+    const clients = await Client.find(queryCondition).sort({ createdAt: -1 }).lean();
 
     return NextResponse.json({ clients });
   } catch (error: unknown) {

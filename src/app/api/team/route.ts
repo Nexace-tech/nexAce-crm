@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/session";
+import { requireTenantSession, isAuthError } from "@/lib/auth-guard";
 import { connectToDatabase } from "@/lib/db";
 import { User } from "@/models/User";
 import { Attendance } from "@/models/Attendance";
@@ -16,10 +16,9 @@ import bcrypt from "bcryptjs";
  */
 export async function GET(request: Request) {
   try {
-    const session = await getSession();
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const authResult = await requireTenantSession();
+    if (isAuthError(authResult)) return authResult;
+    const { session, tenantObjectId, userObjectId } = authResult;
 
     const { searchParams } = new URL(request.url);
     const department = searchParams.get("department");
@@ -33,16 +32,14 @@ export async function GET(request: Request) {
     }
 
     // Base query: tenant ID constraint
-    const query: any = {
-      tenantId: new mongoose.Types.ObjectId(session.tenantId)
-    };
+    const query: any = { tenantId: tenantObjectId };
 
     // Role-based data scoping (skipped when all=true for workspace chat/directory):
     if (!all && dataScope.scope === "department") {
       // Logged-in user's own profile to get department & ID
       const loggedUser = await User.findById(session.userId).lean();
       const userDept = loggedUser?.department;
-      const userObjId = new mongoose.Types.ObjectId(session.userId);
+      const userObjId = userObjectId;
 
       query.$and = query.$and || [];
       query.$and.push({
@@ -55,7 +52,7 @@ export async function GET(request: Request) {
         ]
       });
     } else if (dataScope.scope === "own") {
-      query._id = new mongoose.Types.ObjectId(session.userId);
+      query._id = userObjectId;
     }
 
     // Filter by department if supplied
@@ -101,7 +98,7 @@ export async function GET(request: Request) {
     todayEnd.setHours(23, 59, 59, 999);
 
     const todayAttendances = await Attendance.find({
-      tenantId: new mongoose.Types.ObjectId(session.tenantId),
+      tenantId: tenantObjectId,
       date: { $gte: todayStart, $lte: todayEnd }
     }).lean();
 
@@ -149,10 +146,9 @@ export async function GET(request: Request) {
  */
 export async function POST(request: Request) {
   try {
-    const session = await getSession();
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const authResult = await requireTenantSession();
+    if (isAuthError(authResult)) return authResult;
+    const { session, tenantObjectId } = authResult;
 
     const isPrivileged = session.role === "Admin" || session.role === "Manager" || isSubAdminRole(session.role);
     if (!isPrivileged) {
@@ -162,7 +158,7 @@ export async function POST(request: Request) {
     const body = await request.json();
     await connectToDatabase();
 
-    const tenantObjectId = new mongoose.Types.ObjectId(session.tenantId);
+    // const tenantObjectId = new mongoose.Types.ObjectId(session.tenantId);  // now provided by requireTenantSession
 
     // Helper: generate a strong, unique one-time password for each provisioned account
     const provisionPassword = async () => {

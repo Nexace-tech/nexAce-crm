@@ -24,15 +24,22 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Forbidden: Seeding is not permitted in production" }, { status: 403 });
   }
 
-  // 2. In development, require a confirmation secret to prevent accidental wipes
-  const { searchParams } = new URL(request.url);
-  const confirmKey = searchParams.get("confirm");
-  const authHeader = request.headers.get("authorization");
-  const seedSecret = process.env.SEED_SECRET || "nexace-dev-seed-confirmed";
+   // 2. In development, require a confirmation secret to prevent accidental wipes
+   const { searchParams } = new URL(request.url);
+   const confirmKey = searchParams.get("confirm");
+   const authHeader = request.headers.get("authorization");
+   const seedSecret = process.env.SEED_SECRET;
 
-  if (confirmKey !== seedSecret && authHeader !== `Bearer ${seedSecret}`) {
+   if (!seedSecret) {
+     return NextResponse.json(
+       { error: "Forbidden: SEED_SECRET environment variable is not configured" },
+       { status: 403 }
+     );
+   }
+
+   if (confirmKey !== seedSecret && authHeader !== `Bearer ${seedSecret}`) {
     return NextResponse.json(
-      { error: "Forbidden: Missing or invalid confirmation key (?confirm=nexace-dev-seed-confirmed)" },
+      { error: "Forbidden: Missing or invalid confirmation key. Set ?confirm=<your_SEED_SECRET>" },
       { status: 403 }
     );
   }

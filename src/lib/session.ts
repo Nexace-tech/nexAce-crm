@@ -67,11 +67,49 @@ export async function createSession(
   });
 }
 
-export async function getSession() {
+/**
+ * Retrieves the session from the JWT cookie.
+ *
+ * By default (skipDbValidation=false), also re-validates the user against the
+ * database to ensure the account still exists and is active. This prevents
+ * privilege escalation from stale JWTs (e.g., a demoted Admin's old token
+ * still carrying "Admin" for up to 7 days).
+ *
+ * Pass skipDbValidation=true when the caller will perform its own DB
+ * validation (e.g., dashboard layout, /api/auth/me), to avoid redundant queries.
+ */
+export async function getSession(skipDbValidation = false): Promise<SessionPayload | null> {
   const cookieStore = await cookies();
   const session = cookieStore.get("session")?.value;
   if (!session) return null;
-  return await decrypt(session);
+  const payload = await decrypt(session);
+  if (!payload) return null;
+  if (skipDbValidation) return payload;
+
+  // DB-backed revalidation: confirm the user still exists and is active
+  try {
+    const { connectToDatabase } = await import("@/lib/db");
+    const { User } = await import("@/models/User");
+    const mongoose = (await import("mongoose")).default;
+    await connectToDatabase();
+
+    const user = await User.findOne({
+      _id: payload.userId,
+      tenantId: new mongoose.Types.ObjectId(payload.tenantId),
+    })
+      .select("role status")
+      .lean();
+
+    if (!user || user.status === "Pending" || user.status === "Suspended") {
+      return null;
+    }
+
+    // Return session with DB-authoritative role (not JWT-self-asserted)
+    return { ...payload, role: user.role };
+  } catch {
+    // If DB is unreachable, don't trust the JWT
+    return null;
+  }
 }
 
 export async function updateSession() {
