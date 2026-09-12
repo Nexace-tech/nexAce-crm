@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import { connectToDatabase } from "@/lib/db";
 import { Notification } from "@/models/Notification";
 import { User } from "@/models/User";
+import { sendFcmPush } from "@/lib/fcm";
 
 type NotifyType =
   | "chat"
@@ -95,6 +96,22 @@ export async function notify(
     }));
 
     await Notification.insertMany(docs, { ordered: false });
+
+    // Fire FCM push to all device tokens of the recipients
+    const usersWithTokens = await User.find({
+      _id: { $in: uniqueRecipientIds },
+      deviceTokens: { $exists: true, $not: { $size: 0 } },
+    }).select("deviceTokens").lean();
+
+    const allTokens: string[] = usersWithTokens.flatMap((u: any) => u.deviceTokens || []);
+    if (allTokens.length > 0) {
+      await sendFcmPush(allTokens, {
+        title: payload.title,
+        message: payload.message,
+        linkUrl: payload.linkUrl,
+        type: payload.type,
+      });
+    }
   } catch (err) {
     console.error("[notify] Failed to create notification(s):", err);
   }

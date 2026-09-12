@@ -29,3 +29,7 @@ ios/App/.symlinks/
 *.aab
 
 
+.env.example
+src/lib/fcm.ts
+android/gradle.properties
+.env.example
