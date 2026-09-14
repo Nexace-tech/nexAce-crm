@@ -32,6 +32,10 @@ interface UserProfile {
   bio?: string;
   phone?: string;
   photoUrl?: string;
+  resumeUrl?: string;
+  resumeFileName?: string;
+  resumeFileSize?: number;
+  resumeUpdatedAt?: string | Date;
   socialLinks?: {
     linkedin?: string;
     twitter?: string;

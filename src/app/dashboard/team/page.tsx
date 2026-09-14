@@ -2164,6 +2164,39 @@ export default function TeamDashboardPage() {
                 />
               </div>
 
+              {/* Employee Resume / CV in Edit Modal */}
+              {selectedMember.resumeUrl && (
+                <div className="p-3 rounded-lg bg-muted/40 border border-border flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="h-9 w-9 rounded bg-rose-500/10 flex items-center justify-center shrink-0 border border-rose-500/20">
+                      {selectedMember.resumeFileName?.toLowerCase().endsWith(".doc") || selectedMember.resumeFileName?.toLowerCase().endsWith(".docx") ? (
+                        <i className="fa-solid fa-file-word text-blue-500 text-lg" />
+                      ) : (
+                        <i className="fa-solid fa-file-pdf text-rose-500 text-lg" />
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-foreground truncate">
+                        {selectedMember.resumeFileName || "Employee_Resume.pdf"}
+                      </p>
+                      <p className="text-[11px] text-muted-foreground">
+                        Uploaded Resume / CV
+                      </p>
+                    </div>
+                  </div>
+                  <a
+                    href={selectedMember.resumeUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    download={selectedMember.resumeFileName || "Resume"}
+                  >
+                    <Button type="button" variant="outline" size="sm" className="h-8 text-xs gap-1.5 cursor-pointer">
+                      <i className="fa-solid fa-arrow-down-to-line text-xs text-primary" /> Download
+                    </Button>
+                  </a>
+                </div>
+              )}
+
               {/* Social Media Profiles in Edit Modal */}
               <div className="pt-2 border-t border-border space-y-2">
                 <label className="text-xs font-bold text-foreground flex items-center gap-1.5">

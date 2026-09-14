@@ -1186,6 +1186,22 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
                       <span>Shift:</span>
                       <span className="font-medium text-foreground">{u.shiftTime || "09:00 AM - 05:00 PM"}</span>
                     </p>
+                    {u.resumeUrl && (
+                      <div className="pt-2 mt-1 border-t border-border/50 flex justify-between items-center">
+                        <span className="text-muted-foreground flex items-center gap-1.5 font-medium">
+                          <i className="fa-solid fa-file-lines text-rose-500 text-xs" /> Resume / CV:
+                        </span>
+                        <a
+                          href={u.resumeUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          download={u.resumeFileName || "Resume"}
+                          className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline"
+                        >
+                          <i className="fa-solid fa-arrow-down-to-line text-[10px]" /> Download
+                        </a>
+                      </div>
+                    )}
                   </div>
                 </CardContent>
               </Card>

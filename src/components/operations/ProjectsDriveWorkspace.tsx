@@ -552,6 +552,8 @@ export function ProjectsDriveWorkspace({ initialTab, hideHeader = false }: Proje
         matchesType = ["xls", "xlsx", "csv"].includes(ext) || mime.includes("sheet") || mime.includes("csv");
       } else if (driveTypeFilter === "Archives") {
         matchesType = ["zip", "rar", "7z", "tar", "gz"].includes(ext) || mime.includes("zip");
+      } else if (driveTypeFilter === "Resumes") {
+        matchesType = file.folder === "Resumes" || file.name.toLowerCase().includes("resume");
       } else if (driveTypeFilter === "Other") {
         const isCommon = mime.startsWith("image/") || ext === "pdf" || ["doc", "docx", "txt", "xls", "xlsx", "csv", "zip"].includes(ext);
         matchesType = !isCommon;
@@ -2084,6 +2086,7 @@ export function ProjectsDriveWorkspace({ initialTab, hideHeader = false }: Proje
                     title="Filter by file type"
                   >
                     <option value="All">All Types</option>
+                    <option value="Resumes">Employee Resumes & CVs</option>
                     <option value="Images">Images (PNG, JPG, WEBP, SVG)</option>
                     <option value="PDFs">PDF Documents</option>
                     <option value="Documents">Word / Text Docs</option>
@@ -2330,9 +2333,16 @@ export function ProjectsDriveWorkspace({ initialTab, hideHeader = false }: Proje
 
                             <div className="flex items-center justify-between text-[10px] text-muted-foreground border-t border-border/60 pt-2">
                               <span>By {file.uploadedBy?.name || "Member"}</span>
-                              <Badge variant="outline" className="text-[9px] px-1.5 py-0">
-                                {file.mimeType?.split("/")[1] || "file"}
-                              </Badge>
+                              <div className="flex items-center gap-1.5">
+                                {(file.folder === "Resumes" || file.name.toLowerCase().includes("resume")) && (
+                                  <Badge variant="outline" className="text-[9px] px-1.5 py-0 bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30 font-semibold">
+                                    <i className="fa-solid fa-file-lines mr-1 text-[8px]" /> Resume
+                                  </Badge>
+                                )}
+                                <Badge variant="outline" className="text-[9px] px-1.5 py-0">
+                                  {file.mimeType?.split("/")[1] || "file"}
+                                </Badge>
+                              </div>
                             </div>
                           </div>
                         );

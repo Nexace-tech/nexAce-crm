@@ -17,6 +17,10 @@ export interface IUser extends Document {
   bio?: string;
   phone?: string;
   photoUrl?: string;
+  resumeUrl?: string;
+  resumeFileName?: string;
+  resumeFileSize?: number;
+  resumeUpdatedAt?: Date;
   shiftTime?: string;
   shiftName?: string;
   employmentType?: string;
@@ -58,6 +62,10 @@ const UserSchema: Schema = new Schema({
   bio: { type: String, default: "" },
   phone: { type: String, default: "" },
   photoUrl: { type: String, default: "" },
+  resumeUrl: { type: String, default: "" },
+  resumeFileName: { type: String, default: "" },
+  resumeFileSize: { type: Number, default: 0 },
+  resumeUpdatedAt: { type: Date },
   shiftTime: { type: String, default: "09:00 AM - 05:00 PM" },
   shiftName: { type: String, default: "Standard Day Shift" },
   employmentType: { type: String, default: "Permanent", trim: true },
@@ -89,7 +97,7 @@ UserSchema.index({ email: 1, tenantId: 1 }, { unique: true });
 UserSchema.index({ tenantId: 1, role: 1 });
 
 // Force invalidate in-memory Mongoose model cache if schema updated
-if (mongoose.models.User && (!mongoose.models.User.schema.path("salary") || !mongoose.models.User.schema.path("bankDetails"))) {
+if (mongoose.models.User && (!mongoose.models.User.schema.path("salary") || !mongoose.models.User.schema.path("bankDetails") || !mongoose.models.User.schema.path("resumeUrl"))) {
   delete (mongoose.models as any).User;
 }
 

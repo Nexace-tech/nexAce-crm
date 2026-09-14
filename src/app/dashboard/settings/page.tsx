@@ -78,6 +78,14 @@ function SettingsPageContent() {
   const [photoBroken, setPhotoBroken] = useState(false);
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
 
+  const [resumeUrl, setResumeUrl] = useState("");
+  const [resumeFileName, setResumeFileName] = useState("");
+  const [resumeFileSize, setResumeFileSize] = useState<number>(0);
+  const [resumeUpdatedAt, setResumeUpdatedAt] = useState<string | Date | null>(null);
+  const [uploadingResume, setUploadingResume] = useState(false);
+  const [showRemoveResumeModal, setShowRemoveResumeModal] = useState(false);
+  const fileResumeRef = React.useRef<HTMLInputElement | null>(null);
+
   const [linkedin, setLinkedin] = useState("");
   const [twitter, setTwitter] = useState("");
   const [github, setGithub] = useState("");
@@ -179,6 +187,10 @@ function SettingsPageContent() {
       setAccountNo(user.bankDetails?.accountNo || "");
       setIfscCode(user.bankDetails?.ifscCode || "");
       setUpiId(user.bankDetails?.upiId || "");
+      setResumeUrl(user.resumeUrl || "");
+      setResumeFileName(user.resumeFileName || "");
+      setResumeFileSize(user.resumeFileSize || 0);
+      setResumeUpdatedAt(user.resumeUpdatedAt || null);
     }
   }, [user]);
 
@@ -542,6 +554,91 @@ function SettingsPageContent() {
       showToast(err.message || "Failed to remove profile photo", "error");
     } finally {
       setUploadingPhoto(false);
+    }
+  };
+
+  const formatResumeBytes = (bytes?: number) => {
+    if (!bytes || bytes === 0) return "0 B";
+    const k = 1024;
+    const sizes = ["B", "KB", "MB", "GB"];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
+  };
+
+  const handleUploadResume = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !user) return;
+
+    const allowedExtensions = [".pdf", ".doc", ".docx"];
+    const fileExt = file.name.substring(file.name.lastIndexOf(".")).toLowerCase();
+    if (!allowedExtensions.includes(fileExt)) {
+      showToast("Please upload a valid document (PDF, DOC, or DOCX).", "error");
+      return;
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+      showToast("Resume file must be smaller than 10MB.", "error");
+      return;
+    }
+
+    setUploadingResume(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const res = await fetch("/api/team/upload-resume", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Failed to upload resume");
+      }
+
+      setResumeUrl(data.resumeUrl);
+      setResumeFileName(data.resumeFileName);
+      setResumeFileSize(data.resumeFileSize);
+      setResumeUpdatedAt(data.resumeUpdatedAt);
+
+      await refreshUser();
+      showToast("Resume uploaded successfully!", "success");
+    } catch (err: any) {
+      console.error(err);
+      showToast(err.message || "Failed to upload resume", "error");
+    } finally {
+      setUploadingResume(false);
+      if (fileResumeRef.current) fileResumeRef.current.value = "";
+    }
+  };
+
+  const handleRemoveResume = async () => {
+    if (!user) return;
+
+    setUploadingResume(true);
+    try {
+      const res = await fetch("/api/team/upload-resume", {
+        method: "DELETE",
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to remove resume");
+      }
+
+      setResumeUrl("");
+      setResumeFileName("");
+      setResumeFileSize(0);
+      setResumeUpdatedAt(null);
+
+      await refreshUser();
+      setShowRemoveResumeModal(false);
+      showToast("Resume removed successfully.", "success");
+    } catch (err: any) {
+      console.error(err);
+      showToast(err.message || "Failed to remove resume", "error");
+    } finally {
+      setUploadingResume(false);
     }
   };
 
@@ -1645,6 +1742,126 @@ function SettingsPageContent() {
                 />
               </div>
 
+              {/* Resume / CV Upload Section */}
+              <div className="pt-4 border-t border-border space-y-3">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="space-y-0.5">
+                    <h4 className="text-sm font-bold text-foreground flex items-center gap-2">
+                      <i className="fa-solid fa-file-lines text-primary text-sm" /> Resume / Curriculum Vitae (CV)
+                    </h4>
+                    <p className="text-xs text-muted-foreground">
+                      Upload your latest resume or CV. Supported formats: PDF, DOC, DOCX (max 10MB).
+                    </p>
+                  </div>
+                  {resumeUrl && (
+                    <Badge variant="outline" className="bg-emerald-500/10 text-emerald-500 border-emerald-500/30 text-xs px-2.5 py-0.5 flex items-center gap-1.5 font-medium">
+                      <i className="fa-solid fa-circle-check text-[10px]" /> Uploaded
+                    </Badge>
+                  )}
+                </div>
+
+                <input
+                  ref={fileResumeRef}
+                  type="file"
+                  accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                  onChange={handleUploadResume}
+                  className="hidden"
+                />
+
+                {resumeUrl ? (
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl bg-muted/30 border border-border/80 hover:border-primary/40 transition-colors">
+                    <div className="flex items-center gap-3.5 min-w-0">
+                      <div className="h-12 w-12 rounded-lg bg-rose-500/10 border border-rose-500/20 flex items-center justify-center shrink-0">
+                        {resumeFileName.toLowerCase().endsWith(".doc") || resumeFileName.toLowerCase().endsWith(".docx") ? (
+                          <i className="fa-solid fa-file-word text-blue-500 text-2xl" />
+                        ) : (
+                          <i className="fa-solid fa-file-pdf text-rose-500 text-2xl" />
+                        )}
+                      </div>
+                      <div className="min-w-0 space-y-0.5">
+                        <p className="text-sm font-semibold text-foreground truncate" title={resumeFileName || "My_Resume.pdf"}>
+                          {resumeFileName || "My_Resume.pdf"}
+                        </p>
+                        <p className="text-xs text-muted-foreground flex items-center gap-2">
+                          {resumeFileSize > 0 && <span>{formatResumeBytes(resumeFileSize)}</span>}
+                          {resumeFileSize > 0 && <span>•</span>}
+                          <span>
+                            {resumeUpdatedAt
+                              ? `Uploaded on ${new Date(resumeUpdatedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`
+                              : "Uploaded"}
+                          </span>
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0 flex-wrap sm:flex-nowrap">
+                      <a
+                        href={resumeUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        download={resumeFileName || "Resume"}
+                      >
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="gap-1.5 text-xs font-semibold cursor-pointer border-border hover:border-primary/50 text-foreground"
+                        >
+                          <i className="fa-solid fa-arrow-down-to-line text-xs text-primary" />
+                          Download / View
+                        </Button>
+                      </a>
+
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={uploadingResume}
+                        onClick={() => fileResumeRef.current?.click()}
+                        className="gap-1.5 text-xs font-semibold cursor-pointer border-border hover:border-primary/50 text-foreground"
+                      >
+                        <i className={cn("text-xs", uploadingResume ? "fa-solid fa-spinner fa-spin" : "fa-solid fa-arrows-rotate text-primary")} />
+                        {uploadingResume ? "Replacing..." : "Replace"}
+                      </Button>
+
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={uploadingResume}
+                        onClick={() => setShowRemoveResumeModal(true)}
+                        className="gap-1.5 text-xs font-semibold text-rose-500 border-rose-500/30 hover:bg-rose-500/10 hover:text-rose-600 cursor-pointer"
+                      >
+                        <i className="fa-solid fa-trash-can text-xs" />
+                        Remove
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div
+                    onClick={() => !uploadingResume && fileResumeRef.current?.click()}
+                    className={cn(
+                      "border-2 border-dashed border-border/80 hover:border-primary/60 rounded-xl p-6 flex flex-col items-center justify-center text-center cursor-pointer bg-muted/20 hover:bg-muted/40 transition-all duration-200 group",
+                      uploadingResume && "pointer-events-none opacity-70"
+                    )}
+                  >
+                    <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center mb-2.5 text-primary group-hover:scale-105 transition-transform">
+                      {uploadingResume ? (
+                        <i className="fa-solid fa-spinner fa-spin text-xl text-primary" />
+                      ) : (
+                        <i className="fa-solid fa-cloud-arrow-up text-xl text-primary" />
+                      )}
+                    </div>
+                    <p className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors">
+                      {uploadingResume ? "Uploading your resume..." : "Click to upload your Resume or CV"}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Supports PDF, DOC, DOCX files up to 10MB
+                    </p>
+                  </div>
+                )}
+              </div>
+
               {/* Social Media Profiles Section */}
               <div className="pt-3 border-t border-border space-y-3">
                 <div className="flex items-center gap-2">
@@ -2264,6 +2481,53 @@ function SettingsPageContent() {
                 ) : (
                   <>
                     <i className="fa-solid fa-trash-can text-xs" /> Remove Photo
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Remove Resume Confirmation Modal */}
+      {showRemoveResumeModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in">
+          <div className="w-full max-w-md bg-card border border-border rounded-2xl p-6 shadow-2xl space-y-5 animate-in zoom-in-95" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-start gap-3.5">
+              <div className="w-10 h-10 rounded-full bg-rose-500/10 text-rose-500 flex items-center justify-center shrink-0 border border-rose-500/20">
+                <i className="fa-solid fa-trash-can text-lg" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-base font-bold text-foreground">Remove Resume</h3>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Are you sure you want to remove your resume (<span className="font-medium text-foreground">{resumeFileName || "Resume"}</span>)? You can upload a new one at any time.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2.5 pt-2 border-t border-border/60">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowRemoveResumeModal(false)}
+                disabled={uploadingResume}
+              >
+                Cancel
+              </Button>
+              <Button
+                color="destructive"
+                size="sm"
+                onClick={handleRemoveResume}
+                disabled={uploadingResume}
+                className="gap-2 font-semibold cursor-pointer"
+              >
+                {uploadingResume ? (
+                  <>
+                    <i className="fa-solid fa-spinner fa-spin text-xs" /> Removing...
+                  </>
+                ) : (
+                  <>
+                    <i className="fa-solid fa-trash-can text-xs" /> Remove Resume
                   </>
                 )}
               </Button>

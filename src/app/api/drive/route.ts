@@ -25,7 +25,8 @@ export async function GET() {
 
     await connectToDatabase();
 
-    const isElevatedRole = session.role === "Admin";
+    const { isSubAdminRole } = await import("@/lib/roles");
+    const isElevatedRole = session.role === "Admin" || session.role === "OPS" || isSubAdminRole(session.role);
     const queryCondition: any = {
       tenantId: new mongoose.Types.ObjectId(session.tenantId),
     };

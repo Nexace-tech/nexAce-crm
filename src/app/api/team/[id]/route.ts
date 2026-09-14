@@ -229,6 +229,10 @@ export async function PUT(request: Request, { params }: RouteParams) {
       if (body.bio !== undefined) user.bio = body.bio;
       if (body.phone !== undefined) user.phone = body.phone;
       if (body.photoUrl !== undefined) user.photoUrl = body.photoUrl;
+      if (body.resumeUrl !== undefined) user.resumeUrl = body.resumeUrl;
+      if (body.resumeFileName !== undefined) user.resumeFileName = body.resumeFileName;
+      if (body.resumeFileSize !== undefined) user.resumeFileSize = body.resumeFileSize;
+      if (body.resumeUpdatedAt !== undefined) user.resumeUpdatedAt = body.resumeUpdatedAt;
       if (body.skills !== undefined) user.skills = body.skills;
       if (body.socialLinks !== undefined) {
         user.socialLinks = {
@@ -256,6 +260,10 @@ export async function PUT(request: Request, { params }: RouteParams) {
     const directUpdate: any = {};
     if (canEditOthers && body.salary !== undefined) directUpdate.salary = Number(body.salary) || 0;
     if (canEditOthers && body.employmentType !== undefined) directUpdate.employmentType = body.employmentType;
+    if (body.resumeUrl !== undefined) directUpdate.resumeUrl = body.resumeUrl;
+    if (body.resumeFileName !== undefined) directUpdate.resumeFileName = body.resumeFileName;
+    if (body.resumeFileSize !== undefined) directUpdate.resumeFileSize = body.resumeFileSize;
+    if (body.resumeUpdatedAt !== undefined) directUpdate.resumeUpdatedAt = body.resumeUpdatedAt;
     if (body.bankDetails !== undefined) {
       directUpdate.bankDetails = {
         bankName: (body.bankDetails.bankName || "").trim(),
