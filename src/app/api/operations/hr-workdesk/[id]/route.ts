@@ -18,18 +18,42 @@ export async function PATCH(
     const body = await request.json();
     await connectToDatabase();
 
-    const { employeeId, employeeName, department, role, allocatedProject, allocationPercentage, billingRate, skills, startDate, endDate, notes, status } = body;
+    const {
+      employeeId,
+      userId,
+      employeeName,
+      email,
+      department,
+      role,
+      assignedProject,
+      allocatedProject,
+      allocatedHoursPerWeek,
+      utilizationRate,
+      allocationPercentage,
+      billingRate,
+      skills,
+      startDate,
+      endDate,
+      notes,
+      status,
+    } = body;
+
     const updatePayload: Record<string, unknown> = {};
-    if (employeeId !== undefined) updatePayload.employeeId = employeeId ? new mongoose.Types.ObjectId(employeeId) : null;
+    const effectiveUserId = userId || employeeId;
+    if (effectiveUserId !== undefined) updatePayload.userId = effectiveUserId ? new mongoose.Types.ObjectId(effectiveUserId) : null;
     if (employeeName !== undefined) updatePayload.employeeName = employeeName;
+    if (email !== undefined) updatePayload.email = email;
     if (department !== undefined) updatePayload.department = department;
     if (role !== undefined) updatePayload.role = role;
-    if (allocatedProject !== undefined) updatePayload.allocatedProject = allocatedProject;
-    if (allocationPercentage !== undefined) updatePayload.allocationPercentage = Number(allocationPercentage);
+    if (assignedProject !== undefined) updatePayload.assignedProject = assignedProject;
+    else if (allocatedProject !== undefined) updatePayload.assignedProject = allocatedProject;
+    if (allocatedHoursPerWeek !== undefined) updatePayload.allocatedHoursPerWeek = Number(allocatedHoursPerWeek);
+    if (utilizationRate !== undefined) updatePayload.utilizationRate = Number(utilizationRate);
+    else if (allocationPercentage !== undefined) updatePayload.utilizationRate = Number(allocationPercentage);
     if (billingRate !== undefined) updatePayload.billingRate = Number(billingRate);
     if (skills !== undefined) updatePayload.skills = skills;
-    if (startDate !== undefined) updatePayload.startDate = startDate ? new Date(startDate) : null;
-    if (endDate !== undefined) updatePayload.endDate = endDate ? new Date(endDate) : null;
+    if (startDate !== undefined) updatePayload.startDate = startDate;
+    if (endDate !== undefined) updatePayload.endDate = endDate;
     if (notes !== undefined) updatePayload.notes = notes;
     if (status !== undefined) updatePayload.status = status;
 

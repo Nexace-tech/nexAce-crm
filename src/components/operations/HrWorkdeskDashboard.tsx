@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,7 +8,9 @@ import { cn } from "@/lib/utils";
 
 export interface ResourceAllocation {
   _id: string;
+  userId?: string;
   employeeName: string;
+  email?: string;
   role: string;
   department: string;
   assignedProject: string;
@@ -27,7 +29,8 @@ interface ScheduleMeeting {
   time: string;
   avatarInitials: string;
   avatarColor: string;
-  type: "Candidate Interview" | "Performance Review" | "Team Sync";
+  type: "Candidate Interview" | "Performance Review" | "Team Sync" | "One-on-One";
+  notes?: string;
 }
 
 interface HrWorkdeskDashboardProps {
@@ -77,61 +80,80 @@ export default function HrWorkdeskDashboard({
   } | null>(null);
 
   // ── Calendar & Schedule State ──
-  const [calendarDate, setCalendarDate] = useState<Date>(new Date(2026, 7, 31)); // Aug 31, 2026
-  const [selectedCalendarDay, setSelectedCalendarDay] = useState<number>(31);
+  const [calendarDate, setCalendarDate] = useState<Date>(new Date());
+  const [selectedCalendarDay, setSelectedCalendarDay] = useState<number>(new Date().getDate());
+  const [scheduleFilterMode, setScheduleFilterMode] = useState<"day" | "all">("day");
   const [showScheduleModal, setShowScheduleModal] = useState<boolean>(false);
   const [showAddMeetingModal, setShowAddMeetingModal] = useState<boolean>(false);
+  const [scheduleLoading, setScheduleLoading] = useState<boolean>(false);
 
   // ── Schedule Meetings List ──
-  const [meetings, setMeetings] = useState<ScheduleMeeting[]>([
-    {
-      id: "1",
-      title: "Meeting with Candidate #1",
-      name: "Sophia Martinez",
-      date: "2026-08-31",
-      time: "10.00 - 11.00",
-      avatarInitials: "SM",
-      avatarColor: "bg-purple-500 text-white",
-      type: "Candidate Interview",
-    },
-    {
-      id: "2",
-      title: "Meeting with Candidate #2",
-      name: "David Kim",
-      date: "2026-08-31",
-      time: "11.30 - 12.30",
-      avatarInitials: "DK",
-      avatarColor: "bg-cyan-500 text-white",
-      type: "Candidate Interview",
-    },
-    {
-      id: "3",
-      title: "Meeting with Candidate #3",
-      name: "Emma Wilson",
-      date: "2026-08-31",
-      time: "14.00 - 15.00",
-      avatarInitials: "EW",
-      avatarColor: "bg-pink-500 text-white",
-      type: "Candidate Interview",
-    },
-    {
-      id: "4",
-      title: "Quarterly Performance Sync",
-      name: "Engineering Leads",
-      date: "2026-09-01",
-      time: "16.00 - 17.00",
-      avatarInitials: "EL",
-      avatarColor: "bg-emerald-500 text-white",
-      type: "Performance Review",
-    },
-  ]);
+  const [meetings, setMeetings] = useState<ScheduleMeeting[]>([]);
+  const [fetchedChartData, setFetchedChartData] = useState<any>(null);
+
+  const selectedDateStr = useMemo(() => {
+    const y = calendarDate.getFullYear();
+    const m = String(calendarDate.getMonth() + 1).padStart(2, "0");
+    const d = String(selectedCalendarDay).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  }, [calendarDate, selectedCalendarDay]);
 
   const [newMeetingForm, setNewMeetingForm] = useState({
     title: "",
     name: "",
+    date: new Date().toISOString().slice(0, 10),
     time: "10:00 - 11:00",
-    type: "Candidate Interview" as ScheduleMeeting["type"],
+    type: "Team Sync" as ScheduleMeeting["type"],
   });
+
+  const fetchScheduleMeetings = async () => {
+    try {
+      setScheduleLoading(true);
+      const res = await fetch("/api/operations/hr-workdesk/schedule");
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data.meetings)) {
+          setMeetings(
+            data.meetings.map((m: any) => ({
+              id: m._id || m.id,
+              title: m.title,
+              name: m.name,
+              date: m.date,
+              time: m.time,
+              avatarInitials:
+                (m.name || "")
+                  .split(" ")
+                  .map((n: string) => n[0])
+                  .join("")
+                  .slice(0, 2)
+                  .toUpperCase() || "HR",
+              avatarColor: m.avatarColor || "bg-purple-500 text-white",
+              type: m.type || "Team Sync",
+              notes: m.notes || "",
+            }))
+          );
+        }
+      }
+    } catch (err) {
+      console.error("Failed to load schedule meetings:", err);
+    } finally {
+      setScheduleLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchScheduleMeetings();
+
+    // Fetch dynamic chartData
+    fetch("/api/operations/hr-workdesk")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.chartData) {
+          setFetchedChartData(data.chartData);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   // ── Quick Status Change Popover State ──
   const [quickStatusMenuId, setQuickStatusMenuId] = useState<string | null>(null);
@@ -292,26 +314,26 @@ export default function HrWorkdeskDashboard({
 
   // ── Chart Dynamic Data based on Timeframe ──
   const chartData = useMemo(() => {
-    if (chartTimeframe === "Daily") {
-      return {
-        labels: ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"],
+    const source = fetchedChartData || {
+      Daily: {
+        labels: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
         approved: [25, 68, 88, 72, 95, 65, 78],
         pending: [52, 28, 48, 62, 28, 82, 58],
-      };
-    } else if (chartTimeframe === "Weekly") {
-      return {
+      },
+      Weekly: {
         labels: ["Week 1", "Week 2", "Week 3", "Week 4"],
         approved: [62, 85, 74, 96],
         pending: [45, 55, 38, 60],
-      };
-    } else {
-      return {
+      },
+      Monthly: {
         labels: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
         approved: [45, 58, 62, 78, 82, 90, 85, 94, 88, 76, 92, 98],
         pending: [32, 40, 35, 50, 48, 55, 60, 45, 52, 48, 38, 42],
-      };
-    }
-  }, [chartTimeframe]);
+      },
+    };
+
+    return source[chartTimeframe] || source["Daily"];
+  }, [chartTimeframe, fetchedChartData]);
 
   // ── Calendar Computations ──
   const currentYear = calendarDate.getFullYear();
@@ -326,7 +348,14 @@ export default function HrWorkdeskDashboard({
     const totalDaysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
     const totalDaysInPrevMonth = new Date(currentYear, currentMonth, 0).getDate();
 
-    const days: Array<{ day: number; isCurrMonth: boolean; isSelected: boolean }> = [];
+    const days: Array<{
+      day: number;
+      isCurrMonth: boolean;
+      isSelected: boolean;
+      dateStr?: string;
+      hasEvents?: boolean;
+      eventCount?: number;
+    }> = [];
 
     // Prev month overflow days
     for (let i = firstDayIndex - 1; i >= 0; i--) {
@@ -335,10 +364,15 @@ export default function HrWorkdeskDashboard({
 
     // Current month days
     for (let i = 1; i <= totalDaysInMonth; i++) {
+      const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}-${String(i).padStart(2, "0")}`;
+      const count = meetings.filter((m) => m.date === dateStr).length;
       days.push({
         day: i,
         isCurrMonth: true,
         isSelected: i === selectedCalendarDay,
+        dateStr,
+        hasEvents: count > 0,
+        eventCount: count,
       });
     }
 
@@ -349,7 +383,14 @@ export default function HrWorkdeskDashboard({
     }
 
     return days;
-  }, [currentYear, currentMonth, selectedCalendarDay]);
+  }, [currentYear, currentMonth, selectedCalendarDay, meetings]);
+
+  const displayedMeetings = useMemo(() => {
+    if (scheduleFilterMode === "day") {
+      return meetings.filter((m) => m.date === selectedDateStr);
+    }
+    return meetings;
+  }, [meetings, scheduleFilterMode, selectedDateStr]);
 
   const handlePrevMonth = () => {
     setCalendarDate(new Date(currentYear, currentMonth - 1, 1));
@@ -359,32 +400,57 @@ export default function HrWorkdeskDashboard({
     setCalendarDate(new Date(currentYear, currentMonth + 1, 1));
   };
 
-  // Add Meeting Handler
-  const handleAddMeeting = (e: React.FormEvent) => {
+  // Add Meeting Handler (Persistent API)
+  const handleAddMeeting = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newMeetingForm.title || !newMeetingForm.name) return;
+    if (!newMeetingForm.title?.trim() || !newMeetingForm.name?.trim()) return;
 
-    const colors = ["bg-purple-500 text-white", "bg-cyan-500 text-white", "bg-pink-500 text-white", "bg-emerald-500 text-white"];
-    const initials = newMeetingForm.name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase();
+    try {
+      const targetDate = newMeetingForm.date || selectedDateStr;
+      const res = await fetch("/api/operations/hr-workdesk/schedule", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: newMeetingForm.title.trim(),
+          name: newMeetingForm.name.trim(),
+          date: targetDate,
+          time: newMeetingForm.time,
+          type: newMeetingForm.type,
+        }),
+      });
 
-    const newM: ScheduleMeeting = {
-      id: Date.now().toString(),
-      title: newMeetingForm.title,
-      name: newMeetingForm.name,
-      date: `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}-${String(selectedCalendarDay).padStart(2, "0")}`,
-      time: newMeetingForm.time,
-      avatarInitials: initials || "M",
-      avatarColor: colors[meetings.length % colors.length],
-      type: newMeetingForm.type,
-    };
-
-    setMeetings((prev) => [newM, ...prev]);
-    setShowAddMeetingModal(false);
-    setNewMeetingForm({ title: "", name: "", time: "10:00 - 11:00", type: "Candidate Interview" });
+      if (res.ok) {
+        await fetchScheduleMeetings();
+        setShowAddMeetingModal(false);
+        setNewMeetingForm({
+          title: "",
+          name: "",
+          date: selectedDateStr,
+          time: "10:00 - 11:00",
+          type: "Team Sync",
+        });
+      } else {
+        const err = await res.json();
+        alert(err.error || "Failed to schedule event");
+      }
+    } catch {
+      alert("Failed to schedule event");
+    }
   };
 
-  const handleDeleteMeeting = (id: string) => {
-    setMeetings((prev) => prev.filter((m) => m.id !== id));
+  const handleDeleteMeeting = async (id: string) => {
+    try {
+      const res = await fetch(`/api/operations/hr-workdesk/schedule?id=${id}`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        setMeetings((prev) => prev.filter((m) => m.id !== id));
+      } else {
+        alert("Failed to remove event");
+      }
+    } catch {
+      alert("Failed to remove event");
+    }
   };
 
   // Avatar color palette
@@ -646,12 +712,12 @@ export default function HrWorkdeskDashboard({
             </Card>
           </div>
 
-          {/* ── Row 2: Application Received (Interactive Dual-Spline Line Chart) ── */}
+          {/* ── Row 2: Applications Received (Interactive Dual-Spline Line Chart) ── */}
           <Card className="border border-border/70 shadow-xs rounded-2xl overflow-hidden bg-card">
             <CardHeader className="p-5 pb-3 border-b border-border/40 flex flex-row items-center justify-between">
               <div>
                 <CardTitle className="text-base font-bold text-foreground">
-                  Application Recieved
+                  Applications Received
                 </CardTitle>
                 <div className="flex items-center gap-4 mt-2 text-xs select-none">
                   {/* Toggle Approved Series */}
@@ -784,13 +850,13 @@ export default function HrWorkdeskDashboard({
                     const step = 640 / (N - 1 || 1);
                     const startX = 45;
 
-                    const appPoints = chartData.approved.map((v, i) => ({
+                    const appPoints = chartData.approved.map((v: number, i: number) => ({
                       x: startX + i * step,
                       y: 210 - (v / 100) * 190,
                       val: v,
                     }));
 
-                    const pendPoints = chartData.pending.map((v, i) => ({
+                    const pendPoints = chartData.pending.map((v: number, i: number) => ({
                       x: startX + i * step,
                       y: 210 - (v / 100) * 190,
                       val: v,
@@ -827,7 +893,7 @@ export default function HrWorkdeskDashboard({
                               strokeWidth="3.5"
                               strokeLinecap="round"
                             />
-                            {appPoints.map((pt, idx) => (
+                            {appPoints.map((pt: { x: number; y: number; val: number }, idx: number) => (
                               <circle
                                 key={`app-pt-${idx}`}
                                 cx={pt.x}
@@ -864,7 +930,7 @@ export default function HrWorkdeskDashboard({
                               strokeWidth="3.5"
                               strokeLinecap="round"
                             />
-                            {pendPoints.map((pt, idx) => (
+                            {pendPoints.map((pt: { x: number; y: number; val: number }, idx: number) => (
                               <circle
                                 key={`pend-pt-${idx}`}
                                 cx={pt.x}
@@ -891,7 +957,7 @@ export default function HrWorkdeskDashboard({
                         )}
 
                         {/* X-Axis Labels */}
-                        {chartData.labels.map((lbl, idx) => {
+                        {chartData.labels.map((lbl: string, idx: number) => {
                           const x = startX + idx * step;
                           return (
                             <text
@@ -1176,9 +1242,11 @@ export default function HrWorkdeskDashboard({
                         );
                       }
 
-                      const email = `${emp.employeeName
-                        .toLowerCase()
-                        .replace(/\s+/g, "")}@nexace.com`;
+                      const email =
+                        emp.email ||
+                        (emp.employeeName
+                          ? `${emp.employeeName.toLowerCase().replace(/\s+/g, "")}@nexace.com`
+                          : "—");
 
                       return (
                         <tr
@@ -1232,7 +1300,7 @@ export default function HrWorkdeskDashboard({
 
                           {/* Join Date */}
                           <td className="py-4 px-4 text-muted-foreground font-medium">
-                            {emp.startDate || "June 1, 2026"}
+                            {emp.startDate || "—"}
                           </td>
 
                           {/* Actions */}
@@ -1368,17 +1436,30 @@ export default function HrWorkdeskDashboard({
                     onClick={() => {
                       if (d.isCurrMonth) {
                         setSelectedCalendarDay(d.day);
+                        setScheduleFilterMode("day");
+                        if (d.dateStr) {
+                          setNewMeetingForm((prev) => ({ ...prev, date: d.dateStr! }));
+                        }
                       }
                     }}
                     className={cn(
-                      "h-8 flex items-center justify-center rounded-full font-medium transition-all",
+                      "h-9 relative flex flex-col items-center justify-center rounded-xl font-medium transition-all group",
                       !d.isCurrMonth && "text-muted-foreground/30 pointer-events-none",
                       d.isCurrMonth && !d.isSelected && "text-foreground hover:bg-muted/60 cursor-pointer",
                       d.isSelected &&
                         "bg-purple-600 text-white font-bold shadow-xs cursor-pointer scale-105"
                     )}
                   >
-                    {d.day}
+                    <span className="text-xs leading-none">{d.day}</span>
+                    {d.hasEvents && (
+                      <span
+                        className={cn(
+                          "w-1.5 h-1.5 rounded-full mt-1 transition-colors",
+                          d.isSelected ? "bg-white" : "bg-purple-500"
+                        )}
+                        title={`${d.eventCount} scheduled`}
+                      />
+                    )}
                   </div>
                 ))}
               </div>
@@ -1387,36 +1468,85 @@ export default function HrWorkdeskDashboard({
 
           {/* ── Widget 2: Schedule / Upcoming Candidate Meetings ── */}
           <Card className="border border-border/70 shadow-xs rounded-2xl overflow-hidden bg-card">
-            <CardHeader className="p-5 pb-3 border-b border-border/40 flex flex-row items-center justify-between">
-              <div>
-                <CardTitle className="text-base font-bold text-foreground flex items-center gap-2">
-                  <span>Schedule</span>
-                  <span className="text-[11px] px-2 py-0.5 rounded-full bg-purple-100 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 font-semibold">
-                    {meetings.length} Events
-                  </span>
-                </CardTitle>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  {monthNames[currentMonth]} {selectedCalendarDay}, {currentYear}
-                </p>
+            <CardHeader className="p-5 pb-3 border-b border-border/40 flex flex-col gap-2.5">
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-base font-bold text-foreground flex items-center gap-2">
+                    <span>Schedule</span>
+                    <span className="text-[11px] px-2 py-0.5 rounded-full bg-purple-100 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 font-semibold">
+                      {scheduleFilterMode === "day"
+                        ? `${displayedMeetings.length} on day`
+                        : `${meetings.length} Total`}
+                    </span>
+                  </CardTitle>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {scheduleFilterMode === "day"
+                      ? `${monthNames[currentMonth]} ${selectedCalendarDay}, ${currentYear}`
+                      : "All upcoming events"}
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setNewMeetingForm((prev) => ({ ...prev, date: selectedDateStr }));
+                    setShowAddMeetingModal(true);
+                  }}
+                  className="h-8 px-2.5 gap-1.5 text-xs font-semibold rounded-lg cursor-pointer hover:bg-muted"
+                >
+                  <i className="fa-solid fa-plus text-[10px]" />
+                  <span>Add</span>
+                </Button>
               </div>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setShowAddMeetingModal(true)}
-                className="h-8 px-2.5 gap-1.5 text-xs font-semibold rounded-lg cursor-pointer hover:bg-muted"
-              >
-                <i className="fa-solid fa-plus text-[10px]" />
-                <span>Add</span>
-              </Button>
+
+              {/* Day vs All Filter Switcher */}
+              <div className="flex items-center gap-1 bg-muted/50 p-1 rounded-lg border border-border/40 text-[11px]">
+                <button
+                  type="button"
+                  onClick={() => setScheduleFilterMode("day")}
+                  className={cn(
+                    "flex-1 py-1 px-2 rounded-md font-medium transition-colors cursor-pointer text-center",
+                    scheduleFilterMode === "day"
+                      ? "bg-purple-600 text-white font-semibold shadow-xs"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  Selected Day ({meetings.filter((m) => m.date === selectedDateStr).length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setScheduleFilterMode("all")}
+                  className={cn(
+                    "flex-1 py-1 px-2 rounded-md font-medium transition-colors cursor-pointer text-center",
+                    scheduleFilterMode === "all"
+                      ? "bg-purple-600 text-white font-semibold shadow-xs"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  All Events ({meetings.length})
+                </button>
+              </div>
             </CardHeader>
 
             <CardContent className="p-5 space-y-3">
-              {meetings.length === 0 ? (
-                <div className="text-center py-6 text-muted-foreground text-xs">
-                  No upcoming meetings scheduled.
+              {displayedMeetings.length === 0 ? (
+                <div className="text-center py-6 px-3 text-muted-foreground text-xs space-y-2">
+                  <p>No meetings scheduled for this {scheduleFilterMode === "day" ? "date" : "period"}.</p>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setNewMeetingForm((prev) => ({ ...prev, date: selectedDateStr }));
+                      setShowAddMeetingModal(true);
+                    }}
+                    className="h-7 text-xs gap-1.5 text-purple-600 dark:text-purple-400 border-purple-300 dark:border-purple-800 hover:bg-purple-50 dark:hover:bg-purple-950/40 cursor-pointer"
+                  >
+                    <i className="fa-solid fa-plus text-[9px]" />
+                    <span>Schedule Event</span>
+                  </Button>
                 </div>
               ) : (
-                meetings.slice(0, 4).map((item) => (
+                displayedMeetings.slice(0, 4).map((item) => (
                   <div
                     key={item.id}
                     className="flex items-center justify-between gap-3 p-3 rounded-xl hover:bg-muted/30 transition-colors border border-border/30 bg-muted/10 group"
@@ -1433,12 +1563,17 @@ export default function HrWorkdeskDashboard({
 
                       <div className="min-w-0">
                         <p className="text-xs font-bold text-foreground truncate">{item.title}</p>
-                        <div className="flex items-center gap-2.5 mt-0.5 text-[10px] text-muted-foreground">
+                        <div className="flex items-center gap-2 mt-0.5 text-[10px] text-muted-foreground">
                           <span className="flex items-center gap-1">
                             <i className="fa-regular fa-clock text-[9px]" />
                             <span>{item.time}</span>
                           </span>
                           <span className="text-foreground/70 font-medium truncate">• {item.name}</span>
+                          {scheduleFilterMode === "all" && item.date && (
+                            <span className="text-purple-600 dark:text-purple-400 font-semibold truncate">
+                              ({item.date.slice(5)})
+                            </span>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -1446,10 +1581,10 @@ export default function HrWorkdeskDashboard({
                     <button
                       type="button"
                       onClick={() => handleDeleteMeeting(item.id)}
-                      className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive text-xs p-1 transition-opacity cursor-pointer"
+                      className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive text-xs p-1.5 rounded-md hover:bg-destructive/10 transition-all cursor-pointer"
                       title="Delete event"
                     >
-                      <i className="fa-solid fa-xmark" />
+                      <i className="fa-solid fa-trash text-[11px]" />
                     </button>
                   </div>
                 ))
@@ -1460,7 +1595,7 @@ export default function HrWorkdeskDashboard({
                 onClick={() => setShowScheduleModal(true)}
                 className="w-full h-9 rounded-xl text-xs font-semibold text-purple-600 hover:text-purple-700 hover:bg-purple-50 dark:hover:bg-purple-950/30 border-purple-200 dark:border-purple-900/50 cursor-pointer transition-colors"
               >
-                View All ({meetings.length})
+                View Full Agenda ({meetings.length})
               </Button>
             </CardContent>
           </Card>
@@ -1581,6 +1716,17 @@ export default function HrWorkdeskDashboard({
                   placeholder="e.g. Alex Henderson"
                   value={newMeetingForm.name}
                   onChange={(e) => setNewMeetingForm({ ...newMeetingForm, name: e.target.value })}
+                  className="h-9 text-xs"
+                />
+              </div>
+
+              <div>
+                <label className="font-semibold text-foreground block mb-1">Date</label>
+                <Input
+                  type="date"
+                  required
+                  value={newMeetingForm.date}
+                  onChange={(e) => setNewMeetingForm({ ...newMeetingForm, date: e.target.value })}
                   className="h-9 text-xs"
                 />
               </div>

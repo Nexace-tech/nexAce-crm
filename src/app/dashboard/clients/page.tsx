@@ -16,8 +16,10 @@ import { UserManagementTab } from "@/components/settings/UserManagementTab";
 import { ShiftAndStatusTab } from "@/components/settings/ShiftAndStatusTab";
 import { cn } from "@/lib/utils";
 import { AccessRestricted } from "@/components/ui/AccessRestricted";
+import { ProjectsDriveWorkspace } from "@/components/operations/ProjectsDriveWorkspace";
+import { ContractsOnboardingTab } from "@/components/operations/ContractsOnboardingTab";
 
-export type OpsTabKey = "operations" | "hr" | "external" | "reports" | "users" | "shifts";
+export type OpsTabKey = "operations" | "projects" | "drive" | "contracts" | "hr" | "external" | "reports" | "users" | "shifts";
 
 interface ClientData {
   _id: string;
@@ -49,7 +51,9 @@ interface ClientData {
 
 interface ResourceAllocation {
   _id: string;
+  userId?: string;
   employeeName: string;
+  email?: string;
   role: string;
   department: string;
   assignedProject: string;
@@ -83,6 +87,12 @@ export default function OperationsPage() {
   const initialTab: OpsTabKey =
     tabParam === "reports"
       ? "reports"
+      : tabParam === "projects"
+      ? "projects"
+      : tabParam === "drive"
+      ? "drive"
+      : tabParam === "contracts"
+      ? "contracts"
       : tabParam === "external" || tabParam === "external-teams"
       ? "external"
       : tabParam === "hr"
@@ -97,6 +107,9 @@ export default function OperationsPage() {
 
   useEffect(() => {
     if (tabParam === "reports") setActiveTab("reports");
+    else if (tabParam === "projects") setActiveTab("projects");
+    else if (tabParam === "drive") setActiveTab("drive");
+    else if (tabParam === "contracts") setActiveTab("contracts");
     else if (tabParam === "hr") setActiveTab("hr");
     else if (tabParam === "external" || tabParam === "external-teams") setActiveTab("external");
     else if (tabParam === "users") setActiveTab("users");
@@ -122,6 +135,7 @@ export default function OperationsPage() {
   const [editingHrAllocation, setEditingHrAllocation] = useState<ResourceAllocation | null>(null);
   const [hrFormData, setHrFormData] = useState({
     employeeName: "",
+    email: "",
     role: "",
     department: "Engineering",
     assignedProject: "",
@@ -696,6 +710,7 @@ export default function OperationsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           employeeName: hrFormData.employeeName,
+          email: hrFormData.email || "",
           role: hrFormData.role || "",
           department: hrFormData.department,
           assignedProject: hrFormData.assignedProject || "Unassigned",
@@ -710,7 +725,7 @@ export default function OperationsPage() {
         await fetchHrAllocations();
         setShowHrModal(false);
         setEditingHrAllocation(null);
-        setHrFormData({ employeeName: "", role: "", department: "Engineering", assignedProject: "", allocatedHoursPerWeek: 40, utilizationRate: 0, status: "Deployed", startDate: "", notes: "" });
+        setHrFormData({ employeeName: "", email: "", role: "", department: "Engineering", assignedProject: "", allocatedHoursPerWeek: 40, utilizationRate: 0, status: "Deployed", startDate: "", notes: "" });
       } else {
         const err = await res.json();
         alert(err.error || "Failed to save allocation.");
@@ -744,6 +759,7 @@ export default function OperationsPage() {
     setEditingHrAllocation(alloc);
     setHrFormData({
       employeeName: alloc.employeeName,
+      email: alloc.email || "",
       role: alloc.role,
       department: alloc.department,
       assignedProject: alloc.assignedProject,
@@ -812,7 +828,7 @@ export default function OperationsPage() {
           <div>
             <h1 className="text-xl font-bold text-foreground tracking-tight">OPS Portal</h1>
             <p className="text-xs text-muted-foreground">
-              Operations control, client retainers, HR allocations, external vendors &amp; workspace reports
+              Operations control, projects &amp; drive, contracts &amp; onboarding, HR allocations, external vendors &amp; workspace reports
             </p>
           </div>
         </div>
@@ -877,6 +893,9 @@ export default function OperationsPage() {
       <div className="flex items-center gap-1 p-1 bg-muted/60 rounded-xl border border-border overflow-x-auto no-scrollbar">
         {[
           { key: "operations", label: "Operations Control", icon: "fa-solid fa-list-check", count: projects.length },
+          { key: "projects", label: "Projects & Kanban", icon: "fa-solid fa-folder-tree" },
+          { key: "drive", label: "Drive Space", icon: "fa-solid fa-hard-drive" },
+          { key: "contracts", label: "Contracts & Onboarding", icon: "fa-solid fa-file-contract" },
           { key: "hr", label: "HR Workdesk", icon: "fa-solid fa-users-gear", count: hrAllocations.length },
           { key: "external", label: "External Teams", icon: "fa-solid fa-building-user", count: externalMembers.length },
           { key: "reports", label: "Reports & Data Exports", icon: "fa-solid fa-file-lines" },
@@ -1518,6 +1537,21 @@ export default function OperationsPage() {
         </div>
       )}
 
+      {/* Projects & Kanban Tab View */}
+      {activeTab === "projects" && (
+        <ProjectsDriveWorkspace initialTab="kanban" hideHeader={true} />
+      )}
+
+      {/* Drive Space Tab View */}
+      {activeTab === "drive" && (
+        <ProjectsDriveWorkspace initialTab="drive" hideHeader={true} />
+      )}
+
+      {/* Contracts & Onboarding Tab View */}
+      {activeTab === "contracts" && (
+        <ContractsOnboardingTab />
+      )}
+
       {/* HR Workdesk Tab View - Redesigned to exact Kleon HR Standard */}
       {activeTab === "hr" && (
         <HrWorkdeskDashboard
@@ -1527,8 +1561,9 @@ export default function OperationsPage() {
             setEditingHrAllocation(null);
             setHrFormData({
               employeeName: "",
+              email: "",
               role: "",
-              department: "Engineering",
+              department: "Operations",
               assignedProject: "",
               allocatedHoursPerWeek: 40,
               utilizationRate: 0,
@@ -1826,48 +1861,53 @@ export default function OperationsPage() {
                   <Input
                     type="text"
                     required
-                    placeholder="e.g. David Kim"
+                    placeholder="e.g. Aditya Singh Yadav"
                     value={hrFormData.employeeName}
                     onChange={(e) => setHrFormData((prev) => ({ ...prev, employeeName: e.target.value }))}
                   />
                 </div>
 
                 <div className="space-y-1">
-                  <label className="font-semibold text-foreground">Role / Designation</label>
+                  <label className="font-semibold text-foreground">Email Address</label>
                   <Input
-                    type="text"
-                    placeholder="e.g. Senior Fullstack Lead"
-                    value={hrFormData.role}
-                    onChange={(e) => setHrFormData((prev) => ({ ...prev, role: e.target.value }))}
+                    type="email"
+                    placeholder="e.g. employee@nexace.com"
+                    value={hrFormData.email}
+                    onChange={(e) => setHrFormData((prev) => ({ ...prev, email: e.target.value }))}
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <label className="font-semibold text-foreground">Department</label>
-                  <select
-                    value={hrFormData.department}
-                    onChange={(e) => setHrFormData((prev) => ({ ...prev, department: e.target.value }))}
-                    className="w-full h-9 px-3 text-xs bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer"
-                  >
-                    <option value="Engineering">Engineering</option>
-                    <option value="Design">Design</option>
-                    <option value="QA">QA</option>
-                    <option value="Infrastructure">Infrastructure</option>
-                    <option value="Product">Product</option>
-                  </select>
+                  <label className="font-semibold text-foreground">Role / Designation</label>
+                  <Input
+                    type="text"
+                    placeholder="e.g. Operations Lead"
+                    value={hrFormData.role}
+                    onChange={(e) => setHrFormData((prev) => ({ ...prev, role: e.target.value }))}
+                  />
                 </div>
 
                 <div className="space-y-1">
-                  <label className="font-semibold text-foreground">Assigned Project</label>
+                  <label className="font-semibold text-foreground">Department</label>
                   <Input
                     type="text"
-                    placeholder="e.g. Acme FinTech Retainer"
-                    value={hrFormData.assignedProject}
-                    onChange={(e) => setHrFormData((prev) => ({ ...prev, assignedProject: e.target.value }))}
+                    placeholder="e.g. Operations, Engineering, Design..."
+                    value={hrFormData.department}
+                    onChange={(e) => setHrFormData((prev) => ({ ...prev, department: e.target.value }))}
                   />
                 </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="font-semibold text-foreground">Assigned Project</label>
+                <Input
+                  type="text"
+                  placeholder="e.g. Acme FinTech Retainer"
+                  value={hrFormData.assignedProject}
+                  onChange={(e) => setHrFormData((prev) => ({ ...prev, assignedProject: e.target.value }))}
+                />
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

@@ -121,7 +121,7 @@ export function TeamShiftOverviewCard() {
   const [searchQuery, setSearchQuery] = useState("");
   const [departmentFilter, setDepartmentFilter] = useState("All");
   const [shiftFilter, setShiftFilter] = useState("All");
-  const [statusFilter, setStatusFilter] = useState("All");
+  const [statusFilter, setStatusFilter] = useState("active");
   const [typeFilter, setTypeFilter] = useState("All");
   const [viewMode, setViewMode] = useState<"table" | "cards">("table");
   const [now, setNow] = useState(new Date());
@@ -248,10 +248,12 @@ export function TeamShiftOverviewCard() {
   const fetchTeamShifts = async (isManual = false) => {
     if (isManual) setRefreshing(true);
     try {
-      const res = await fetch("/api/team?all=true");
+      const res = await fetch("/api/team?all=true&activeOnly=true");
       if (res.ok) {
         const data = await res.json();
         let users = data.users || [];
+        // Ensure only active accounts are displayed (ignore inactive or suspended)
+        users = users.filter((u: any) => (u.status || "Active").toLowerCase() === "active");
         if (!isAdmin && !isOPS && currentUser?.email) {
           users = users.filter(
             (u: any) => u.email?.toLowerCase() === currentUser.email?.toLowerCase()
@@ -306,13 +308,16 @@ export function TeamShiftOverviewCard() {
       const shiftName = m.shiftName || "Standard Day Shift";
       const empType = m.employmentType || "Permanent";
       const timeStatus = getShiftStatus(shiftTiming);
-      const computedStatus = m.isClockedIn
-        ? "active"
-        : m.attendanceStatus === "Shift Ended"
-          ? "ended"
-          : timeStatus === "active"
-            ? "upcoming"
-            : timeStatus;
+
+      // A member is "active" if clocked in, currently active online, or their shift hours are running right now
+      let computedStatus: "active" | "upcoming" | "ended" | "offshift" = "offshift";
+      if (m.attendanceStatus === "Shift Ended") {
+        computedStatus = "ended";
+      } else if (m.isClockedIn || m.isOnline || timeStatus === "active") {
+        computedStatus = "active";
+      } else {
+        computedStatus = timeStatus;
+      }
 
       // Safe manager resolution using O(1) map lookup
       let managerName = "—";
@@ -376,13 +381,13 @@ export function TeamShiftOverviewCard() {
   }), [enriched]);
 
   const formatTime = (d: Date) => formatISTTime(d);
-  const hasFilters = !!(searchQuery || departmentFilter !== "All" || shiftFilter !== "All" || typeFilter !== "All" || statusFilter !== "All");
+  const hasFilters = !!(searchQuery || departmentFilter !== "All" || shiftFilter !== "All" || typeFilter !== "All" || statusFilter !== "active");
   const resetFilters = () => { 
     setSearchQuery(""); 
     setDepartmentFilter("All");
     setShiftFilter("All"); 
     setTypeFilter("All"); 
-    setStatusFilter("All"); 
+    setStatusFilter("active"); 
   };
 
   const myRecord = enriched.find((m) => m.email?.toLowerCase() === currentUser?.email?.toLowerCase());
@@ -565,6 +570,40 @@ export function TeamShiftOverviewCard() {
               </button>
             )}
           </div>
+
+          {/* Active Users Quick Toggle */}
+          <button
+            type="button"
+            onClick={() => setStatusFilter(statusFilter === "active" ? "All" : "active")}
+            className={cn(
+              "h-8 px-2.5 text-xs rounded-md border font-semibold transition-all cursor-pointer shrink-0 flex items-center gap-1.5",
+              statusFilter === "active"
+                ? "bg-emerald-600 text-white border-emerald-700 shadow-xs ring-1 ring-emerald-500/30"
+                : "bg-background text-muted-foreground border-border hover:text-foreground hover:bg-muted"
+            )}
+            title="Toggle Active Users Only"
+          >
+            <i className="fa-solid fa-circle-check text-[11px]" />
+            <span>Active Only</span>
+          </button>
+
+          {/* Status Filter */}
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className={cn(
+              "h-8 text-xs border rounded-md px-2.5 outline-none cursor-pointer shrink-0 font-medium transition-colors",
+              statusFilter === "active"
+                ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 font-bold"
+                : "bg-background text-foreground border-border"
+            )}
+          >
+            <option value="active">Active Now (Online / Shift Active)</option>
+            <option value="All">All Statuses (Total Roster)</option>
+            <option value="upcoming">Starting Soon</option>
+            <option value="ended">Shift Ended</option>
+            <option value="offshift">Off Shift</option>
+          </select>
 
           {/* Department Filter */}
           <select

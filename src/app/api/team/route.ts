@@ -31,8 +31,19 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Forbidden: Team module access disabled" }, { status: 403 });
     }
 
-    // Base query: tenant ID constraint
+    // Base query: tenant ID constraint, only active users by default
     const query: any = { tenantId: tenantObjectId };
+    const statusParam = searchParams.get("status");
+    const activeOnly = searchParams.get("activeOnly") === "true";
+    const includeInactive = searchParams.get("includeInactive") === "true";
+
+    if (activeOnly) {
+      query.status = "Active";
+    } else if (statusParam) {
+      query.status = statusParam;
+    } else if (!includeInactive) {
+      query.status = { $ne: "Suspended" };
+    }
 
     // Role-based data scoping (skipped when all=true for workspace chat/directory):
     if (!all && dataScope.scope === "department") {

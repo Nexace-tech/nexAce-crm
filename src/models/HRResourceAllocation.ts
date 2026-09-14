@@ -3,7 +3,9 @@ import mongoose, { Schema, Document, Model } from "mongoose";
 export interface IHRResourceAllocation extends Document {
   tenantId: mongoose.Types.ObjectId;
   createdBy: mongoose.Types.ObjectId;
+  userId?: mongoose.Types.ObjectId;
   employeeName: string;
+  email?: string;
   role: string;
   department: string;
   assignedProject: string;
@@ -20,7 +22,9 @@ const HRResourceAllocationSchema = new Schema<IHRResourceAllocation>(
   {
     tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true, index: true },
     createdBy: { type: Schema.Types.ObjectId, ref: "User", required: true },
+    userId: { type: Schema.Types.ObjectId, ref: "User" },
     employeeName: { type: String, required: true, trim: true },
+    email: { type: String, trim: true, default: "" },
     role: { type: String, trim: true, default: "" },
     department: { type: String, trim: true, default: "Engineering" },
     assignedProject: { type: String, trim: true, default: "Unassigned" },
