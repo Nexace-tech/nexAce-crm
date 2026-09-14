@@ -3,7 +3,7 @@ import { Geolocation, Position } from "@capacitor/geolocation";
 import { Camera, CameraResultType, CameraSource } from "@capacitor/camera";
 import { Haptics, ImpactStyle, NotificationType } from "@capacitor/haptics";
 import { Network, ConnectionStatus } from "@capacitor/network";
-import { PushNotifications, Token, PushNotificationSchema } from "@capacitor/push-notifications";
+import { PushNotifications, Token, PushNotificationSchema, ActionPerformed } from "@capacitor/push-notifications";
 
 export interface GeoCoordinates {
   latitude: number;
@@ -152,24 +152,50 @@ export const NativeService = {
   },
 
   /**
-   * Initialize native push notifications and register FCM/APNs token
+   * Initialize native push notifications, create channels, and register FCM/APNs token
    */
   async initPushNotifications(onNotificationReceived?: (notif: PushNotificationSchema) => void): Promise<string | null> {
     if (!this.isNative()) return null;
 
     try {
+      // 1. Check and request notification permissions
       let perm = await PushNotifications.checkPermissions();
       if (perm.receive !== "granted") {
         perm = await PushNotifications.requestPermissions();
       }
 
       if (perm.receive !== "granted") {
-        console.warn("Push notification permission not granted");
+        console.warn("[PushNotifications] Permission not granted:", perm.receive);
         return null;
       }
 
+      // 2. On Android, create the required notification channel before registering
+      if (Capacitor.getPlatform() === "android") {
+        try {
+          await PushNotifications.createChannel({
+            id: "nexace_crm_default",
+            name: "NexAce CRM Alerts",
+            description: "General CRM alerts, updates, task assignments, and chat messages",
+            importance: 5, // High importance (heads-up banner + sound)
+            visibility: 1, // Public on lockscreen
+            sound: "default",
+            vibration: true,
+            lights: true,
+            lightColor: "#00c5a0",
+          });
+          console.log("[PushNotifications] Android notification channel 'nexace_crm_default' registered");
+        } catch (channelErr) {
+          console.warn("[PushNotifications] Failed to create notification channel:", channelErr);
+        }
+      }
+
+      // 3. Remove existing listeners to avoid duplicate firing
+      await PushNotifications.removeAllListeners();
+
       return new Promise<string | null>((resolve) => {
+        // Token received from Firebase/APNs
         PushNotifications.addListener("registration", async (token: Token) => {
+          console.log("[PushNotifications] Device registered with FCM token:", token.value.slice(0, 15) + "...");
           try {
             await fetch("/api/notifications/register-device", {
               method: "POST",
@@ -180,26 +206,39 @@ export const NativeService = {
               }),
             });
           } catch (apiErr) {
-            console.error("Failed to register device token with server:", apiErr);
+            console.error("[PushNotifications] Failed to register device token with server:", apiErr);
           }
           resolve(token.value);
         });
 
         PushNotifications.addListener("registrationError", (err) => {
-          console.error("Error registering push notifications:", err);
+          console.error("[PushNotifications] Error registering push notifications:", err);
           resolve(null);
         });
 
-        if (onNotificationReceived) {
-          PushNotifications.addListener("pushNotificationReceived", (notification: PushNotificationSchema) => {
+        // Notification arrived while app is open (foreground)
+        PushNotifications.addListener("pushNotificationReceived", (notification: PushNotificationSchema) => {
+          console.log("[PushNotifications] Received in foreground:", notification.title);
+          // Haptic tactile feedback
+          NativeService.haptic("medium");
+          if (onNotificationReceived) {
             onNotificationReceived(notification);
-          });
-        }
+          }
+        });
+
+        // User tapped on the notification in the Android/iOS notification drawer
+        PushNotifications.addListener("pushNotificationActionPerformed", (action: ActionPerformed) => {
+          console.log("[PushNotifications] Action performed:", action);
+          const linkUrl = action.notification.data?.linkUrl;
+          if (linkUrl && typeof window !== "undefined" && typeof linkUrl === "string" && linkUrl.startsWith("/")) {
+            window.location.href = linkUrl;
+          }
+        });
 
         PushNotifications.register();
       });
     } catch (err) {
-      console.error("Failed to initialize push notifications:", err);
+      console.error("[PushNotifications] Failed to initialize push notifications:", err);
       return null;
     }
   },

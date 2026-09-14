@@ -118,14 +118,16 @@ export async function sendFcmPush(
             body: payload.message,
           },
           data: {
-            title: payload.title,
-            body: payload.message,
-            type: payload.type || "general",
-            linkUrl: payload.linkUrl || "",
+            title: String(payload.title || ""),
+            body: String(payload.message || ""),
+            type: String(payload.type || "general"),
+            linkUrl: String(payload.linkUrl || ""),
           },
           android: {
-            priority: "high",
+            priority: "HIGH",
             notification: {
+              title: payload.title,
+              body: payload.message,
               sound: "default",
               channel_id: "nexace_crm_default",
             },
@@ -150,7 +152,17 @@ export async function sendFcmPush(
       if (!res.ok) {
         const text = await res.text();
         console.warn(`[fcm] Push failed for token ...${token.slice(-8)}: ${text}`);
+        if (res.status === 404 || text.includes("UNREGISTERED")) {
+          // Asynchronously prune stale token from database
+          try {
+            const { User } = await import("@/models/User");
+            await User.updateMany({ deviceTokens: token }, { $pull: { deviceTokens: token } });
+            console.log(`[fcm] Pruned expired token ...${token.slice(-8)} from DB`);
+          } catch { /* ignore prune errors */ }
+        }
+        throw new Error(text);
       }
+      return await res.json();
     })
   );
 
@@ -158,3 +170,36 @@ export async function sendFcmPush(
   const failed = results.filter((r) => r.status === "rejected").length;
   console.log(`[fcm] Push sent: ${succeeded} succeeded, ${failed} failed`);
 }
+
+/**
+ * Diagnostic utility to verify FCM Service Account validity and configuration.
+ */
+export async function checkFcmStatus(): Promise<{
+  configured: boolean;
+  projectId?: string;
+  clientEmail?: string;
+  tokenReady?: boolean;
+  error?: string;
+}> {
+  const saJson = process.env.FCM_SERVICE_ACCOUNT_JSON;
+  if (!saJson) {
+    return { configured: false, error: "FCM_SERVICE_ACCOUNT_JSON environment variable is not defined" };
+  }
+
+  try {
+    const sa: ServiceAccount = JSON.parse(saJson);
+    const token = await getAccessToken(sa);
+    return {
+      configured: true,
+      projectId: sa.project_id,
+      clientEmail: sa.client_email,
+      tokenReady: Boolean(token),
+    };
+  } catch (err: any) {
+    return {
+      configured: true,
+      error: err.message || "Failed to authenticate with Firebase using Service Account JSON",
+    };
+  }
+}
+

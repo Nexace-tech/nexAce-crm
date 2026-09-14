@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#11161d" />
+  <title>No Connection | NexAce CRM</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+    :root {
+      --bg-main: #11161d;
+      --card-bg: rgba(22, 28, 36, 0.85);
+      --card-border: rgba(255, 255, 255, 0.08);
+      --accent-teal: #00c5a0;
+      --accent-sky: #0ea5e9;
+      --danger: #f43f5e;
+      --danger-bg: rgba(244, 63, 94, 0.12);
+      --success: #10b981;
+      --text-muted: #94a3b8;
+    }
+    body {
+      background-color: var(--bg-main);
+      color: #f8fafc;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      min-height: 100vh;
+      min-height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      overflow-x: hidden;
+      position: relative;
+    }
+
+    /* Ambient background glows */
+    .glow-top {
+      position: absolute;
+      top: -100px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 320px;
+      height: 320px;
+      background: radial-gradient(circle, rgba(0, 197, 160, 0.18) 0%, transparent 70%);
+      filter: blur(50px);
+      pointer-events: none;
+      z-index: 0;
+    }
+    .glow-bottom {
+      position: absolute;
+      bottom: -100px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 360px;
+      height: 360px;
+      background: radial-gradient(circle, rgba(244, 63, 94, 0.12) 0%, transparent 70%);
+      filter: blur(60px);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* Brand Header */
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 24px;
+      z-index: 1;
+    }
+    .brand-logo {
+      width: 38px;
+      height: 38px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, var(--accent-teal), var(--accent-sky));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 14px rgba(0, 197, 160, 0.35);
+    }
+    .brand-logo svg {
+      width: 20px;
+      height: 20px;
+      fill: #090d11;
+    }
+    .brand-title {
+      font-size: 20px;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      color: #ffffff;
+    }
+    .brand-title span {
+      color: var(--accent-teal);
+    }
+
+    /* Main Card */
+    .card {
+      background: var(--card-bg);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      border: 1px solid var(--card-border);
+      border-radius: 28px;
+      padding: 34px 24px 28px;
+      max-width: 390px;
+      width: 100%;
+      box-shadow: 0 24px 50px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      position: relative;
+      z-index: 1;
+      animation: cardAppear 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    @keyframes cardAppear {
+      from { opacity: 0; transform: translateY(18px) scale(0.97); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
+    /* Radar Pulse Ring */
+    .icon-container {
+      position: relative;
+      width: 84px;
+      height: 84px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 22px;
+    }
+    .pulse-ring {
+      position: absolute;
+      inset: 0;
+      border-radius: 26px;
+      border: 1.5px solid var(--danger);
+      opacity: 0;
+      animation: radar 2.4s infinite cubic-bezier(0.25, 1, 0.5, 1);
+    }
+    .pulse-ring:nth-child(2) {
+      animation-delay: 1.2s;
+    }
+    @keyframes radar {
+      0% { transform: scale(0.95); opacity: 0.8; }
+      100% { transform: scale(1.55); opacity: 0; }
+    }
+
+    .icon-box {
+      width: 80px;
+      height: 80px;
+      border-radius: 24px;
+      background: var(--danger-bg);
+      border: 1px solid rgba(244, 63, 94, 0.35);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      z-index: 2;
+      box-shadow: 0 10px 25px rgba(244, 63, 94, 0.2);
+    }
+    .icon-box svg {
+      width: 40px;
+      height: 40px;
+      stroke: var(--danger);
+      stroke-width: 2.2;
+      fill: none;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    h1 {
+      font-size: 21px;
+      font-weight: 750;
+      color: #ffffff;
+      margin-bottom: 8px;
+      letter-spacing: -0.02em;
+    }
+    .desc {
+      font-size: 13.5px;
+      color: var(--text-muted);
+      line-height: 1.55;
+      margin-bottom: 22px;
+      padding: 0 4px;
+    }
+
+    /* Diagnostic pill */
+    .diagnostic-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 30px;
+      padding: 5px 14px;
+      font-size: 11.5px;
+      font-weight: 600;
+      color: #cbd5e1;
+      margin-bottom: 22px;
+    }
+    .status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--danger);
+      box-shadow: 0 0 8px var(--danger);
+      animation: blink 1.5s infinite ease-in-out;
+    }
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+
+    /* Action Button */
+    .btn-retry {
+      background: linear-gradient(135deg, var(--accent-teal) 0%, var(--accent-sky) 100%);
+      color: #080c10;
+      font-size: 14.5px;
+      font-weight: 750;
+      border: none;
+      border-radius: 16px;
+      padding: 15px 24px;
+      width: 100%;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 9px;
+      transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+      box-shadow: 0 6px 20px rgba(0, 197, 160, 0.35);
+    }
+    .btn-retry:active {
+      transform: scale(0.97);
+      box-shadow: 0 2px 8px rgba(0, 197, 160, 0.25);
+    }
+    .btn-retry svg {
+      width: 17px;
+      height: 17px;
+      stroke: currentColor;
+      stroke-width: 2.4;
+      fill: none;
+    }
+    .spin {
+      animation: spin 0.9s linear infinite;
+    }
+    @keyframes spin {
+      100% { transform: rotate(360deg); }
+    }
+
+    /* Auto-retry timer */
+    .auto-retry {
+      margin-top: 14px;
+      font-size: 12px;
+      font-weight: 500;
+      color: #64748b;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .auto-retry strong {
+      color: #e2e8f0;
+    }
+
+    /* Troubleshooting accordion */
+    .tips-toggle {
+      margin-top: 20px;
+      padding-top: 16px;
+      border-top: 1px solid rgba(255, 255, 255, 0.07);
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: none;
+      border-left: none;
+      border-right: none;
+      border-bottom: none;
+      color: #94a3b8;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .tips-toggle svg {
+      width: 14px;
+      height: 14px;
+      transition: transform 0.2s ease;
+      stroke: currentColor;
+      stroke-width: 2.2;
+      fill: none;
+    }
+    .tips-toggle.active svg {
+      transform: rotate(180deg);
+    }
+    .tips-list {
+      display: none;
+      width: 100%;
+      text-align: left;
+      margin-top: 12px;
+      padding: 12px;
+      background: rgba(0, 0, 0, 0.25);
+      border-radius: 14px;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      font-size: 11.5px;
+      color: #cbd5e1;
+      line-height: 1.6;
+    }
+    .tips-list.show {
+      display: block;
+      animation: fadeIn 0.2s ease;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(-4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .tips-list li {
+      list-style: none;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+    .tips-list li:last-child {
+      margin-bottom: 0;
+    }
+    .tips-dot {
+      width: 4px;
+      height: 4px;
+      border-radius: 50%;
+      background: var(--accent-teal);
+      flex-shrink: 0;
+    }
+
+    /* Success State */
+    .success-mode .icon-box {
+      background: rgba(16, 185, 129, 0.15);
+      border-color: rgba(16, 185, 129, 0.4);
+    }
+    .success-mode .icon-box svg {
+      stroke: var(--success);
+    }
+    .success-mode .status-dot {
+      background: var(--success);
+      box-shadow: 0 0 8px var(--success);
+    }
+  </style>
+</head>
+<body>
+  <div class="glow-top"></div>
+  <div class="glow-bottom"></div>
+
+  <!-- Brand Header -->
+  <div class="brand">
+    <div class="brand-logo">
+      <svg viewBox="0 0 24 24">
+        <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+        <polyline points="2 17 12 22 22 17"></polyline>
+        <polyline points="2 12 12 17 22 12"></polyline>
+      </svg>
+    </div>
+    <div class="brand-title">NexAce <span>CRM</span></div>
+  </div>
+
+  <!-- Offline Card -->
+  <div class="card" id="mainCard">
+    <div class="icon-container">
+      <div class="pulse-ring"></div>
+      <div class="pulse-ring"></div>
+      <div class="icon-box" id="iconBox">
+        <svg id="mainIcon" viewBox="0 0 24 24">
+          <line x1="1" y1="1" x2="23" y2="23"></line>
+          <path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"></path>
+          <path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"></path>
+          <path d="M10.71 5.05A16 16 0 0 1 22.58 9"></path>
+          <path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88"></path>
+          <path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path>
+          <line x1="12" y1="20" x2="12.01" y2="20"></line>
+        </svg>
+      </div>
+    </div>
+
+    <h1 id="statusHeading">No Internet Connection</h1>
+    <p class="desc" id="statusDesc">NexAce CRM could not establish a connection to your workspace. Please check your network settings.</p>
+
+    <!-- Diagnostics Pill -->
+    <div class="diagnostic-pill">
+      <div class="status-dot" id="statusDot"></div>
+      <span id="diagnosticText">Network Status: Offline</span>
+    </div>
+
+    <!-- Main Button -->
+    <button class="btn-retry" id="retryBtn" onclick="handleManualRetry()">
+      <svg id="retryIcon" viewBox="0 0 24 24">
+        <polyline points="23 4 23 10 17 10"></polyline>
+        <polyline points="1 20 1 14 7 14"></polyline>
+        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+      </svg>
+      <span id="btnText">Retry Connection</span>
+    </button>
+
+    <!-- Auto-retry countdown -->
+    <div class="auto-retry" id="countdownRow">
+      <span>Auto-reconnecting in</span>
+      <strong id="countdownNum">8s</strong>
+    </div>
+
+    <!-- Troubleshooting Tips Accordion -->
+    <button class="tips-toggle" id="tipsToggle" onclick="toggleTips()">
+      <span>Troubleshooting suggestions</span>
+      <svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"></polyline></svg>
+    </button>
+    <div class="tips-list" id="tipsList">
+      <ul>
+        <li><span class="tips-dot"></span> Check Wi-Fi or cellular data switches</li>
+        <li><span class="tips-dot"></span> Toggle Airplane Mode on and off</li>
+        <li><span class="tips-dot"></span> Ensure VPN is not blocking access</li>
+        <li><span class="tips-dot"></span> Reload or restart the application</li>
+      </ul>
+    </div>
+  </div>
+
+  <script>
+    const TARGET_URL = "https://nex-ace-crm.vercel.app";
+    let countdown = 8;
+    let countdownInterval;
+
+    function vibrate(pattern) {
+      if (typeof navigator !== "undefined" && "vibrate" in navigator) {
+        try { navigator.vibrate(pattern); } catch (_) {}
+      }
+    }
+
+    function toggleTips() {
+      const toggle = document.getElementById("tipsToggle");
+      const list = document.getElementById("tipsList");
+      toggle.classList.toggle("active");
+      list.classList.toggle("show");
+    }
+
+    function startCountdown() {
+      clearInterval(countdownInterval);
+      countdown = 8;
+      document.getElementById("countdownNum").innerText = countdown + "s";
+      countdownInterval = setInterval(() => {
+        countdown--;
+        if (countdown <= 0) {
+          clearInterval(countdownInterval);
+          handleManualRetry(true);
+        } else {
+          document.getElementById("countdownNum").innerText = countdown + "s";
+        }
+      }, 1000);
+    }
+
+    function handleManualRetry(isAuto = false) {
+      const btn = document.getElementById("retryBtn");
+      const btnText = document.getElementById("btnText");
+      const retryIcon = document.getElementById("retryIcon");
+      const diagText = document.getElementById("diagnosticText");
+
+      if (!isAuto) vibrate(30);
+
+      btnText.innerText = "Checking Network...";
+      retryIcon.classList.add("spin");
+      btn.style.opacity = "0.75";
+      btn.disabled = true;
+      diagText.innerText = "Pinging workspace...";
+
+      // Check online status
+      setTimeout(() => {
+        if (navigator.onLine) {
+          onSuccessReconnect();
+        } else {
+          retryIcon.classList.remove("spin");
+          btnText.innerText = "Retry Connection";
+          btn.style.opacity = "1";
+          btn.disabled = false;
+          diagText.innerText = "Network Status: Offline";
+          if (!isAuto) vibrate([40, 80, 40]);
+          startCountdown();
+        }
+      }, 900);
+    }
+
+    function onSuccessReconnect() {
+      clearInterval(countdownInterval);
+      vibrate([50, 100, 50]);
+
+      const card = document.getElementById("mainCard");
+      const heading = document.getElementById("statusHeading");
+      const desc = document.getElementById("statusDesc");
+      const btnText = document.getElementById("btnText");
+      const diagText = document.getElementById("diagnosticText");
+      const retryIcon = document.getElementById("retryIcon");
+      const iconBox = document.getElementById("iconBox");
+
+      card.classList.add("success-mode");
+      heading.innerText = "Connection Restored!";
+      heading.style.color = "#10b981";
+      desc.innerText = "Connected to network. Loading your workspace...";
+      btnText.innerText = "Entering Workspace...";
+      diagText.innerText = "Network Status: Online";
+      diagText.style.color = "#10b981";
+      retryIcon.classList.remove("spin");
+
+      // Replace main icon with checkmark
+      iconBox.innerHTML = `
+        <svg viewBox="0 0 24 24" style="stroke: #10b981; width: 40px; height: 40px; fill: none; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round;">
+          <polyline points="20 6 9 17 4 12"></polyline>
+        </svg>
+      `;
+
+      setTimeout(() => {
+        window.location.href = TARGET_URL;
+      }, 600);
+    }
+
+    // Immediate auto-detection when network interface recovers
+    window.addEventListener("online", () => {
+      onSuccessReconnect();
+    });
+
+    // Start auto-retry loop
+    startCountdown();
+  </script>
+</body>
+</html>

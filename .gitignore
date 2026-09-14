@@ -33,3 +33,6 @@ ios/App/.symlinks/
 src/lib/fcm.ts
 android/gradle.properties
 .env.example
+capacitor.config.ts
+android/app/src/main/AndroidManifest.xml
+android/app/src/main/AndroidManifest.xml

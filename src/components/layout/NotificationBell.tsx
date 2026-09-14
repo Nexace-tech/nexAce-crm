@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { cn, getNotificationTargetUrl } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
+import { NativeService } from "@/lib/native/nativeService";
 
 interface NotifItem {
   _id: string;
@@ -141,6 +142,7 @@ export function NotificationBell() {
         if (newlyAdded) {
           setLatestToast(newlyAdded);
           playChimeSound();
+          NativeService.haptic("medium");
 
           // Native OS desktop notification
           if (typeof window !== "undefined" && "Notification" in window && window.Notification.permission === "granted") {

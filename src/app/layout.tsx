@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { ThemeProvider } from "@/providers/theme-provider";
+import { OfflineBanner } from "@/components/layout/OfflineBanner";
 import "./globals.css";
 
 export const viewport: Viewport = {
@@ -42,6 +43,7 @@ export default function RootLayout({
       </head>
       <body suppressHydrationWarning className="bg-background text-foreground antialiased min-h-screen">
         <ThemeProvider defaultTheme="system">
+          <OfflineBanner />
           {children}
         </ThemeProvider>
       </body>

@@ -8,6 +8,7 @@ const config: CapacitorConfig = {
     // In mobile native app mode, point to the live cloud backend or local network IP
     url: process.env.CAPACITOR_SERVER_URL || "https://nex-ace-crm.vercel.app",
     cleartext: true,
+    errorPath: "offline.html",
   },
   android: {
     allowMixedContent: true,
@@ -17,6 +18,9 @@ const config: CapacitorConfig = {
       launchShowDuration: 1800,
       backgroundColor: "#11161d",
       showSpinner: false,
+    },
+    PushNotifications: {
+      presentationOptions: ["badge", "sound", "alert"],
     },
   },
 };

@@ -12,7 +12,6 @@ import { GuidedTour } from "@/components/guided-tour/GuidedTour";
 import { ProfileCompletionBanner } from "@/components/layout/ProfileCompletionBanner";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import { MobileBottomNav } from "@/components/layout/MobileBottomNav";
-import { OfflineBanner } from "@/components/layout/OfflineBanner";
 import { NativeService } from "@/lib/native/nativeService";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
@@ -54,7 +53,6 @@ const featureSections: { title: string; items: MenuItem[] }[] = [
     title: "Operations & CRM",
     items: [
       { key: "clients", name: "OPS Portal", href: "/dashboard/clients", icon: "fa-solid fa-list-check" },
-      { key: "sales", name: "Sales Workdesk", href: "/dashboard/sales", icon: "fa-solid fa-handshake" },
       { key: "bd", name: "BD Portal", href: "/dashboard/bd", icon: "fa-solid fa-briefcase" },
       { key: "finance", name: "Finance Portal", href: "/dashboard/finance", icon: "fa-solid fa-coins" },
       { key: "referrals", name: "Referral Pipeline", href: "/dashboard/referrals", icon: "fa-solid fa-link" },
@@ -143,9 +141,6 @@ export function DashboardClientLayout({ session, menuItems, isPending = false, c
 
   return (
     <div className="flex min-h-screen bg-slate-50 dark:bg-[#11161d] text-slate-900 dark:text-slate-100 transition-colors duration-200">
-      {/* ── Offline Network Banner ── */}
-      <OfflineBanner />
-
       {/* Mobile Overlay */}
       {mobileOpen && (
         <div

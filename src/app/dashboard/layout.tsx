@@ -75,7 +75,6 @@ export default async function DashboardLayout({ children }: DashboardLayoutProps
     { key: "projects", name: "Projects & Drive", href: "/dashboard/projects", icon: "fa-solid fa-folder-tree" },
     { key: "chat", name: "Chat & Mail", href: "/dashboard/chat", icon: "fa-solid fa-comments" },
     { key: "clients", name: "OPS Portal", href: "/dashboard/clients", icon: "fa-solid fa-list-check" },
-    { key: "sales", name: "Sales Workdesk", href: "/dashboard/sales", icon: "fa-solid fa-handshake" },
     { key: "bd", name: "BD Portal", href: "/dashboard/bd", icon: "fa-solid fa-briefcase" },
     { key: "finance", name: "Finance Portal", href: "/dashboard/finance", icon: "fa-solid fa-coins" },
     { key: "referrals", name: "Referral Pipeline", href: "/dashboard/referrals", icon: "fa-solid fa-link" },
