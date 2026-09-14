@@ -8,8 +8,9 @@ import mongoose from "mongoose";
 
 /**
  * GET: Fetch tenant projects with role-based data scoping.
+ * Pass ?trash=true to fetch soft-deleted projects within the 30-day retention window.
  */
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const session = await getSession();
     if (!session) {
@@ -17,10 +18,50 @@ export async function GET() {
     }
 
     await connectToDatabase();
+
+    const { searchParams } = new URL(request.url);
+    const isTrash = searchParams.get("trash") === "true" || searchParams.get("trashed") === "true";
+
     const dataScope = await getUserDataScope(session);
+
+    if (isTrash) {
+      const isElevated =
+        session.role === "Admin" ||
+        session.role === "OPS" ||
+        session.role === "Manager" ||
+        dataScope.canViewFeature("deleteProjects");
+
+      if (!isElevated) {
+        return NextResponse.json({ error: "Forbidden: Only administrators can access project trash" }, { status: 403 });
+      }
+
+      // Fetch soft-deleted projects held within 30-day safety retention
+      const trashed = await Project.find({
+        tenantId: new mongoose.Types.ObjectId(session.tenantId),
+        isDeleted: true,
+      })
+        .populate("members", "name role photoUrl")
+        .populate("deletedBy", "name email")
+        .sort({ deletedAt: -1 })
+        .lean();
+
+      // Compute days remaining until permanent deletion
+      const projects = trashed.map((p: any) => {
+        const deletedTime = p.deletedAt ? new Date(p.deletedAt).getTime() : Date.now();
+        const elapsedDays = Math.floor((Date.now() - deletedTime) / (1000 * 60 * 60 * 24));
+        const daysRemaining = Math.max(0, 30 - elapsedDays);
+        return {
+          ...p,
+          daysRemaining,
+        };
+      });
+
+      return NextResponse.json({ projects });
+    }
 
     const query: any = {
       tenantId: new mongoose.Types.ObjectId(session.tenantId),
+      isDeleted: { $ne: true },
     };
 
     // Also find any project IDs where the user has assigned tasks
@@ -28,6 +69,7 @@ export async function GET() {
     const assignedTasks = await Task.find({
       tenantId: new mongoose.Types.ObjectId(session.tenantId),
       assignee: new mongoose.Types.ObjectId(session.userId),
+      isDeleted: { $ne: true },
     }).select("projectId").lean();
     const assignedProjectIds = assignedTasks.map((t: any) => t.projectId).filter(Boolean);
 

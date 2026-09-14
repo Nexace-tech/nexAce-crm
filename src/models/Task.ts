@@ -30,6 +30,8 @@ export interface ITask extends Document {
   subtasks: ISubtask[];
   comments: IComment[];
   history: IHistory[];
+  isDeleted?: boolean;
+  deletedAt?: Date | null;
   tenantId: mongoose.Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
@@ -74,6 +76,8 @@ const TaskSchema = new Schema<ITask>(
     subtasks: [SubtaskSchema],
     comments: [CommentSchema],
     history: [HistorySchema],
+    isDeleted: { type: Boolean, default: false, index: true },
+    deletedAt: { type: Date, default: null, index: true },
     tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true, index: true },
   },
   { timestamps: true }
@@ -83,6 +87,14 @@ const TaskSchema = new Schema<ITask>(
 TaskSchema.index({ tenantId: 1, projectId: 1, status: 1 });
 TaskSchema.index({ tenantId: 1, sprintId: 1 });
 TaskSchema.index({ tenantId: 1, assignee: 1 });
+TaskSchema.index({ tenantId: 1, isDeleted: 1 });
+
+// TTL index: auto-purge soft-deleted tasks after 30 days (2,592,000 seconds)
+TaskSchema.index({ deletedAt: 1 }, { expireAfterSeconds: 2592000 });
+
+if (mongoose.models && mongoose.models.Task && (!mongoose.models.Task.schema.path("isDeleted") || process.env.NODE_ENV !== "production")) {
+  delete (mongoose.models as any).Task;
+}
 
 export const Task: Model<ITask> =
   mongoose.models.Task || mongoose.model<ITask>("Task", TaskSchema);

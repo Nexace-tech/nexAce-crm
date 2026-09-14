@@ -43,6 +43,7 @@ export async function GET(request: Request) {
 
     const query: any = {
       tenantId: new mongoose.Types.ObjectId(session.tenantId),
+      isDeleted: { $ne: true },
     };
 
     if (projectId && projectId !== "all") {
@@ -63,6 +64,7 @@ export async function GET(request: Request) {
       const userProjects = await Project.find({
         tenantId: new mongoose.Types.ObjectId(session.tenantId),
         members: userObjId,
+        isDeleted: { $ne: true },
       }).select("_id");
       const userProjectIds = userProjects.map((p) => p._id);
 
@@ -89,11 +91,13 @@ export async function GET(request: Request) {
       const assignedTasks = await Task.find({
         tenantId: new mongoose.Types.ObjectId(session.tenantId),
         assignee: userObjId,
+        isDeleted: { $ne: true },
       }).select("projectId").lean();
       const assignedProjectIds = assignedTasks.map((t: any) => t.projectId).filter(Boolean);
 
       const deptProjects = await Project.find({
         tenantId: new mongoose.Types.ObjectId(session.tenantId),
+        isDeleted: { $ne: true },
         $or: [
           { members: userObjId },
           { assignedDepartment: userDept },

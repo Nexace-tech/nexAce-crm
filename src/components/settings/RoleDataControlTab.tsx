@@ -37,6 +37,7 @@ export type FeatureCategory =
   | "Overview"
   | "Team"
   | "Calendar & Time"
+  | "OPS Portal"
   | "Projects"
   | "Drive"
   | "Sprints"
@@ -45,7 +46,6 @@ export type FeatureCategory =
   | "Appraisals"
   | "Goals & OKRs"
   | "Analytics"
-  | "CRM & Clients"
   | "BD & Leads"
   | "Finance & Invoices"
   | "IT & Infrastructure"
@@ -89,6 +89,17 @@ export const FEATURE_ACTIONS: FeatureMeta[] = [
   { key: "manageShifts", name: "Manage Shift Schedules", category: "Calendar & Time", subGroup: "Shifts & Punch Clock", description: "Create, edit, and assign shift slots to employees", icon: "fa-solid fa-calendar-plus" },
   { key: "viewShiftCalendar", name: "View Team Shift Calendar", category: "Calendar & Time", subGroup: "Shifts & Punch Clock", description: "Access full team shift calendar and roster overview", icon: "fa-solid fa-calendar-days" },
   { key: "clockInOut", name: "Clock In & Clock Out Shift", category: "Calendar & Time", subGroup: "Shifts & Punch Clock", description: "Record daily shift punch-in and punch-out attendance", icon: "fa-solid fa-business-time" },
+
+  // OPS Portal
+  { key: "viewClients", name: "View OPS Retainers & Control", category: "OPS Portal", subGroup: "Operations Retainers", description: "Browse active client retainers, accounts, and health status", icon: "fa-solid fa-list-check" },
+  { key: "createClients", name: "Create & Edit Operations Retainers", category: "OPS Portal", subGroup: "Operations Retainers", description: "Add new client accounts, set delivery owners & target dates", icon: "fa-solid fa-folder-plus" },
+  { key: "manageClients", name: "Manage Retainers & Contact Logs", category: "OPS Portal", subGroup: "Operations Retainers", description: "Update progress %, health status, and add contact history logs", icon: "fa-solid fa-pen-to-square" },
+  { key: "deleteClients", name: "Delete Operations Retainers", category: "OPS Portal", subGroup: "Operations Retainers", description: "Permanently remove client project retainers from the system", icon: "fa-solid fa-trash-can" },
+  { key: "manageContracts", name: "Manage Contracts & Onboarding", category: "OPS Portal", subGroup: "Contracts & Onboarding", description: "Manage client contracts, SLAs, e-signatures, and onboarding status", icon: "fa-solid fa-file-contract" },
+  { key: "manageHRWorkdesk", name: "Manage HR Allocations", category: "OPS Portal", subGroup: "Resource Allocation", description: "Allocate staff to projects, manage utilization %, and bench status", icon: "fa-solid fa-user-gear" },
+  { key: "manageExternalTeams", name: "Manage External Contractors", category: "OPS Portal", subGroup: "External Contractors", description: "Track third-party vendors, freelance contracts & hourly rates", icon: "fa-solid fa-users-gear" },
+  { key: "viewReports", name: "Access Operations Reports", category: "OPS Portal", subGroup: "Reports & Data Export", description: "View aggregated project progress and workforce utilization reports", icon: "fa-solid fa-chart-pie" },
+  { key: "exportClientData", name: "Export Client Data & Reports", category: "OPS Portal", subGroup: "Reports & Data Export", description: "Download CSV exports of client accounts and allocation matrices", icon: "fa-solid fa-file-export" },
 
   // Projects
   { key: "viewProjects", name: "View Projects & Tasks", category: "Projects", subGroup: "Kanban Boards & Tasks", description: "Browse all workspace projects and task boards", icon: "fa-solid fa-folder-open" },
@@ -159,17 +170,6 @@ export const FEATURE_ACTIONS: FeatureMeta[] = [
   { key: "viewAuditLogs", name: "Access System Activity Audit Logs", category: "Analytics", subGroup: "Performance & Audits", description: "Browse chronological security and action trail", icon: "fa-solid fa-shield-halved" },
   { key: "exportAuditLogs", name: "Export Audit Log Trail", category: "Analytics", subGroup: "Performance & Audits", description: "Download CSV records of all platform activity logs", icon: "fa-solid fa-download" },
 
-  // CRM & Clients (OPS Portal)
-  { key: "viewClients", name: "View OPS Retainers & Projects", category: "CRM & Clients", subGroup: "Operations Retainers", description: "Browse active client retainers, accounts, and health status", icon: "fa-solid fa-handshake" },
-  { key: "createClients", name: "Create & Edit Operations Retainers", category: "CRM & Clients", subGroup: "Operations Retainers", description: "Add new client accounts, set delivery owners & target dates", icon: "fa-solid fa-folder-plus" },
-  { key: "manageClients", name: "Manage Retainers & Contact Logs", category: "CRM & Clients", subGroup: "Operations Retainers", description: "Update progress %, health status, and add contact history logs", icon: "fa-solid fa-pen-to-square" },
-  { key: "deleteClients", name: "Delete Operations Retainers", category: "CRM & Clients", subGroup: "Operations Retainers", description: "Permanently remove client project retainers from the system", icon: "fa-solid fa-trash-can" },
-  { key: "manageContracts", name: "Manage Contracts & Onboarding", category: "CRM & Clients", subGroup: "Contracts & Onboarding", description: "Manage client contracts, SLAs, e-signatures, and onboarding status", icon: "fa-solid fa-file-contract" },
-  { key: "manageHRWorkdesk", name: "Manage HR Allocations", category: "CRM & Clients", subGroup: "Resource Allocation", description: "Allocate staff to projects, manage utilization %, and bench status", icon: "fa-solid fa-user-gear" },
-  { key: "manageExternalTeams", name: "Manage External Contractors", category: "CRM & Clients", subGroup: "External Contractors", description: "Track third-party vendors, freelance contracts & hourly rates", icon: "fa-solid fa-users-gear" },
-  { key: "viewReports", name: "Access Operations Reports", category: "CRM & Clients", subGroup: "Reports & Data Export", description: "View aggregated project progress and workforce utilization reports", icon: "fa-solid fa-chart-pie" },
-  { key: "exportClientData", name: "Export Client Data & Reports", category: "CRM & Clients", subGroup: "Reports & Data Export", description: "Download CSV exports of client accounts and allocation matrices", icon: "fa-solid fa-file-export" },
-
   // BD & Leads
   { key: "viewBD", name: "View BD Portal & Leads", category: "BD & Leads", subGroup: "Lead Acquisition", description: "Access BD lead lists, client accounts, and lead capture logs", icon: "fa-solid fa-briefcase" },
   { key: "manageLeads", name: "Create & Qualify Leads", category: "BD & Leads", subGroup: "Lead Acquisition", description: "Add new prospective leads, qualify status, and assign owners", icon: "fa-solid fa-user-plus" },
@@ -222,15 +222,16 @@ export const FEATURE_ACTIONS: FeatureMeta[] = [
 ];
 
 export const FEATURE_CATEGORIES: FeatureCategory[] = [
-  "Overview", "Team", "Calendar & Time", "Projects", "Sprints", "Drive",
+  "Overview", "Team", "Calendar & Time", "OPS Portal", "Projects", "Sprints", "Drive",
   "Chat", "HR & Leave", "Appraisals", "Goals & OKRs", "Analytics",
-  "CRM & Clients", "BD & Leads", "Finance & Invoices", "IT & Infrastructure", "Referrals", "Notifications", "Admin & Users", "Settings",
+  "BD & Leads", "Finance & Invoices", "IT & Infrastructure", "Referrals", "Notifications", "Admin & Users", "Settings",
 ];
 
 export const CATEGORY_COLORS: Record<FeatureCategory, { text: string; bg: string; border: string; badge: string }> = {
   "Overview":          { text: "text-primary", bg: "bg-primary/10", border: "border-primary/20", badge: "bg-primary/15 text-primary" },
   "Team":              { text: "text-primary", bg: "bg-primary/10", border: "border-primary/20", badge: "bg-primary/15 text-primary" },
   "Calendar & Time":   { text: "text-primary", bg: "bg-primary/10", border: "border-primary/20", badge: "bg-primary/15 text-primary" },
+  "OPS Portal":        { text: "text-primary", bg: "bg-primary/10", border: "border-primary/20", badge: "bg-primary/15 text-primary" },
   "Projects":          { text: "text-primary", bg: "bg-primary/10", border: "border-primary/20", badge: "bg-primary/15 text-primary" },
   "Sprints":           { text: "text-primary", bg: "bg-primary/10", border: "border-primary/20", badge: "bg-primary/15 text-primary" },
   "Drive":             { text: "text-primary", bg: "bg-primary/10", border: "border-primary/20", badge: "bg-primary/15 text-primary" },
@@ -239,7 +240,6 @@ export const CATEGORY_COLORS: Record<FeatureCategory, { text: string; bg: string
   "Appraisals":        { text: "text-primary", bg: "bg-primary/10", border: "border-primary/20", badge: "bg-primary/15 text-primary" },
   "Goals & OKRs":      { text: "text-primary", bg: "bg-primary/10", border: "border-primary/20", badge: "bg-primary/15 text-primary" },
   "Analytics":         { text: "text-primary", bg: "bg-primary/10", border: "border-primary/20", badge: "bg-primary/15 text-primary" },
-  "CRM & Clients":     { text: "text-primary", bg: "bg-primary/10", border: "border-primary/20", badge: "bg-primary/15 text-primary" },
   "BD & Leads":        { text: "text-primary", bg: "bg-primary/10", border: "border-primary/20", badge: "bg-primary/15 text-primary" },
   "Finance & Invoices": { text: "text-primary", bg: "bg-primary/10", border: "border-primary/20", badge: "bg-primary/15 text-primary" },
   "IT & Infrastructure": { text: "text-primary", bg: "bg-primary/10", border: "border-primary/20", badge: "bg-primary/15 text-primary" },
@@ -253,6 +253,7 @@ export const CATEGORY_ICONS: Record<FeatureCategory, string> = {
   "Overview":          "fa-solid fa-chart-simple",
   "Team":              "fa-solid fa-users",
   "Calendar & Time":   "fa-solid fa-calendar-days",
+  "OPS Portal":        "fa-solid fa-list-check",
   "Projects":          "fa-solid fa-folder-tree",
   "Sprints":           "fa-solid fa-person-running",
   "Drive":             "fa-solid fa-hard-drive",
@@ -261,7 +262,6 @@ export const CATEGORY_ICONS: Record<FeatureCategory, string> = {
   "Appraisals":        "fa-solid fa-star",
   "Goals & OKRs":      "fa-solid fa-bullseye",
   "Analytics":         "fa-solid fa-chart-line",
-  "CRM & Clients":     "fa-solid fa-handshake",
   "BD & Leads":        "fa-solid fa-briefcase",
   "Finance & Invoices": "fa-solid fa-coins",
   "IT & Infrastructure": "fa-solid fa-terminal",

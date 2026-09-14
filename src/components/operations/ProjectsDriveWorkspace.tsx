@@ -23,12 +23,15 @@ export function ProjectsDriveWorkspace({ initialTab, hideHeader = false }: Proje
   const { user: currentUser, loading: authLoading } = useAuth();
   const searchParams = useSearchParams();
   const { can, canAccessModule, isAdmin, isOPS, loading: permLoading } = usePermissions();
-  const [persistedTab, setPersistedTab] = useTabPersistence<"kanban" | "gantt" | "wiki" | "drive" | "workload" | "history">(
+  const canDeleteProject = isAdmin || can("deleteProjects");
+  const canAccessTrash = isAdmin || isOPS || can("deleteProjects");
+
+  const [persistedTab, setPersistedTab] = useTabPersistence<"kanban" | "gantt" | "wiki" | "drive" | "workload" | "history" | "trash">(
     "projects_active_tab",
     initialTab || "kanban",
-    ["kanban", "gantt", "wiki", "drive", "workload", "history"]
+    ["kanban", "gantt", "wiki", "drive", "workload", "history", "trash"]
   );
-  const [activeTab, setActiveTabState] = useState<"kanban" | "gantt" | "wiki" | "drive" | "workload" | "history">(
+  const [activeTab, setActiveTabState] = useState<"kanban" | "gantt" | "wiki" | "drive" | "workload" | "history" | "trash">(
     initialTab || persistedTab
   );
 
@@ -38,7 +41,15 @@ export function ProjectsDriveWorkspace({ initialTab, hideHeader = false }: Proje
     }
   }, [initialTab]);
 
-  const setActiveTab = (tab: "kanban" | "gantt" | "wiki" | "drive" | "workload" | "history") => {
+  useEffect(() => {
+    if (activeTab === "trash" && !canAccessTrash && !permLoading) {
+      setActiveTabState("kanban");
+      setPersistedTab("kanban");
+    }
+  }, [activeTab, canAccessTrash, permLoading]);
+
+  const setActiveTab = (tab: "kanban" | "gantt" | "wiki" | "drive" | "workload" | "history" | "trash") => {
+    if (tab === "trash" && !canAccessTrash) return;
     setActiveTabState(tab);
     setPersistedTab(tab);
   };
@@ -104,6 +115,16 @@ export function ProjectsDriveWorkspace({ initialTab, hideHeader = false }: Proje
   const [editProjIsInternal, setEditProjIsInternal] = useState(true);
   const [editProjRequirements, setEditProjRequirements] = useState("");
   const [isSavingEdit, setIsSavingEdit] = useState(false);
+
+  // Trash & 30-day Retention states
+  const [trashedProjects, setTrashedProjects] = useState<any[]>([]);
+  const [loadingTrash, setLoadingTrash] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [projectToDelete, setProjectToDelete] = useState<{ id: string; name: string } | null>(null);
+  const [isDeletingProject, setIsDeletingProject] = useState(false);
+  const [isRestoringProject, setIsRestoringProject] = useState<string | null>(null);
+  const [purgeConfirmProject, setPurgeConfirmProject] = useState<{ id: string; name: string } | null>(null);
+  const [isPurgingProject, setIsPurgingProject] = useState<string | null>(null);
 
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [newTaskDesc, setNewTaskDesc] = useState("");
@@ -245,6 +266,25 @@ export function ProjectsDriveWorkspace({ initialTab, hideHeader = false }: Proje
     setMounted(true);
   }, []);
 
+  const fetchTrashedProjects = async () => {
+    if (!canAccessTrash) {
+      setTrashedProjects([]);
+      return;
+    }
+    try {
+      setLoadingTrash(true);
+      const res = await fetch("/api/projects?trash=true");
+      if (res.ok) {
+        const data = await res.json();
+        setTrashedProjects(data.projects || []);
+      }
+    } catch (e) {
+      console.error("fetchTrashedProjects error:", e);
+    } finally {
+      setLoadingTrash(false);
+    }
+  };
+
   const fetchProjects = async () => {
     try {
       const res = await fetch("/api/projects");
@@ -252,14 +292,90 @@ export function ProjectsDriveWorkspace({ initialTab, hideHeader = false }: Proje
         const data = await res.json();
         const list = data.projects || [];
         setProjects(list);
+        if (selectedProjectId !== "all" && !list.some((p: any) => p._id === selectedProjectId)) {
+          setSelectedProjectId("all");
+        }
         await fetchTasks(selectedProjectId || "all");
         await fetchActivityLogs(selectedProjectId || "all");
+        fetchTrashedProjects();
         return list;
       }
     } catch (e) {
       console.error("fetchProjects error:", e);
     }
     return [];
+  };
+
+  const handleSoftDeleteProject = async () => {
+    if (!projectToDelete) return;
+    setIsDeletingProject(true);
+    try {
+      const res = await fetch(`/api/projects/${projectToDelete.id}`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        showToast(`Project '${projectToDelete.name}' moved to trash. Retained for 30 days.`, "success");
+        setShowDeleteConfirm(false);
+        setProjectToDelete(null);
+        setSelectedProjectId("all");
+        await fetchProjects();
+        await fetchTrashedProjects();
+      } else {
+        const err = await res.json();
+        showToast(err.error || "Failed to delete project.", "error");
+      }
+    } catch (e) {
+      console.error(e);
+      showToast("Failed to delete project.", "error");
+    } finally {
+      setIsDeletingProject(false);
+    }
+  };
+
+  const handleRestoreProject = async (id: string, name: string) => {
+    setIsRestoringProject(id);
+    try {
+      const res = await fetch(`/api/projects/${id}/restore`, {
+        method: "POST",
+      });
+      if (res.ok) {
+        showToast(`Project '${name}' restored successfully!`, "success");
+        await fetchProjects();
+        await fetchTrashedProjects();
+        setSelectedProjectId(id);
+        setActiveTab("kanban");
+      } else {
+        const err = await res.json();
+        showToast(err.error || "Failed to restore project.", "error");
+      }
+    } catch (e) {
+      console.error(e);
+      showToast("Failed to restore project.", "error");
+    } finally {
+      setIsRestoringProject(null);
+    }
+  };
+
+  const handlePermanentPurgeProject = async (id: string, name: string) => {
+    setIsPurgingProject(id);
+    try {
+      const res = await fetch(`/api/projects/${id}?permanent=true`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        showToast(`Project '${name}' permanently purged.`, "info");
+        setPurgeConfirmProject(null);
+        await fetchTrashedProjects();
+      } else {
+        const err = await res.json();
+        showToast(err.error || "Failed to permanently purge project.", "error");
+      }
+    } catch (e) {
+      console.error(e);
+      showToast("Failed to permanently purge project.", "error");
+    } finally {
+      setIsPurgingProject(null);
+    }
   };
 
   const fetchTasks = async (overrideProjectId?: string) => {
@@ -1042,91 +1158,135 @@ export function ProjectsDriveWorkspace({ initialTab, hideHeader = false }: Proje
         >
           <i className="fa-solid fa-clock-rotate-left text-sm" /> Project History
         </button>
-      </div>
 
-      {/* Project Selector Bar */}
-      <Card className="p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
-        <div className="flex items-center gap-3 w-full sm:w-auto flex-wrap">
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-semibold text-foreground shrink-0">Active Project:</span>
-            <select
-              value={selectedProjectId}
-              onChange={(e) => {
-                const val = e.target.value;
-                setSelectedProjectId(val);
-                fetchTasks(val);
-              }}
-              className="h-9 px-3 text-sm bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary w-64 cursor-pointer font-medium"
-            >
-              <option value="all">⚡ All Projects (Combined Workspace View)</option>
-              {(boardFilter === "starred"
-                ? projects.filter((p) => starredProjectIds.includes(p._id))
-                : projects
-              ).map((p) => {
-                const isStarred = starredProjectIds.includes(p._id);
-                return (
-                  <option key={p._id} value={p._id}>
-                    {isStarred ? "⭐" : "📁"} {p.name}
-                  </option>
-                );
-              })}
-            </select>
-
-            {/* Quick Star Toggle Button for selected project */}
-            {selectedProjectId && selectedProjectId !== "all" && (
-              <button
-                type="button"
-                onClick={(e) => toggleStarProject(selectedProjectId, e)}
-                className={cn(
-                  "h-9 w-9 rounded-md border flex items-center justify-center transition-all cursor-pointer",
-                  starredProjectIds.includes(selectedProjectId)
-                    ? "bg-amber-500/15 border-amber-500/50 text-amber-500 hover:bg-amber-500/25"
-                    : "border-border hover:bg-accent text-muted-foreground hover:text-amber-500"
-                )}
-                title={starredProjectIds.includes(selectedProjectId) ? "Remove from Starred Boards" : "Add to Starred Boards"}
-              >
-                <i className={cn("text-sm", starredProjectIds.includes(selectedProjectId) ? "fa-solid fa-star text-amber-500" : "fa-regular fa-star")} />
-              </button>
+        {canAccessTrash && (
+          <button
+            onClick={() => {
+              setActiveTab("trash");
+              fetchTrashedProjects();
+            }}
+            className={cn(
+              "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
+              activeTab === "trash"
+                ? "border-rose-500 text-rose-500 bg-rose-500/10 rounded-t-md font-semibold -mb-px"
+                : "border-transparent text-muted-foreground hover:text-foreground"
             )}
-          </div>
-
-          <div className="flex items-center gap-2 text-xs">
-            <Badge variant="outline" className="gap-1.5 px-2.5 py-1 text-xs bg-muted/30">
-              <i className="fa-solid fa-folder-closed text-primary text-[11px]" />
-              Total Projects: <strong className="text-foreground">{projects.length}</strong>
-            </Badge>
-
-            <Badge variant="outline" className="gap-1.5 px-2.5 py-1 text-xs bg-emerald-500/10 text-emerald-500 border-emerald-500/30">
-              <i className="fa-solid fa-circle-play text-emerald-500 text-[11px]" />
-              Active Projects: <strong className="text-emerald-500">{projects.filter((p) => p.status === "In Progress" || p.status === "Planning" || !p.status).length}</strong>
-            </Badge>
-
-            {starredProjectIds.length > 0 && (
-              <Badge variant="outline" className="gap-1.5 px-2.5 py-1 text-xs bg-amber-500/10 text-amber-500 border-amber-500/30">
-                <i className="fa-solid fa-star text-amber-500 text-[11px]" />
-                Starred: <strong className="text-amber-500">{starredProjectIds.length}</strong>
+          >
+            <i className="fa-solid fa-trash-can text-sm" /> Project Trash (30d Hold)
+            {trashedProjects.length > 0 && (
+              <Badge variant="outline" className="px-1.5 py-0 text-[10px] bg-rose-500/15 text-rose-400 border-rose-500/30 font-semibold font-mono">
+                {trashedProjects.length}
               </Badge>
             )}
-          </div>
-        </div>
+          </button>
+        )}
+      </div>
 
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          {selectedProjectId && selectedProjectId !== "all" && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleOpenEditProject}
-              className="gap-2 font-semibold text-xs h-8 border-primary/40 text-primary hover:bg-primary/10"
-            >
-              <i className="fa-solid fa-pen-to-square text-xs" /> Edit Details
-            </Button>
-          )}
-          <Badge color="primary" variant="soft" className="gap-1.5 px-2.5 py-1 text-xs font-semibold">
-            <i className="fa-solid fa-list-check text-[11px]" />
-            Total Tasks: <strong className="text-primary-foreground">{tasks.length}</strong>
-          </Badge>
-        </div>
-      </Card>
+      {/* Project Selector Bar (visible on active workspace views) */}
+      {activeTab !== "trash" && (
+        <Card className="p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-3 w-full sm:w-auto flex-wrap">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-semibold text-foreground shrink-0">Active Project:</span>
+              <select
+                value={selectedProjectId}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setSelectedProjectId(val);
+                  fetchTasks(val);
+                }}
+                className="h-9 px-3 text-sm bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary w-64 cursor-pointer font-medium"
+              >
+                <option value="all">⚡ All Projects (Combined Workspace View)</option>
+                {(boardFilter === "starred"
+                  ? projects.filter((p) => starredProjectIds.includes(p._id))
+                  : projects
+                ).map((p) => {
+                  const isStarred = starredProjectIds.includes(p._id);
+                  return (
+                    <option key={p._id} value={p._id}>
+                      {isStarred ? "⭐" : "📁"} {p.name}
+                    </option>
+                  );
+                })}
+              </select>
+
+              {/* Quick Star Toggle Button for selected project */}
+              {selectedProjectId && selectedProjectId !== "all" && (
+                <button
+                  type="button"
+                  onClick={(e) => toggleStarProject(selectedProjectId, e)}
+                  className={cn(
+                    "h-9 w-9 rounded-md border flex items-center justify-center transition-all cursor-pointer",
+                    starredProjectIds.includes(selectedProjectId)
+                      ? "bg-amber-500/15 border-amber-500/50 text-amber-500 hover:bg-amber-500/25"
+                      : "border-border hover:bg-accent text-muted-foreground hover:text-amber-500"
+                  )}
+                  title={starredProjectIds.includes(selectedProjectId) ? "Remove from Starred Boards" : "Add to Starred Boards"}
+                >
+                  <i className={cn("text-sm", starredProjectIds.includes(selectedProjectId) ? "fa-solid fa-star text-amber-500" : "fa-regular fa-star")} />
+                </button>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2 text-xs">
+              <Badge variant="outline" className="gap-1.5 px-2.5 py-1 text-xs bg-muted/30">
+                <i className="fa-solid fa-folder-closed text-primary text-[11px]" />
+                Total Projects: <strong className="text-foreground">{projects.length}</strong>
+              </Badge>
+
+              <Badge variant="outline" className="gap-1.5 px-2.5 py-1 text-xs bg-emerald-500/10 text-emerald-500 border-emerald-500/30">
+                <i className="fa-solid fa-circle-play text-emerald-500 text-[11px]" />
+                Active Projects: <strong className="text-emerald-500">{projects.filter((p) => p.status === "In Progress" || p.status === "Planning" || !p.status).length}</strong>
+              </Badge>
+
+              {starredProjectIds.length > 0 && (
+                <Badge variant="outline" className="gap-1.5 px-2.5 py-1 text-xs bg-amber-500/10 text-amber-500 border-amber-500/30">
+                  <i className="fa-solid fa-star text-amber-500 text-[11px]" />
+                  Starred: <strong className="text-amber-500">{starredProjectIds.length}</strong>
+                </Badge>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            {selectedProjectId && selectedProjectId !== "all" && (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleOpenEditProject}
+                  className="gap-2 font-semibold text-xs h-8 border-primary/40 text-primary hover:bg-primary/10"
+                >
+                  <i className="fa-solid fa-pen-to-square text-xs" /> Edit Details
+                </Button>
+
+                {canDeleteProject && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const p = projects.find((proj) => proj._id === selectedProjectId);
+                      if (p) {
+                        setProjectToDelete({ id: p._id, name: p.name });
+                        setShowDeleteConfirm(true);
+                      }
+                    }}
+                    className="gap-2 font-semibold text-xs h-8 border-rose-500/40 text-rose-500 hover:bg-rose-500/10 hover:border-rose-500/60 cursor-pointer"
+                    title="Move project to trash (preserved for 30 days so you can restore)"
+                  >
+                    <i className="fa-solid fa-trash-can text-xs" /> Delete Project
+                  </Button>
+                )}
+              </>
+            )}
+            <Badge color="primary" variant="soft" className="gap-1.5 px-2.5 py-1 text-xs font-semibold">
+              <i className="fa-solid fa-list-check text-[11px]" />
+              Total Tasks: <strong className="text-primary-foreground">{tasks.length}</strong>
+            </Badge>
+          </div>
+        </Card>
+      )}
 
       {/* Kanban Board View */}
       {activeTab === "kanban" && (
@@ -1205,6 +1365,27 @@ export function ProjectsDriveWorkspace({ initialTab, hideHeader = false }: Proje
                       {starredProjectIds.length}
                     </span>
                   </button>
+
+                  {/* Project Trash (30d Hold) */}
+                  {canAccessTrash && (
+                    <button
+                      onClick={() => {
+                        setActiveTab("trash");
+                        fetchTrashedProjects();
+                      }}
+                      className="w-full flex items-center justify-between px-4 py-3 rounded-2xl text-sm font-medium transition-all cursor-pointer text-muted-foreground hover:bg-accent/60 hover:text-foreground dark:text-slate-200 dark:hover:bg-[#1a1215] dark:hover:text-rose-400"
+                    >
+                      <div className="flex items-center gap-3.5">
+                        <i className="fa-solid fa-trash-can text-lg text-rose-400" />
+                        <span>Trash (30d Hold)</span>
+                      </div>
+                      {trashedProjects.length > 0 && (
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-rose-500/15 text-rose-400 font-mono font-medium">
+                          {trashedProjects.length}
+                        </span>
+                      )}
+                    </button>
+                  )}
                 </div>
 
                 {/* Sublist of Starred Projects when Starred Boards filter is active */}
@@ -2423,6 +2604,157 @@ export function ProjectsDriveWorkspace({ initialTab, hideHeader = false }: Proje
         </Card>
       )}
 
+      {/* Project Trash & 30-Day Recovery Center Tab View */}
+      {activeTab === "trash" && canAccessTrash && (
+        <Card className="p-5 space-y-5">
+          <CardHeader className="px-0 pt-0 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border pb-4">
+            <div>
+              <CardTitle className="text-base font-bold flex items-center gap-2 text-rose-500">
+                <i className="fa-solid fa-trash-can text-rose-500 text-sm" /> Project Trash &amp; Recovery Center
+              </CardTitle>
+              <CardDescription>
+                Safely manage soft-deleted projects. Projects and their tasks are preserved for 30 days before permanent removal.
+              </CardDescription>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={fetchTrashedProjects}
+                disabled={loadingTrash}
+                className="gap-2 font-semibold text-xs h-8 border-border hover:bg-muted/60 cursor-pointer"
+              >
+                <i className={cn("fa-solid text-xs", loadingTrash ? "fa-spinner fa-spin" : "fa-arrows-rotate")} />
+                Refresh
+              </Button>
+            </div>
+          </CardHeader>
+
+          {/* 30-Day Safe Hold Policy Banner */}
+          <div className="p-4 rounded-xl border border-amber-500/30 bg-amber-500/10 dark:bg-amber-950/20 text-foreground space-y-1.5">
+            <div className="flex items-center gap-2 font-bold text-xs text-amber-500">
+              <i className="fa-solid fa-shield-halved text-sm text-amber-500" />
+              <span>30-Day Recovery Safe Hold Active</span>
+            </div>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              When administrators delete a project, it is protected from immediate destruction. All associated sprint tasks, descriptions, and file references remain completely intact in this safe hold bin for <strong>30 days</strong>. You or any authorized user can restore the project at any time with a single click. After 30 days, expired projects are permanently pruned.
+            </p>
+          </div>
+
+          <CardContent className="px-0 pb-0">
+            {loadingTrash ? (
+              <div className="py-16 text-center text-muted-foreground text-sm space-y-2">
+                <i className="fa-solid fa-spinner fa-spin text-3xl text-primary block mb-2" />
+                <p>Loading trashed projects...</p>
+              </div>
+            ) : trashedProjects.length === 0 ? (
+              <div className="py-16 text-center text-muted-foreground text-sm space-y-3 rounded-2xl border border-dashed border-border/70 bg-muted/10">
+                <div className="w-14 h-14 rounded-full bg-muted/40 mx-auto flex items-center justify-center text-muted-foreground/40 text-2xl">
+                  <i className="fa-solid fa-recycle" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-foreground text-sm">No Projects in Trash</h4>
+                  <p className="text-xs text-muted-foreground mt-1 max-w-sm mx-auto">
+                    There are currently no soft-deleted projects in the 30-day retention window.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {trashedProjects.map((p) => {
+                  const daysRemaining = p.daysRemaining !== undefined ? p.daysRemaining : 30;
+                  const isExpiringSoon = daysRemaining <= 7;
+                  return (
+                    <div
+                      key={p._id}
+                      className="p-4 rounded-xl border border-border bg-card shadow-xs hover:border-border/80 transition-all flex flex-col justify-between gap-4"
+                    >
+                      <div className="space-y-2.5">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="space-y-1">
+                            <h4 className="text-sm font-bold text-foreground flex items-center gap-2">
+                              <i className="fa-solid fa-folder text-amber-500 text-xs" />
+                              {p.name}
+                            </h4>
+                            {p.description && (
+                              <p className="text-xs text-muted-foreground line-clamp-2">
+                                {p.description}
+                              </p>
+                            )}
+                          </div>
+
+                          {/* Days remaining badge */}
+                          <Badge
+                            variant="outline"
+                            className={cn(
+                              "shrink-0 gap-1.5 font-mono text-[11px] font-semibold py-1 px-2.5",
+                              isExpiringSoon
+                                ? "bg-rose-500/15 text-rose-500 border-rose-500/30"
+                                : "bg-emerald-500/15 text-emerald-500 border-emerald-500/30"
+                            )}
+                          >
+                            <i className={cn("fa-solid text-[10px]", isExpiringSoon ? "fa-triangle-exclamation" : "fa-clock")} />
+                            {daysRemaining} {daysRemaining === 1 ? "day" : "days"} left
+                          </Badge>
+                        </div>
+
+                        {/* Metadata pills */}
+                        <div className="flex items-center gap-3 flex-wrap text-[11px] text-muted-foreground pt-1 border-t border-border/50">
+                          <span className="flex items-center gap-1.5">
+                            <i className="fa-solid fa-calendar-xmark text-rose-400 text-xs" />
+                            Deleted: <strong className="text-foreground font-medium">{formatDateTime(p.deletedAt)}</strong>
+                          </span>
+
+                          <span className="flex items-center gap-1.5">
+                            <i className="fa-solid fa-user-circle text-primary text-xs" />
+                            By: <strong className="text-foreground font-medium">{p.deletedByName || p.deletedBy?.name || "Admin"}</strong>
+                          </span>
+
+                          {p.status && (
+                            <span className="flex items-center gap-1.5">
+                              <i className="fa-solid fa-info-circle text-muted-foreground text-xs" />
+                              Original Status: <strong className="text-foreground font-medium">{p.status}</strong>
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Action buttons */}
+                      <div className="flex items-center justify-between gap-2 pt-3 border-t border-border/60">
+                        <Button
+                          size="sm"
+                          onClick={() => handleRestoreProject(p._id, p.name)}
+                          disabled={isRestoringProject === p._id}
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2 font-semibold text-xs h-8 cursor-pointer shadow-xs"
+                        >
+                          <i className={cn("fa-solid text-xs", isRestoringProject === p._id ? "fa-spinner fa-spin" : "fa-rotate-left")} />
+                          {isRestoringProject === p._id ? "Restoring..." : "Restore Project"}
+                        </Button>
+
+                        {isAdmin && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setPurgeConfirmProject({ id: p._id, name: p.name })}
+                            disabled={isPurgingProject === p._id}
+                            className="text-rose-500 hover:text-rose-600 hover:bg-rose-500/10 gap-1.5 text-xs h-8 cursor-pointer"
+                            title="Bypass 30-day hold and permanently purge this project"
+                          >
+                            <i className="fa-solid fa-ban text-xs" />
+                            Purge Permanently
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {/* Selected SOP Article Detail Modal */}
       {selectedArticle && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in" onClick={() => setSelectedArticle(null)}>
@@ -3014,14 +3346,32 @@ export function ProjectsDriveWorkspace({ initialTab, hideHeader = false }: Proje
                 />
               </div>
 
-              <div className="flex justify-end gap-2 pt-3 border-t border-border">
-                <Button variant="outline" size="sm" type="button" onClick={() => setShowEditProjectForm(false)} disabled={isSavingEdit}>
-                  Cancel
-                </Button>
-                <Button color="primary" size="sm" type="submit" className="font-semibold gap-1.5" disabled={isSavingEdit}>
-                  <i className="fa-solid fa-floppy-disk text-xs" />
-                  {isSavingEdit ? "Saving..." : "Save Changes"}
-                </Button>
+              <div className="flex items-center justify-between gap-2 pt-3 border-t border-border">
+                {canDeleteProject && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    type="button"
+                    onClick={() => {
+                      setShowEditProjectForm(false);
+                      setProjectToDelete({ id: selectedProjectId, name: editProjName });
+                      setShowDeleteConfirm(true);
+                    }}
+                    className="text-rose-500 hover:text-rose-600 hover:bg-rose-500/10 gap-1.5 cursor-pointer text-xs"
+                  >
+                    <i className="fa-solid fa-trash-can text-xs" />
+                    Move to Trash
+                  </Button>
+                )}
+                <div className="flex items-center gap-2 ml-auto">
+                  <Button variant="outline" size="sm" type="button" onClick={() => setShowEditProjectForm(false)} disabled={isSavingEdit}>
+                    Cancel
+                  </Button>
+                  <Button color="primary" size="sm" type="submit" className="font-semibold gap-1.5" disabled={isSavingEdit}>
+                    <i className="fa-solid fa-floppy-disk text-xs" />
+                    {isSavingEdit ? "Saving..." : "Save Changes"}
+                  </Button>
+                </div>
               </div>
             </form>
           </div>
@@ -3450,6 +3800,118 @@ export function ProjectsDriveWorkspace({ initialTab, hideHeader = false }: Proje
                 ) : (
                   <>
                     <i className="fa-solid fa-trash-can text-xs" /> Delete Task
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Soft Delete Project Confirmation Modal */}
+      {showDeleteConfirm && projectToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in" onClick={() => setShowDeleteConfirm(false)}>
+          <div className="w-full max-w-md bg-card border border-border rounded-xl p-6 shadow-2xl space-y-4 animate-in zoom-in-95" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-3 text-rose-500">
+              <div className="w-10 h-10 rounded-full bg-rose-500/10 flex items-center justify-center text-lg shrink-0">
+                <i className="fa-solid fa-trash-can" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-foreground">Move Project to Trash?</h3>
+                <p className="text-xs text-muted-foreground">30-day recovery retention policy</p>
+              </div>
+            </div>
+
+            <div className="space-y-2 text-xs text-foreground/90">
+              <p>
+                Are you sure you want to delete <strong className="text-foreground">"{projectToDelete.name}"</strong>?
+              </p>
+              <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-400 space-y-1">
+                <div className="flex items-center gap-1.5 font-bold">
+                  <i className="fa-solid fa-shield-halved text-xs" />
+                  <span>Safe Hold: Retained for 30 Days</span>
+                </div>
+                <p className="text-[11px] leading-relaxed text-muted-foreground">
+                  The project and its sprint tasks will be removed from the active workspace and kept in the <strong>Trash</strong> bin for 30 days. You or any authorized team member can restore it at any time with full data integrity.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2.5 pt-3 border-t border-border/60">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setShowDeleteConfirm(false);
+                  setProjectToDelete(null);
+                }}
+                disabled={isDeletingProject}
+              >
+                Cancel
+              </Button>
+              <Button
+                color="destructive"
+                size="sm"
+                onClick={handleSoftDeleteProject}
+                disabled={isDeletingProject}
+                className="gap-2 font-semibold cursor-pointer"
+              >
+                {isDeletingProject ? (
+                  <>
+                    <i className="fa-solid fa-spinner fa-spin text-xs" /> Moving to Trash...
+                  </>
+                ) : (
+                  <>
+                    <i className="fa-solid fa-trash-can text-xs" /> Move to Trash (30d Hold)
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Permanent Purge Confirmation Modal */}
+      {purgeConfirmProject && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in" onClick={() => setPurgeConfirmProject(null)}>
+          <div className="w-full max-w-md bg-card border border-border rounded-xl p-6 shadow-2xl space-y-4 animate-in zoom-in-95" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-3 text-rose-500">
+              <div className="w-10 h-10 rounded-full bg-rose-500/15 flex items-center justify-center text-lg shrink-0">
+                <i className="fa-solid fa-triangle-exclamation" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-foreground">Permanently Delete Project?</h3>
+                <p className="text-xs text-rose-500 font-medium">Bypasses 30-day retention • Cannot be undone</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-foreground/90 leading-relaxed">
+              This will immediately and permanently delete <strong className="text-foreground">"{purgeConfirmProject.name}"</strong> and all of its associated tasks from the database. This action is <strong>irreversible</strong>.
+            </p>
+
+            <div className="flex justify-end gap-2.5 pt-3 border-t border-border/60">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPurgeConfirmProject(null)}
+                disabled={isPurgingProject === purgeConfirmProject.id}
+              >
+                Cancel
+              </Button>
+              <Button
+                color="destructive"
+                size="sm"
+                onClick={() => handlePermanentPurgeProject(purgeConfirmProject.id, purgeConfirmProject.name)}
+                disabled={isPurgingProject === purgeConfirmProject.id}
+                className="gap-2 font-semibold cursor-pointer"
+              >
+                {isPurgingProject === purgeConfirmProject.id ? (
+                  <>
+                    <i className="fa-solid fa-spinner fa-spin text-xs" /> Purging...
+                  </>
+                ) : (
+                  <>
+                    <i className="fa-solid fa-ban text-xs" /> Permanently Delete
                   </>
                 )}
               </Button>

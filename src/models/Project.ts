@@ -16,6 +16,10 @@ export interface IProject extends Document {
   clientId?: mongoose.Types.ObjectId;
   clientAccount?: string;
   tenantId: mongoose.Types.ObjectId;
+  isDeleted?: boolean;
+  deletedAt?: Date | null;
+  deletedBy?: mongoose.Types.ObjectId | null;
+  deletedByName?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -45,6 +49,10 @@ const ProjectSchema = new Schema<IProject>(
     clientId: { type: Schema.Types.ObjectId, ref: "Client" },
     clientAccount: { type: String, trim: true },
     tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true, index: true },
+    isDeleted: { type: Boolean, default: false, index: true },
+    deletedAt: { type: Date, default: null, index: true },
+    deletedBy: { type: Schema.Types.ObjectId, ref: "User" },
+    deletedByName: { type: String },
   },
   { timestamps: true }
 );
@@ -53,6 +61,14 @@ const ProjectSchema = new Schema<IProject>(
 ProjectSchema.index({ tenantId: 1, createdAt: -1 });
 ProjectSchema.index({ tenantId: 1, members: 1 });
 ProjectSchema.index({ tenantId: 1, assignedDepartment: 1 });
+ProjectSchema.index({ tenantId: 1, isDeleted: 1 });
+
+// TTL index: auto-purge soft-deleted projects after 30 days (2,592,000 seconds)
+ProjectSchema.index({ deletedAt: 1 }, { expireAfterSeconds: 2592000 });
+
+if (mongoose.models && mongoose.models.Project && (!mongoose.models.Project.schema.path("isDeleted") || process.env.NODE_ENV !== "production")) {
+  delete (mongoose.models as any).Project;
+}
 
 export const Project: Model<IProject> =
   mongoose.models.Project || mongoose.model<IProject>("Project", ProjectSchema);

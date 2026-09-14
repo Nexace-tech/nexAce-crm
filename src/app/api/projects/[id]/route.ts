@@ -31,6 +31,13 @@ export async function PUT(
       return NextResponse.json({ error: "Project not found" }, { status: 404 });
     }
 
+    if (project.isDeleted) {
+      return NextResponse.json(
+        { error: "Cannot edit a project in trash. Restore it first." },
+        { status: 400 }
+      );
+    }
+
     const isManagerOrAdmin = session.role === "Admin" || session.role === "Manager";
     const isMember = project.members.some((m) => m.toString() === session.userId);
 
@@ -110,7 +117,7 @@ export async function PUT(
 }
 
 /**
- * DELETE: Delete a project and its associated tasks (Admin/Manager).
+ * DELETE: Soft-delete project with 30-day safety retention, or permanent purge (Admin only).
  */
 export async function DELETE(
   request: Request,
@@ -139,13 +146,73 @@ export async function DELETE(
       return NextResponse.json({ error: "Project not found" }, { status: 404 });
     }
 
-    // Delete associated tasks
-    await Task.deleteMany({ projectId: new mongoose.Types.ObjectId(id) });
+    const { searchParams } = new URL(request.url);
+    const permanent = searchParams.get("permanent") === "true";
 
-    // Delete project
-    await project.deleteOne();
+    if (permanent) {
+      // Permanent Purge (Admin only)
+      if (session.role !== "Admin") {
+        return NextResponse.json(
+          { error: "Forbidden: Only Admin can permanently delete projects" },
+          { status: 403 }
+        );
+      }
 
-    return NextResponse.json({ success: true, message: "Project deleted successfully" });
+      await Task.deleteMany({ projectId: new mongoose.Types.ObjectId(id) });
+      await project.deleteOne();
+
+      await ActivityLog.create({
+        tenantId: new mongoose.Types.ObjectId(session.tenantId),
+        userId: new mongoose.Types.ObjectId(session.userId),
+        userName: session.userName,
+        userRole: session.role,
+        action: "PROJECT_PURGED",
+        targetName: project.name,
+        details: `Project '${project.name}' was permanently deleted by ${session.userName}.`,
+      });
+
+      return NextResponse.json({
+        success: true,
+        message: "Project permanently purged",
+      });
+    }
+
+    // Soft-delete: Move to trash for 30-day retention
+    const now = new Date();
+    await Project.updateOne(
+      { _id: new mongoose.Types.ObjectId(id) },
+      {
+        $set: {
+          isDeleted: true,
+          deletedAt: now,
+          deletedBy: new mongoose.Types.ObjectId(session.userId),
+          deletedByName: session.userName,
+        },
+      }
+    );
+
+    // Also mark associated tasks as soft-deleted
+    await Task.updateMany(
+      { projectId: new mongoose.Types.ObjectId(id) },
+      { $set: { isDeleted: true, deletedAt: now } }
+    );
+
+    // Record activity log
+    await ActivityLog.create({
+      tenantId: new mongoose.Types.ObjectId(session.tenantId),
+      projectId: project._id,
+      userId: new mongoose.Types.ObjectId(session.userId),
+      userName: session.userName,
+      userRole: session.role,
+      action: "PROJECT_MOVED_TO_TRASH",
+      targetName: project.name,
+      details: `Project '${project.name}' was moved to Trash by ${session.userName}. It will be preserved for 30 days before permanent deletion.`,
+    });
+
+    return NextResponse.json({
+      success: true,
+      message: "Project moved to trash and will be kept for 30 days before permanent deletion.",
+    });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Internal Server Error";
     console.error("API DELETE Project error:", error);
