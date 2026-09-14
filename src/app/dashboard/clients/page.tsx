@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
@@ -124,6 +124,39 @@ export default function OperationsPage() {
     setTimeout(() => setToast(null), 4000);
   };
   const [viewMode, setViewMode] = useState<"list" | "grid">("list");
+
+  // Tab horizontal scroll controls
+  const tabScrollRef = React.useRef<HTMLDivElement>(null);
+  const [canScrollTabsLeft, setCanScrollTabsLeft] = useState(false);
+  const [canScrollTabsRight, setCanScrollTabsRight] = useState(false);
+
+  const checkTabScroll = useCallback(() => {
+    const el = tabScrollRef.current;
+    if (el) {
+      setCanScrollTabsLeft(el.scrollLeft > 4);
+      setCanScrollTabsRight(el.scrollLeft < el.scrollWidth - el.clientWidth - 4);
+    }
+  }, []);
+
+  useEffect(() => {
+    checkTabScroll();
+    window.addEventListener("resize", checkTabScroll);
+    return () => window.removeEventListener("resize", checkTabScroll);
+  }, [checkTabScroll]);
+
+  const handleScrollTabs = (dir: "left" | "right") => {
+    const el = tabScrollRef.current;
+    if (!el) return;
+    el.scrollBy({ left: dir === "left" ? -240 : 240, behavior: "smooth" });
+    setTimeout(checkTabScroll, 300);
+  };
+
+  const handleTabWheel = (e: React.WheelEvent<HTMLDivElement>) => {
+    if (e.deltaY !== 0) {
+      e.currentTarget.scrollLeft += e.deltaY;
+      checkTabScroll();
+    }
+  };
 
   // HR Workdesk State
   const [hrAllocations, setHrAllocations] = useState<ResourceAllocation[]>([]);
@@ -889,47 +922,77 @@ export default function OperationsPage() {
         </div>
       </div>
 
-      {/* OPS Portal Tab Bar - Styled like IT Portal */}
-      <div className="flex items-center gap-1 p-1 bg-muted/60 rounded-xl border border-border overflow-x-auto no-scrollbar">
-        {[
-          { key: "operations", label: "Operations Control", icon: "fa-solid fa-list-check", count: projects.length },
-          { key: "projects", label: "Projects & Kanban", icon: "fa-solid fa-folder-tree" },
-          { key: "drive", label: "Drive Space", icon: "fa-solid fa-hard-drive" },
-          { key: "contracts", label: "Contracts & Onboarding", icon: "fa-solid fa-file-contract" },
-          { key: "hr", label: "HR Workdesk", icon: "fa-solid fa-users-gear", count: hrAllocations.length },
-          { key: "external", label: "External Teams", icon: "fa-solid fa-building-user", count: externalMembers.length },
-          { key: "reports", label: "Reports & Data Exports", icon: "fa-solid fa-file-lines" },
-          ...((can("manageUsers") || isAdmin || isOPS) ? [{ key: "users", label: "User Management", icon: "fa-solid fa-users" }] : []),
-          ...((can("manageShifts") || isAdmin || isOPS) ? [{ key: "shifts", label: "Shifts & Status", icon: "fa-solid fa-clock" }] : []),
-        ].map((tab) => (
+      {/* OPS Portal Tab Bar - Styled like IT Portal with Smooth Horizontal Scroll */}
+      <div className="relative flex items-center group">
+        {canScrollTabsLeft && (
           <button
-            key={tab.key}
-            id={`ops-tab-${tab.key}`}
-            onClick={() => {
-              setActiveTab(tab.key as OpsTabKey);
-              const url = new URL(window.location.href);
-              url.searchParams.set("tab", tab.key);
-              window.history.replaceState({}, "", url.toString());
-            }}
-            className={cn(
-              "flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition-all duration-200 whitespace-nowrap cursor-pointer",
-              activeTab === tab.key
-                ? "bg-card text-foreground shadow-sm border border-border font-bold"
-                : "text-muted-foreground hover:text-foreground hover:bg-card/60"
-            )}
+            type="button"
+            onClick={() => handleScrollTabs("left")}
+            className="absolute -left-2 z-10 w-7 h-7 rounded-full bg-card/95 border border-border shadow-md flex items-center justify-center text-muted-foreground hover:text-foreground cursor-pointer transition-all hover:scale-105"
+            title="Scroll Tabs Left"
           >
-            <i className={cn(tab.icon, activeTab === tab.key ? "text-primary" : "text-muted-foreground")} />
-            <span>{tab.label}</span>
-            {tab.count !== undefined && (
-              <span className={cn(
-                "ml-1 text-[10px] px-1.5 py-0.2 rounded-full font-mono",
-                activeTab === tab.key ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground"
-              )}>
-                {tab.count}
-              </span>
-            )}
+            <i className="fa-solid fa-chevron-left text-xs" />
           </button>
-        ))}
+        )}
+
+        <div
+          ref={tabScrollRef}
+          onScroll={checkTabScroll}
+          onWheel={handleTabWheel}
+          className="flex items-center gap-1.5 p-1 bg-muted/60 rounded-xl border border-border overflow-x-auto scroll-smooth w-full select-none"
+        >
+          {[
+            { key: "operations", label: "Operations Control", icon: "fa-solid fa-list-check", count: projects.length },
+            { key: "projects", label: "Projects & Kanban", icon: "fa-solid fa-folder-tree" },
+            { key: "drive", label: "Drive Space", icon: "fa-solid fa-hard-drive" },
+            { key: "contracts", label: "Contracts & Onboarding", icon: "fa-solid fa-file-contract" },
+            { key: "hr", label: "HR Workdesk", icon: "fa-solid fa-users-gear", count: hrAllocations.length },
+            { key: "external", label: "External Teams", icon: "fa-solid fa-building-user", count: externalMembers.length },
+            { key: "reports", label: "Reports & Data Exports", icon: "fa-solid fa-file-lines" },
+            ...((can("manageUsers") || isAdmin || isOPS) ? [{ key: "users", label: "User Management", icon: "fa-solid fa-users" }] : []),
+            ...((can("manageShifts") || isAdmin || isOPS) ? [{ key: "shifts", label: "Shifts & Status", icon: "fa-solid fa-clock" }] : []),
+          ].map((tab) => (
+            <button
+              key={tab.key}
+              id={`ops-tab-${tab.key}`}
+              onClick={(e) => {
+                setActiveTab(tab.key as OpsTabKey);
+                const url = new URL(window.location.href);
+                url.searchParams.set("tab", tab.key);
+                window.history.replaceState({}, "", url.toString());
+                e.currentTarget.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+              }}
+              className={cn(
+                "flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition-all duration-200 whitespace-nowrap cursor-pointer shrink-0",
+                activeTab === tab.key
+                  ? "bg-card text-foreground shadow-sm border border-border font-bold ring-1 ring-primary/25 text-primary"
+                  : "text-muted-foreground hover:text-foreground hover:bg-card/60"
+              )}
+            >
+              <i className={cn(tab.icon, activeTab === tab.key ? "text-primary" : "text-muted-foreground")} />
+              <span>{tab.label}</span>
+              {tab.count !== undefined && (
+                <span className={cn(
+                  "ml-1 text-[10px] px-1.5 py-0.2 rounded-full font-mono",
+                  activeTab === tab.key ? "bg-primary/15 text-primary font-bold" : "bg-muted text-muted-foreground"
+                )}>
+                  {tab.count}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+
+        {canScrollTabsRight && (
+          <button
+            type="button"
+            onClick={() => handleScrollTabs("right")}
+            className="absolute -right-2 z-10 w-7 h-7 rounded-full bg-card/95 border border-border shadow-md flex items-center justify-center text-muted-foreground hover:text-foreground cursor-pointer transition-all hover:scale-105"
+            title="Scroll Tabs Right"
+          >
+            <i className="fa-solid fa-chevron-right text-xs" />
+          </button>
+        )}
       </div>
 
       {/* Operations Control Tab View */}
