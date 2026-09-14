@@ -71,7 +71,7 @@ const featureSections: { title: string; items: MenuItem[] }[] = [
 
 export function DashboardClientLayout({ session, menuItems, isPending = false, children }: DashboardClientLayoutProps) {
   const { user } = useAuthContext();
-  const { canAccessModule } = usePermissions();
+  const { canAccessModule, isAdmin, isOPS, role: permRole } = usePermissions();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [tourOpen, setTourOpen] = useState(false);
@@ -123,8 +123,13 @@ export function DashboardClientLayout({ session, menuItems, isPending = false, c
   };
 
   const userName = user?.name || session.userName;
-  const role = user?.role || session.role;
+  const role = user?.role || session.role || permRole;
   const tenantName = (user?.tenantId as any)?.name || session.tenantName;
+  const isEmployeeOrHR = !isAdmin && !isOPS && (
+    role?.toLowerCase() === "employee" || 
+    role?.toLowerCase() === "hr" || 
+    !role
+  );
 
   const isRouteActive = (href: string) => {
     if (href === "/dashboard") return pathname === "/dashboard";
@@ -229,14 +234,17 @@ export function DashboardClientLayout({ session, menuItems, isPending = false, c
                 </div>
                 <div className="space-y-1 mt-1">
                   {allowedInSec.map((item) => {
-                    const active = isRouteActive(item.href);
+                    const itemHref = isEmployeeOrHR && item.key === "clients" ? "/dashboard/clients?tab=projects" : item.href;
+                    const itemName = isEmployeeOrHR && item.key === "clients" ? "Projects & Drive" : item.name;
+                    const itemIcon = isEmployeeOrHR && item.key === "clients" ? "fa-solid fa-folder-tree" : item.icon;
+                    const active = isRouteActive(itemHref);
                     const disabled = isPending && item.href !== "/dashboard";
 
                     if (disabled) {
                       return (
                         <div key={item.href} className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium text-slate-400 dark:text-slate-600 cursor-not-allowed">
-                          <i className={cn(item.icon, "w-4.5 text-center text-sm shrink-0")} />
-                          <span className="flex-1 truncate">{item.name}</span>
+                          <i className={cn(itemIcon, "w-4.5 text-center text-sm shrink-0")} />
+                          <span className="flex-1 truncate">{itemName}</span>
                           <i className="fa-solid fa-lock text-[10px]" />
                         </div>
                       );
@@ -245,7 +253,7 @@ export function DashboardClientLayout({ session, menuItems, isPending = false, c
                     return (
                       <Link
                         key={item.href}
-                        href={item.href}
+                        href={itemHref}
                         onClick={() => setMobileOpen(false)}
                         className={cn(
                           "flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-all duration-150 group",
@@ -254,8 +262,8 @@ export function DashboardClientLayout({ session, menuItems, isPending = false, c
                             : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-[#1f2937]/70"
                         )}
                       >
-                        <i className={cn(item.icon, "w-4.5 text-center text-sm shrink-0", active ? "text-[#00c5a0]" : "text-slate-500 dark:text-slate-400 group-hover:text-slate-900 dark:group-hover:text-white")} />
-                        <span className="flex-1 truncate">{item.name}</span>
+                        <i className={cn(itemIcon, "w-4.5 text-center text-sm shrink-0", active ? "text-[#00c5a0]" : "text-slate-500 dark:text-slate-400 group-hover:text-slate-900 dark:group-hover:text-white")} />
+                        <span className="flex-1 truncate">{itemName}</span>
                         {item.badge && (
                           <span className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded-full", item.badgeColor || "bg-rose-500/20 text-rose-400")}>
                             {item.badge}

@@ -82,6 +82,18 @@ export function usePermissions() {
   const canAccessModule = (moduleKey: string): boolean => {
     if (!user) return false;
     if (isAdmin) return true;
+
+    // OPS Portal (/dashboard/clients) houses both Clients and Projects & Drive.
+    // If checking "clients", allow access if the role has either "clients" OR "projects" enabled.
+    if (moduleKey === "clients") {
+      if (modulePermissions["clients"] === true || modulePermissions["projects"] === true) {
+        return true;
+      }
+      if (modulePermissions["clients"] === false && modulePermissions["projects"] === false) {
+        return false;
+      }
+    }
+
     if (modulePermissions[moduleKey] !== undefined) {
       return Boolean(modulePermissions[moduleKey]);
     }
@@ -89,13 +101,13 @@ export function usePermissions() {
 
     // Default fallback access for modules before explicit customization in settings
     const defaultModulesByRole: Record<string, string[]> = {
-      Employee: ["overview", "team", "calendar", "projects", "chat", "notifications", "referrals", "goals", "hr", "settings"],
-      HR: ["overview", "team", "calendar", "projects", "chat", "notifications", "referrals", "goals", "hr", "it", "analytics", "settings"],
-      Manager: ["overview", "team", "calendar", "projects", "chat", "notifications", "sales", "bd", "referrals", "goals", "hr", "settings"],
-      OPS: ["overview", "team", "calendar", "projects", "chat", "notifications", "clients", "sales", "bd", "finance", "referrals", "goals", "hr", "it", "analytics", "settings"],
+      Employee: ["overview", "team", "calendar", "projects", "clients", "chat", "notifications", "referrals", "goals", "hr", "settings"],
+      HR: ["overview", "team", "calendar", "projects", "clients", "chat", "notifications", "referrals", "goals", "hr", "it", "analytics", "settings"],
+      Manager: ["overview", "team", "calendar", "projects", "clients", "chat", "notifications", "bd", "referrals", "goals", "hr", "settings"],
+      OPS: ["overview", "team", "calendar", "projects", "clients", "bd", "finance", "referrals", "goals", "hr", "it", "analytics", "settings"],
     };
     const roleKey = normalizeRoleKey(user.role);
-    const allowedDefaults = defaultModulesByRole[roleKey] || defaultModulesByRole[user.role] || ["overview", "team", "calendar", "projects", "chat", "notifications", "settings"];
+    const allowedDefaults = defaultModulesByRole[roleKey] || defaultModulesByRole[user.role] || ["overview", "team", "calendar", "projects", "clients", "chat", "notifications", "settings"];
     return allowedDefaults.includes(moduleKey);
   };
 

@@ -13,6 +13,8 @@ export interface IProject extends Document {
   assignType?: "Member" | "Department";
   assignedDepartment?: string;
   members: mongoose.Types.ObjectId[];
+  clientId?: mongoose.Types.ObjectId;
+  clientAccount?: string;
   tenantId: mongoose.Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
@@ -40,6 +42,8 @@ const ProjectSchema = new Schema<IProject>(
     assignType: { type: String, enum: ["Member", "Department"], default: "Member" },
     assignedDepartment: { type: String, trim: true },
     members: [{ type: Schema.Types.ObjectId, ref: "User" }],
+    clientId: { type: Schema.Types.ObjectId, ref: "Client" },
+    clientAccount: { type: String, trim: true },
     tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true, index: true },
   },
   { timestamps: true }

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
 import { connectToDatabase } from "@/lib/db";
 import { Client } from "@/models/Client";
+import { Project } from "@/models/Project";
 import { getUserDataScope } from "@/lib/dataScope";
 import { isSubAdminRole } from "@/lib/roles";
 import mongoose from "mongoose";
@@ -118,6 +119,7 @@ export async function POST(request: Request) {
       }
 
       const insertedClients = await Client.insertMany(validDocs);
+
       return NextResponse.json({
         success: true,
         count: insertedClients.length,

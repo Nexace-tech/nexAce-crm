@@ -22,7 +22,6 @@ export const MODULES: ModuleMeta[] = [
   { key: "projects", name: "Projects, Sprints & Drive", category: "Operations & Delivery", description: "Agile kanban board, drive file storage, and project wiki", icon: "fa-solid fa-folder-tree" },
   { key: "chat", name: "Chat & Messaging", category: "Core & Overview", description: "Realtime workspace channels and direct team chat", icon: "fa-solid fa-comments" },
   { key: "clients", name: "OPS Portal", category: "Operations & Delivery", description: "Operations control, client retainers, HR allocations, external vendors & reports", icon: "fa-solid fa-list-check" },
-  { key: "sales", name: "Sales Workdesk", category: "Growth & Revenue", description: "Full sales pipeline management — deals, stages, and revenue forecasts", icon: "fa-solid fa-handshake" },
   { key: "bd", name: "BD Portal", category: "Growth & Revenue", description: "Business development, leads qualification, proposals pipeline & client deals", icon: "fa-solid fa-briefcase" },
   { key: "finance", name: "Finance Portal", category: "Growth & Revenue", description: "Invoices, expenses, budget tracking, and payroll overview", icon: "fa-solid fa-coins" },
   { key: "referrals", name: "Candidate Referral Pipeline", category: "People & Culture", description: "Employee referral submissions and bonus tracking", icon: "fa-solid fa-link" },
@@ -47,7 +46,6 @@ export type FeatureCategory =
   | "Goals & OKRs"
   | "Analytics"
   | "CRM & Clients"
-  | "Sales Workdesk"
   | "BD & Leads"
   | "Finance & Invoices"
   | "IT & Infrastructure"
@@ -166,17 +164,11 @@ export const FEATURE_ACTIONS: FeatureMeta[] = [
   { key: "createClients", name: "Create & Edit Operations Retainers", category: "CRM & Clients", subGroup: "Operations Retainers", description: "Add new client accounts, set delivery owners & target dates", icon: "fa-solid fa-folder-plus" },
   { key: "manageClients", name: "Manage Retainers & Contact Logs", category: "CRM & Clients", subGroup: "Operations Retainers", description: "Update progress %, health status, and add contact history logs", icon: "fa-solid fa-pen-to-square" },
   { key: "deleteClients", name: "Delete Operations Retainers", category: "CRM & Clients", subGroup: "Operations Retainers", description: "Permanently remove client project retainers from the system", icon: "fa-solid fa-trash-can" },
+  { key: "manageContracts", name: "Manage Contracts & Onboarding", category: "CRM & Clients", subGroup: "Contracts & Onboarding", description: "Manage client contracts, SLAs, e-signatures, and onboarding status", icon: "fa-solid fa-file-contract" },
   { key: "manageHRWorkdesk", name: "Manage HR Allocations", category: "CRM & Clients", subGroup: "Resource Allocation", description: "Allocate staff to projects, manage utilization %, and bench status", icon: "fa-solid fa-user-gear" },
   { key: "manageExternalTeams", name: "Manage External Contractors", category: "CRM & Clients", subGroup: "External Contractors", description: "Track third-party vendors, freelance contracts & hourly rates", icon: "fa-solid fa-users-gear" },
   { key: "viewReports", name: "Access Operations Reports", category: "CRM & Clients", subGroup: "Reports & Data Export", description: "View aggregated project progress and workforce utilization reports", icon: "fa-solid fa-chart-pie" },
   { key: "exportClientData", name: "Export Client Data & Reports", category: "CRM & Clients", subGroup: "Reports & Data Export", description: "Download CSV exports of client accounts and allocation matrices", icon: "fa-solid fa-file-export" },
-
-  // Sales Workdesk
-  { key: "viewSalesWorkdesk", name: "View Deals Pipeline", category: "Sales Workdesk", subGroup: "Sales Pipeline", description: "Access the Sales Workdesk and view all deal cards across stages", icon: "fa-solid fa-handshake" },
-  { key: "manageDeals", name: "Create & Update Deals", category: "Sales Workdesk", subGroup: "Sales Pipeline", description: "Add new deals, update deal values, close dates, and probability", icon: "fa-solid fa-folder-plus" },
-  { key: "deleteDeals", name: "Delete Sales Deals", category: "Sales Workdesk", subGroup: "Sales Pipeline", description: "Remove deal entries from the sales workdesk pipeline", icon: "fa-solid fa-trash-can" },
-  { key: "exportSales", name: "Export Sales Data", category: "Sales Workdesk", subGroup: "Pipeline Reports", description: "Download sales deals pipeline data and revenue summaries", icon: "fa-solid fa-file-csv" },
-  { key: "manageSalesSettings", name: "Manage Sales Configuration", category: "Sales Workdesk", subGroup: "Pipeline Reports", description: "Configure sales pipeline stages, currencies, and revenue targets", icon: "fa-solid fa-sliders" },
 
   // BD & Leads
   { key: "viewBD", name: "View BD Portal & Leads", category: "BD & Leads", subGroup: "Lead Acquisition", description: "Access BD lead lists, client accounts, and lead capture logs", icon: "fa-solid fa-briefcase" },
@@ -232,7 +224,7 @@ export const FEATURE_ACTIONS: FeatureMeta[] = [
 export const FEATURE_CATEGORIES: FeatureCategory[] = [
   "Overview", "Team", "Calendar & Time", "Projects", "Sprints", "Drive",
   "Chat", "HR & Leave", "Appraisals", "Goals & OKRs", "Analytics",
-  "CRM & Clients", "Sales Workdesk", "BD & Leads", "Finance & Invoices", "IT & Infrastructure", "Referrals", "Notifications", "Admin & Users", "Settings",
+  "CRM & Clients", "BD & Leads", "Finance & Invoices", "IT & Infrastructure", "Referrals", "Notifications", "Admin & Users", "Settings",
 ];
 
 export const CATEGORY_COLORS: Record<FeatureCategory, { text: string; bg: string; border: string; badge: string }> = {
@@ -248,7 +240,6 @@ export const CATEGORY_COLORS: Record<FeatureCategory, { text: string; bg: string
   "Goals & OKRs":      { text: "text-primary", bg: "bg-primary/10", border: "border-primary/20", badge: "bg-primary/15 text-primary" },
   "Analytics":         { text: "text-primary", bg: "bg-primary/10", border: "border-primary/20", badge: "bg-primary/15 text-primary" },
   "CRM & Clients":     { text: "text-primary", bg: "bg-primary/10", border: "border-primary/20", badge: "bg-primary/15 text-primary" },
-  "Sales Workdesk":    { text: "text-primary", bg: "bg-primary/10", border: "border-primary/20", badge: "bg-primary/15 text-primary" },
   "BD & Leads":        { text: "text-primary", bg: "bg-primary/10", border: "border-primary/20", badge: "bg-primary/15 text-primary" },
   "Finance & Invoices": { text: "text-primary", bg: "bg-primary/10", border: "border-primary/20", badge: "bg-primary/15 text-primary" },
   "IT & Infrastructure": { text: "text-primary", bg: "bg-primary/10", border: "border-primary/20", badge: "bg-primary/15 text-primary" },
@@ -271,7 +262,6 @@ export const CATEGORY_ICONS: Record<FeatureCategory, string> = {
   "Goals & OKRs":      "fa-solid fa-bullseye",
   "Analytics":         "fa-solid fa-chart-line",
   "CRM & Clients":     "fa-solid fa-handshake",
-  "Sales Workdesk":    "fa-solid fa-handshake",
   "BD & Leads":        "fa-solid fa-briefcase",
   "Finance & Invoices": "fa-solid fa-coins",
   "IT & Infrastructure": "fa-solid fa-terminal",
@@ -327,16 +317,15 @@ const PRESET_TEMPLATES: RolePresetTemplate[] = [
   },
   {
     id: "sales_bd",
-    name: "Sales & BD Revenue Specialist",
+    name: "Business Development Specialist",
     badge: "Growth",
-    description: "Tailored for business development, deals management, proposals, and pipeline forecasting.",
-    icon: "fa-solid fa-handshake",
-    modules: ["overview", "team", "calendar", "chat", "sales", "bd", "referrals", "notifications"],
+    description: "Tailored for business development, leads qualification, proposals pipeline & client deals.",
+    icon: "fa-solid fa-briefcase",
+    modules: ["overview", "team", "calendar", "chat", "bd", "referrals", "notifications"],
     features: [
       "viewKpiWidgets", "viewAnnouncements", "viewTeamDirectory", "viewEmployeeProfiles", "viewOrgChart",
       "logOwnTimesheet", "editOwnTimesheet", "clockInOut",
       "sendChatMessages", "viewMailCenter", "sendEmails", "viewWhatsAppPanel", "sendWhatsAppMessages", "startVirtualHuddles", "joinVirtualHuddles",
-      "viewSalesWorkdesk", "manageDeals", "deleteDeals", "exportSales", "manageSalesSettings",
       "viewBD", "manageLeads", "deleteLeads", "manageProposals", "sendProposals", "manageExecutiveTargets", "exportBD",
       "submitReferral", "viewOwnReferrals", "viewNotifications",
     ],
@@ -384,7 +373,7 @@ const PRESET_TEMPLATES: RolePresetTemplate[] = [
     badge: "Compliance",
     description: "Full visibility across all system records, audit logs, and timelines without edit or delete rights.",
     icon: "fa-solid fa-eye",
-    modules: ["overview", "team", "calendar", "projects", "clients", "sales", "bd", "finance", "goals", "hr", "it", "analytics", "notifications"],
+    modules: ["overview", "team", "calendar", "projects", "clients", "bd", "finance", "goals", "hr", "it", "analytics", "notifications"],
     features: [
       "viewKpiWidgets", "viewShiftOverview", "viewRecentActivity", "viewAnnouncements",
       "viewTeamDirectory", "viewEmployeeProfiles", "viewSalaryData", "viewOrgChart",
@@ -394,7 +383,6 @@ const PRESET_TEMPLATES: RolePresetTemplate[] = [
       "viewAllLeaves", "viewManagerReviews", "viewGoals",
       "viewAnalyticsOverview", "viewPerformanceMetrics", "viewAuditLogs", "exportAuditLogs",
       "viewClients", "viewReports", "exportClientData",
-      "viewSalesWorkdesk", "exportSales",
       "viewBD", "exportBD",
       "viewFinancePortal", "viewExpenseReports", "exportInvoices",
       "viewITPortal", "viewAllReferrals", "viewNotifications",

@@ -82,15 +82,24 @@ interface ExternalMember {
 
 export default function OperationsPage() {
   const searchParams = useSearchParams();
-  const { can, isAdmin, isOPS, canAccessModule, loading: permLoading } = usePermissions();
+  const { can, isAdmin, isOPS, canAccessModule, loading: permLoading, role } = usePermissions();
   const tabParam = searchParams?.get("tab");
+
+  const isEmployee = !isAdmin && !isOPS && (
+    role?.toLowerCase() === "employee" || 
+    role?.toLowerCase() === "hr" || 
+    !can("viewClients")
+  );
+
   const initialTab: OpsTabKey =
-    tabParam === "reports"
-      ? "reports"
-      : tabParam === "projects"
+    tabParam === "projects"
       ? "projects"
       : tabParam === "drive"
       ? "drive"
+      : isEmployee
+      ? "projects"
+      : tabParam === "reports"
+      ? "reports"
       : tabParam === "contracts"
       ? "contracts"
       : tabParam === "external" || tabParam === "external-teams"
@@ -106,6 +115,15 @@ export default function OperationsPage() {
   const [activeTab, setActiveTab] = useState<OpsTabKey>(initialTab);
 
   useEffect(() => {
+    if (isEmployee) {
+      if (tabParam === "drive") {
+        setActiveTab("drive");
+      } else {
+        setActiveTab("projects");
+      }
+      return;
+    }
+
     if (tabParam === "reports") setActiveTab("reports");
     else if (tabParam === "projects") setActiveTab("projects");
     else if (tabParam === "drive") setActiveTab("drive");
@@ -115,7 +133,7 @@ export default function OperationsPage() {
     else if (tabParam === "users") setActiveTab("users");
     else if (tabParam === "shifts") setActiveTab("shifts");
     else if (tabParam === "operations") setActiveTab("operations");
-  }, [tabParam]);
+  }, [tabParam, isEmployee]);
 
   // Toast state (used by ShiftAndStatusTab)
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
@@ -331,6 +349,43 @@ export default function OperationsPage() {
     notes: "",
   });
 
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [kanbanProjectsCount, setKanbanProjectsCount] = useState<number | null>(null);
+
+  const fetchKanbanCount = async () => {
+    try {
+      const res = await fetch("/api/projects");
+      if (res.ok) {
+        const data = await res.json();
+        setKanbanProjectsCount((data.projects || []).length);
+      }
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleSyncProjects = async () => {
+    try {
+      setIsSyncing(true);
+      const res = await fetch("/api/operations/sync-projects", { method: "POST" });
+      if (res.ok) {
+        const data = await res.json();
+        showToast(
+          data.createdProjectsCount > 0 || data.createdClientsCount > 0
+            ? `Synced ${data.createdProjectsCount} Kanban boards & ${data.createdClientsCount} Operations projects!`
+            : "Operations Control & Kanban Boards are fully in sync!"
+        );
+        await Promise.all([fetchProjects(), fetchKanbanCount()]);
+      } else {
+        showToast("Failed to sync projects", "error");
+      }
+    } catch {
+      showToast("Error syncing projects", "error");
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
   const fetchProjects = async () => {
     try {
       setLoading(true);
@@ -379,20 +434,20 @@ export default function OperationsPage() {
 
   useEffect(() => {
     fetchProjects();
+    fetchKanbanCount();
     fetchHrAllocations();
     fetchExternalMembers();
+    // Auto-sync in background on mount
+    fetch("/api/operations/sync-projects", { method: "POST" })
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.createdProjectsCount > 0 || d.createdClientsCount > 0) {
+          fetchProjects();
+          fetchKanbanCount();
+        }
+      })
+      .catch(() => {});
   }, []);
-
-  useEffect(() => {
-    const tabParam = searchParams?.get("tab");
-    if (tabParam === "external" || tabParam === "external-teams") {
-      setActiveTab("external");
-    } else if (tabParam === "hr") {
-      setActiveTab("hr");
-    } else if (tabParam === "operations") {
-      setActiveTab("operations");
-    }
-  }, [searchParams]);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -832,7 +887,7 @@ export default function OperationsPage() {
     });
   }, [externalMembers, externalSearch, externalStatusFilter, externalCategoryFilter]);
 
-  if (!permLoading && !canAccessModule("clients")) {
+  if (!permLoading && !canAccessModule("clients") && !canAccessModule("projects")) {
     return <AccessRestricted moduleName="OPS Portal" icon="fa-solid fa-list-check" />;
   }
 
@@ -856,24 +911,43 @@ export default function OperationsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-primary/20 to-teal-500/20 text-primary flex items-center justify-center border border-primary/20 shadow-sm">
-            <i className="fa-solid fa-list-check text-base" />
+            <i className={cn("text-base", isEmployee ? "fa-solid fa-folder-tree" : "fa-solid fa-list-check")} />
           </div>
           <div>
-            <h1 className="text-xl font-bold text-foreground tracking-tight">OPS Portal</h1>
+            <h1 className="text-xl font-bold text-foreground tracking-tight">
+              {isEmployee ? "Projects & Drive Space" : "OPS Portal"}
+            </h1>
             <p className="text-xs text-muted-foreground">
-              Operations control, projects &amp; drive, contracts &amp; onboarding, HR allocations, external vendors &amp; workspace reports
+              {isEmployee
+                ? "Agile Kanban sprint boards, task workflows, SOP Wiki & Drive file storage"
+                : "Operations control, projects & drive, contracts & onboarding, HR allocations, external vendors & workspace reports"}
             </p>
           </div>
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            <span className="text-[10px] font-semibold">Live Data</span>
-          </div>
+          {!isEmployee && (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="text-[10px] font-semibold">Live Data</span>
+            </div>
+          )}
 
-          {activeTab === "operations" && (
+          {activeTab === "operations" && !isEmployee && (
             <>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleSyncProjects}
+                disabled={isSyncing}
+                className="gap-2 font-semibold h-8 cursor-pointer shadow-2xs"
+                title="Synchronize Operations Control projects with Kanban Boards"
+              >
+                <i className={cn("fa-solid fa-arrows-rotate text-xs text-primary", isSyncing && "animate-spin")} />
+                {isSyncing ? "Syncing..." : "Sync with Kanban"}
+              </Button>
+
               <Button
                 type="button"
                 variant="outline"
@@ -892,13 +966,13 @@ export default function OperationsPage() {
             </>
           )}
 
-          {activeTab === "hr" && (
+          {activeTab === "hr" && !isEmployee && (
             <Button color="primary" size="sm" onClick={() => setShowHrModal(true)} className="gap-2 font-semibold h-8 cursor-pointer">
               <i className="fa-solid fa-user-plus text-xs" /> Allocate Staff Resource
             </Button>
           )}
 
-          {activeTab === "external" && (
+          {activeTab === "external" && !isEmployee && (
             <Button color="primary" size="sm" onClick={() => {
               setEditingExternalMember(null);
               setExternalFormData({
@@ -922,81 +996,82 @@ export default function OperationsPage() {
         </div>
       </div>
 
-      {/* OPS Portal Tab Bar - Styled like IT Portal with Smooth Horizontal Scroll */}
-      <div className="relative flex items-center group">
-        {canScrollTabsLeft && (
-          <button
-            type="button"
-            onClick={() => handleScrollTabs("left")}
-            className="absolute -left-2 z-10 w-7 h-7 rounded-full bg-card/95 border border-border shadow-md flex items-center justify-center text-muted-foreground hover:text-foreground cursor-pointer transition-all hover:scale-105"
-            title="Scroll Tabs Left"
-          >
-            <i className="fa-solid fa-chevron-left text-xs" />
-          </button>
-        )}
-
-        <div
-          ref={tabScrollRef}
-          onScroll={checkTabScroll}
-          onWheel={handleTabWheel}
-          className="flex items-center gap-1.5 p-1 bg-muted/60 rounded-xl border border-border overflow-x-auto scroll-smooth w-full select-none"
-        >
-          {[
-            { key: "operations", label: "Operations Control", icon: "fa-solid fa-list-check", count: projects.length },
-            { key: "projects", label: "Projects & Kanban", icon: "fa-solid fa-folder-tree" },
-            { key: "drive", label: "Drive Space", icon: "fa-solid fa-hard-drive" },
-            { key: "contracts", label: "Contracts & Onboarding", icon: "fa-solid fa-file-contract" },
-            { key: "hr", label: "HR Workdesk", icon: "fa-solid fa-users-gear", count: hrAllocations.length },
-            { key: "external", label: "External Teams", icon: "fa-solid fa-building-user", count: externalMembers.length },
-            { key: "reports", label: "Reports & Data Exports", icon: "fa-solid fa-file-lines" },
-            ...((can("manageUsers") || isAdmin || isOPS) ? [{ key: "users", label: "User Management", icon: "fa-solid fa-users" }] : []),
-            ...((can("manageShifts") || isAdmin || isOPS) ? [{ key: "shifts", label: "Shifts & Status", icon: "fa-solid fa-clock" }] : []),
-          ].map((tab) => (
+      {/* OPS Portal Tab Bar - Rendered for Admin/OPS management navigation (Employees go directly to Projects & Drive workspace) */}
+      {!isEmployee && (
+        <div className="relative flex items-center group">
+          {canScrollTabsLeft && (
             <button
-              key={tab.key}
-              id={`ops-tab-${tab.key}`}
-              onClick={(e) => {
-                setActiveTab(tab.key as OpsTabKey);
-                const url = new URL(window.location.href);
-                url.searchParams.set("tab", tab.key);
-                window.history.replaceState({}, "", url.toString());
-                e.currentTarget.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
-              }}
-              className={cn(
-                "flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition-all duration-200 whitespace-nowrap cursor-pointer shrink-0",
-                activeTab === tab.key
-                  ? "bg-card text-foreground shadow-sm border border-border font-bold ring-1 ring-primary/25 text-primary"
-                  : "text-muted-foreground hover:text-foreground hover:bg-card/60"
-              )}
+              type="button"
+              onClick={() => handleScrollTabs("left")}
+              className="absolute -left-2 z-10 w-7 h-7 rounded-full bg-card/95 border border-border shadow-md flex items-center justify-center text-muted-foreground hover:text-foreground cursor-pointer transition-all hover:scale-105"
+              title="Scroll Tabs Left"
             >
-              <i className={cn(tab.icon, activeTab === tab.key ? "text-primary" : "text-muted-foreground")} />
-              <span>{tab.label}</span>
-              {tab.count !== undefined && (
-                <span className={cn(
-                  "ml-1 text-[10px] px-1.5 py-0.2 rounded-full font-mono",
-                  activeTab === tab.key ? "bg-primary/15 text-primary font-bold" : "bg-muted text-muted-foreground"
-                )}>
-                  {tab.count}
-                </span>
-              )}
+              <i className="fa-solid fa-chevron-left text-xs" />
             </button>
-          ))}
-        </div>
+          )}
 
-        {canScrollTabsRight && (
-          <button
-            type="button"
-            onClick={() => handleScrollTabs("right")}
-            className="absolute -right-2 z-10 w-7 h-7 rounded-full bg-card/95 border border-border shadow-md flex items-center justify-center text-muted-foreground hover:text-foreground cursor-pointer transition-all hover:scale-105"
-            title="Scroll Tabs Right"
+          <div
+            ref={tabScrollRef}
+            onScroll={checkTabScroll}
+            onWheel={handleTabWheel}
+            className="flex items-center gap-1.5 p-1 bg-muted/60 rounded-xl border border-border overflow-x-auto scroll-smooth w-full select-none"
           >
-            <i className="fa-solid fa-chevron-right text-xs" />
-          </button>
-        )}
-      </div>
+            {[
+              { key: "operations", label: "Operations Control", icon: "fa-solid fa-list-check", count: projects.length },
+              { key: "projects", label: "Projects & Kanban", icon: "fa-solid fa-folder-tree", count: kanbanProjectsCount ?? projects.length },
+              { key: "contracts", label: "Contracts & Onboarding", icon: "fa-solid fa-file-contract" },
+              { key: "hr", label: "HR Workdesk", icon: "fa-solid fa-users-gear", count: hrAllocations.length },
+              { key: "external", label: "External Teams", icon: "fa-solid fa-building-user", count: externalMembers.length },
+              { key: "reports", label: "Reports & Data Exports", icon: "fa-solid fa-file-lines" },
+              ...((can("manageUsers") || isAdmin || isOPS) ? [{ key: "users", label: "User Management", icon: "fa-solid fa-users" }] : []),
+              ...((can("manageShifts") || isAdmin || isOPS) ? [{ key: "shifts", label: "Shifts & Status", icon: "fa-solid fa-clock" }] : []),
+            ].map((tab) => (
+              <button
+                key={tab.key}
+                id={`ops-tab-${tab.key}`}
+                onClick={(e) => {
+                  setActiveTab(tab.key as OpsTabKey);
+                  const url = new URL(window.location.href);
+                  url.searchParams.set("tab", tab.key);
+                  window.history.replaceState({}, "", url.toString());
+                  e.currentTarget.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+                }}
+                className={cn(
+                  "flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition-all duration-200 whitespace-nowrap cursor-pointer shrink-0",
+                  activeTab === tab.key
+                    ? "bg-card text-foreground shadow-sm border border-border font-bold ring-1 ring-primary/25 text-primary"
+                    : "text-muted-foreground hover:text-foreground hover:bg-card/60"
+                )}
+              >
+                <i className={cn(tab.icon, activeTab === tab.key ? "text-primary" : "text-muted-foreground")} />
+                <span>{tab.label}</span>
+                {tab.count !== undefined && (
+                  <span className={cn(
+                    "ml-1 text-[10px] px-1.5 py-0.2 rounded-full font-mono",
+                    activeTab === tab.key ? "bg-primary/15 text-primary font-bold" : "bg-muted text-muted-foreground"
+                  )}>
+                    {tab.count}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+
+          {canScrollTabsRight && (
+            <button
+              type="button"
+              onClick={() => handleScrollTabs("right")}
+              className="absolute -right-2 z-10 w-7 h-7 rounded-full bg-card/95 border border-border shadow-md flex items-center justify-center text-muted-foreground hover:text-foreground cursor-pointer transition-all hover:scale-105"
+              title="Scroll Tabs Right"
+            >
+              <i className="fa-solid fa-chevron-right text-xs" />
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Operations Control Tab View */}
-      {activeTab === "operations" && (
+      {activeTab === "operations" && !isEmployee && (
         <div className="space-y-8">
           {/* Metric Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
@@ -1600,13 +1675,13 @@ export default function OperationsPage() {
         </div>
       )}
 
-      {/* Projects & Kanban Tab View */}
-      {activeTab === "projects" && (
-        <ProjectsDriveWorkspace initialTab="kanban" hideHeader={true} />
+      {/* Projects & Kanban Workspace View */}
+      {(activeTab === "projects" || isEmployee) && (
+        <ProjectsDriveWorkspace initialTab={tabParam === "drive" ? "drive" : "kanban"} hideHeader={true} />
       )}
 
-      {/* Drive Space Tab View */}
-      {activeTab === "drive" && (
+      {/* Drive Space Tab View (legacy fallback) */}
+      {activeTab === "drive" && !isEmployee && (
         <ProjectsDriveWorkspace initialTab="drive" hideHeader={true} />
       )}
 

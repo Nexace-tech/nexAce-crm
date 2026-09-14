@@ -106,6 +106,52 @@ export async function POST(request: Request) {
       tenantId: new mongoose.Types.ObjectId(session.tenantId),
     });
 
+    // Auto-sync into Operations Control (Client)
+    try {
+      const { Client } = await import("@/models/Client");
+      const cleanName = (name || "").trim();
+      const clientExists = await Client.findOne({
+        tenantId: new mongoose.Types.ObjectId(session.tenantId),
+        projectName: cleanName,
+      });
+
+      if (!clientExists) {
+        const clientPhase =
+          status === "In Progress"
+            ? "In Delivery"
+            : status === "On Hold"
+            ? "On Hold"
+            : status === "Completed"
+            ? "Closed"
+            : "In Delivery";
+
+        await Client.create({
+          tenantId: new mongoose.Types.ObjectId(session.tenantId),
+          uploadedBy: new mongoose.Types.ObjectId(session.userId),
+          name: cleanName,
+          company: cleanName,
+          clientAccount: description?.slice(0, 50) || "Operations Internal",
+          projectId: `CLP-${Date.now().toString().slice(-4)}`,
+          venture: assignedDepartment || "Ace Consultancys",
+          projectName: cleanName,
+          deliveryOwner: session.userName || "Operations Admin",
+          phase: clientPhase,
+          priority: priority === "Urgent" || priority === "High" ? "High" : "Medium",
+          startDate: startDate ? new Date(startDate) : new Date(),
+          targetEndDate: dueDate ? new Date(dueDate) : undefined,
+          health: "Green",
+          billingType: "Project",
+          monthlyValue: Number(cost) || 15000,
+          estHours: 40,
+          actualHours: 0,
+          progressPercent: 0,
+          notes: description || "",
+        });
+      }
+    } catch (e) {
+      console.warn("Could not auto-create operations client:", e);
+    }
+
     return NextResponse.json({ success: true, project: newProject }, { status: 201 });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Internal Server Error";

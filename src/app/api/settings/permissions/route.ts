@@ -13,7 +13,6 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, Record<string, boolean>> =
     projects: true,
     chat: true,
     clients: true,
-    sales: true,
     bd: true,
     finance: true,
     referrals: true,
@@ -30,8 +29,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, Record<string, boolean>> =
     calendar: true,
     projects: true,
     chat: true,
-    clients: false,
-    sales: true,
+    clients: true,
     bd: true,
     finance: false,
     referrals: true,
@@ -48,8 +46,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, Record<string, boolean>> =
     calendar: true,
     projects: true,
     chat: true,
-    clients: false,
-    sales: false,
+    clients: true,
     bd: false,
     finance: false,
     referrals: true,
@@ -66,8 +63,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, Record<string, boolean>> =
     calendar: true,
     projects: true,
     chat: true,
-    clients: false,
-    sales: false,
+    clients: true,
     bd: false,
     finance: false,
     referrals: true,
@@ -84,35 +80,33 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, Record<string, boolean>> =
 export const DEFAULT_FEATURE_PERMISSIONS: Record<string, Record<string, boolean>> = {
   OPS: {
     // Overview
-    viewKpiWidgets: true, viewShiftOverview: true, viewAnnouncements: true, createAnnouncements: true, viewRecentActivity: true,
+    viewKpiWidgets: true, viewShiftOverview: true, viewRecentActivity: true, viewAnnouncements: true, createAnnouncements: true,
     // Team
-    viewTeamDirectory: true, viewEmployeeProfiles: true, inviteTeamMembers: true, editEmployeeProfiles: true, deactivateEmployees: true, viewSalaryData: true, viewOrgChart: true,
+    viewTeamDirectory: true, viewEmployeeProfiles: true, editEmployeeProfiles: true, inviteTeamMembers: true, deactivateEmployees: true, viewSalaryData: true, viewOrgChart: true,
     // Calendar & Time
-    logOwnTimesheet: true, editOwnTimesheet: true, viewTeamTimesheets: true, approveTimesheets: true, manageShifts: false, exportTimesheets: true, viewShiftCalendar: true, clockInOut: true,
+    logOwnTimesheet: true, editOwnTimesheet: true, viewTeamTimesheets: true, approveTimesheets: true, exportTimesheets: true, manageShifts: true, viewShiftCalendar: true, clockInOut: true,
     // Projects
     viewProjects: true, createProjects: true, deleteProjects: true, assignTasksToOthers: true, changeTaskStatus: true, commentOnTasks: true, deleteTaskComments: true, manageProjectWiki: true, viewProjectGantt: true, exportProjectData: true,
     // Sprints
-    createSprints: true, deleteSprints: true, moveBetweenSprints: true, completeSprints: true,
+    createSprints: true, moveBetweenSprints: true, completeSprints: true, deleteSprints: true,
     // Drive
-    viewDriveFiles: true, uploadDriveFiles: true, downloadDriveFiles: true, deleteDriveFiles: true, bulkDeleteDriveFiles: true, shareDriveFiles: true,
+    viewDriveFiles: true, uploadDriveFiles: true, downloadDriveFiles: true, shareDriveFiles: true, deleteDriveFiles: true, bulkDeleteDriveFiles: true,
     // Chat
     sendChatMessages: true, createChatChannels: true, deleteChatChannels: true, pinChatMessages: true, deleteOthersChatMessages: true, viewMailCenter: true, sendEmails: true, deleteEmails: true, viewWhatsAppPanel: true, sendWhatsAppMessages: true, startVirtualHuddles: true, joinVirtualHuddles: true,
     // HR & Leave
-    applyLeave: true, viewOwnLeaveStatus: true, viewTeamLeave: true, approveLeave: true, manageOnboarding: true, viewHRCases: true, createHRCases: true, viewHROnboarding: true, manageHRCases: true,
+    viewOwnLeaves: true, applyLeaves: true, viewAllLeaves: true, approveLeaves: true, manageCompanyChecklists: true, manageHRVault: true, manageHRCases: true,
     // Appraisals
-    viewOwnAppraisal: true, submitSelfReview: true, reviewTeamAppraisals: true, manageAppraisalCycles: true,
+    viewOwnAppraisals: true, submitSelfReview: true, viewManagerReviews: true, createAppraisalCycles: true,
     // Goals & OKRs
-    viewGoals: true, createGoals: true, editGoals: true, deleteGoals: true, sendKudos: true, manageSurveys: true, viewSurveyResults: true, submitSurveyResponses: true,
+    viewGoals: true, createGoals: true, manageGoals: true, sendKudos: true, submitSurvey: true, createPulseSurveys: true,
     // Analytics
-    viewAnalyticsDashboard: true, viewAuditLogs: true, exportReports: true, viewSecurityEvents: true,
+    viewAnalyticsOverview: true, viewPerformanceMetrics: true, viewAuditLogs: true, exportAuditLogs: true,
     // CRM & Clients
-    viewClients: true, createClients: true, editClients: true, deleteClients: true, viewDeals: true, manageDeals: true, exportClientData: true, manageClientContacts: true,
-    // Sales Workdesk
-    viewSalesWorkdesk: true, createSalesDeals: true, editSalesDeals: true, deleteSalesDeals: true, changeDealStages: true,
+    viewClients: true, createClients: true, manageClients: true, deleteClients: true, manageContracts: true, manageHRWorkdesk: true, manageExternalTeams: true, viewReports: true, exportClientData: true,
     // BD & Leads
-    viewBD: true, createLeads: true, editLeads: true, deleteLeads: true, importLeads: true, exportLeads: true, viewProposals: true, createProposals: true, editProposals: true, deleteProposals: true, sendProposals: true,
+    viewBD: true, manageLeads: true, deleteLeads: true, manageProposals: true, sendProposals: true, manageExecutiveTargets: true, exportBD: true,
     // Finance & Invoices
-    viewFinancePortal: true, viewInvoices: true, createInvoices: true, approveInvoices: true, confirmInvoicePayments: true, exportInvoices: true, manageExpenses: true, viewExpenseReports: true,
+    viewFinancePortal: true, createInvoices: true, approveInvoices: true, confirmInvoicePayments: true, exportInvoices: true, manageExpenses: true, viewExpenseReports: true,
     // IT & Infrastructure
     viewITPortal: true, manageITAccess: true, manageITSubscriptions: true, manageITDevices: true, manageITInvoices: true,
     // Referrals
@@ -126,35 +120,33 @@ export const DEFAULT_FEATURE_PERMISSIONS: Record<string, Record<string, boolean>
   },
   Manager: {
     // Overview
-    viewKpiWidgets: true, viewShiftOverview: true, viewAnnouncements: true, createAnnouncements: true, viewRecentActivity: true,
+    viewKpiWidgets: true, viewShiftOverview: true, viewRecentActivity: true, viewAnnouncements: true, createAnnouncements: true,
     // Team
-    viewTeamDirectory: true, viewEmployeeProfiles: true, inviteTeamMembers: false, editEmployeeProfiles: false, deactivateEmployees: false, viewSalaryData: false, viewOrgChart: true,
+    viewTeamDirectory: true, viewEmployeeProfiles: true, editEmployeeProfiles: false, inviteTeamMembers: false, deactivateEmployees: false, viewSalaryData: false, viewOrgChart: true,
     // Calendar & Time
-    logOwnTimesheet: true, editOwnTimesheet: true, viewTeamTimesheets: true, approveTimesheets: true, manageShifts: true, exportTimesheets: true, viewShiftCalendar: true, clockInOut: true,
+    logOwnTimesheet: true, editOwnTimesheet: true, viewTeamTimesheets: true, approveTimesheets: true, exportTimesheets: true, manageShifts: true, viewShiftCalendar: true, clockInOut: true,
     // Projects
     viewProjects: true, createProjects: true, deleteProjects: false, assignTasksToOthers: true, changeTaskStatus: true, commentOnTasks: true, deleteTaskComments: false, manageProjectWiki: true, viewProjectGantt: true, exportProjectData: true,
     // Sprints
-    createSprints: true, deleteSprints: false, moveBetweenSprints: true, completeSprints: true,
+    createSprints: true, moveBetweenSprints: true, completeSprints: true, deleteSprints: false,
     // Drive
-    viewDriveFiles: true, uploadDriveFiles: true, downloadDriveFiles: true, deleteDriveFiles: true, bulkDeleteDriveFiles: false, shareDriveFiles: true,
+    viewDriveFiles: true, uploadDriveFiles: true, downloadDriveFiles: true, shareDriveFiles: true, deleteDriveFiles: true, bulkDeleteDriveFiles: false,
     // Chat
     sendChatMessages: true, createChatChannels: true, deleteChatChannels: false, pinChatMessages: true, deleteOthersChatMessages: false, viewMailCenter: true, sendEmails: true, deleteEmails: false, viewWhatsAppPanel: true, sendWhatsAppMessages: true, startVirtualHuddles: true, joinVirtualHuddles: true,
     // HR & Leave
-    applyLeave: true, viewOwnLeaveStatus: true, viewTeamLeave: true, approveLeave: true, manageOnboarding: false, viewHRCases: false, createHRCases: false, viewHROnboarding: true, manageHRCases: false,
+    viewOwnLeaves: true, applyLeaves: true, viewAllLeaves: true, approveLeaves: true, manageCompanyChecklists: false, manageHRVault: false, manageHRCases: false,
     // Appraisals
-    viewOwnAppraisal: true, submitSelfReview: true, reviewTeamAppraisals: true, manageAppraisalCycles: false,
+    viewOwnAppraisals: true, submitSelfReview: true, viewManagerReviews: true, createAppraisalCycles: false,
     // Goals & OKRs
-    viewGoals: true, createGoals: true, editGoals: true, deleteGoals: false, sendKudos: true, manageSurveys: false, viewSurveyResults: true, submitSurveyResponses: true,
+    viewGoals: true, createGoals: true, manageGoals: false, sendKudos: true, submitSurvey: true, createPulseSurveys: false,
     // Analytics
-    viewAnalyticsDashboard: true, viewAuditLogs: false, exportReports: true, viewSecurityEvents: false,
+    viewAnalyticsOverview: true, viewPerformanceMetrics: true, viewAuditLogs: false, exportAuditLogs: false,
     // CRM & Clients
-    viewClients: false, createClients: false, editClients: false, deleteClients: false, viewDeals: false, manageDeals: false, exportClientData: false, manageClientContacts: false,
-    // Sales Workdesk
-    viewSalesWorkdesk: true, createSalesDeals: true, editSalesDeals: true, deleteSalesDeals: false, changeDealStages: true,
+    viewClients: false, createClients: false, manageClients: false, deleteClients: false, manageContracts: false, manageHRWorkdesk: false, manageExternalTeams: false, viewReports: false, exportClientData: false,
     // BD & Leads
-    viewBD: true, createLeads: true, editLeads: true, deleteLeads: false, importLeads: true, exportLeads: true, viewProposals: true, createProposals: true, editProposals: true, deleteProposals: false, sendProposals: true,
+    viewBD: true, manageLeads: true, deleteLeads: false, manageProposals: true, sendProposals: true, manageExecutiveTargets: false, exportBD: true,
     // Finance & Invoices
-    viewFinancePortal: false, viewInvoices: false, createInvoices: true, approveInvoices: false, confirmInvoicePayments: false, exportInvoices: true, manageExpenses: false, viewExpenseReports: false,
+    viewFinancePortal: false, createInvoices: true, approveInvoices: false, confirmInvoicePayments: false, exportInvoices: true, manageExpenses: false, viewExpenseReports: false,
     // IT & Infrastructure
     viewITPortal: false, manageITAccess: false, manageITSubscriptions: false, manageITDevices: false, manageITInvoices: false,
     // Referrals
@@ -168,35 +160,33 @@ export const DEFAULT_FEATURE_PERMISSIONS: Record<string, Record<string, boolean>
   },
   HR: {
     // Overview
-    viewKpiWidgets: true, viewShiftOverview: true, viewAnnouncements: true, createAnnouncements: false, viewRecentActivity: true,
+    viewKpiWidgets: true, viewShiftOverview: true, viewRecentActivity: true, viewAnnouncements: true, createAnnouncements: false,
     // Team
-    viewTeamDirectory: true, viewEmployeeProfiles: true, inviteTeamMembers: false, editEmployeeProfiles: false, deactivateEmployees: false, viewSalaryData: false, viewOrgChart: true,
+    viewTeamDirectory: true, viewEmployeeProfiles: true, editEmployeeProfiles: true, inviteTeamMembers: true, deactivateEmployees: false, viewSalaryData: true, viewOrgChart: true,
     // Calendar & Time
-    logOwnTimesheet: true, editOwnTimesheet: true, viewTeamTimesheets: true, approveTimesheets: true, manageShifts: false, exportTimesheets: true, viewShiftCalendar: true, clockInOut: true,
+    logOwnTimesheet: true, editOwnTimesheet: true, viewTeamTimesheets: true, approveTimesheets: true, exportTimesheets: true, manageShifts: false, viewShiftCalendar: true, clockInOut: true,
     // Projects
-    viewProjects: true, createProjects: false, deleteProjects: false, assignTasksToOthers: false, changeTaskStatus: false, commentOnTasks: true, deleteTaskComments: false, manageProjectWiki: true, viewProjectGantt: false, exportProjectData: false,
+    viewProjects: true, createProjects: false, deleteProjects: false, assignTasksToOthers: false, changeTaskStatus: false, commentOnTasks: true, deleteTaskComments: false, manageProjectWiki: true, viewProjectGantt: true, exportProjectData: false,
     // Sprints
-    createSprints: false, deleteSprints: false, moveBetweenSprints: false, completeSprints: false,
+    createSprints: false, moveBetweenSprints: false, completeSprints: false, deleteSprints: false,
     // Drive
-    viewDriveFiles: true, uploadDriveFiles: true, downloadDriveFiles: true, deleteDriveFiles: false, bulkDeleteDriveFiles: false, shareDriveFiles: true,
+    viewDriveFiles: true, uploadDriveFiles: true, downloadDriveFiles: true, shareDriveFiles: true, deleteDriveFiles: false, bulkDeleteDriveFiles: false,
     // Chat
     sendChatMessages: true, createChatChannels: false, deleteChatChannels: false, pinChatMessages: false, deleteOthersChatMessages: false, viewMailCenter: true, sendEmails: true, deleteEmails: false, viewWhatsAppPanel: false, sendWhatsAppMessages: false, startVirtualHuddles: true, joinVirtualHuddles: true,
     // HR & Leave
-    applyLeave: true, viewOwnLeaveStatus: true, viewTeamLeave: true, approveLeave: true, manageOnboarding: true, viewHRCases: true, createHRCases: true, viewHROnboarding: true, manageHRCases: true,
+    viewOwnLeaves: true, applyLeaves: true, viewAllLeaves: true, approveLeaves: true, manageCompanyChecklists: true, manageHRVault: true, manageHRCases: true,
     // Appraisals
-    viewOwnAppraisal: true, submitSelfReview: true, reviewTeamAppraisals: true, manageAppraisalCycles: true,
+    viewOwnAppraisals: true, submitSelfReview: true, viewManagerReviews: true, createAppraisalCycles: true,
     // Goals & OKRs
-    viewGoals: true, createGoals: false, editGoals: false, deleteGoals: false, sendKudos: true, manageSurveys: true, viewSurveyResults: true, submitSurveyResponses: true,
+    viewGoals: true, createGoals: false, manageGoals: false, sendKudos: true, submitSurvey: true, createPulseSurveys: true,
     // Analytics
-    viewAnalyticsDashboard: true, viewAuditLogs: false, exportReports: true, viewSecurityEvents: false,
+    viewAnalyticsOverview: true, viewPerformanceMetrics: true, viewAuditLogs: false, exportAuditLogs: false,
     // CRM & Clients
-    viewClients: false, createClients: false, editClients: false, deleteClients: false, viewDeals: false, manageDeals: false, exportClientData: false, manageClientContacts: false,
-    // Sales Workdesk
-    viewSalesWorkdesk: false, createSalesDeals: false, editSalesDeals: false, deleteSalesDeals: false, changeDealStages: false,
+    viewClients: false, createClients: false, manageClients: false, deleteClients: false, manageContracts: true, manageHRWorkdesk: true, manageExternalTeams: false, viewReports: false, exportClientData: false,
     // BD & Leads
-    viewBD: false, createLeads: false, editLeads: false, deleteLeads: false, importLeads: false, exportLeads: false, viewProposals: false, createProposals: false, editProposals: false, deleteProposals: false, sendProposals: false,
+    viewBD: false, manageLeads: false, deleteLeads: false, manageProposals: false, sendProposals: false, manageExecutiveTargets: false, exportBD: false,
     // Finance & Invoices
-    viewFinancePortal: false, viewInvoices: false, createInvoices: true, approveInvoices: false, confirmInvoicePayments: false, exportInvoices: true, manageExpenses: false, viewExpenseReports: false,
+    viewFinancePortal: false, createInvoices: false, approveInvoices: false, confirmInvoicePayments: false, exportInvoices: false, manageExpenses: false, viewExpenseReports: false,
     // IT & Infrastructure
     viewITPortal: true, manageITAccess: false, manageITSubscriptions: false, manageITDevices: true, manageITInvoices: false,
     // Referrals
@@ -210,35 +200,33 @@ export const DEFAULT_FEATURE_PERMISSIONS: Record<string, Record<string, boolean>
   },
   Employee: {
     // Overview
-    viewKpiWidgets: true, viewShiftOverview: false, viewAnnouncements: true, createAnnouncements: false, viewRecentActivity: true,
+    viewKpiWidgets: true, viewShiftOverview: false, viewRecentActivity: true, viewAnnouncements: true, createAnnouncements: false,
     // Team
-    viewTeamDirectory: true, viewEmployeeProfiles: true, inviteTeamMembers: false, editEmployeeProfiles: false, deactivateEmployees: false, viewSalaryData: false, viewOrgChart: true,
+    viewTeamDirectory: true, viewEmployeeProfiles: true, editEmployeeProfiles: false, inviteTeamMembers: false, deactivateEmployees: false, viewSalaryData: false, viewOrgChart: true,
     // Calendar & Time
-    logOwnTimesheet: true, editOwnTimesheet: true, viewTeamTimesheets: false, approveTimesheets: false, manageShifts: false, exportTimesheets: false, viewShiftCalendar: true, clockInOut: true,
+    logOwnTimesheet: true, editOwnTimesheet: true, viewTeamTimesheets: false, approveTimesheets: false, exportTimesheets: false, manageShifts: false, viewShiftCalendar: true, clockInOut: true,
     // Projects
     viewProjects: true, createProjects: false, deleteProjects: false, assignTasksToOthers: false, changeTaskStatus: true, commentOnTasks: true, deleteTaskComments: false, manageProjectWiki: false, viewProjectGantt: true, exportProjectData: false,
     // Sprints
-    createSprints: false, deleteSprints: false, moveBetweenSprints: false, completeSprints: false,
+    createSprints: false, moveBetweenSprints: false, completeSprints: false, deleteSprints: false,
     // Drive
-    viewDriveFiles: true, uploadDriveFiles: true, downloadDriveFiles: true, deleteDriveFiles: false, bulkDeleteDriveFiles: false, shareDriveFiles: true,
+    viewDriveFiles: true, uploadDriveFiles: true, downloadDriveFiles: true, shareDriveFiles: true, deleteDriveFiles: false, bulkDeleteDriveFiles: false,
     // Chat
     sendChatMessages: true, createChatChannels: false, deleteChatChannels: false, pinChatMessages: false, deleteOthersChatMessages: false, viewMailCenter: false, sendEmails: false, deleteEmails: false, viewWhatsAppPanel: false, sendWhatsAppMessages: false, startVirtualHuddles: false, joinVirtualHuddles: true,
     // HR & Leave
-    applyLeave: true, viewOwnLeaveStatus: true, viewTeamLeave: false, approveLeave: false, manageOnboarding: false, viewHRCases: false, createHRCases: false, viewHROnboarding: false, manageHRCases: false,
+    viewOwnLeaves: true, applyLeaves: true, viewAllLeaves: false, approveLeaves: false, manageCompanyChecklists: false, manageHRVault: false, manageHRCases: false,
     // Appraisals
-    viewOwnAppraisal: true, submitSelfReview: true, reviewTeamAppraisals: false, manageAppraisalCycles: false,
+    viewOwnAppraisals: true, submitSelfReview: true, viewManagerReviews: false, createAppraisalCycles: false,
     // Goals & OKRs
-    viewGoals: true, createGoals: false, editGoals: false, deleteGoals: false, sendKudos: true, manageSurveys: false, viewSurveyResults: false, submitSurveyResponses: true,
+    viewGoals: true, createGoals: false, manageGoals: false, sendKudos: true, submitSurvey: true, createPulseSurveys: false,
     // Analytics
-    viewAnalyticsDashboard: false, viewAuditLogs: false, exportReports: false, viewSecurityEvents: false,
+    viewAnalyticsOverview: false, viewPerformanceMetrics: false, viewAuditLogs: false, exportAuditLogs: false,
     // CRM & Clients
-    viewClients: false, createClients: false, editClients: false, deleteClients: false, viewDeals: false, manageDeals: false, exportClientData: false, manageClientContacts: false,
-    // Sales Workdesk
-    viewSalesWorkdesk: false, createSalesDeals: false, editSalesDeals: false, deleteSalesDeals: false, changeDealStages: false,
+    viewClients: false, createClients: false, manageClients: false, deleteClients: false, manageContracts: false, manageHRWorkdesk: false, manageExternalTeams: false, viewReports: false, exportClientData: false,
     // BD & Leads
-    viewBD: false, createLeads: false, editLeads: false, deleteLeads: false, importLeads: false, exportLeads: false, viewProposals: false, createProposals: false, editProposals: false, deleteProposals: false, sendProposals: false,
+    viewBD: false, manageLeads: false, deleteLeads: false, manageProposals: false, sendProposals: false, manageExecutiveTargets: false, exportBD: false,
     // Finance & Invoices
-    viewFinancePortal: false, viewInvoices: false, createInvoices: true, approveInvoices: false, confirmInvoicePayments: false, exportInvoices: true, manageExpenses: false, viewExpenseReports: false,
+    viewFinancePortal: false, createInvoices: false, approveInvoices: false, confirmInvoicePayments: false, exportInvoices: false, manageExpenses: false, viewExpenseReports: false,
     // IT & Infrastructure
     viewITPortal: false, manageITAccess: false, manageITSubscriptions: false, manageITDevices: false, manageITInvoices: false,
     // Referrals
@@ -307,9 +295,52 @@ export async function GET() {
       }
     });
 
-    // Ensure HR role has Projects module access enabled by default
+    // Clean up obsolete sales module/features and ensure proper defaults for all roles
+    Object.keys(permissionsMap).forEach((roleKey) => {
+      if (permissionsMap[roleKey]) {
+        delete (permissionsMap[roleKey] as any).sales;
+      }
+    });
+
+    Object.keys(featurePermissionsMap).forEach((roleKey) => {
+      const fMap = featurePermissionsMap[roleKey];
+      if (fMap) {
+        // Clean up obsolete sales features
+        delete (fMap as any).viewSalesWorkdesk;
+        delete (fMap as any).createSalesDeals;
+        delete (fMap as any).editSalesDeals;
+        delete (fMap as any).deleteSalesDeals;
+        delete (fMap as any).changeDealStages;
+        delete (fMap as any).manageDeals;
+        delete (fMap as any).exportSales;
+        delete (fMap as any).manageSalesSettings;
+
+        // Apply defaults for newly introduced granular permissions if undefined
+        const roleDefaults = DEFAULT_FEATURE_PERMISSIONS[roleKey] || DEFAULT_FEATURE_PERMISSIONS.Employee;
+        Object.keys(roleDefaults).forEach((fKey) => {
+          if (fMap[fKey] === undefined) {
+            fMap[fKey] = roleDefaults[fKey];
+          }
+        });
+      }
+    });
+
+    // Ensure Projects & Drive access for HR and Employee
     if (permissionsMap.HR) {
       permissionsMap.HR.projects = true;
+    }
+    if (permissionsMap.Employee) {
+      permissionsMap.Employee.projects = true;
+    }
+    if (featurePermissionsMap.HR) {
+      featurePermissionsMap.HR.viewProjects = true;
+      featurePermissionsMap.HR.manageContracts = true;
+      featurePermissionsMap.HR.manageHRWorkdesk = true;
+      featurePermissionsMap.HR.viewClients = false;
+    }
+    if (featurePermissionsMap.Employee) {
+      featurePermissionsMap.Employee.viewProjects = true;
+      featurePermissionsMap.Employee.viewClients = false;
     }
 
     const customRoles = dbPermissions.filter((d) => d.isCustom).map((d) => d.role);
