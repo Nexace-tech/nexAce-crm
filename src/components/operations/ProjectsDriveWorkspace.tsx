@@ -172,12 +172,28 @@ export function ProjectsDriveWorkspace({ initialTab, hideHeader = false }: Proje
   const [uploadName, setUploadName] = useState("");
   const [driveFolder, setDriveFolder] = useState<string>("/");
   const [deleteConfirmFile, setDeleteConfirmFile] = useState<any | null>(null);
+  const [editingFile, setEditingFile] = useState<{ _id: string; name: string; folder: string } | null>(null);
+  const [isUpdatingFile, setIsUpdatingFile] = useState<boolean>(false);
 
   // Multi-select & Batch operations & Preview Lightbox state
   const [selectedDriveFileIds, setSelectedDriveFileIds] = useState<string[]>([]);
   const [previewFile, setPreviewFile] = useState<any | null>(null);
   const [showBatchDeleteModal, setShowBatchDeleteModal] = useState<boolean>(false);
   const [isDeletingBatch, setIsDeletingBatch] = useState<boolean>(false);
+
+  // Enhanced Drive Space States
+  const [driveViewMode, setDriveViewMode] = useState<"grid" | "list">(() => {
+    if (typeof window !== "undefined") {
+      return (localStorage.getItem("drive_view_mode") as "grid" | "list") || "grid";
+    }
+    return "grid";
+  });
+  const [driveFolderFilter, setDriveFolderFilter] = useState<string>("All");
+  const [isDraggingFile, setIsDraggingFile] = useState<boolean>(false);
+  const [isUploadingFile, setIsUploadingFile] = useState<boolean>(false);
+  const [copiedFileId, setCopiedFileId] = useState<string | null>(null);
+  const [showUploadPanel, setShowUploadPanel] = useState<boolean>(true);
+  const driveFileInputRef = useRef<HTMLInputElement>(null);
 
   // Drive Files Filtering & Sorting State
   const [driveSearch, setDriveSearch] = useState<string>("");
@@ -471,11 +487,12 @@ export function ProjectsDriveWorkspace({ initialTab, hideHeader = false }: Proje
     }
   };
 
-  const handleFileUpload = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleFileUpload = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     if (!uploadFile) return;
 
     try {
+      setIsUploadingFile(true);
       const formData = new FormData();
       formData.append("file", uploadFile);
       formData.append("fileName", uploadName || uploadFile.name);
@@ -487,9 +504,12 @@ export function ProjectsDriveWorkspace({ initialTab, hideHeader = false }: Proje
       });
 
       if (res.ok) {
-        showToast("File uploaded successfully!", "success");
+        showToast("File uploaded successfully to Drive Space!", "success");
         setUploadFile(null);
         setUploadName("");
+        if (driveFileInputRef.current) {
+          driveFileInputRef.current.value = "";
+        }
         await fetchDriveFiles();
         fetchActivityLogs();
       } else {
@@ -498,6 +518,58 @@ export function ProjectsDriveWorkspace({ initialTab, hideHeader = false }: Proje
       }
     } catch (e) {
       showToast("File upload error", "error");
+    } finally {
+      setIsUploadingFile(false);
+    }
+  };
+
+  const handleUpdateFile = async () => {
+    if (!editingFile) return;
+    try {
+      setIsUpdatingFile(true);
+      const res = await fetch("/api/drive", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fileId: editingFile._id,
+          name: editingFile.name,
+          folder: editingFile.folder,
+        }),
+      });
+
+      if (res.ok) {
+        showToast("File updated successfully!", "success");
+        setEditingFile(null);
+        await fetchDriveFiles();
+        fetchActivityLogs();
+      } else {
+        const err = await res.json();
+        showToast(err.error || "Failed to update file", "error");
+      }
+    } catch (e) {
+      showToast("Error updating file", "error");
+    } finally {
+      setIsUpdatingFile(false);
+    }
+  };
+
+  const handleCopyFileLink = (file: any) => {
+    const downloadUrl = `${window.location.origin}/api/drive/download?fileId=${file._id}`;
+    if (typeof navigator !== "undefined" && navigator.clipboard) {
+      navigator.clipboard.writeText(downloadUrl).then(() => {
+        setCopiedFileId(file._id);
+        showToast(`Download link copied to clipboard!`, "success");
+        setTimeout(() => setCopiedFileId(null), 2500);
+      }).catch(() => {
+        showToast("Could not copy link to clipboard", "error");
+      });
+    }
+  };
+
+  const handleToggleDriveView = (mode: "grid" | "list") => {
+    setDriveViewMode(mode);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("drive_view_mode", mode);
     }
   };
 
@@ -511,6 +583,7 @@ export function ProjectsDriveWorkspace({ initialTab, hideHeader = false }: Proje
         showToast("File deleted successfully!", "success");
         setDeleteConfirmFile(null);
         setSelectedDriveFileIds((prev) => prev.filter((id) => id !== fileId));
+        if (previewFile?._id === fileId) setPreviewFile(null);
         await fetchDriveFiles();
         fetchActivityLogs();
       } else {
@@ -530,6 +603,57 @@ export function ProjectsDriveWorkspace({ initialTab, hideHeader = false }: Proje
 
   const driveUploaders = useMemo(() => {
     return ["All", ...Array.from(new Set(driveFiles.map((f) => f.uploadedBy?.name).filter(Boolean)))];
+  }, [driveFiles]);
+
+  const driveFolders = useMemo(() => {
+    const folders = new Set<string>();
+    driveFiles.forEach((f) => {
+      const folderName = (f.folder || "/").trim();
+      if (folderName) folders.add(folderName);
+    });
+    return ["All", ...Array.from(folders)];
+  }, [driveFiles]);
+
+  const driveStats = useMemo(() => {
+    let totalBytes = 0;
+    let imgCount = 0;
+    let docCount = 0;
+    let sheetCount = 0;
+    let otherCount = 0;
+
+    driveFiles.forEach((file) => {
+      const bytes = file.size || 0;
+      totalBytes += bytes;
+      const ext = file.name?.split(".").pop()?.toLowerCase() || "";
+      const mime = file.mimeType || "";
+      if (mime.startsWith("image/") || ["png", "jpg", "jpeg", "webp", "gif", "svg"].includes(ext)) {
+        imgCount++;
+      } else if (ext === "pdf" || mime.includes("word") || ["doc", "docx", "txt", "rtf"].includes(ext)) {
+        docCount++;
+      } else if (["xls", "xlsx", "csv"].includes(ext) || mime.includes("sheet")) {
+        sheetCount++;
+      } else {
+        otherCount++;
+      }
+    });
+
+    const formatBytes = (bytes: number) => {
+      if (bytes === 0) return "0 KB";
+      const k = 1024;
+      const sizes = ["B", "KB", "MB", "GB"];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
+    };
+
+    return {
+      totalCount: driveFiles.length,
+      totalFormatted: formatBytes(totalBytes),
+      totalBytes,
+      imgCount,
+      docCount,
+      sheetCount,
+      otherCount,
+    };
   }, [driveFiles]);
 
   const filteredDriveFiles = useMemo(() => {
@@ -560,8 +684,9 @@ export function ProjectsDriveWorkspace({ initialTab, hideHeader = false }: Proje
       }
 
       const matchesUploader = driveUploaderFilter === "All" || uploaderName === driveUploaderFilter;
+      const matchesFolder = driveFolderFilter === "All" || (file.folder || "/") === driveFolderFilter;
 
-      return matchesSearch && matchesType && matchesUploader;
+      return matchesSearch && matchesType && matchesUploader && matchesFolder;
     }).sort((a, b) => {
       if (driveSortBy === "oldest") return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
       if (driveSortBy === "name-asc") return a.name.localeCompare(b.name);
@@ -572,7 +697,7 @@ export function ProjectsDriveWorkspace({ initialTab, hideHeader = false }: Proje
       if (driveSortBy === "size-asc") return (a.size || 0) - (b.size || 0);
       return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     });
-  }, [driveFiles, driveSearch, driveTypeFilter, driveUploaderFilter, driveSortBy]);
+  }, [driveFiles, driveSearch, driveTypeFilter, driveUploaderFilter, driveSortBy, driveFolderFilter]);
 
   const handleSelectAllDriveFiles = () => {
     if (selectedDriveFileIds.length === filteredDriveFiles.length && filteredDriveFiles.length > 0) {
@@ -589,7 +714,7 @@ export function ProjectsDriveWorkspace({ initialTab, hideHeader = false }: Proje
     selectedFiles.forEach((file, index) => {
       setTimeout(() => {
         const a = document.createElement("a");
-        a.href = `/api/drive/download?fileId=${file._id}`;
+        a.href = `/api/drive/download?fileId=${file._id}&download=true`;
         a.download = file.name;
         a.target = "_blank";
         document.body.appendChild(a);
@@ -604,22 +729,29 @@ export function ProjectsDriveWorkspace({ initialTab, hideHeader = false }: Proje
     if (selectedDriveFileIds.length === 0) return;
     setIsDeletingBatch(true);
 
-    let successCount = 0;
-    for (const fileId of selectedDriveFileIds) {
-      try {
-        const res = await fetch(`/api/drive?fileId=${fileId}`, { method: "DELETE" });
-        if (res.ok) successCount++;
-      } catch (e) {
-        console.error(e);
-      }
-    }
+    try {
+      const res = await fetch("/api/drive", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fileIds: selectedDriveFileIds }),
+      });
 
-    setIsDeletingBatch(false);
-    setShowBatchDeleteModal(false);
-    setSelectedDriveFileIds([]);
-    showToast(`Successfully deleted ${successCount} file(s)`, "success");
-    await fetchDriveFiles();
-    fetchActivityLogs();
+      if (res.ok) {
+        const data = await res.json();
+        showToast(`Successfully deleted ${data.deletedCount || selectedDriveFileIds.length} file(s)`, "success");
+        setSelectedDriveFileIds([]);
+        setShowBatchDeleteModal(false);
+        await fetchDriveFiles();
+        fetchActivityLogs();
+      } else {
+        const err = await res.json();
+        showToast(err.error || "Batch delete failed", "error");
+      }
+    } catch (e) {
+      showToast("Error during batch delete", "error");
+    } finally {
+      setIsDeletingBatch(false);
+    }
   };
 
   useEffect(() => {
@@ -645,6 +777,12 @@ export function ProjectsDriveWorkspace({ initialTab, hideHeader = false }: Proje
       setActivityLogs([]);
     }
   }, [selectedProjectId, activeTab, mounted]);
+
+  useEffect(() => {
+    if (mounted && activeTab === "drive") {
+      fetchDriveFiles();
+    }
+  }, [activeTab, mounted]);
 
   const processedTaskIdRef = useRef<string | null>(null);
 
@@ -1939,75 +2077,279 @@ export function ProjectsDriveWorkspace({ initialTab, hideHeader = false }: Proje
       )}
       {activeTab === "drive" && (
         <div className="space-y-6">
-          <Card className="p-5">
-            <CardHeader className="px-0 pt-0">
-              <CardTitle className="text-base font-bold flex items-center gap-2">
-                <i className="fa-solid fa-cloud-arrow-up text-primary text-sm" /> Upload File to Drive
-              </CardTitle>
-              <CardDescription className="font-normal text-xs">Store assets, project specs, and documents securely in workspace drive storage.</CardDescription>
+          {/* Storage & File Health Overview Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <Card className="border-l-4 border-l-primary bg-card/60 shadow-xs">
+              <CardContent className="p-4 flex items-center justify-between">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Storage Used</p>
+                  <p className="text-xl font-bold text-foreground mt-0.5">{driveStats.totalFormatted}</p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">Across {driveStats.totalCount} stored document{driveStats.totalCount === 1 ? "" : "s"}</p>
+                </div>
+                <div className="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
+                  <i className="fa-solid fa-hard-drive text-lg" />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="border-l-4 border-l-rose-500 bg-card/60 shadow-xs">
+              <CardContent className="p-4 flex items-center justify-between">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">PDFs & Documents</p>
+                  <p className="text-xl font-bold text-foreground mt-0.5">{driveStats.docCount}</p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">Specifications, briefs & reports</p>
+                </div>
+                <div className="w-10 h-10 rounded-xl bg-rose-500/10 text-rose-500 flex items-center justify-center">
+                  <i className="fa-solid fa-file-pdf text-lg" />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="border-l-4 border-l-emerald-500 bg-card/60 shadow-xs">
+              <CardContent className="p-4 flex items-center justify-between">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Images & Media</p>
+                  <p className="text-xl font-bold text-foreground mt-0.5">{driveStats.imgCount}</p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">Visuals, screenshots & assets</p>
+                </div>
+                <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center">
+                  <i className="fa-solid fa-images text-lg" />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className={cn("border-l-4 bg-card/60 shadow-xs", isAdmin ? "border-l-indigo-500" : "border-l-teal-500")}>
+              <CardContent className="p-4 flex items-center justify-between">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Vault Privacy</p>
+                  <div className="mt-1">
+                    {isAdmin ? (
+                      <Badge variant="soft" color="primary" className="text-[10px] font-bold">
+                        <i className="fa-solid fa-shield-halved text-[9px] mr-1" /> Admin: All Data
+                      </Badge>
+                    ) : (
+                      <Badge variant="soft" className="text-[10px] font-bold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30">
+                        <i className="fa-solid fa-user-lock text-[9px] mr-1" /> My Data Only
+                      </Badge>
+                    )}
+                  </div>
+                  <p className="text-[10px] text-muted-foreground mt-1">
+                    {isAdmin ? "Viewing workspace-wide files" : "Isolated private storage"}
+                  </p>
+                </div>
+                <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center", isAdmin ? "bg-indigo-500/10 text-indigo-500" : "bg-teal-500/10 text-teal-500")}>
+                  <i className={cn("fa-solid text-lg", isAdmin ? "fa-shield-halved" : "fa-lock")} />
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Interactive Drag & Drop Upload Zone */}
+          <Card className="p-5 overflow-hidden">
+            <CardHeader className="px-0 pt-0 flex flex-row items-center justify-between gap-4">
+              <div>
+                <CardTitle className="text-base font-bold flex items-center gap-2">
+                  <i className="fa-solid fa-cloud-arrow-up text-primary text-sm" /> Upload Document or Asset
+                </CardTitle>
+                <CardDescription className="font-normal text-xs">
+                  Drop files to store securely in your workspace drive repository.
+                </CardDescription>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowUploadPanel(!showUploadPanel)}
+                className="h-8 gap-1.5 text-xs font-semibold"
+              >
+                <i className={cn("fa-solid text-xs", showUploadPanel ? "fa-chevron-up" : "fa-chevron-down")} />
+                {showUploadPanel ? "Hide Upload" : "Add File"}
+              </Button>
             </CardHeader>
-            <CardContent className="px-0 pt-2">
-              <form onSubmit={handleFileUpload} className="space-y-4">
+
+            {showUploadPanel && (
+              <CardContent className="px-0 pt-2 space-y-4">
+                {/* Drag-and-Drop Target */}
+                <div
+                  onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); setIsDraggingFile(true); }}
+                  onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setIsDraggingFile(true); }}
+                  onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setIsDraggingFile(false); }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setIsDraggingFile(false);
+                    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                      const f = e.dataTransfer.files[0];
+                      const ext = f.name.includes(".") ? f.name.split(".").pop()?.toLowerCase() || "" : "";
+                      if (allowedExtensions.length > 0 && ext && !allowedExtensions.includes(ext)) {
+                        showToast(`File type .${ext} is not allowed. Allowed: ${allowedExtensions.map((ex) => `.${ex}`).join(", ")}`, "error");
+                        return;
+                      }
+                      setUploadFile(f);
+                      if (!uploadName) setUploadName(f.name);
+                    }
+                  }}
+                  onClick={() => driveFileInputRef.current?.click()}
+                  className={cn(
+                    "border-2 border-dashed rounded-xl p-6 text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-2",
+                    isDraggingFile
+                      ? "border-primary bg-primary/10 scale-[1.005]"
+                      : uploadFile
+                      ? "border-emerald-500/60 bg-emerald-500/5"
+                      : "border-border/80 hover:border-primary/50 hover:bg-muted/30"
+                  )}
+                >
+                  <input
+                    ref={driveFileInputRef}
+                    type="file"
+                    className="hidden"
+                    accept={allowedExtensions.length > 0 ? allowedExtensions.map((e) => `.${e}`).join(",") : undefined}
+                    onChange={(e) => {
+                      if (e.target.files && e.target.files[0]) {
+                        const f = e.target.files[0];
+                        const ext = f.name.includes(".") ? f.name.split(".").pop()?.toLowerCase() || "" : "";
+                        if (allowedExtensions.length > 0 && ext && !allowedExtensions.includes(ext)) {
+                          showToast(`File type .${ext} is not allowed. Allowed: ${allowedExtensions.map((ex) => `.${ex}`).join(", ")}`, "error");
+                          e.target.value = "";
+                          setUploadFile(null);
+                          return;
+                        }
+                        setUploadFile(f);
+                        if (!uploadName) setUploadName(f.name);
+                      }
+                    }}
+                  />
+
+                  {uploadFile ? (
+                    <div className="flex items-center gap-3 p-3 bg-card border border-border rounded-xl max-w-md w-full shadow-xs">
+                      <div className="w-10 h-10 rounded-lg bg-emerald-500/10 text-emerald-500 flex items-center justify-center shrink-0">
+                        <i className="fa-solid fa-file-circle-check text-lg" />
+                      </div>
+                      <div className="min-w-0 flex-1 text-left">
+                        <p className="text-xs font-bold text-foreground truncate">{uploadFile.name}</p>
+                        <p className="text-[10px] text-muted-foreground">{Math.round(uploadFile.size / 1024)} KB · Ready to upload</p>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setUploadFile(null);
+                          setUploadName("");
+                          if (driveFileInputRef.current) driveFileInputRef.current.value = "";
+                        }}
+                      >
+                        <i className="fa-solid fa-xmark text-xs" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="w-12 h-12 rounded-full bg-primary/10 text-primary flex items-center justify-center">
+                        <i className="fa-solid fa-cloud-arrow-up text-xl" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold text-foreground">
+                          Drag and drop your file here, or <span className="text-primary underline font-bold">browse from device</span>
+                        </p>
+                        <p className="text-[11px] text-muted-foreground mt-0.5">
+                          Supports documents, spreadsheets, images, and archives up to 25 MB
+                        </p>
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                {/* Upload Destination & Metadata Form */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-foreground">Destination Folder</label>
+                    <select
+                      value={driveFolder}
+                      onChange={(e) => setDriveFolder(e.target.value)}
+                      className="w-full h-9 px-3 text-xs rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
+                    >
+                      <option value="/">Root Workspace (/)</option>
+                      <option value="Projects">Projects</option>
+                      <option value="Documents">Documents</option>
+                      <option value="Contracts">Contracts</option>
+                      <option value="Invoices">Invoices</option>
+                      <option value="Designs">Designs</option>
+                      <option value="Resumes">Resumes</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-1 sm:col-span-2">
+                    <label className="text-xs font-semibold text-foreground">Display Name (Optional)</label>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="text"
+                        value={uploadName}
+                        onChange={(e) => setUploadName(e.target.value)}
+                        placeholder="e.g. Q3_Client_Brief_v2.pdf"
+                        className="h-9 text-xs"
+                      />
+                      <Button
+                        color="primary"
+                        size="sm"
+                        type="button"
+                        disabled={!uploadFile || isUploadingFile}
+                        onClick={() => handleFileUpload()}
+                        className="gap-2 shrink-0 h-9 font-semibold"
+                      >
+                        {isUploadingFile ? (
+                          <>
+                            <i className="fa-solid fa-spinner fa-spin text-xs" /> Uploading...
+                          </>
+                        ) : (
+                          <>
+                            <i className="fa-solid fa-arrow-up-from-bracket text-xs" /> Upload
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Allowed formats policy preview */}
                 {allowedExtensions.length > 0 && (
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/40 p-2.5 rounded-lg border border-border/60">
-                    <i className="fa-solid fa-shield-halved text-primary text-xs" />
-                    <span>Allowed File Types (Admin Managed):</span>
+                  <div className="flex items-center gap-2 text-[11px] text-muted-foreground bg-muted/40 p-2.5 rounded-lg border border-border/60">
+                    <i className="fa-solid fa-shield-halved text-primary text-xs shrink-0" />
+                    <span>Allowed File Extensions:</span>
                     <div className="flex items-center gap-1 flex-wrap">
                       {allowedExtensions.map((ext) => (
-                        <span key={ext} className="px-1.5 py-0.5 rounded bg-primary/10 text-primary font-mono text-[10px] uppercase font-bold border border-primary/20">
+                        <span key={ext} className="px-1.5 py-0.2 rounded bg-primary/10 text-primary font-mono text-[9px] uppercase font-bold border border-primary/20">
                           .{ext}
                         </span>
                       ))}
                     </div>
                   </div>
                 )}
-                <div className="flex flex-col sm:flex-row items-end gap-3">
-                  <div className="space-y-1 flex-1 w-full">
-                    <label className="text-xs font-semibold text-foreground">Select File</label>
-                    <Input
-                      type="file"
-                      accept={allowedExtensions.map((e) => `.${e}`).join(",")}
-                      onChange={(e) => {
-                        if (e.target.files && e.target.files[0]) {
-                          const selected = e.target.files[0];
-                          const ext = selected.name.includes(".") ? selected.name.split(".").pop()?.toLowerCase() || "" : "";
-                          if (allowedExtensions.length > 0 && ext && !allowedExtensions.includes(ext)) {
-                            showToast(`File type .${ext} is not allowed. Allowed: ${allowedExtensions.map(e => `.${e}`).join(", ")}`, "error");
-                            e.target.value = "";
-                            setUploadFile(null);
-                            return;
-                          }
-                          setUploadFile(selected);
-                          if (!uploadName) setUploadName(selected.name);
-                        }
-                      }}
-                      required
-                    />
-                  </div>
-                  <div className="space-y-1 flex-1 w-full">
-                    <label className="text-xs font-semibold text-foreground">Display Name (Optional)</label>
-                    <Input
-                      type="text"
-                      value={uploadName}
-                      onChange={(e) => setUploadName(e.target.value)}
-                      placeholder="e.g. Project_Brief_v2.pdf"
-                    />
-                  </div>
-                  <Button color="primary" size="sm" type="submit" disabled={!uploadFile} className="gap-2 shrink-0 h-9 font-semibold">
-                    <i className="fa-solid fa-upload text-xs" /> Upload
-                  </Button>
-                </div>
-              </form>
-            </CardContent>
+              </CardContent>
+            )}
           </Card>
 
+          {/* Drive Files & Assets Main Section */}
           <Card className="p-5">
             <CardHeader className="px-0 pt-0 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
-                <CardTitle className="text-base font-bold flex items-center gap-2">
+                <CardTitle className="text-base font-bold flex items-center gap-2 flex-wrap">
                   <i className="fa-solid fa-hard-drive text-primary text-sm" /> Drive Files & Assets ({driveFiles.length})
+                  {isAdmin ? (
+                    <Badge variant="soft" color="primary" className="text-[10px] font-semibold">
+                      <i className="fa-solid fa-shield-halved text-[9px] mr-1" /> Admin: All Files
+                    </Badge>
+                  ) : (
+                    <Badge variant="soft" className="text-[10px] font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20">
+                      <i className="fa-solid fa-user-lock text-[9px] mr-1" /> My Files Only
+                    </Badge>
+                  )}
                 </CardTitle>
-                <CardDescription>File repository accessible across your workspace</CardDescription>
+                <CardDescription>
+                  {isAdmin
+                    ? "Full workspace file repository (All user documents & uploads visible to Admin)"
+                    : "Your personal workspace drive storage (Showing only your uploaded documents)"}
+                </CardDescription>
               </div>
 
               {driveFiles.length > 0 && (
@@ -2035,7 +2377,7 @@ export function ProjectsDriveWorkspace({ initialTab, hideHeader = false }: Proje
                         className="h-8 gap-1.5 text-xs font-semibold text-primary border-primary/30 hover:bg-primary/10"
                         title="Download selected files"
                       >
-                        <i className="fa-solid fa-download text-xs" /> Download Selected ({selectedDriveFileIds.length})
+                        <i className="fa-solid fa-download text-xs" /> Download ({selectedDriveFileIds.length})
                       </Button>
 
                       <Button
@@ -2046,7 +2388,7 @@ export function ProjectsDriveWorkspace({ initialTab, hideHeader = false }: Proje
                         className="h-8 gap-1.5 text-xs font-semibold"
                         title="Delete selected files"
                       >
-                        <i className="fa-solid fa-trash-can text-xs" /> Delete Selected ({selectedDriveFileIds.length})
+                        <i className="fa-solid fa-trash-can text-xs" /> Delete ({selectedDriveFileIds.length})
                       </Button>
                     </>
                   )}
@@ -2054,9 +2396,40 @@ export function ProjectsDriveWorkspace({ initialTab, hideHeader = false }: Proje
               )}
             </CardHeader>
 
+            {/* Quick Folder Filter Chips */}
+            {driveFolders.length > 1 && (
+              <div className="pt-2 pb-3 border-b border-border/60 flex items-center gap-1.5 overflow-x-auto scrollbar-thin">
+                <span className="text-[11px] font-bold text-muted-foreground mr-1 shrink-0">
+                  <i className="fa-solid fa-folder mr-1 text-xs" /> Folders:
+                </span>
+                {driveFolders.map((folder) => {
+                  const count = folder === "All" ? driveFiles.length : driveFiles.filter((f) => (f.folder || "/") === folder).length;
+                  const isActive = driveFolderFilter === folder;
+                  return (
+                    <button
+                      key={folder}
+                      onClick={() => { setDriveFolderFilter(folder); setDrivePage(1); }}
+                      className={cn(
+                        "flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-all cursor-pointer shrink-0",
+                        isActive
+                          ? "bg-primary text-primary-foreground shadow-xs font-bold"
+                          : "bg-muted/50 text-muted-foreground hover:text-foreground hover:bg-muted"
+                      )}
+                    >
+                      <i className={cn("fa-solid text-[10px]", folder === "All" ? "fa-folder-tree" : "fa-folder")} />
+                      <span>{folder === "All" ? "All Folders" : folder === "/" ? "Root (/)" : folder}</span>
+                      <span className={cn("text-[10px] px-1.5 py-0.2 rounded-full font-mono", isActive ? "bg-white/20 text-white" : "bg-muted text-muted-foreground")}>
+                        {count}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
             {/* Filter Toolbar for Drive Files */}
             {driveFiles.length > 0 && (
-              <div className="pt-2 pb-4 border-b border-border flex flex-col md:flex-row items-start md:items-center justify-between gap-3 flex-wrap">
+              <div className="py-3 border-b border-border flex flex-col md:flex-row items-start md:items-center justify-between gap-3 flex-wrap">
                 <div className="flex items-center gap-2 flex-wrap w-full md:w-auto">
                   {/* Search bar */}
                   <div className="relative flex-1 md:w-56">
@@ -2086,7 +2459,7 @@ export function ProjectsDriveWorkspace({ initialTab, hideHeader = false }: Proje
                     title="Filter by file type"
                   >
                     <option value="All">All Types</option>
-                    <option value="Resumes">Employee Resumes & CVs</option>
+                    <option value="Resumes">Employee Resumes</option>
                     <option value="Images">Images (PNG, JPG, WEBP, SVG)</option>
                     <option value="PDFs">PDF Documents</option>
                     <option value="Documents">Word / Text Docs</option>
@@ -2096,18 +2469,20 @@ export function ProjectsDriveWorkspace({ initialTab, hideHeader = false }: Proje
                   </select>
 
                   {/* Uploader Filter */}
-                  <select
-                    value={driveUploaderFilter}
-                    onChange={(e) => setDriveUploaderFilter(e.target.value)}
-                    className="h-8 px-2.5 text-xs rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
-                    title="Filter by uploader"
-                  >
-                    {driveUploaders.map((u) => (
-                      <option key={u} value={u}>
-                        {u === "All" ? "All Uploaders" : `By ${u}`}
-                      </option>
-                    ))}
-                  </select>
+                  {driveUploaders.length > 2 && (
+                    <select
+                      value={driveUploaderFilter}
+                      onChange={(e) => setDriveUploaderFilter(e.target.value)}
+                      className="h-8 px-2.5 text-xs rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
+                      title="Filter by uploader"
+                    >
+                      {driveUploaders.map((u) => (
+                        <option key={u} value={u}>
+                          {u === "All" ? "All Uploaders" : `By ${u}`}
+                        </option>
+                      ))}
+                    </select>
+                  )}
 
                   {/* Sort Filter */}
                   <select
@@ -2120,14 +2495,42 @@ export function ProjectsDriveWorkspace({ initialTab, hideHeader = false }: Proje
                     <option value="oldest">Oldest Uploads</option>
                     <option value="name-asc">Name (A → Z)</option>
                     <option value="name-desc">Name (Z → A)</option>
-                    <option value="member-asc">Member / Uploader (A → Z)</option>
-                    <option value="member-desc">Member / Uploader (Z → A)</option>
                     <option value="size-desc">Size (Largest)</option>
                     <option value="size-asc">Size (Smallest)</option>
                   </select>
                 </div>
 
                 <div className="flex items-center gap-2 self-end md:self-auto flex-wrap">
+                  {/* View Mode Toggle */}
+                  <div className="flex items-center rounded-lg border border-border bg-background p-0.5">
+                    <button
+                      type="button"
+                      onClick={() => handleToggleDriveView("grid")}
+                      className={cn(
+                        "h-7 w-7 rounded-md flex items-center justify-center text-xs transition-colors cursor-pointer",
+                        driveViewMode === "grid"
+                          ? "bg-primary text-primary-foreground font-bold shadow-xs"
+                          : "text-muted-foreground hover:text-foreground"
+                      )}
+                      title="Grid View"
+                    >
+                      <i className="fa-solid fa-border-all text-xs" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleToggleDriveView("list")}
+                      className={cn(
+                        "h-7 w-7 rounded-md flex items-center justify-center text-xs transition-colors cursor-pointer",
+                        driveViewMode === "list"
+                          ? "bg-primary text-primary-foreground font-bold shadow-xs"
+                          : "text-muted-foreground hover:text-foreground"
+                      )}
+                      title="Table / List View"
+                    >
+                      <i className="fa-solid fa-list-ul text-xs" />
+                    </button>
+                  </div>
+
                   {/* Rows per page selector */}
                   <div className="flex items-center gap-1 text-xs text-muted-foreground">
                     <span>Show:</span>
@@ -2164,7 +2567,7 @@ export function ProjectsDriveWorkspace({ initialTab, hideHeader = false }: Proje
                     {driveShowAll ? "Paginated" : "All"}
                   </Button>
 
-                  {(driveSearch || driveTypeFilter !== "All" || driveUploaderFilter !== "All" || driveSortBy !== "newest") && (
+                  {(driveSearch || driveTypeFilter !== "All" || driveUploaderFilter !== "All" || driveFolderFilter !== "All" || driveSortBy !== "newest") && (
                     <Button
                       variant="ghost"
                       size="sm"
@@ -2172,6 +2575,7 @@ export function ProjectsDriveWorkspace({ initialTab, hideHeader = false }: Proje
                         setDriveSearch("");
                         setDriveTypeFilter("All");
                         setDriveUploaderFilter("All");
+                        setDriveFolderFilter("All");
                         setDriveSortBy("newest");
                         setDrivePage(1);
                       }}
@@ -2196,7 +2600,7 @@ export function ProjectsDriveWorkspace({ initialTab, hideHeader = false }: Proje
                   return (
                     <div className="py-12 text-center text-muted-foreground text-sm space-y-1">
                       <i className="fa-solid fa-folder-open text-3xl opacity-50 text-primary mb-2 block" />
-                      <p className="font-medium">No files uploaded yet.</p>
+                      <p className="font-medium">No files stored in your Drive Space yet.</p>
                       <p className="text-xs">Use the upload box above to add your first file to Drive Space.</p>
                     </div>
                   );
@@ -2215,6 +2619,7 @@ export function ProjectsDriveWorkspace({ initialTab, hideHeader = false }: Proje
                           setDriveSearch("");
                           setDriveTypeFilter("All");
                           setDriveUploaderFilter("All");
+                          setDriveFolderFilter("All");
                           setDriveSortBy("newest");
                           setDrivePage(1);
                         }}
@@ -2228,126 +2633,289 @@ export function ProjectsDriveWorkspace({ initialTab, hideHeader = false }: Proje
 
                 return (
                   <>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {paginatedDriveFiles.map((file) => {
-                        const isSelected = selectedDriveFileIds.includes(file._id);
-                        const isImg = (file.mimeType || "").startsWith("image/") || /\.(png|jpe?g|gif|webp|svg)$/i.test(file.name);
-                        const fileDownloadUrl = `/api/drive/download?fileId=${file._id}`;
-
-                        return (
-                          <div
-                            key={file._id}
-                            className={cn(
-                              "p-4 rounded-xl border transition-all flex flex-col justify-between space-y-3 relative group",
-                              isSelected ? "border-primary bg-primary/5 shadow-xs" : "border-border bg-card hover:shadow-md"
-                            )}
-                          >
-                            <div className="flex items-start justify-between gap-2">
-                              <div className="flex items-start gap-3 min-w-0 flex-1">
-                                {/* Multi-select checkbox */}
+                    {/* View Mode: List / Table View */}
+                    {driveViewMode === "list" ? (
+                      <div className="overflow-x-auto rounded-xl border border-border">
+                        <table className="w-full text-xs text-left">
+                          <thead className="bg-muted/50 border-b border-border text-[11px] font-bold text-muted-foreground uppercase">
+                            <tr>
+                              <th className="p-3 w-8">
                                 <button
                                   type="button"
-                                  onClick={() => toggleSelectDriveFile(file._id)}
-                                  className="mt-1 text-muted-foreground hover:text-primary transition-colors focus:outline-none"
-                                  title={isSelected ? "Deselect file" : "Select file"}
+                                  onClick={handleSelectAllDriveFiles}
+                                  className="text-muted-foreground hover:text-primary cursor-pointer"
                                 >
-                                  <i className={cn("fa-lg", isSelected ? "fa-solid fa-square-check text-primary" : "fa-regular fa-square")} />
+                                  <i className={cn("fa-lg", selectedDriveFileIds.length === filteredDriveFiles.length && filteredDriveFiles.length > 0 ? "fa-solid fa-square-check text-primary" : "fa-regular fa-square")} />
                                 </button>
+                              </th>
+                              <th className="p-3">File Name</th>
+                              <th className="p-3">Folder</th>
+                              <th className="p-3">Size</th>
+                              <th className="p-3">Uploaded</th>
+                              <th className="p-3">Uploader</th>
+                              <th className="p-3 text-right">Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-border/60">
+                            {paginatedDriveFiles.map((file) => {
+                              const isSelected = selectedDriveFileIds.includes(file._id);
+                              const isImg = (file.mimeType || "").startsWith("image/") || /\.(png|jpe?g|gif|webp|svg)$/i.test(file.name);
+                              const fileDownloadUrl = `/api/drive/download?fileId=${file._id}&download=true`;
 
-                                {/* Thumbnail or File Icon */}
-                                {isImg ? (
-                                  <div
-                                    onClick={() => setPreviewFile(file)}
-                                    className="relative w-12 h-12 rounded-lg border border-border/80 bg-muted/30 overflow-hidden cursor-pointer shrink-0 group/img flex items-center justify-center"
-                                    title="Click to view image preview"
-                                  >
-                                    <img
-                                      src={fileDownloadUrl}
-                                      alt={file.name}
-                                      className="w-full h-full object-cover group-hover/img:scale-105 transition-transform"
-                                    />
-                                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center text-white">
-                                      <i className="fa-solid fa-eye text-xs" />
+                              return (
+                                <tr key={file._id} className={cn("hover:bg-muted/30 transition-colors", isSelected && "bg-primary/5")}>
+                                  <td className="p-3">
+                                    <button
+                                      type="button"
+                                      onClick={() => toggleSelectDriveFile(file._id)}
+                                      className="text-muted-foreground hover:text-primary cursor-pointer"
+                                    >
+                                      <i className={cn("fa-lg", isSelected ? "fa-solid fa-square-check text-primary" : "fa-regular fa-square")} />
+                                    </button>
+                                  </td>
+                                  <td className="p-3 font-semibold text-foreground">
+                                    <div className="flex items-center gap-2.5 min-w-[200px]">
+                                      <div
+                                        onClick={() => setPreviewFile(file)}
+                                        className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0 cursor-pointer hover:bg-primary/20 transition-colors"
+                                      >
+                                        <i className={cn("fa-solid text-sm", isImg ? "fa-image" : file.name.endsWith(".pdf") ? "fa-file-pdf text-rose-500" : "fa-file-lines")} />
+                                      </div>
+                                      <span
+                                        onClick={() => setPreviewFile(file)}
+                                        className="truncate hover:text-primary cursor-pointer max-w-xs"
+                                        title={file.name}
+                                      >
+                                        {file.name}
+                                      </span>
                                     </div>
-                                  </div>
-                                ) : (
-                                  <div
-                                    onClick={() => setPreviewFile(file)}
-                                    className="p-2.5 bg-primary/10 text-primary rounded-lg shrink-0 flex items-center justify-center w-10 h-10 cursor-pointer hover:bg-primary/20 transition-colors"
-                                    title="Click to view file details"
-                                  >
-                                    <i className={cn("fa-solid text-lg", isImg ? "fa-image" : file.name.endsWith(".pdf") ? "fa-file-pdf text-rose-500" : "fa-file-lines")} />
-                                  </div>
-                                )}
+                                  </td>
+                                  <td className="p-3 text-muted-foreground">
+                                    <Badge variant="outline" className="text-[10px] font-normal">
+                                      {file.folder || "/"}
+                                    </Badge>
+                                  </td>
+                                  <td className="p-3 text-muted-foreground font-mono">
+                                    {Math.round((file.size || 0) / 1024)} KB
+                                  </td>
+                                  <td className="p-3 text-muted-foreground whitespace-nowrap">
+                                    {new Date(file.createdAt).toLocaleDateString()}
+                                  </td>
+                                  <td className="p-3 text-foreground whitespace-nowrap">
+                                    <span className="inline-flex items-center gap-1.5">
+                                      <span className="w-5 h-5 rounded-full bg-primary/15 text-primary text-[10px] font-bold flex items-center justify-center">
+                                        {(file.uploadedBy?.name || "U")[0].toUpperCase()}
+                                      </span>
+                                      <span>{file.uploadedBy?.name || "Member"}</span>
+                                    </span>
+                                  </td>
+                                  <td className="p-3 text-right">
+                                    <div className="flex items-center justify-end gap-1">
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={() => handleCopyFileLink(file)}
+                                        className="h-7 w-7 text-muted-foreground hover:text-primary hover:bg-primary/10"
+                                        title={copiedFileId === file._id ? "Copied Link!" : "Copy Shareable Link"}
+                                      >
+                                        <i className={cn("fa-solid text-xs", copiedFileId === file._id ? "fa-check text-emerald-500" : "fa-link")} />
+                                      </Button>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={() => setPreviewFile(file)}
+                                        className="h-7 w-7 text-muted-foreground hover:text-primary hover:bg-primary/10"
+                                        title="Preview File"
+                                      >
+                                        <i className="fa-solid fa-eye text-xs" />
+                                      </Button>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={() => setEditingFile({ _id: file._id, name: file.name, folder: file.folder || "/" })}
+                                        className="h-7 w-7 text-muted-foreground hover:text-primary hover:bg-primary/10"
+                                        title="Rename or Move Folder"
+                                      >
+                                        <i className="fa-solid fa-pen-to-square text-xs" />
+                                      </Button>
+                                      <a
+                                        href={fileDownloadUrl}
+                                        download={file.name}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="inline-flex items-center justify-center h-7 w-7 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
+                                        title="Download File"
+                                      >
+                                        <i className="fa-solid fa-download text-xs" />
+                                      </a>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={() => setDeleteConfirmFile(file)}
+                                        className="h-7 w-7 text-destructive hover:bg-destructive/10"
+                                        title="Delete File"
+                                      >
+                                        <i className="fa-solid fa-trash-can text-xs" />
+                                      </Button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      /* View Mode: Grid Cards View */
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {paginatedDriveFiles.map((file) => {
+                          const isSelected = selectedDriveFileIds.includes(file._id);
+                          const isImg = (file.mimeType || "").startsWith("image/") || /\.(png|jpe?g|gif|webp|svg)$/i.test(file.name);
+                          const fileDownloadUrl = `/api/drive/download?fileId=${file._id}&download=true`;
 
-                                <div className="min-w-0 flex-1">
-                                  <p
-                                    onClick={() => setPreviewFile(file)}
-                                    className="font-semibold text-xs text-foreground truncate cursor-pointer hover:text-primary transition-colors"
-                                    title={file.name}
+                          return (
+                            <div
+                              key={file._id}
+                              className={cn(
+                                "p-4 rounded-xl border transition-all flex flex-col justify-between space-y-3 relative group",
+                                isSelected ? "border-primary bg-primary/5 shadow-xs" : "border-border bg-card hover:shadow-md"
+                              )}
+                            >
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="flex items-start gap-3 min-w-0 flex-1">
+                                  {/* Multi-select checkbox */}
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleSelectDriveFile(file._id)}
+                                    className="mt-1 text-muted-foreground hover:text-primary transition-colors focus:outline-none"
+                                    title={isSelected ? "Deselect file" : "Select file"}
                                   >
-                                    {file.name}
-                                  </p>
-                                  <p className="text-[10px] text-muted-foreground">
-                                    {Math.round((file.size || 0) / 1024)} KB • {new Date(file.createdAt).toLocaleDateString()}
-                                  </p>
+                                    <i className={cn("fa-lg", isSelected ? "fa-solid fa-square-check text-primary" : "fa-regular fa-square")} />
+                                  </button>
+
+                                  {/* Thumbnail or File Icon */}
+                                  {isImg ? (
+                                    <div
+                                      onClick={() => setPreviewFile(file)}
+                                      className="relative w-12 h-12 rounded-lg border border-border/80 bg-muted/30 overflow-hidden cursor-pointer shrink-0 group/img flex items-center justify-center"
+                                      title="Click to view image preview"
+                                    >
+                                      <img
+                                        src={`/api/drive/download?fileId=${file._id}`}
+                                        alt={file.name}
+                                        className="w-full h-full object-cover group-hover/img:scale-105 transition-transform"
+                                      />
+                                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center text-white">
+                                        <i className="fa-solid fa-eye text-xs" />
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div
+                                      onClick={() => setPreviewFile(file)}
+                                      className="p-2.5 bg-primary/10 text-primary rounded-lg shrink-0 flex items-center justify-center w-10 h-10 cursor-pointer hover:bg-primary/20 transition-colors"
+                                      title="Click to view file details"
+                                    >
+                                      <i className={cn("fa-solid text-lg", isImg ? "fa-image" : file.name.endsWith(".pdf") ? "fa-file-pdf text-rose-500" : "fa-file-lines")} />
+                                    </div>
+                                  )}
+
+                                  <div className="min-w-0 flex-1">
+                                    <p
+                                      onClick={() => setPreviewFile(file)}
+                                      className="font-semibold text-xs text-foreground truncate cursor-pointer hover:text-primary transition-colors"
+                                      title={file.name}
+                                    >
+                                      {file.name}
+                                    </p>
+                                    <p className="text-[10px] text-muted-foreground">
+                                      {Math.round((file.size || 0) / 1024)} KB • {new Date(file.createdAt).toLocaleDateString()}
+                                    </p>
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center gap-1 shrink-0">
+                                  {/* Copy Link button */}
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => handleCopyFileLink(file)}
+                                    className="h-7 w-7 text-muted-foreground hover:text-primary hover:bg-primary/10"
+                                    title={copiedFileId === file._id ? "Copied Link!" : "Copy Shareable Link"}
+                                  >
+                                    <i className={cn("fa-solid text-xs", copiedFileId === file._id ? "fa-check text-emerald-500" : "fa-link")} />
+                                  </Button>
+
+                                  {/* Preview button */}
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => setPreviewFile(file)}
+                                    className="h-7 w-7 text-muted-foreground hover:text-primary hover:bg-primary/10"
+                                    title="View file details / Preview"
+                                  >
+                                    <i className="fa-solid fa-eye text-xs" />
+                                  </Button>
+
+                                  {/* Rename/Move button */}
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => setEditingFile({ _id: file._id, name: file.name, folder: file.folder || "/" })}
+                                    className="h-7 w-7 text-muted-foreground hover:text-primary hover:bg-primary/10"
+                                    title="Rename or Move Folder"
+                                  >
+                                    <i className="fa-solid fa-pen-to-square text-xs" />
+                                  </Button>
+
+                                  {/* Download button */}
+                                  <a
+                                    href={fileDownloadUrl}
+                                    download={file.name}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="inline-flex items-center justify-center h-7 w-7 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
+                                    title="Download File"
+                                  >
+                                    <i className="fa-solid fa-download text-xs" />
+                                  </a>
+
+                                  {/* Delete button */}
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => setDeleteConfirmFile(file)}
+                                    className="h-7 w-7 text-destructive hover:bg-destructive/10"
+                                    title="Delete File"
+                                  >
+                                    <i className="fa-solid fa-trash-can text-xs" />
+                                  </Button>
                                 </div>
                               </div>
 
-                              <div className="flex items-center gap-1 shrink-0">
-                                {/* Preview button */}
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  onClick={() => setPreviewFile(file)}
-                                  className="h-7 w-7 text-muted-foreground hover:text-primary hover:bg-primary/10"
-                                  title="View file details / Preview"
-                                >
-                                  <i className="fa-solid fa-eye text-xs" />
-                                </Button>
-
-                                {/* Download button */}
-                                <a
-                                  href={fileDownloadUrl}
-                                  download={file.name}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="inline-flex items-center justify-center h-7 w-7 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
-                                  title="Download File"
-                                >
-                                  <i className="fa-solid fa-download text-xs" />
-                                </a>
-
-                                {/* Delete button */}
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  onClick={() => setDeleteConfirmFile(file)}
-                                  className="h-7 w-7 text-destructive hover:bg-destructive/10"
-                                  title="Delete File"
-                                >
-                                  <i className="fa-solid fa-trash-can text-xs" />
-                                </Button>
-                              </div>
-                            </div>
-
-                            <div className="flex items-center justify-between text-[10px] text-muted-foreground border-t border-border/60 pt-2">
-                              <span>By {file.uploadedBy?.name || "Member"}</span>
-                              <div className="flex items-center gap-1.5">
-                                {(file.folder === "Resumes" || file.name.toLowerCase().includes("resume")) && (
-                                  <Badge variant="outline" className="text-[9px] px-1.5 py-0 bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30 font-semibold">
-                                    <i className="fa-solid fa-file-lines mr-1 text-[8px]" /> Resume
+                              <div className="flex items-center justify-between text-[10px] text-muted-foreground border-t border-border/60 pt-2">
+                                <span className="truncate max-w-[140px]">By {file.uploadedBy?.name || "Member"}</span>
+                                <div className="flex items-center gap-1.5">
+                                  {file.folder && file.folder !== "/" && (
+                                    <Badge variant="outline" className="text-[9px] px-1.5 py-0 font-normal">
+                                      <i className="fa-solid fa-folder text-[8px] mr-1 opacity-70" />
+                                      {file.folder}
+                                    </Badge>
+                                  )}
+                                  {(file.folder === "Resumes" || file.name.toLowerCase().includes("resume")) && (
+                                    <Badge variant="outline" className="text-[9px] px-1.5 py-0 bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30 font-semibold">
+                                      <i className="fa-solid fa-file-lines mr-1 text-[8px]" /> Resume
+                                    </Badge>
+                                  )}
+                                  <Badge variant="outline" className="text-[9px] px-1.5 py-0">
+                                    {file.mimeType?.split("/")[1] || "file"}
                                   </Badge>
-                                )}
-                                <Badge variant="outline" className="text-[9px] px-1.5 py-0">
-                                  {file.mimeType?.split("/")[1] || "file"}
-                                </Badge>
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        );
-                      })}
-                    </div>
+                          );
+                        })}
+                      </div>
+                    )}
 
                     {/* Pagination Footer */}
                     <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-border/60 text-xs text-muted-foreground">
@@ -3922,6 +4490,357 @@ export function ProjectsDriveWorkspace({ initialTab, hideHeader = false }: Proje
                 ) : (
                   <>
                     <i className="fa-solid fa-ban text-xs" /> Permanently Delete
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Drive File Preview Lightbox Modal */}
+      {previewFile && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-sm animate-in fade-in"
+          onClick={() => setPreviewFile(null)}
+        >
+          <div
+            className="w-full max-w-4xl max-h-[92vh] bg-card border border-border rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="p-4 px-5 border-b border-border flex items-center justify-between gap-3 bg-muted/25">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                  <i className={cn(
+                    "fa-solid text-lg",
+                    (previewFile.mimeType || "").startsWith("image/") || /\.(png|jpe?g|gif|webp|svg)$/i.test(previewFile.name)
+                      ? "fa-image"
+                      : previewFile.name.endsWith(".pdf")
+                      ? "fa-file-pdf text-rose-500"
+                      : "fa-file-lines"
+                  )} />
+                </div>
+                <div className="min-w-0">
+                  <h3 className="text-sm font-bold text-foreground truncate" title={previewFile.name}>
+                    {previewFile.name}
+                  </h3>
+                  <div className="flex items-center gap-2 text-[11px] text-muted-foreground mt-0.5 flex-wrap">
+                    <Badge variant="outline" className="text-[9px] px-1.5 py-0">
+                      <i className="fa-solid fa-folder text-[8px] mr-1 opacity-70" />
+                      {previewFile.folder || "/"}
+                    </Badge>
+                    <span>•</span>
+                    <span className="font-mono">{Math.round((previewFile.size || 0) / 1024)} KB</span>
+                    <span>•</span>
+                    <span>{new Date(previewFile.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}</span>
+                    <span>•</span>
+                    <span>By {previewFile.uploadedBy?.name || "Member"}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Header Action Buttons */}
+              <div className="flex items-center gap-1.5 shrink-0">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleCopyFileLink(previewFile)}
+                  className="h-8 gap-1.5 text-xs"
+                  title="Copy shareable download link"
+                >
+                  <i className={cn("fa-solid text-xs", copiedFileId === previewFile._id ? "fa-check text-emerald-500" : "fa-link")} />
+                  <span className="hidden sm:inline">{copiedFileId === previewFile._id ? "Copied!" : "Copy Link"}</span>
+                </Button>
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setEditingFile({ _id: previewFile._id, name: previewFile.name, folder: previewFile.folder || "/" });
+                  }}
+                  className="h-8 gap-1.5 text-xs"
+                  title="Rename or move folder"
+                >
+                  <i className="fa-solid fa-pen-to-square text-xs" />
+                  <span className="hidden sm:inline">Rename/Move</span>
+                </Button>
+
+                <a
+                  href={`/api/drive/download?fileId=${previewFile._id}&download=true`}
+                  download={previewFile.name}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center justify-center gap-1.5 h-8 px-3 rounded-lg text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+                  title="Download file"
+                >
+                  <i className="fa-solid fa-download text-xs" />
+                  <span className="hidden sm:inline">Download</span>
+                </a>
+
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setPreviewFile(null)}
+                  className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                >
+                  <i className="fa-solid fa-xmark text-sm" />
+                </Button>
+              </div>
+            </div>
+
+            {/* Modal Preview Body */}
+            <div className="flex-1 overflow-auto p-4 sm:p-6 flex items-center justify-center bg-muted/10 min-h-[360px] max-h-[70vh]">
+              {((previewFile.mimeType || "").startsWith("image/") || /\.(png|jpe?g|gif|webp|svg)$/i.test(previewFile.name)) ? (
+                <div className="flex flex-col items-center justify-center gap-3">
+                  <img
+                    src={`/api/drive/download?fileId=${previewFile._id}`}
+                    alt={previewFile.name}
+                    className="max-h-[60vh] max-w-full rounded-xl object-contain shadow-md border border-border"
+                  />
+                  <p className="text-[11px] text-muted-foreground">Original Resolution Preview</p>
+                </div>
+              ) : previewFile.name.endsWith(".pdf") || previewFile.mimeType === "application/pdf" ? (
+                <div className="w-full h-[62vh] rounded-xl overflow-hidden border border-border shadow-xs bg-card">
+                  <iframe
+                    src={`/api/drive/download?fileId=${previewFile._id}`}
+                    title={previewFile.name}
+                    className="w-full h-full border-0"
+                  />
+                </div>
+              ) : (
+                <div className="text-center p-8 max-w-md space-y-4">
+                  <div className="w-16 h-16 rounded-2xl bg-primary/10 text-primary flex items-center justify-center mx-auto text-2xl">
+                    <i className="fa-solid fa-file-lines" />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-foreground text-sm">{previewFile.name}</h4>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Direct visual preview is optimized for Images and PDFs. You can download or view this file directly on your system.
+                    </p>
+                  </div>
+                  <div className="pt-2 flex items-center justify-center gap-2">
+                    <a
+                      href={`/api/drive/download?fileId=${previewFile._id}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center justify-center gap-1.5 h-9 px-4 rounded-lg text-xs font-semibold border border-border bg-background hover:bg-muted text-foreground transition-colors"
+                    >
+                      <i className="fa-solid fa-arrow-up-right-from-square text-xs text-primary" /> Open in New Tab
+                    </a>
+                    <a
+                      href={`/api/drive/download?fileId=${previewFile._id}&download=true`}
+                      download={previewFile.name}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center justify-center gap-1.5 h-9 px-4 rounded-lg text-xs font-semibold bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+                    >
+                      <i className="fa-solid fa-download text-xs" /> Download File
+                    </a>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-3 px-5 border-t border-border flex items-center justify-between text-xs text-muted-foreground bg-muted/20">
+              <span className="font-mono text-[11px]">ID: {previewFile._id}</span>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setDeleteConfirmFile(previewFile)}
+                className="h-7 text-xs text-destructive hover:bg-destructive/10 gap-1.5"
+              >
+                <i className="fa-solid fa-trash-can text-xs" /> Delete File
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Rename & Move File Modal */}
+      {editingFile && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in"
+          onClick={() => setEditingFile(null)}
+        >
+          <div
+            className="w-full max-w-md bg-card border border-border rounded-xl p-6 shadow-2xl space-y-4 animate-in zoom-in-95"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-3 text-primary">
+              <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-lg shrink-0">
+                <i className="fa-solid fa-pen-to-square" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-foreground">Rename & Move File</h3>
+                <p className="text-xs text-muted-foreground">Update document name or organize into folders</p>
+              </div>
+            </div>
+
+            <div className="space-y-3 pt-2">
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-foreground">File Name</label>
+                <Input
+                  type="text"
+                  value={editingFile.name}
+                  onChange={(e) => setEditingFile({ ...editingFile, name: e.target.value })}
+                  placeholder="File name"
+                  className="h-9 text-xs"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-foreground">Destination Folder</label>
+                <select
+                  value={editingFile.folder}
+                  onChange={(e) => setEditingFile({ ...editingFile, folder: e.target.value })}
+                  className="w-full h-9 px-3 text-xs rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
+                >
+                  <option value="/">Root Workspace (/)</option>
+                  <option value="Projects">Projects</option>
+                  <option value="Documents">Documents</option>
+                  <option value="Contracts">Contracts</option>
+                  <option value="Invoices">Invoices</option>
+                  <option value="Designs">Designs</option>
+                  <option value="Resumes">Resumes</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2.5 pt-3 border-t border-border/60">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setEditingFile(null)}
+                disabled={isUpdatingFile}
+              >
+                Cancel
+              </Button>
+              <Button
+                color="primary"
+                size="sm"
+                onClick={handleUpdateFile}
+                disabled={isUpdatingFile || !editingFile.name.trim()}
+                className="gap-2 font-semibold"
+              >
+                {isUpdatingFile ? (
+                  <>
+                    <i className="fa-solid fa-spinner fa-spin text-xs" /> Saving...
+                  </>
+                ) : (
+                  <>
+                    <i className="fa-solid fa-check text-xs" /> Save Changes
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Single File Confirmation Modal */}
+      {deleteConfirmFile && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in"
+          onClick={() => setDeleteConfirmFile(null)}
+        >
+          <div
+            className="w-full max-w-md bg-card border border-border rounded-xl p-6 shadow-2xl space-y-4 animate-in zoom-in-95"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-3 text-rose-500">
+              <div className="w-10 h-10 rounded-full bg-rose-500/10 flex items-center justify-center text-lg shrink-0">
+                <i className="fa-solid fa-trash-can" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-foreground">Delete File?</h3>
+                <p className="text-xs text-muted-foreground">Permanent deletion from workspace storage</p>
+              </div>
+            </div>
+
+            <div className="space-y-2 text-xs text-foreground/90">
+              <p>
+                Are you sure you want to permanently delete <strong className="text-foreground">"{deleteConfirmFile.name}"</strong>?
+              </p>
+              <div className="p-3 rounded-lg bg-muted/50 border border-border text-xs space-y-1">
+                <p className="text-muted-foreground">
+                  <strong>Folder:</strong> {deleteConfirmFile.folder || "/"} • <strong>Size:</strong> {Math.round((deleteConfirmFile.size || 0) / 1024)} KB
+                </p>
+                <p className="text-rose-500 font-medium">
+                  This file will be permanently removed from physical disk storage and database records.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2.5 pt-3 border-t border-border/60">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setDeleteConfirmFile(null)}
+              >
+                Cancel
+              </Button>
+              <Button
+                color="destructive"
+                size="sm"
+                onClick={() => handleDeleteFile(deleteConfirmFile._id)}
+                className="gap-2 font-semibold cursor-pointer"
+              >
+                <i className="fa-solid fa-trash-can text-xs" /> Delete File
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Batch Delete Confirmation Modal */}
+      {showBatchDeleteModal && selectedDriveFileIds.length > 0 && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in"
+          onClick={() => setShowBatchDeleteModal(false)}
+        >
+          <div
+            className="w-full max-w-md bg-card border border-border rounded-xl p-6 shadow-2xl space-y-4 animate-in zoom-in-95"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-3 text-rose-500">
+              <div className="w-10 h-10 rounded-full bg-rose-500/10 flex items-center justify-center text-lg shrink-0">
+                <i className="fa-solid fa-triangle-exclamation" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-foreground">Delete {selectedDriveFileIds.length} Selected File{selectedDriveFileIds.length === 1 ? "" : "s"}?</h3>
+                <p className="text-xs text-rose-500 font-medium">Batch permanent purge • Cannot be undone</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-foreground/90 leading-relaxed">
+              You are about to permanently delete <strong className="text-foreground">{selectedDriveFileIds.length}</strong> selected documents from Drive Space storage. This action cannot be reversed.
+            </p>
+
+            <div className="flex justify-end gap-2.5 pt-3 border-t border-border/60">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowBatchDeleteModal(false)}
+                disabled={isDeletingBatch}
+              >
+                Cancel
+              </Button>
+              <Button
+                color="destructive"
+                size="sm"
+                onClick={handleBatchDeleteDriveFiles}
+                disabled={isDeletingBatch}
+                className="gap-2 font-semibold cursor-pointer"
+              >
+                {isDeletingBatch ? (
+                  <>
+                    <i className="fa-solid fa-spinner fa-spin text-xs" /> Deleting {selectedDriveFileIds.length} files...
+                  </>
+                ) : (
+                  <>
+                    <i className="fa-solid fa-trash-can text-xs" /> Delete ({selectedDriveFileIds.length})
                   </>
                 )}
               </Button>

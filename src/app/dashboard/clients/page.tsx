@@ -887,7 +887,9 @@ export default function OperationsPage() {
     });
   }, [externalMembers, externalSearch, externalStatusFilter, externalCategoryFilter]);
 
-  if (!permLoading && !canAccessModule("clients") && !canAccessModule("projects")) {
+  const isDriveTab = tabParam === "drive" || activeTab === "drive";
+
+  if (!permLoading && !isDriveTab && !canAccessModule("clients") && !canAccessModule("projects")) {
     return <AccessRestricted moduleName="OPS Portal" icon="fa-solid fa-list-check" />;
   }
 
@@ -911,14 +913,16 @@ export default function OperationsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-primary/20 to-teal-500/20 text-primary flex items-center justify-center border border-primary/20 shadow-sm">
-            <i className={cn("text-base", isEmployee ? "fa-solid fa-folder-tree" : "fa-solid fa-list-check")} />
+            <i className={cn("text-base", isDriveTab ? "fa-solid fa-hard-drive" : isEmployee ? "fa-solid fa-folder-tree" : "fa-solid fa-list-check")} />
           </div>
           <div>
             <h1 className="text-xl font-bold text-foreground tracking-tight">
-              {isEmployee ? "Projects & Drive Space" : "OPS Portal"}
+              {isDriveTab ? "Drive Space" : isEmployee ? "Projects & Drive Space" : "OPS Portal"}
             </h1>
             <p className="text-xs text-muted-foreground">
-              {isEmployee
+              {isDriveTab
+                ? "Workspace file repository, cloud documents & asset storage"
+                : isEmployee
                 ? "Agile Kanban sprint boards, task workflows, SOP Wiki & Drive file storage"
                 : "Operations control, projects & drive, contracts & onboarding, HR allocations, external vendors & workspace reports"}
             </p>
@@ -1019,6 +1023,7 @@ export default function OperationsPage() {
             {[
               { key: "operations", label: "Operations Control", icon: "fa-solid fa-list-check", count: projects.length },
               { key: "projects", label: "Projects & Kanban", icon: "fa-solid fa-folder-tree", count: kanbanProjectsCount ?? projects.length },
+              { key: "drive", label: "Drive Space", icon: "fa-solid fa-hard-drive" },
               { key: "contracts", label: "Contracts & Onboarding", icon: "fa-solid fa-file-contract" },
               { key: "hr", label: "HR Workdesk", icon: "fa-solid fa-users-gear", count: hrAllocations.length },
               { key: "external", label: "External Teams", icon: "fa-solid fa-building-user", count: externalMembers.length },
@@ -1676,12 +1681,12 @@ export default function OperationsPage() {
       )}
 
       {/* Projects & Kanban Workspace View */}
-      {(activeTab === "projects" || isEmployee) && (
-        <ProjectsDriveWorkspace initialTab={tabParam === "drive" ? "drive" : "kanban"} hideHeader={true} />
+      {(activeTab === "projects" || (isEmployee && activeTab !== "drive")) && (
+        <ProjectsDriveWorkspace initialTab="kanban" hideHeader={true} />
       )}
 
-      {/* Drive Space Tab View (legacy fallback) */}
-      {activeTab === "drive" && !isEmployee && (
+      {/* Drive Space Tab View */}
+      {activeTab === "drive" && (
         <ProjectsDriveWorkspace initialTab="drive" hideHeader={true} />
       )}
 

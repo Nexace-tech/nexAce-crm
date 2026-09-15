@@ -25,13 +25,13 @@ export async function GET() {
 
     await connectToDatabase();
 
-    const { isSubAdminRole } = await import("@/lib/roles");
-    const isElevatedRole = session.role === "Admin" || session.role === "OPS" || isSubAdminRole(session.role);
+    const isAdmin = Boolean(session.role && session.role.trim().toLowerCase() === "admin");
     const queryCondition: any = {
       tenantId: new mongoose.Types.ObjectId(session.tenantId),
+      isRecycled: { $ne: true },
     };
 
-    if (!isElevatedRole) {
+    if (!isAdmin) {
       queryCondition.uploadedBy = new mongoose.Types.ObjectId(session.userId);
     }
 
@@ -180,18 +180,17 @@ export async function POST(request: Request) {
 }
 
 /**
- * DELETE: Remove file from disk and database metadata.
- * Body/Query: ?fileId=XYZ
+ * PATCH: Update file metadata (rename or move folder)
  */
-export async function DELETE(request: Request) {
+export async function PATCH(request: Request) {
   try {
     const session = await getSession();
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { searchParams } = new URL(request.url);
-    const fileId = searchParams.get("fileId");
+    const body = await request.json();
+    const { fileId, name, folder } = body;
 
     if (!fileId) {
       return NextResponse.json({ error: "File ID is required" }, { status: 400 });
@@ -204,42 +203,126 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: "File not found" }, { status: 404 });
     }
 
-    // Check permissions: restricted to uploader or Admin
     const isOwner = file.uploadedBy.toString() === session.userId;
-    const isAdmin = session.role === "Admin";
+    const isAdmin = Boolean(session.role && session.role.trim().toLowerCase() === "admin");
     if (!isOwner && !isAdmin) {
       return NextResponse.json({ error: "Forbidden: Access denied" }, { status: 403 });
     }
 
-    // Remove file from disk — with path traversal guard
-    const diskPath = path.resolve(path.join(UPLOAD_DIR, file.filePath));
-    if (diskPath.startsWith(UPLOAD_DIR + path.sep) || diskPath === UPLOAD_DIR) {
-      try {
-        await unlink(diskPath);
-      } catch (e) {
-        console.error("Failed to delete file from disk:", e);
-      }
-    } else {
-      console.error(`Path traversal blocked on delete: ${file.filePath}`);
+    const changes: string[] = [];
+    if (typeof name === "string" && name.trim()) {
+      const cleanName = name.trim();
+      changes.push(`renamed to '${cleanName}'`);
+      file.name = cleanName;
     }
 
-    // Remove from DB
-    await file.deleteOne();
+    if (typeof folder === "string") {
+      const cleanFolder = folder.trim() || "/";
+      changes.push(`moved to folder '${cleanFolder}'`);
+      file.folder = cleanFolder;
+    }
 
-    await ActivityLog.create({
-      tenantId: new mongoose.Types.ObjectId(session.tenantId),
-      userId: new mongoose.Types.ObjectId(session.userId),
-      userName: session.userName,
-      userRole: session.role,
-      action: "FILE_DELETED",
-      targetName: file.name,
-      details: `Deleted file '${file.name}' from Drive Space`,
-    });
+    if (changes.length > 0) {
+      await file.save();
 
-    return NextResponse.json({ success: true, message: "File deleted successfully" });
+      await ActivityLog.create({
+        tenantId: new mongoose.Types.ObjectId(session.tenantId),
+        userId: new mongoose.Types.ObjectId(session.userId),
+        userName: session.userName,
+        userRole: session.role,
+        action: "FILE_UPDATED",
+        targetName: file.name,
+        details: `Updated file '${file.name}': ${changes.join(", ")}`,
+      });
+    }
+
+    return NextResponse.json({ success: true, file });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Internal Server Error";
+    console.error("API PATCH Drive error:", error);
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
+/**
+ * DELETE: Remove file from disk and database metadata. Supports single or batch deletion.
+ * Query: ?fileId=XYZ or JSON body: { fileIds: [...] }
+ */
+export async function DELETE(request: Request) {
+  try {
+    const session = await getSession();
+    if (!session) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { searchParams } = new URL(request.url);
+    let fileId = searchParams.get("fileId");
+    let fileIds: string[] = [];
+
+    if (!fileId) {
+      try {
+        const body = await request.json();
+        if (body.fileIds && Array.isArray(body.fileIds)) {
+          fileIds = body.fileIds;
+        } else if (body.fileId) {
+          fileId = body.fileId;
+        }
+      } catch {
+        // query param only
+      }
+    }
+
+    if (fileId) {
+      fileIds = [fileId];
+    }
+
+    if (!fileIds.length) {
+      return NextResponse.json({ error: "File ID is required" }, { status: 400 });
+    }
+
+    await connectToDatabase();
+
+    const isAdmin = Boolean(session.role && session.role.trim().toLowerCase() === "admin");
+    let deletedCount = 0;
+
+    for (const id of fileIds) {
+      const file = await DriveFile.findById(id);
+      if (!file || file.tenantId.toString() !== session.tenantId) continue;
+
+      const isOwner = file.uploadedBy.toString() === session.userId;
+      if (!isOwner && !isAdmin) continue;
+
+      // Remove file from disk — with path traversal guard
+      const diskPath = path.resolve(path.join(UPLOAD_DIR, file.filePath));
+      if (diskPath.startsWith(UPLOAD_DIR + path.sep) || diskPath === UPLOAD_DIR) {
+        try {
+          await unlink(diskPath);
+        } catch (e) {
+          console.error("Failed to delete file from disk:", e);
+        }
+      } else {
+        console.error(`Path traversal blocked on delete: ${file.filePath}`);
+      }
+
+      await file.deleteOne();
+      deletedCount++;
+
+      await ActivityLog.create({
+        tenantId: new mongoose.Types.ObjectId(session.tenantId),
+        userId: new mongoose.Types.ObjectId(session.userId),
+        userName: session.userName,
+        userRole: session.role,
+        action: "FILE_DELETED",
+        targetName: file.name,
+        details: `Deleted file '${file.name}' from Drive Space`,
+      });
+    }
+
+    return NextResponse.json({ success: true, deletedCount, message: `${deletedCount} file(s) deleted successfully` });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Internal Server Error";
     console.error("API DELETE Drive error:", error);
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
+

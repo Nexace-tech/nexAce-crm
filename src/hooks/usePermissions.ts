@@ -81,7 +81,10 @@ export function usePermissions() {
 
   const canAccessModule = (moduleKey: string): boolean => {
     if (!user) return false;
-    if (isAdmin) return true;
+    // Drive Space is accessible to all authenticated workspace users
+    if (moduleKey === "drive") {
+      return true;
+    }
 
     // OPS Portal (/dashboard/clients) houses both Clients and Projects & Drive.
     // If checking "clients", allow access if the role has either "clients" OR "projects" enabled.

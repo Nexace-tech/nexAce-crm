@@ -328,6 +328,7 @@ const PRESET_TEMPLATES: RolePresetTemplate[] = [
       "sendChatMessages", "viewMailCenter", "sendEmails", "viewWhatsAppPanel", "sendWhatsAppMessages", "startVirtualHuddles", "joinVirtualHuddles",
       "viewBD", "manageLeads", "deleteLeads", "manageProposals", "sendProposals", "manageExecutiveTargets", "exportBD",
       "submitReferral", "viewOwnReferrals", "viewNotifications",
+      "viewDriveFiles", "uploadDriveFiles", "downloadDriveFiles", "shareDriveFiles",
     ],
   },
   {
@@ -344,6 +345,7 @@ const PRESET_TEMPLATES: RolePresetTemplate[] = [
       "viewITPortal", "manageITInvoices", "manageITSubscriptions",
       "sendChatMessages", "viewMailCenter", "sendEmails",
       "viewNotifications",
+      "viewDriveFiles", "uploadDriveFiles", "downloadDriveFiles", "shareDriveFiles",
     ],
   },
   {

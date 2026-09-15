@@ -47,11 +47,17 @@ export async function GET(request: Request) {
     let downloadName = "document";
     let mimeType = "application/octet-stream";
 
+    const isAdmin = Boolean(session.role && session.role.trim().toLowerCase() === "admin");
+
     if (fileId) {
       await connectToDatabase();
       const file = await DriveFile.findById(fileId);
       if (!file || file.tenantId.toString() !== session.tenantId) {
         return new Response("File not found", { status: 404 });
+      }
+      // Non-admin can only access/download their own files
+      if (!isAdmin && file.uploadedBy && file.uploadedBy.toString() !== session.userId) {
+        return new Response("Forbidden: Access restricted to your own files", { status: 403 });
       }
       filePathOnDisk = file.filePath;
       downloadName = file.name;
