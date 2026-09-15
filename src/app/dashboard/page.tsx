@@ -12,7 +12,7 @@ import { EmployeeDashboard } from "@/components/dashboard/EmployeeDashboard";
 import { PendingApprovalDashboard } from "@/components/dashboard/PendingApprovalDashboard";
 import { Preloader } from "@/components/ui/Preloader";
 import { AccessRestricted } from "@/components/ui/AccessRestricted";
-import { isSubAdminRole } from "@/lib/roles";
+import { isSubAdminRole, normalizeRoleKey } from "@/lib/roles";
 
 export default function DashboardHome() {
   const { user, loading } = useAuth();
@@ -34,7 +34,8 @@ export default function DashboardHome() {
     return <AccessRestricted moduleName="Overview Dashboard" icon="fa-solid fa-chart-simple" />;
   }
 
-  const role = user.role?.toLowerCase();
+  // Normalize role so any casing variant from the DB ("admin", "Admin", "ADMIN") is handled safely
+  const role = normalizeRoleKey(user.role).toLowerCase();
 
   // 1. Check if user registration status is Pending
   if (user.status === "Pending") {

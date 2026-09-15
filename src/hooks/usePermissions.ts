@@ -81,6 +81,8 @@ export function usePermissions() {
 
   const canAccessModule = (moduleKey: string): boolean => {
     if (!user) return false;
+    // Root Admin always has full, unconditional access to every module
+    if (isAdmin) return true;
     // Drive Space is accessible to all authenticated workspace users
     if (moduleKey === "drive") {
       return true;

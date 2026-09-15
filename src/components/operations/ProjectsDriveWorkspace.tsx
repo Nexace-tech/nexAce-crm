@@ -1224,110 +1224,132 @@ export function ProjectsDriveWorkspace({ initialTab, hideHeader = false }: Proje
             </Button>
           </div>
         </div>
-      ) : (
-        <div className="flex items-center justify-end gap-2">
-          {can("createProjects") && (
-            <Button variant="outline" size="sm" onClick={() => setShowProjectForm(true)} className="gap-2 font-semibold h-8 text-xs">
-              <i className="fa-solid fa-folder-plus text-xs" /> New Project
-            </Button>
-          )}
-          <Button color="primary" size="sm" onClick={() => setShowTaskForm(true)} className="gap-2 font-semibold h-8 text-xs">
-            <i className="fa-solid fa-plus text-xs" /> Create Task
-          </Button>
-        </div>
-      )}
+      ) : null}
 
-      {/* Tabs */}
-      <div className="flex border-b border-border space-x-1 overflow-x-auto no-scrollbar">
-        <button
-          onClick={() => setActiveTab("kanban")}
-          className={cn(
-            "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
-            activeTab === "kanban"
-              ? "border-primary text-primary bg-primary/10 rounded-t-md font-semibold -mb-px"
-              : "border-transparent text-muted-foreground hover:text-foreground"
-          )}
-        >
-          <i className="fa-solid fa-square-kanban text-sm" /> Kanban Board
-        </button>
-
-        <button
-          onClick={() => setActiveTab("gantt")}
-          className={cn(
-            "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
-            activeTab === "gantt"
-              ? "border-primary text-primary bg-primary/10 rounded-t-md font-semibold -mb-px"
-              : "border-transparent text-muted-foreground hover:text-foreground"
-          )}
-        >
-          <i className="fa-solid fa-chart-gantt text-sm" /> Gantt Timeline
-        </button>
-
-        <button
-          onClick={() => setActiveTab("wiki")}
-          className={cn(
-            "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
-            activeTab === "wiki"
-              ? "border-primary text-primary bg-primary/10 rounded-t-md font-semibold -mb-px"
-              : "border-transparent text-muted-foreground hover:text-foreground"
-          )}
-        >
-          <i className="fa-solid fa-book text-sm" /> SOP Wiki
-        </button>
-
-        <button
-          onClick={() => setActiveTab("drive")}
-          className={cn(
-            "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
-            activeTab === "drive"
-              ? "border-primary text-primary bg-primary/10 rounded-t-md font-semibold -mb-px"
-              : "border-transparent text-muted-foreground hover:text-foreground"
-          )}
-        >
-          <i className="fa-solid fa-hard-drive text-sm" /> Drive Space
-        </button>
-
-        <button
-          onClick={() => setActiveTab("history")}
-          className={cn(
-            "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
-            activeTab === "history"
-              ? "border-primary text-primary bg-primary/10 rounded-t-md font-semibold -mb-px"
-              : "border-transparent text-muted-foreground hover:text-foreground"
-          )}
-        >
-          <i className="fa-solid fa-clock-rotate-left text-sm" /> Project History
-        </button>
-
-        {canAccessTrash && (
+      {/* Modern Workspace Segmented Navigation & Action Bar */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 p-1.5 rounded-2xl bg-card/70 dark:bg-card/40 backdrop-blur-md border border-border/70 shadow-xs">
+        <div className="flex items-center gap-1 overflow-x-auto no-scrollbar py-0.5">
           <button
-            onClick={() => {
-              setActiveTab("trash");
-              fetchTrashedProjects();
-            }}
+            onClick={() => setActiveTab("kanban")}
             className={cn(
-              "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
-              activeTab === "trash"
-                ? "border-rose-500 text-rose-500 bg-rose-500/10 rounded-t-md font-semibold -mb-px"
-                : "border-transparent text-muted-foreground hover:text-foreground"
+              "px-3.5 py-2 text-xs font-semibold rounded-xl transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
+              activeTab === "kanban"
+                ? "bg-primary text-primary-foreground shadow-xs font-bold"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
             )}
           >
-            <i className="fa-solid fa-trash-can text-sm" /> Project Trash (30d Hold)
-            {trashedProjects.length > 0 && (
-              <Badge variant="outline" className="px-1.5 py-0 text-[10px] bg-rose-500/15 text-rose-400 border-rose-500/30 font-semibold font-mono">
-                {trashedProjects.length}
-              </Badge>
-            )}
+            <i className={cn("fa-solid fa-square-kanban text-xs", activeTab === "kanban" ? "text-primary-foreground" : "text-sky-400")} />
+            <span>Kanban Board</span>
           </button>
-        )}
+
+          <button
+            onClick={() => setActiveTab("gantt")}
+            className={cn(
+              "px-3.5 py-2 text-xs font-semibold rounded-xl transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
+              activeTab === "gantt"
+                ? "bg-primary text-primary-foreground shadow-xs font-bold"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+            )}
+          >
+            <i className={cn("fa-solid fa-chart-gantt text-xs", activeTab === "gantt" ? "text-primary-foreground" : "text-indigo-400")} />
+            <span>Gantt Timeline</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab("wiki")}
+            className={cn(
+              "px-3.5 py-2 text-xs font-semibold rounded-xl transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
+              activeTab === "wiki"
+                ? "bg-primary text-primary-foreground shadow-xs font-bold"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+            )}
+          >
+            <i className={cn("fa-solid fa-book-bookmark text-xs", activeTab === "wiki" ? "text-primary-foreground" : "text-emerald-400")} />
+            <span>SOP Wiki</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab("drive")}
+            className={cn(
+              "px-3.5 py-2 text-xs font-semibold rounded-xl transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
+              activeTab === "drive"
+                ? "bg-primary text-primary-foreground shadow-xs font-bold"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+            )}
+          >
+            <i className={cn("fa-solid fa-hard-drive text-xs", activeTab === "drive" ? "text-primary-foreground" : "text-amber-400")} />
+            <span>Drive Space</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab("history")}
+            className={cn(
+              "px-3.5 py-2 text-xs font-semibold rounded-xl transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
+              activeTab === "history"
+                ? "bg-primary text-primary-foreground shadow-xs font-bold"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+            )}
+          >
+            <i className={cn("fa-solid fa-clock-rotate-left text-xs", activeTab === "history" ? "text-primary-foreground" : "text-purple-400")} />
+            <span>Project History</span>
+          </button>
+
+          {canAccessTrash && (
+            <button
+              onClick={() => {
+                setActiveTab("trash");
+                fetchTrashedProjects();
+              }}
+              className={cn(
+                "px-3.5 py-2 text-xs font-semibold rounded-xl transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
+                activeTab === "trash"
+                  ? "bg-rose-500 text-white shadow-xs font-bold"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+              )}
+            >
+              <i className="fa-solid fa-trash-can text-xs text-rose-400" />
+              <span>Trash (30d)</span>
+              {trashedProjects.length > 0 && (
+                <span className={cn("px-1.5 py-0.2 text-[10px] rounded-full font-mono font-bold", activeTab === "trash" ? "bg-white/25 text-white" : "bg-rose-500/15 text-rose-500")}>
+                  {trashedProjects.length}
+                </span>
+              )}
+            </button>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2 self-end md:self-auto shrink-0 px-1">
+          {can("createProjects") && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowProjectForm(true)}
+              className="gap-2 font-semibold h-8 text-xs border-border/80 hover:bg-muted/60 hover:text-primary transition-colors cursor-pointer"
+            >
+              <i className="fa-solid fa-folder-plus text-xs text-primary" />
+              <span>New Project</span>
+            </Button>
+          )}
+          <Button
+            color="primary"
+            size="sm"
+            onClick={() => setShowTaskForm(true)}
+            className="gap-2 font-semibold h-8 text-xs shadow-xs cursor-pointer"
+          >
+            <i className="fa-solid fa-plus text-xs" />
+            <span>Create Task</span>
+          </Button>
+        </div>
       </div>
 
-      {/* Project Selector Bar (visible on active workspace views) */}
+      {/* Active Project HUD & Workspace Scope Bar */}
       {activeTab !== "trash" && (
-        <Card className="p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-3 w-full sm:w-auto flex-wrap">
+        <Card className="p-3.5 bg-card/70 dark:bg-card/40 backdrop-blur-md border border-border/70 rounded-2xl shadow-xs flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3.5">
+          <div className="flex items-center gap-3 flex-wrap">
             <div className="flex items-center gap-2">
-              <span className="text-sm font-semibold text-foreground shrink-0">Active Project:</span>
+              <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground shrink-0 flex items-center gap-1.5">
+                <i className="fa-solid fa-sliders text-xs text-primary" /> Scope:
+              </span>
               <select
                 value={selectedProjectId}
                 onChange={(e) => {
@@ -1335,9 +1357,9 @@ export function ProjectsDriveWorkspace({ initialTab, hideHeader = false }: Proje
                   setSelectedProjectId(val);
                   fetchTasks(val);
                 }}
-                className="h-9 px-3 text-sm bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary w-64 cursor-pointer font-medium"
+                className="h-9 pl-3 pr-7 text-xs bg-background border border-border/80 rounded-xl text-foreground font-semibold focus:outline-none focus:ring-1 focus:ring-primary w-64 cursor-pointer truncate shadow-2xs hover:border-primary/40 transition-colors"
               >
-                <option value="all">⚡ All Projects (Combined Workspace View)</option>
+                <option value="all">⚡ All Projects (Combined Workspace)</option>
                 {(boardFilter === "starred"
                   ? projects.filter((p) => starredProjectIds.includes(p._id))
                   : projects
@@ -1357,46 +1379,49 @@ export function ProjectsDriveWorkspace({ initialTab, hideHeader = false }: Proje
                   type="button"
                   onClick={(e) => toggleStarProject(selectedProjectId, e)}
                   className={cn(
-                    "h-9 w-9 rounded-md border flex items-center justify-center transition-all cursor-pointer",
+                    "h-9 w-9 rounded-xl border flex items-center justify-center transition-all cursor-pointer shadow-2xs shrink-0",
                     starredProjectIds.includes(selectedProjectId)
-                      ? "bg-amber-500/15 border-amber-500/50 text-amber-500 hover:bg-amber-500/25"
-                      : "border-border hover:bg-accent text-muted-foreground hover:text-amber-500"
+                      ? "bg-amber-500/15 border-amber-500/40 text-amber-500 hover:bg-amber-500/25"
+                      : "border-border hover:bg-muted text-muted-foreground hover:text-amber-500"
                   )}
                   title={starredProjectIds.includes(selectedProjectId) ? "Remove from Starred Boards" : "Add to Starred Boards"}
                 >
-                  <i className={cn("text-sm", starredProjectIds.includes(selectedProjectId) ? "fa-solid fa-star text-amber-500" : "fa-regular fa-star")} />
+                  <i className={cn("text-xs", starredProjectIds.includes(selectedProjectId) ? "fa-solid fa-star text-amber-500" : "fa-regular fa-star")} />
                 </button>
               )}
             </div>
 
-            <div className="flex items-center gap-2 text-xs">
-              <Badge variant="outline" className="gap-1.5 px-2.5 py-1 text-xs bg-muted/30">
-                <i className="fa-solid fa-folder-closed text-primary text-[11px]" />
-                Total Projects: <strong className="text-foreground">{projects.length}</strong>
-              </Badge>
+            <div className="flex items-center gap-2 text-xs flex-wrap">
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/20 text-xs font-medium">
+                <i className="fa-solid fa-folder-closed text-[11px]" />
+                <span>Total:</span>
+                <strong className="font-bold">{projects.length}</strong>
+              </div>
 
-              <Badge variant="outline" className="gap-1.5 px-2.5 py-1 text-xs bg-emerald-500/10 text-emerald-500 border-emerald-500/30">
-                <i className="fa-solid fa-circle-play text-emerald-500 text-[11px]" />
-                Active Projects: <strong className="text-emerald-500">{projects.filter((p) => p.status === "In Progress" || p.status === "Planning" || !p.status).length}</strong>
-              </Badge>
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 text-xs font-medium">
+                <i className="fa-solid fa-circle-play text-[11px]" />
+                <span>Active:</span>
+                <strong className="font-bold">{projects.filter((p) => p.status === "In Progress" || p.status === "Planning" || !p.status).length}</strong>
+              </div>
 
               {starredProjectIds.length > 0 && (
-                <Badge variant="outline" className="gap-1.5 px-2.5 py-1 text-xs bg-amber-500/10 text-amber-500 border-amber-500/30">
-                  <i className="fa-solid fa-star text-amber-500 text-[11px]" />
-                  Starred: <strong className="text-amber-500">{starredProjectIds.length}</strong>
-                </Badge>
+                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 text-xs font-medium">
+                  <i className="fa-solid fa-star text-[11px]" />
+                  <span>Starred:</span>
+                  <strong className="font-bold">{starredProjectIds.length}</strong>
+                </div>
               )}
             </div>
           </div>
 
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <div className="flex items-center gap-2 text-xs justify-end flex-wrap">
             {selectedProjectId && selectedProjectId !== "all" && (
               <>
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={handleOpenEditProject}
-                  className="gap-2 font-semibold text-xs h-8 border-primary/40 text-primary hover:bg-primary/10"
+                  className="gap-2 font-semibold text-xs h-8 border-primary/30 text-primary hover:bg-primary/10 rounded-xl"
                 >
                   <i className="fa-solid fa-pen-to-square text-xs" /> Edit Details
                 </Button>
@@ -1412,18 +1437,20 @@ export function ProjectsDriveWorkspace({ initialTab, hideHeader = false }: Proje
                         setShowDeleteConfirm(true);
                       }
                     }}
-                    className="gap-2 font-semibold text-xs h-8 border-rose-500/40 text-rose-500 hover:bg-rose-500/10 hover:border-rose-500/60 cursor-pointer"
-                    title="Move project to trash (preserved for 30 days so you can restore)"
+                    className="gap-2 font-semibold text-xs h-8 border-rose-500/30 text-rose-500 hover:bg-rose-500/10 rounded-xl cursor-pointer"
+                    title="Move project to trash (preserved for 30 days)"
                   >
-                    <i className="fa-solid fa-trash-can text-xs" /> Delete Project
+                    <i className="fa-solid fa-trash-can text-xs" /> Move to Trash
                   </Button>
                 )}
               </>
             )}
-            <Badge color="primary" variant="soft" className="gap-1.5 px-2.5 py-1 text-xs font-semibold">
+
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary/10 text-primary border border-primary/25 font-bold text-xs shadow-2xs">
               <i className="fa-solid fa-list-check text-[11px]" />
-              Total Tasks: <strong className="text-primary-foreground">{tasks.length}</strong>
-            </Badge>
+              <span>Total Tasks:</span>
+              <span className="font-mono">{tasks.length}</span>
+            </div>
           </div>
         </Card>
       )}
@@ -1434,48 +1461,47 @@ export function ProjectsDriveWorkspace({ initialTab, hideHeader = false }: Proje
           {/* Board Sidebar */}
           <div
             className={cn(
-              "relative bg-card border border-border dark:bg-[#141b1f] dark:border-[#26343b] shadow-sm rounded-2xl p-4 transition-all duration-300 shrink-0 w-full lg:w-auto overflow-visible",
-              boardSidebarCollapsed ? "lg:w-16" : "lg:w-64"
+              "relative bg-card/70 dark:bg-card/40 backdrop-blur-md border border-border/70 shadow-xs rounded-2xl p-3.5 transition-all duration-300 shrink-0 w-full lg:w-auto overflow-visible",
+              boardSidebarCollapsed ? "lg:w-16" : "lg:w-60"
             )}
           >
             {/* Collapse Toggle Button on vertical divider */}
             <button
               onClick={() => setBoardSidebarCollapsed(!boardSidebarCollapsed)}
-              className="hidden lg:flex absolute -right-3 top-10 z-20 w-6 h-6 rounded-full bg-card border border-border text-muted-foreground hover:text-foreground dark:bg-[#1c262b] dark:border-[#2e3e46] dark:text-slate-300 dark:hover:text-white items-center justify-center shadow-md cursor-pointer text-xs transition-colors"
+              className="hidden lg:flex absolute -right-3 top-9 z-20 w-6 h-6 rounded-full bg-card border border-border/80 text-muted-foreground hover:text-foreground items-center justify-center shadow-xs cursor-pointer text-xs transition-colors"
               title={boardSidebarCollapsed ? "Expand Board Sidebar" : "Collapse Board Sidebar"}
             >
-              <i className={cn("fa-solid", boardSidebarCollapsed ? "fa-chevron-right" : "fa-chevron-left")} />
+              <i className={cn("fa-solid text-[10px]", boardSidebarCollapsed ? "fa-chevron-right" : "fa-chevron-left")} />
             </button>
 
             {!boardSidebarCollapsed ? (
-              <div className="space-y-4">
-                {/* Oval Pill Add New Board Button */}
+              <div className="space-y-3.5">
+                {/* Add New Board Button */}
                 <button
                   onClick={() => setShowProjectForm(true)}
-                  className="w-full bg-primary hover:bg-primary/90 active:scale-[0.98] text-primary-foreground font-medium text-sm py-2.5 px-6 rounded-full transition-all duration-200 shadow-md shadow-primary/20 flex items-center justify-center gap-2 cursor-pointer"
+                  className="w-full bg-primary hover:bg-primary/90 active:scale-[0.98] text-primary-foreground font-semibold text-xs py-2.5 px-4 rounded-xl transition-all duration-200 shadow-sm shadow-primary/20 flex items-center justify-center gap-2 cursor-pointer"
                 >
+                  <i className="fa-solid fa-plus text-xs" />
                   <span>Add New Board</span>
                 </button>
 
-                {/* Sidebar Menu Items */}
-                <div className="space-y-1.5 pt-1">
+                {/* Sidebar Navigation Items */}
+                <div className="space-y-1 pt-0.5">
                   {/* All Boards */}
                   <button
-                    onClick={() => {
-                      setBoardFilter("all");
-                    }}
+                    onClick={() => setBoardFilter("all")}
                     className={cn(
-                      "w-full flex items-center justify-between px-4 py-3 rounded-2xl text-sm font-medium transition-all cursor-pointer",
+                      "w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer",
                       boardFilter === "all"
-                        ? "bg-primary/10 text-primary font-semibold border border-primary/25 dark:bg-[#0d3135] dark:text-[#30b8bd] dark:border-transparent shadow-xs"
-                        : "text-muted-foreground hover:bg-accent/60 hover:text-foreground dark:text-slate-200 dark:hover:bg-[#0e272a] dark:hover:text-[#30b8bd]"
+                        ? "bg-primary/10 text-primary border border-primary/25 shadow-2xs font-bold"
+                        : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
                     )}
                   >
-                    <div className="flex items-center gap-3.5">
-                      <i className="fa-solid fa-table-cells-large text-lg" />
+                    <div className="flex items-center gap-2.5">
+                      <i className="fa-solid fa-table-cells-large text-sm text-primary" />
                       <span>All Boards</span>
                     </div>
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground dark:bg-slate-800/60 dark:text-slate-400 font-mono font-medium">
+                    <span className="text-[11px] px-2 py-0.5 rounded-md bg-muted/80 text-foreground font-mono font-semibold">
                       {projects.length}
                     </span>
                   </button>
@@ -1491,17 +1517,17 @@ export function ProjectsDriveWorkspace({ initialTab, hideHeader = false }: Proje
                       }
                     }}
                     className={cn(
-                      "w-full flex items-center justify-between px-4 py-3 rounded-2xl text-sm font-medium transition-all cursor-pointer",
+                      "w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer",
                       boardFilter === "starred"
-                        ? "bg-primary/10 text-primary font-semibold border border-primary/25 dark:bg-[#0d3135] dark:text-[#30b8bd] dark:border-transparent shadow-xs"
-                        : "text-muted-foreground hover:bg-accent/60 hover:text-foreground dark:text-slate-200 dark:hover:bg-[#0e272a] dark:hover:text-[#30b8bd]"
+                        ? "bg-primary/10 text-primary border border-primary/25 shadow-2xs font-bold"
+                        : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
                     )}
                   >
-                    <div className="flex items-center gap-3.5">
-                      <i className={cn("text-lg", starredProjectIds.length > 0 ? "fa-solid fa-star text-amber-500" : "fa-regular fa-star")} />
+                    <div className="flex items-center gap-2.5">
+                      <i className={cn("text-sm", starredProjectIds.length > 0 ? "fa-solid fa-star text-amber-500" : "fa-regular fa-star text-muted-foreground")} />
                       <span>Starred Boards</span>
                     </div>
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground dark:bg-slate-800/60 dark:text-slate-400 font-mono font-medium">
+                    <span className="text-[11px] px-2 py-0.5 rounded-md bg-muted/80 text-foreground font-mono font-semibold">
                       {starredProjectIds.length}
                     </span>
                   </button>
@@ -1513,14 +1539,14 @@ export function ProjectsDriveWorkspace({ initialTab, hideHeader = false }: Proje
                         setActiveTab("trash");
                         fetchTrashedProjects();
                       }}
-                      className="w-full flex items-center justify-between px-4 py-3 rounded-2xl text-sm font-medium transition-all cursor-pointer text-muted-foreground hover:bg-accent/60 hover:text-foreground dark:text-slate-200 dark:hover:bg-[#1a1215] dark:hover:text-rose-400"
+                      className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer text-muted-foreground hover:bg-rose-500/10 hover:text-rose-500"
                     >
-                      <div className="flex items-center gap-3.5">
-                        <i className="fa-solid fa-trash-can text-lg text-rose-400" />
-                        <span>Trash (30d Hold)</span>
+                      <div className="flex items-center gap-2.5">
+                        <i className="fa-solid fa-trash-can text-sm text-rose-400" />
+                        <span>Trash (30d)</span>
                       </div>
                       {trashedProjects.length > 0 && (
-                        <span className="text-xs px-2 py-0.5 rounded-full bg-rose-500/15 text-rose-400 font-mono font-medium">
+                        <span className="text-[11px] px-2 py-0.5 rounded-md bg-rose-500/15 text-rose-500 font-mono font-bold">
                           {trashedProjects.length}
                         </span>
                       )}
@@ -1528,16 +1554,16 @@ export function ProjectsDriveWorkspace({ initialTab, hideHeader = false }: Proje
                   )}
                 </div>
 
-                {/* Sublist of Starred Projects when Starred Boards filter is active */}
+                {/* Sublist of Starred Projects */}
                 {boardFilter === "starred" && (
-                  <div className="pt-2 border-t border-border dark:border-[#26343b] space-y-1">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground dark:text-slate-400 px-2 pb-1">
+                  <div className="pt-2 border-t border-border/70 space-y-1">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground px-2 pb-1">
                       Starred Projects
                     </p>
                     {projects.filter((p) => starredProjectIds.includes(p._id)).length === 0 ? (
-                      <div className="p-3 text-center text-xs text-muted-foreground bg-muted/30 dark:bg-[#0d3135]/40 rounded-xl border border-dashed border-border dark:border-[#26343b]">
-                        <i className="fa-regular fa-star text-amber-500 mb-1.5 text-base block" />
-                        No starred boards yet. Click the star icon next to any project to pin it here.
+                      <div className="p-3 text-center text-xs text-muted-foreground bg-muted/20 rounded-xl border border-dashed border-border/70">
+                        <i className="fa-regular fa-star text-amber-500 mb-1.5 text-sm block" />
+                        No starred boards yet. Click the star icon to pin boards here.
                       </div>
                     ) : (
                       projects
@@ -1554,8 +1580,8 @@ export function ProjectsDriveWorkspace({ initialTab, hideHeader = false }: Proje
                               className={cn(
                                 "flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium cursor-pointer transition-all group",
                                 isSelected
-                                  ? "bg-primary/15 text-primary border border-primary/40 font-semibold dark:bg-[#006970]/50 dark:text-white dark:border-[#006970]"
-                                  : "text-foreground hover:bg-muted/70 dark:text-slate-300 dark:hover:bg-[#0e272a] dark:hover:text-white"
+                                  ? "bg-primary/15 text-primary border border-primary/30 font-semibold"
+                                  : "text-foreground hover:bg-muted/60"
                               )}
                             >
                               <span className="truncate flex items-center gap-2">
@@ -1578,55 +1604,56 @@ export function ProjectsDriveWorkspace({ initialTab, hideHeader = false }: Proje
                 )}
               </div>
             ) : (
-              <div className="flex flex-col items-center space-y-4 pt-2">
+              <div className="flex flex-col items-center space-y-3 pt-1">
                 <button
                   onClick={() => setShowProjectForm(true)}
-                  className="w-10 h-10 bg-primary hover:bg-primary/90 text-primary-foreground rounded-full flex items-center justify-center shadow-md cursor-pointer"
+                  className="w-9 h-9 bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl flex items-center justify-center shadow-xs cursor-pointer transition-colors"
                   title="Add New Board"
                 >
-                  <i className="fa-solid fa-plus text-sm" />
+                  <i className="fa-solid fa-plus text-xs" />
                 </button>
                 <button
                   onClick={() => setBoardFilter("all")}
                   className={cn(
-                    "w-10 h-10 rounded-xl flex items-center justify-center cursor-pointer transition-colors",
+                    "w-9 h-9 rounded-xl flex items-center justify-center cursor-pointer transition-colors",
                     boardFilter === "all"
-                      ? "bg-primary/10 text-primary dark:bg-[#0d3135] dark:text-[#30b8bd]"
-                      : "text-muted-foreground hover:bg-muted hover:text-foreground dark:text-white dark:hover:bg-[#0e272a]"
+                      ? "bg-primary/10 text-primary border border-primary/25"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
                   )}
                   title="All Boards"
                 >
-                  <i className="fa-solid fa-table-cells-large text-base" />
+                  <i className="fa-solid fa-table-cells-large text-sm" />
                 </button>
                 <button
                   onClick={() => setBoardFilter("starred")}
                   className={cn(
-                    "w-10 h-10 rounded-xl flex items-center justify-center cursor-pointer transition-colors",
+                    "w-9 h-9 rounded-xl flex items-center justify-center cursor-pointer transition-colors",
                     boardFilter === "starred"
-                      ? "bg-primary/10 text-primary dark:bg-[#0d3135] dark:text-[#30b8bd]"
-                      : "text-muted-foreground hover:bg-muted hover:text-foreground dark:text-white dark:hover:bg-[#0e272a]"
+                      ? "bg-primary/10 text-primary border border-primary/25"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
                   )}
                   title="Starred Boards"
                 >
-                  <i className={cn("text-base", starredProjectIds.length > 0 ? "fa-solid fa-star text-amber-500" : "fa-regular fa-star")} />
+                  <i className={cn("text-sm", starredProjectIds.length > 0 ? "fa-solid fa-star text-amber-500" : "fa-regular fa-star text-muted-foreground")} />
                 </button>
               </div>
             )}
           </div>
 
-          {/* Kanban Multi-Filter Bar & Quick Actions Toolbar */}
+          {/* Kanban Multi-Filter Bar & Columns Container */}
           <div className="flex-1 min-w-0 w-full space-y-4">
-            <div className="bg-card border border-border rounded-xl p-3 shadow-xs flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 flex-wrap">
-              {/* Search & Priority Filters */}
-              <div className="flex items-center gap-2 flex-1 min-w-[240px] max-w-lg">
+            {/* Filter Toolbar */}
+            <div className="bg-card/70 dark:bg-card/40 backdrop-blur-md border border-border/70 rounded-2xl p-3 shadow-xs flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 flex-wrap">
+              {/* Search & Priority Selector */}
+              <div className="flex items-center gap-2 flex-1 min-w-[240px] max-w-md">
                 <div className="relative flex-1">
                   <i className="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground" />
                   <input
                     type="text"
                     value={taskSearchQuery}
                     onChange={(e) => setTaskSearchQuery(e.target.value)}
-                    placeholder="Search tasks by title, desc or assignee..."
-                    className="w-full pl-8 pr-7 py-1.5 text-xs rounded-lg border border-input bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                    placeholder="Search tasks, descriptions, or assignees..."
+                    className="w-full pl-8 pr-7 h-9 text-xs rounded-xl border border-border/80 bg-background/80 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary shadow-2xs"
                   />
                   {taskSearchQuery && (
                     <button
@@ -1642,22 +1669,22 @@ export function ProjectsDriveWorkspace({ initialTab, hideHeader = false }: Proje
                 <select
                   value={taskPriorityFilter}
                   onChange={(e) => setTaskPriorityFilter(e.target.value as any)}
-                  className="h-8 rounded-lg border border-input bg-background px-2.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary font-medium"
+                  className="h-9 rounded-xl border border-border/80 bg-background/80 px-3 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary font-medium cursor-pointer shadow-2xs"
                 >
                   <option value="all">All Priorities</option>
-                  <option value="High">🔴 High Priority</option>
+                  <option value="High">🔴 High</option>
                   <option value="Medium">🟡 Medium</option>
                   <option value="Low">🔵 Low</option>
                 </select>
               </div>
 
-              {/* Assignee & Due Soon Filters & Action Buttons */}
+              {/* Filters & Action Buttons */}
               <div className="flex items-center gap-2 flex-wrap justify-end">
                 {/* Assignee Filter */}
                 <select
                   value={taskAssigneeFilter}
                   onChange={(e) => setTaskAssigneeFilter(e.target.value)}
-                  className="h-8 rounded-lg border border-input bg-background px-2.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary font-medium max-w-[150px]"
+                  className="h-9 rounded-xl border border-border/80 bg-background/80 px-3 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary font-medium max-w-[140px] cursor-pointer shadow-2xs"
                 >
                   <option value="all">All Assignees</option>
                   {teamMembers.map((m) => (
@@ -1669,25 +1696,25 @@ export function ProjectsDriveWorkspace({ initialTab, hideHeader = false }: Proje
                 <select
                   value={taskSprintFilter}
                   onChange={(e) => setTaskSprintFilter(e.target.value)}
-                  className="h-8 rounded-lg border border-input bg-background px-2.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary font-medium max-w-[150px]"
+                  className="h-9 rounded-xl border border-border/80 bg-background/80 px-3 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary font-medium max-w-[140px] cursor-pointer shadow-2xs"
                 >
                   <option value="all">All Sprints</option>
                   <option value="active">🏃 Active Sprint</option>
-                  <option value="none">No Sprint (Backlog)</option>
+                  <option value="none">Backlog (No Sprint)</option>
                   {sprints.map((s) => (
-                    <option key={s._id} value={s._id}>{s.name} ({s.status})</option>
+                    <option key={s._id} value={s._id}>{s.name}</option>
                   ))}
                 </select>
 
-                {/* Due Soon / Overdue Toggle */}
+                {/* Due Soon Toggle */}
                 <button
                   type="button"
                   onClick={() => setTaskDueSoonOnly(!taskDueSoonOnly)}
                   className={cn(
-                    "h-8 px-2.5 rounded-lg border text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer",
+                    "h-9 px-3 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs",
                     taskDueSoonOnly
-                      ? "bg-amber-500/15 border-amber-500/50 text-amber-600 dark:text-amber-400"
-                      : "border-border text-muted-foreground hover:text-foreground hover:bg-muted/60"
+                      ? "bg-amber-500/15 border-amber-500/40 text-amber-600 dark:text-amber-400"
+                      : "border-border/80 text-muted-foreground hover:text-foreground hover:bg-muted/60"
                   )}
                   title="Show tasks due in next 7 days or overdue"
                 >
@@ -1704,7 +1731,7 @@ export function ProjectsDriveWorkspace({ initialTab, hideHeader = false }: Proje
                       setTaskAssigneeFilter("all");
                       setTaskDueSoonOnly(false);
                     }}
-                    className="h-8 px-2.5 text-xs text-rose-500 hover:bg-rose-500/10 rounded-lg transition-colors font-medium flex items-center gap-1 cursor-pointer"
+                    className="h-9 px-3 text-xs text-rose-500 hover:bg-rose-500/10 rounded-xl transition-colors font-medium flex items-center gap-1.5 cursor-pointer"
                     title="Reset all filters"
                   >
                     <i className="fa-solid fa-filter-circle-xmark text-[11px]" />
@@ -1717,19 +1744,19 @@ export function ProjectsDriveWorkspace({ initialTab, hideHeader = false }: Proje
                   variant="outline"
                   size="sm"
                   onClick={handleExportTasksCSV}
-                  className="h-8 gap-1.5 text-xs font-semibold border-border hover:bg-muted/60"
+                  className="h-9 gap-1.5 text-xs font-semibold border-border/80 hover:bg-muted/60 rounded-xl"
                   title="Export tasks to CSV"
                 >
                   <i className="fa-solid fa-file-csv text-primary text-xs" />
                   <span className="hidden sm:inline">Export CSV</span>
                 </Button>
 
-                {/* Add Task Button */}
+                {/* New Task Button */}
                 <Button
                   color="primary"
                   size="sm"
                   onClick={() => setShowTaskForm(true)}
-                  className="h-8 gap-1.5 text-xs font-semibold shadow-xs"
+                  className="h-9 gap-1.5 text-xs font-semibold shadow-xs rounded-xl"
                 >
                   <i className="fa-solid fa-plus text-[11px]" />
                   <span>New Task</span>
@@ -1738,7 +1765,7 @@ export function ProjectsDriveWorkspace({ initialTab, hideHeader = false }: Proje
             </div>
 
             {/* Kanban Columns Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               {columns.map((col) => {
                 const filteredTasks = tasks.filter((t) => {
                   if ((t.status || "To Do") !== col) return false;
@@ -1779,22 +1806,22 @@ export function ProjectsDriveWorkspace({ initialTab, hideHeader = false }: Proje
                 const isOver = dragOverCol === col;
 
                 const colAccentMap: Record<string, string> = {
-                  "To Do": "border-sky-400",
-                  "In Progress": "border-indigo-500",
-                  "Review": "border-amber-500",
-                  "Done": "border-emerald-500",
-                };
-                const colBorderMap: Record<string, string> = {
-                  "To Do": "border-sky-500/40 dark:border-sky-500/50 hover:border-sky-500/80 shadow-sky-500/5",
-                  "In Progress": "border-indigo-500/40 dark:border-indigo-500/50 hover:border-indigo-500/80 shadow-indigo-500/5",
-                  "Review": "border-amber-500/40 dark:border-amber-500/50 hover:border-amber-500/80 shadow-amber-500/5",
-                  "Done": "border-emerald-500/40 dark:border-emerald-500/50 hover:border-emerald-500/80 shadow-emerald-500/5",
+                  "To Do": "border-t-2 border-t-sky-400",
+                  "In Progress": "border-t-2 border-t-indigo-500",
+                  "Review": "border-t-2 border-t-amber-400",
+                  "Done": "border-t-2 border-t-emerald-400",
                 };
                 const colDotMap: Record<string, string> = {
                   "To Do": "bg-sky-400",
                   "In Progress": "bg-indigo-500",
-                  "Review": "bg-amber-500",
-                  "Done": "bg-emerald-500",
+                  "Review": "bg-amber-400",
+                  "Done": "bg-emerald-400",
+                };
+                const colGlowMap: Record<string, string> = {
+                  "To Do": "ring-sky-400/20",
+                  "In Progress": "ring-indigo-500/20",
+                  "Review": "ring-amber-400/20",
+                  "Done": "ring-emerald-400/20",
                 };
 
                 return (
@@ -1818,92 +1845,172 @@ export function ProjectsDriveWorkspace({ initialTab, hideHeader = false }: Proje
                       }
                     }}
                     className={cn(
-                      "flex flex-col rounded-xl border-2 bg-card/90 dark:bg-slate-900/90 p-4 space-y-3 transition-all duration-200 shadow-md",
-                      colBorderMap[col],
-                      isOver && `${colAccentMap[col]} bg-primary/10 scale-[1.02] shadow-xl border-4`
+                      "flex flex-col rounded-2xl bg-card/60 dark:bg-card/25 backdrop-blur-xs border border-border/70 p-3.5 space-y-3 transition-all duration-200 shadow-xs",
+                      colAccentMap[col],
+                      isOver && "bg-primary/10 border-primary scale-[1.01] shadow-md ring-2 ring-primary/20"
                     )}
                   >
-                    <div className="flex items-center justify-between pb-2 border-b border-border">
-                      <h3 className="font-bold text-sm text-foreground flex items-center gap-2">
-                        <span className={cn("w-2 h-2 rounded-full", colDotMap[col])} /> {col}
-                      </h3>
-                      <Badge color="primary" variant="soft" rounded="full">
-                        {colTasks.length}
-                      </Badge>
+                    {/* Column Header */}
+                    <div className="flex items-center justify-between pb-2.5 border-b border-border/70">
+                      <div className="flex items-center gap-2">
+                        <span className={cn("w-2.5 h-2.5 rounded-full ring-4", colGlowMap[col], colDotMap[col])} />
+                        <h3 className="font-bold text-xs uppercase tracking-wider text-foreground">
+                          {col}
+                        </h3>
+                        <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-muted/80 text-foreground font-mono">
+                          {colTasks.length}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setShowTaskForm(true)}
+                        className="w-6 h-6 rounded-lg text-muted-foreground hover:text-primary hover:bg-primary/10 flex items-center justify-center transition-colors text-xs cursor-pointer"
+                        title={`Add Task to ${col}`}
+                      >
+                        <i className="fa-solid fa-plus text-[11px]" />
+                      </button>
                     </div>
 
-                    <div className="space-y-3 min-h-[300px]">
+                    {/* Task Cards Container */}
+                    <div className="space-y-2.5 min-h-[320px]">
                       {colTasks.length === 0 ? (
                         <div
                           className={cn(
                             "h-32 flex flex-col items-center justify-center gap-2 p-3 text-xs text-muted-foreground border-2 border-dashed rounded-xl transition-all",
-                            isOver ? `${colAccentMap[col]} text-foreground bg-primary/5` : "border-border/60 hover:border-border hover:bg-muted/10"
+                            isOver ? "border-primary text-foreground bg-primary/5" : "border-border/60 hover:border-border hover:bg-muted/10"
                           )}
                         >
                           <span>{isOver ? `Drop here → ${col}` : `No tasks in ${col}`}</span>
                           {col === "To Do" && (
                             <button
                               onClick={() => setShowTaskForm(true)}
-                              className="px-3 py-1 text-[11px] font-semibold text-primary bg-primary/10 hover:bg-primary/20 rounded-md transition-colors cursor-pointer flex items-center gap-1.5"
+                              className="px-2.5 py-1 text-[11px] font-semibold text-primary bg-primary/10 hover:bg-primary/20 rounded-lg transition-colors cursor-pointer flex items-center gap-1.5"
                             >
                               <i className="fa-solid fa-plus text-[10px]" /> Add Task
                             </button>
                           )}
                         </div>
                       ) : (
-                        colTasks.map((t) => (
-                          <Card
-                            key={t._id}
-                            draggable
-                            onDragStart={(e) => {
-                              e.dataTransfer.setData("nexace/task-id", t._id);
-                              e.dataTransfer.effectAllowed = "move";
-                              setDraggedTaskId(t._id);
-                            }}
-                            onDragEnd={() => {
-                              setDraggedTaskId(null);
-                              setDragOverCol(null);
-                            }}
-                            onClick={() => setSelectedTask(t)}
-                            className={cn(
-                              "cursor-grab active:cursor-grabbing hover:shadow-md transition-all p-3.5 space-y-2.5 border-l-4 bg-card dark:bg-slate-800 border border-border/80 shadow-sm opacity-100 group/card",
-                              colAccentMap[col]
-                            )}
-                          >
-                            <div className="flex items-start justify-between gap-2">
-                              <p className="font-bold text-xs text-foreground leading-snug line-clamp-2 group-hover/card:text-primary transition-colors">
-                                {t.title}
-                              </p>
-                              <Badge
-                                color={t.priority === "High" ? "destructive" : t.priority === "Medium" ? "warning" : "info"}
-                                className="text-[10px] px-1.5 py-0 shrink-0 font-semibold"
-                              >
-                                {t.priority}
-                              </Badge>
-                            </div>
-                            {selectedProjectId === "all" && t.projectId?.name && (
-                              <div className="flex items-center gap-1 text-[10px] text-primary font-semibold">
-                                <i className="fa-solid fa-folder text-[9px]" /> {t.projectId.name}
-                              </div>
-                            )}
-                            {t.sprintId && (
-                              <div className="flex items-center gap-1 text-[10px] text-amber-600 dark:text-amber-400 font-semibold">
-                                <i className="fa-solid fa-person-running text-[9px]" /> {sprints.find(s => s._id === (t.sprintId?._id || t.sprintId))?.name || "Sprint Task"}
-                              </div>
-                            )}
-                            {t.description && <p className="text-[11px] text-foreground/80 leading-relaxed line-clamp-2">{t.description}</p>}
-                            <div className="flex items-center justify-between text-[10px] text-foreground/70 font-medium pt-1.5 border-t border-border/40">
-                              <span className="flex items-center gap-1">
-                                <i className="fa-solid fa-user text-[9px] text-primary" /> {t.assignee?.name || "Unassigned"}
-                              </span>
-                              {t.dueDate && (
-                                <span className="flex items-center gap-1 font-mono">
-                                  <i className="fa-solid fa-calendar-day text-[9px] text-muted-foreground" /> Due: {new Date(t.dueDate).toLocaleDateString()}
-                                </span>
+                        colTasks.map((t) => {
+                          const isHigh = t.priority === "High";
+                          const isMed = t.priority === "Medium";
+                          const subtasksTotal = Array.isArray(t.subtasks) ? t.subtasks.length : 0;
+                          const subtasksDone = Array.isArray(t.subtasks) ? t.subtasks.filter((s: any) => s.completed).length : 0;
+                          const subtaskPct = subtasksTotal > 0 ? Math.round((subtasksDone / subtasksTotal) * 100) : 0;
+
+                          const isDueSoon = t.dueDate && (() => {
+                            const d = new Date(t.dueDate).getTime();
+                            const now = Date.now();
+                            return d - now <= 3 * 24 * 60 * 60 * 1000 && d - now >= 0;
+                          })();
+                          const isOverdue = t.dueDate && new Date(t.dueDate).getTime() < Date.now() && t.status !== "Done";
+
+                          return (
+                            <div
+                              key={t._id}
+                              draggable
+                              onDragStart={(e) => {
+                                e.dataTransfer.setData("nexace/task-id", t._id);
+                                e.dataTransfer.effectAllowed = "move";
+                                setDraggedTaskId(t._id);
+                              }}
+                              onDragEnd={() => {
+                                setDraggedTaskId(null);
+                                setDragOverCol(null);
+                              }}
+                              onClick={() => setSelectedTask(t)}
+                              className={cn(
+                                "cursor-grab active:cursor-grabbing hover:shadow-md transition-all duration-200 p-3.5 space-y-2.5 bg-card dark:bg-slate-900/90 border border-border/80 hover:border-primary/50 rounded-xl shadow-xs group/card relative overflow-hidden",
+                                isHigh ? "border-l-4 border-l-rose-500" : isMed ? "border-l-4 border-l-amber-500" : "border-l-4 border-l-sky-500"
                               )}
+                            >
+                              {/* Top: Title & Priority */}
+                              <div className="flex items-start justify-between gap-2">
+                                <p className="font-bold text-xs text-foreground leading-snug line-clamp-2 group-hover/card:text-primary transition-colors">
+                                  {t.title}
+                                </p>
+                                <span
+                                  className={cn(
+                                    "text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border shrink-0 font-mono",
+                                    isHigh
+                                      ? "bg-rose-500/10 text-rose-500 border-rose-500/30"
+                                      : isMed
+                                      ? "bg-amber-500/10 text-amber-500 border-amber-500/30"
+                                      : "bg-sky-500/10 text-sky-500 border-sky-500/30"
+                                  )}
+                                >
+                                  {t.priority || "Medium"}
+                                </span>
+                              </div>
+
+                              {/* Project & Sprint Badges */}
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                {selectedProjectId === "all" && t.projectId?.name && (
+                                  <span className="inline-flex items-center gap-1 text-[10px] text-primary font-semibold bg-primary/10 px-2 py-0.5 rounded-md border border-primary/20">
+                                    <i className="fa-solid fa-folder text-[9px]" /> {t.projectId.name}
+                                  </span>
+                                )}
+                                {t.sprintId && (
+                                  <span className="inline-flex items-center gap-1 text-[10px] text-amber-500 font-semibold bg-amber-500/10 px-2 py-0.5 rounded-md border border-amber-500/20">
+                                    <i className="fa-solid fa-person-running text-[9px]" /> {sprints.find(s => s._id === (t.sprintId?._id || t.sprintId))?.name || "Sprint Task"}
+                                  </span>
+                                )}
+                              </div>
+
+                              {/* Description preview */}
+                              {t.description && (
+                                <p className="text-[11px] text-muted-foreground leading-relaxed line-clamp-2">
+                                  {t.description}
+                                </p>
+                              )}
+
+                              {/* Subtasks Progress Bar */}
+                              {subtasksTotal > 0 && (
+                                <div className="space-y-1 pt-1">
+                                  <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                                    <span className="flex items-center gap-1 font-medium">
+                                      <i className="fa-solid fa-list-check text-[9px] text-primary" /> {subtasksDone}/{subtasksTotal} subtasks
+                                    </span>
+                                    <span className="font-mono font-semibold text-foreground">{subtaskPct}%</span>
+                                  </div>
+                                  <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
+                                    <div
+                                      className={cn("h-full rounded-full transition-all duration-300", subtaskPct === 100 ? "bg-emerald-500" : "bg-primary")}
+                                      style={{ width: `${subtaskPct}%` }}
+                                    />
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Footer: Assignee & Due Date */}
+                              <div className="flex items-center justify-between text-[10px] text-muted-foreground pt-1.5 border-t border-border/40">
+                                <span className="flex items-center gap-1.5 font-medium text-foreground">
+                                  <span className="w-5 h-5 rounded-full bg-primary/15 text-primary text-[10px] font-bold flex items-center justify-center">
+                                    {(t.assignee?.name || "U")[0].toUpperCase()}
+                                  </span>
+                                  <span className="truncate max-w-[100px]">{t.assignee?.name || "Unassigned"}</span>
+                                </span>
+
+                                {t.dueDate && (
+                                  <span
+                                    className={cn(
+                                      "flex items-center gap-1 font-mono text-[10px] px-1.5 py-0.5 rounded font-medium",
+                                      isOverdue
+                                        ? "bg-rose-500/10 text-rose-500 border border-rose-500/20 font-bold"
+                                        : isDueSoon
+                                        ? "bg-amber-500/10 text-amber-500 border border-amber-500/20 font-bold"
+                                        : "text-muted-foreground"
+                                    )}
+                                    title={`Due Date: ${new Date(t.dueDate).toLocaleDateString()}`}
+                                  >
+                                    <i className={cn("text-[9px]", isOverdue ? "fa-solid fa-calendar-xmark text-rose-500" : isDueSoon ? "fa-solid fa-clock text-amber-500" : "fa-regular fa-calendar")} />
+                                    <span>{new Date(t.dueDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
+                                  </span>
+                                )}
+                              </div>
                             </div>
-                          </Card>
-                        ))
+                          );
+                        })
                       )}
                     </div>
                   </div>
