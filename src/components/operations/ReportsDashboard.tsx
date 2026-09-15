@@ -1048,7 +1048,8 @@ export default function ReportsDashboard({ embedded = true }: ReportsDashboardPr
                   </thead>
                   <tbody className="divide-y divide-border">
                     {filteredShiftLogs.map((log) => {
-                      const empName = typeof log.userId === "object" ? log.userId?.name : currentUser?.name || "Employee";
+                      const empName = (typeof log.userId === "object" ? log.userId?.name : currentUser?.name) || "Employee";
+
                       const shiftName = typeof log.userId === "object" ? log.userId?.shiftName : currentUser?.shiftName || "Day Shift";
                       const inTime = (log.originalClockIn || log.clockIn) ? formatISTTime(log.originalClockIn ?? log.clockIn) : "-";
                       const isOnline = log.clockIn && (!log.clockOut || log.clockOut === "Active");
