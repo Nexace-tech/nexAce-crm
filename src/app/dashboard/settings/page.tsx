@@ -1742,7 +1742,9 @@ function SettingsPageContent() {
                 />
               </div>
 
-              {/* Resume / CV Upload Section */}
+
+              {/* Resume / CV Upload Section — Employees & non-admin roles only */}
+              {!isAdmin && !isOPS && (
               <div className="pt-4 border-t border-border space-y-3">
                 <div className="flex items-center justify-between flex-wrap gap-2">
                   <div className="space-y-0.5">
@@ -1861,6 +1863,7 @@ function SettingsPageContent() {
                   </div>
                 )}
               </div>
+              )}
 
               {/* Social Media Profiles Section */}
               <div className="pt-3 border-t border-border space-y-3">
@@ -2489,8 +2492,8 @@ function SettingsPageContent() {
         </div>
       )}
 
-      {/* Remove Resume Confirmation Modal */}
-      {showRemoveResumeModal && (
+      {/* Remove Resume Confirmation Modal — non-admin/OPS only */}
+      {!isAdmin && !isOPS && showRemoveResumeModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in">
           <div className="w-full max-w-md bg-card border border-border rounded-2xl p-6 shadow-2xl space-y-5 animate-in zoom-in-95" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-start gap-3.5">

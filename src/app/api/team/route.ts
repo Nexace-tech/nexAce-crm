@@ -118,6 +118,14 @@ export async function GET(request: Request) {
       attendanceMap[att.userId.toString()] = att;
     });
 
+    // Determine if the caller is allowed to see other employees' private resume data
+    // Only Admin, OPS (SubAdmin), and HR roles can view other users' resumes
+    const { isSubAdminRole: isOPSRole } = await import("@/lib/roles");
+    const callerCanViewResumes =
+      session.role?.trim().toLowerCase() === "admin" ||
+      isOPSRole(session.role) ||
+      session.role?.trim().toLowerCase() === "hr";
+
     const fiveMinsAgo = new Date(Date.now() - 5 * 60 * 1000);
 
     const usersWithAttendance = users.map((u: any) => {
@@ -127,7 +135,7 @@ export async function GET(request: Request) {
       const isRecentlyActive = u.lastActiveAt ? new Date(u.lastActiveAt) >= fiveMinsAgo : false;
       const isOnline = isSelf || isClockedIn || isRecentlyActive;
 
-      return {
+      const baseUser = {
         ...u,
         isOnline,
         isClockedIn,
@@ -135,13 +143,23 @@ export async function GET(request: Request) {
         clockOutTime: att?.clockOut || null,
         attendanceStatus: isClockedIn ? "Active" : att?.clockOut ? "Shift Ended" : "Off Shift"
       };
+
+      // Strip private resume fields from other users' profiles when caller lacks HR-level access
+      if (!isSelf && !callerCanViewResumes) {
+        const { resumeUrl, resumeFileName, resumeFileSize, resumeUpdatedAt, ...safeUser } = baseUser;
+        return safeUser;
+      }
+      return baseUser;
     });
+
 
     return NextResponse.json({ users: usersWithAttendance }, {
       headers: {
         "Cache-Control": "no-store, max-age=0, must-revalidate"
       }
     });
+
+
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Internal Server Error";
     console.error("API GET Team error:", error);

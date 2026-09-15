@@ -35,7 +35,23 @@ export async function GET(request: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Employee not found" }, { status: 404 });
     }
 
-    return NextResponse.json({ user });
+    // Strip private resume fields if the caller does not have HR-level access
+    // and is not viewing their own profile
+    const { isSubAdminRole } = await import("@/lib/roles");
+    const callerCanViewResumes =
+      session.role?.trim().toLowerCase() === "admin" ||
+      isSubAdminRole(session.role) ||
+      session.role?.trim().toLowerCase() === "hr";
+    const isSelf = id === session.userId;
+
+    let safeUser: any = user;
+    if (!isSelf && !callerCanViewResumes) {
+      const { resumeUrl, resumeFileName, resumeFileSize, resumeUpdatedAt, ...rest } = user as any;
+      safeUser = rest;
+    }
+
+    return NextResponse.json({ user: safeUser });
+
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Internal Server Error";
     console.error("API GET Single Team error:", error);
