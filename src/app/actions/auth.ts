@@ -278,7 +278,7 @@ export async function loginAction(state: FormState | undefined, formData: FormDa
   try {
     // 1. Rate Limiting check to prevent brute-force attacks
     const ip = await getClientIp();
-    const limit = rateLimitLogin(email, ip);
+    const limit = await rateLimitLogin(email, ip);
     if (!limit.allowed) {
       const waitSeconds = Math.ceil(limit.retryAfterMs / 1000);
       return {
@@ -380,7 +380,7 @@ export async function forgotPasswordAction(state: FormState | undefined, formDat
     }
 
     // Rate limit password-reset OTP requests per email and per IP
-    const rate = rateLimitOtp(email, await getClientIp());
+    const rate = await rateLimitOtp(email, await getClientIp());
     if (!rate.allowed) {
       return {
         message: `Too many password reset attempts. Try again in ${Math.ceil(rate.retryAfterMs / 1000)} seconds.`,
@@ -497,7 +497,7 @@ export async function resetPasswordAction(state: FormState | undefined, formData
   }
 
   // Rate limit verification attempts to prevent brute-forcing the 6-digit OTP
-  const rate = rateLimitVerify(email, await getClientIp());
+  const rate = await rateLimitVerify(email, await getClientIp());
   if (!rate.allowed) {
     return {
       step: "reset",

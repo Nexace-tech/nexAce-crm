@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
     }
 
     // 0b. Rate limit OTP requests per email and per IP to prevent brute-force / enumeration
-    const rate = rateLimitOtp(cleanEmail, await getClientIp());
+    const rate = await rateLimitOtp(cleanEmail, await getClientIp());
     if (!rate.allowed) {
       return NextResponse.json(
         { error: `Too many verification attempts. Try again in ${Math.ceil(rate.retryAfterMs / 1000)}s.` },

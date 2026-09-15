@@ -1,4 +1,6 @@
 import { headers } from "next/headers";
+import { connectToDatabase } from "@/lib/db";
+import { RateLimit } from "@/models/RateLimit";
 
 type WindowState = { count: number; resetAt: number };
 
@@ -8,34 +10,61 @@ const OTP_MAX_PER_IP = 10;       // max OTP sends per IP per window (anti-enumer
 const VERIFY_MAX_PER_EMAIL = 10; // max verification attempts per email per window (allows typos)
 const VERIFY_MAX_PER_IP = 20;    // max verification attempts per IP per window
 
-const store = new Map<string, WindowState>();
+const memoryStore = new Map<string, WindowState>();
 
-/**
- * SERVERLESS WARNING: This in-memory store is NOT shared across Node.js instances.
- * In multi-instance deployments (e.g. Vercel serverless) rate-limit state is per-instance,
- * meaning an attacker can bypass limits by triggering different instances.
- * Replace with a shared store (e.g. Upstash Redis) for production-grade enforcement.
- */
-if (process.env.NODE_ENV === "production") {
-  console.warn(
-    "[rateLimiter] WARNING: Using in-memory rate limiter in production. " +
-    "This is NOT effective across serverless instances. Configure UPSTASH_REDIS_REST_URL " +
-    "and replace this store with a shared Redis-backed implementation."
-  );
-}
-
-/** Increment the counter for `id`, starting a fresh window if expired. */
-function take(prefix: string, id: string, windowMs: number): WindowState {
+/** In-memory fallback if MongoDB connection drops */
+function takeMemory(prefix: string, id: string, windowMs: number): WindowState {
   const key = `${prefix}:${id}`;
   const now = Date.now();
-  const existing = store.get(key);
+  const existing = memoryStore.get(key);
   if (!existing || now > existing.resetAt) {
     const next: WindowState = { count: 1, resetAt: now + windowMs };
-    store.set(key, next);
+    memoryStore.set(key, next);
     return next;
   }
   existing.count += 1;
   return existing;
+}
+
+/**
+ * Increment the counter for `id`, persisting to MongoDB with a TTL index
+ * so that rate limits are shared across all Vercel serverless instances.
+ * Falls back safely to memory if DB connection is unavailable.
+ */
+async function take(prefix: string, id: string, windowMs: number): Promise<WindowState> {
+  const key = `${prefix}:${id}`;
+  const now = Date.now();
+  const resetAtDate = new Date(now + windowMs);
+
+  try {
+    await connectToDatabase();
+
+    const existing = await RateLimit.findOne({ key });
+    if (!existing || new Date(existing.resetAt).getTime() <= now) {
+      const updated = await RateLimit.findOneAndUpdate(
+        { key },
+        { $set: { count: 1, resetAt: resetAtDate, createdAt: new Date() } },
+        { upsert: true, new: true }
+      );
+      return {
+        count: updated?.count ?? 1,
+        resetAt: updated?.resetAt ? new Date(updated.resetAt).getTime() : resetAtDate.getTime(),
+      };
+    } else {
+      const updated = await RateLimit.findOneAndUpdate(
+        { key },
+        { $inc: { count: 1 } },
+        { new: true }
+      );
+      return {
+        count: updated?.count ?? existing.count + 1,
+        resetAt: new Date(existing.resetAt).getTime(),
+      };
+    }
+  } catch {
+    // Graceful fallback to in-memory store if DB is temporarily unreachable
+    return takeMemory(prefix, id, windowMs);
+  }
 }
 
 export interface RateLimitResult {
@@ -45,17 +74,19 @@ export interface RateLimitResult {
   remaining: number;
 }
 
-function check(
+async function check(
   prefix: string,
   email: string,
   ip: string | undefined,
   maxEmail: number,
   maxIp: number,
   windowMs: number
-): RateLimitResult {
+): Promise<RateLimitResult> {
   const now = Date.now();
-  const emailBucket = take(`${prefix}-email`, email.toLowerCase(), windowMs);
-  const ipBucket = take(`${prefix}-ip`, ip || "unknown", windowMs);
+  const [emailBucket, ipBucket] = await Promise.all([
+    take(`${prefix}-email`, email.toLowerCase(), windowMs),
+    take(`${prefix}-ip`, ip || "unknown", windowMs),
+  ]);
 
   const emailExceeded = emailBucket.count > maxEmail;
   const ipExceeded = ipBucket.count > maxIp;
@@ -79,12 +110,10 @@ function check(
 }
 
 /**
- * Fixed-window in-memory rate limiter for OTP send requests.
- * Effective for a single long-running Node process (next start / dev).
- * For multi-instance serverless deployments, back this with a shared store
- * (e.g. Redis / Upstash) instead.
+ * MongoDB TTL-backed rate limiter for OTP send requests.
+ * Shared across all Vercel serverless instances.
  */
-export function rateLimitOtp(email: string, ip: string | undefined): RateLimitResult {
+export async function rateLimitOtp(email: string, ip: string | undefined): Promise<RateLimitResult> {
   return check("otp", email, ip, OTP_MAX_PER_EMAIL, OTP_MAX_PER_IP, WINDOW_MS);
 }
 
@@ -92,7 +121,7 @@ export function rateLimitOtp(email: string, ip: string | undefined): RateLimitRe
  * Rate limit verification (code-submit) attempts to prevent brute-forcing a
  * 6-digit OTP. Slightly higher thresholds than sending to allow for typos.
  */
-export function rateLimitVerify(email: string, ip: string | undefined): RateLimitResult {
+export async function rateLimitVerify(email: string, ip: string | undefined): Promise<RateLimitResult> {
   return check("verify", email, ip, VERIFY_MAX_PER_EMAIL, VERIFY_MAX_PER_IP, WINDOW_MS);
 }
 
@@ -102,7 +131,7 @@ const LOGIN_MAX_PER_IP = 15;      // max login attempts per IP per window
 /**
  * Rate limit login attempts to prevent brute-force and password guessing attacks.
  */
-export function rateLimitLogin(email: string, ip: string | undefined): RateLimitResult {
+export async function rateLimitLogin(email: string, ip: string | undefined): Promise<RateLimitResult> {
   return check("login", email, ip, LOGIN_MAX_PER_EMAIL, LOGIN_MAX_PER_IP, WINDOW_MS);
 }
 
