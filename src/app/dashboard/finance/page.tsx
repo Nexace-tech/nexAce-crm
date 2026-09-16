@@ -521,19 +521,6 @@ export default function FinancePage() {
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          <Button variant="outline" size="sm" onClick={() => { fetchInvoices(); fetchExpenses(); fetchDeals(); }} className="gap-2 h-8 font-semibold cursor-pointer">
-            <i className="fa-solid fa-rotate-right text-xs" /> Refresh
-          </Button>
-          {(can("manageExpenses") || isAdmin || isOPS) && (
-            <Button variant="outline" size="sm" onClick={handleNewExpense} className="gap-2 h-8 font-semibold cursor-pointer">
-              <i className="fa-solid fa-receipt text-xs" /> Log Expense
-            </Button>
-          )}
-          {(can("manageDeals") || isAdmin || isOPS) && (
-            <Button variant="outline" size="sm" onClick={handleNewDeal} className="gap-2 h-8 font-semibold cursor-pointer">
-              <i className="fa-solid fa-handshake text-xs" /> New Deal
-            </Button>
-          )}
           {(can("createInvoices") || isAdmin || isOPS) && (
             <>
               <Button variant="outline" size="sm" onClick={handleOpenGenerate} className="gap-2 h-8 font-semibold cursor-pointer border-emerald-500/40 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10">
