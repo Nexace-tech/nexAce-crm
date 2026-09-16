@@ -7,10 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { SalesWorkdeskDashboard } from "@/components/operations/SalesWorkdeskDashboard";
-import type { SalesDeal } from "@/components/operations/SalesWorkdeskDashboard";
 import { AdminInvoicesTab } from "@/components/settings/AdminInvoicesTab";
-import { ExternalFinanceOverview } from "./ExternalFinanceOverview";
 import InvoiceGridView from "./InvoiceGridView";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -49,7 +46,7 @@ export interface FinanceExpense {
 interface FinancePortalDashboardProps {
   invoices: FinanceInvoice[];
   expenses: FinanceExpense[];
-  deals: SalesDeal[];
+  deals?: any[];
   loadingInvoices?: boolean;
   loadingExpenses?: boolean;
   loadingDeals?: boolean;
@@ -60,9 +57,9 @@ interface FinancePortalDashboardProps {
   onNewExpense: () => void;
   onEditExpense: (exp: FinanceExpense) => void;
   onDeleteExpense: (id: string, name: string) => void;
-  onNewDeal: () => void;
-  onEditDeal: (deal: SalesDeal) => void;
-  onDeleteDeal: (id: string, name: string) => void;
+  onNewDeal?: () => void;
+  onEditDeal?: (deal: any) => void;
+  onDeleteDeal?: (id: string, name: string) => void;
   onRefresh?: () => void;
 }
 
@@ -118,19 +115,20 @@ export function FinancePortalDashboard({
 }: FinancePortalDashboardProps) {
   const searchParams = useSearchParams();
   const urlTab = searchParams.get("tab");
-  const [activeTab, setActiveTab] = useState<"overview" | "invoices" | "expenses" | "budget" | "payroll">(
-    urlTab === "invoices" || urlTab === "expenses" || urlTab === "budget" || urlTab === "payroll" ? urlTab : "overview"
+  const [activeTab, setActiveTab] = useState<"invoices" | "expenses" | "budget" | "payroll" | "overview">(
+    urlTab === "expenses" || urlTab === "budget" || urlTab === "payroll" ? urlTab : "invoices"
   );
 
   useEffect(() => {
     const tabParam = searchParams.get("tab");
-    if (tabParam && ["overview", "invoices", "expenses", "budget", "payroll"].includes(tabParam)) {
+    if (tabParam === "overview") {
+      setActiveTab("invoices");
+    } else if (tabParam && ["invoices", "expenses", "budget", "payroll"].includes(tabParam)) {
       setActiveTab(tabParam as any);
     }
   }, [searchParams]);
 
   const [financeScope, setFinanceScope] = useState<"internal" | "external">("internal");
-  const [externalDeals, setExternalDeals] = useState<SalesDeal[]>([]);
   const [externalPayroll, setExternalPayroll] = useState<Array<{ period: string; total: number; headcount: number; status: string; date: string }>>([]);
 
   const isExternalInvoice = (inv: FinanceInvoice) => {
@@ -156,7 +154,6 @@ export function FinancePortalDashboard({
   const activeExpenses = financeScope === "internal" ? expenses : (externalExpensesList.length > 0 ? externalExpensesList : expenses);
 
   const activeInvoices = financeScope === "internal" ? internalInvoices : externalInvoices;
-  const activeDeals = financeScope === "internal" ? deals : externalDeals;
 
   const activeBudgetData = useMemo(() => {
     const palette = ["bg-blue-500", "bg-purple-500", "bg-emerald-500", "bg-amber-500", "bg-rose-500", "bg-cyan-500", "bg-indigo-500", "bg-teal-500"];
@@ -322,17 +319,11 @@ export function FinancePortalDashboard({
   const expenseCatOptions = useMemo(() => ["All", ...Array.from(new Set(activeExpenses.map(e => e.category)))], [activeExpenses]);
 
   const tabs = useMemo(() => [
-    {
-      key: "overview" as const,
-      label: "Overview",
-      icon: financeScope === "external" ? "fa-chart-pie" : "fa-handshake",
-      count: financeScope === "external" ? externalInvoices.length : activeDeals.length,
-    },
     { key: "invoices" as const,  label: "Invoices",   icon: "fa-file-invoice-dollar", count: activeInvoices.length },
     { key: "expenses" as const,  label: "Expenses",   icon: "fa-receipt", count: activeExpenses.length },
     { key: "budget" as const,    label: "Budget",     icon: "fa-wallet" },
     { key: "payroll" as const,   label: "Payroll",    icon: "fa-money-check-dollar" },
-  ], [financeScope, externalInvoices.length, activeDeals.length, activeInvoices.length, activeExpenses.length]);
+  ], [activeInvoices.length, activeExpenses.length]);
 
   return (
     <div className="space-y-6">
@@ -414,7 +405,7 @@ export function FinancePortalDashboard({
       </div>
 
       {/* ── INVOICES TAB ── */}
-      {activeTab === "invoices" && (
+      {(activeTab === "invoices" || (activeTab as string) === "overview") && (
         <InvoiceGridView
           invoices={activeInvoices}
           loading={loadingInvoices}
@@ -696,34 +687,6 @@ export function FinancePortalDashboard({
         </div>
       )}
 
-      {/* ── OVERVIEW TAB ── */}
-      {activeTab === "overview" && (
-        financeScope === "external" ? (
-          <ExternalFinanceOverview
-            invoices={externalInvoices}
-            expenses={activeExpenses}
-            budgetData={activeBudgetData}
-            loadingInvoices={loadingInvoices}
-            loadingExpenses={loadingExpenses}
-            showToast={showToast}
-            onNewInvoice={onNewInvoice}
-            onEditInvoice={onEditInvoice}
-            onNewExpense={onNewExpense}
-            onEditExpense={onEditExpense}
-            onNavigateTab={(tab) => setActiveTab(tab)}
-            onRefresh={onRefresh}
-          />
-        ) : (
-          <SalesWorkdeskDashboard
-            deals={activeDeals}
-            loading={loadingDeals}
-            onNewDeal={onNewDeal}
-            onEditDeal={onEditDeal}
-            onDeleteDeal={onDeleteDeal}
-            onRefresh={onRefresh}
-          />
-        )
-      )}
     </div>
   );
 }
