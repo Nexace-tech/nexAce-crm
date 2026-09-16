@@ -140,32 +140,17 @@ export function EmployeeDashboard({ user }: { user: any }) {
       NativeService.haptic("medium");
       setClocking(true);
 
-      // Best-effort geolocation capture
-      let location: { latitude: number; longitude: number; accuracy?: number } | undefined;
-      try {
-        const coords = await NativeService.getLocation();
-        if (coords) {
-          location = {
-            latitude: coords.latitude,
-            longitude: coords.longitude,
-            accuracy: coords.accuracy,
-          };
-        }
-      } catch (locErr) {
-        console.warn("Location capture skipped/failed:", locErr);
-      }
-
       const res = await fetch("/api/attendance", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action, location }),
+        body: JSON.stringify({ action }),
       });
       if (res.ok) {
         NativeService.haptic("success");
         await fetchAttendanceStatus();
         showToast(
           action === "in"
-            ? `Successfully clocked in! ${location ? "📍 Location verified." : ""}`
+            ? "Successfully clocked in!"
             : "Successfully clocked out for today.",
           "success"
         );

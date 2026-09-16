@@ -2322,7 +2322,7 @@ function CalendarPageContent() {
       {/* Tab 4: Shift Clock & Attendance */}
       {activeTab === "attendance" && (
         <div className="space-y-6">
-          {!isAdmin && !isOPS && (() => {
+          {!isAdmin && (() => {
             const targetHours = Number(shiftInfo?.targetHours) || 8.0;
             const workedHours = totalSecondsWorked / 3600;
             const progressPct = Math.min(100, Math.round((workedHours / targetHours) * 100));
