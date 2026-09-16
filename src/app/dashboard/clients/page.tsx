@@ -92,7 +92,7 @@ export default function OperationsPage() {
   );
 
   const initialTab: OpsTabKey =
-    tabParam === "projects"
+    tabParam === "projects" || tabParam === "tasks" || tabParam === "kanban"
       ? "projects"
       : tabParam === "drive"
       ? "drive"
@@ -1682,7 +1682,16 @@ export default function OperationsPage() {
 
       {/* Projects & Kanban Workspace View */}
       {(activeTab === "projects" || (isEmployee && activeTab !== "drive")) && (
-        <ProjectsDriveWorkspace initialTab="kanban" hideHeader={true} />
+        <ProjectsDriveWorkspace
+          initialTab={
+            tabParam === "tasks"
+              ? "tasks"
+              : tabParam === "kanban"
+              ? "kanban"
+              : "projects_grid"
+          }
+          hideHeader={true}
+        />
       )}
 
       {/* Drive Space Tab View */}

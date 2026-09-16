@@ -13,9 +13,22 @@ import { cn, getISTDateString } from "@/lib/utils";
 
 import { useTabPersistence } from "@/hooks/useTabPersistence";
 import { AccessRestricted } from "@/components/ui/AccessRestricted";
+import { ProjectsGridModern } from "./ProjectsGridModern";
+import { TasksListModern } from "./TasksListModern";
+
+export type WorkspaceTabKey =
+  | "projects_grid"
+  | "tasks"
+  | "kanban"
+  | "gantt"
+  | "wiki"
+  | "drive"
+  | "workload"
+  | "history"
+  | "trash";
 
 export interface ProjectsDriveWorkspaceProps {
-  initialTab?: "kanban" | "gantt" | "wiki" | "drive" | "workload" | "history";
+  initialTab?: WorkspaceTabKey;
   hideHeader?: boolean;
 }
 
@@ -26,13 +39,13 @@ export function ProjectsDriveWorkspace({ initialTab, hideHeader = false }: Proje
   const canDeleteProject = isAdmin || can("deleteProjects");
   const canAccessTrash = isAdmin || isOPS || can("deleteProjects");
 
-  const [persistedTab, setPersistedTab] = useTabPersistence<"kanban" | "gantt" | "wiki" | "drive" | "workload" | "history" | "trash">(
+  const [persistedTab, setPersistedTab] = useTabPersistence<WorkspaceTabKey>(
     "projects_active_tab",
-    initialTab || "kanban",
-    ["kanban", "gantt", "wiki", "drive", "workload", "history", "trash"]
+    initialTab || "projects_grid",
+    ["projects_grid", "tasks", "kanban", "gantt", "wiki", "drive", "workload", "history", "trash"]
   );
-  const [activeTab, setActiveTabState] = useState<"kanban" | "gantt" | "wiki" | "drive" | "workload" | "history" | "trash">(
-    initialTab || persistedTab
+  const [activeTab, setActiveTabState] = useState<WorkspaceTabKey>(
+    initialTab || persistedTab || "projects_grid"
   );
 
   useEffect(() => {
@@ -43,12 +56,12 @@ export function ProjectsDriveWorkspace({ initialTab, hideHeader = false }: Proje
 
   useEffect(() => {
     if (activeTab === "trash" && !canAccessTrash && !permLoading) {
-      setActiveTabState("kanban");
-      setPersistedTab("kanban");
+      setActiveTabState("projects_grid");
+      setPersistedTab("projects_grid");
     }
   }, [activeTab, canAccessTrash, permLoading]);
 
-  const setActiveTab = (tab: "kanban" | "gantt" | "wiki" | "drive" | "workload" | "history" | "trash") => {
+  const setActiveTab = (tab: WorkspaceTabKey) => {
     if (tab === "trash" && !canAccessTrash) return;
     setActiveTabState(tab);
     setPersistedTab(tab);
@@ -805,8 +818,12 @@ export function ProjectsDriveWorkspace({ initialTab, hideHeader = false }: Proje
     const urlTaskId = searchParams.get("taskId");
     const urlTab = searchParams.get("tab");
 
-    if (urlTab && ["kanban", "gantt", "wiki", "drive", "workload", "history"].includes(urlTab)) {
-      setActiveTab(urlTab as any);
+    if (urlTab && ["projects_grid", "projects", "tasks", "kanban", "gantt", "wiki", "drive", "workload", "history"].includes(urlTab)) {
+      if (urlTab === "projects") {
+        setActiveTab("projects_grid");
+      } else {
+        setActiveTab(urlTab as any);
+      }
     }
     if (urlProjectId && urlProjectId !== selectedProjectId) {
       setSelectedProjectId(urlProjectId);
@@ -833,10 +850,12 @@ export function ProjectsDriveWorkspace({ initialTab, hideHeader = false }: Proje
     }
   }, [mounted, searchParams]);
 
-  const handleOpenEditProject = () => {
-    if (!selectedProjectId || selectedProjectId === "all") return;
-    const proj = projects.find((p) => p._id === selectedProjectId);
+  const handleOpenEditProject = (targetProj?: any) => {
+    const proj = targetProj || (selectedProjectId !== "all" ? projects.find((p) => p._id === selectedProjectId) : null);
     if (!proj) return;
+    if (proj._id && proj._id !== selectedProjectId) {
+      setSelectedProjectId(proj._id);
+    }
     setEditProjName(proj.name || "");
     setEditProjDesc(proj.description || "");
     setEditProjStatus(proj.status || "Planning");
@@ -849,6 +868,30 @@ export function ProjectsDriveWorkspace({ initialTab, hideHeader = false }: Proje
     setEditProjIsInternal(proj.isInternal ?? true);
     setEditProjRequirements(proj.requirements || "");
     setShowEditProjectForm(true);
+  };
+
+  const handleRequestDeleteProject = (project: { _id: string; name: string }) => {
+    setProjectToDelete({ id: project._id, name: project.name });
+    setShowDeleteConfirm(true);
+  };
+
+  const handleUpdateTaskStatus = async (taskId: string, targetStatus: string) => {
+    try {
+      const res = await fetch("/api/tasks", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ taskId, status: targetStatus }),
+      });
+      if (res.ok) {
+        setTasks((prev) =>
+          prev.map((t) => (t._id === taskId ? { ...t, status: targetStatus } : t))
+        );
+        showToast(`Task moved to ${targetStatus}`, "success");
+        fetchActivityLogs(selectedProjectId || "all");
+      }
+    } catch (e) {
+      console.error("handleUpdateTaskStatus error:", e);
+    }
   };
 
   const handleEditProject = async (e: React.FormEvent) => {
@@ -1230,16 +1273,39 @@ export function ProjectsDriveWorkspace({ initialTab, hideHeader = false }: Proje
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 p-1.5 rounded-2xl bg-card/70 dark:bg-card/40 backdrop-blur-md border border-border/70 shadow-xs">
         <div className="flex items-center gap-1 overflow-x-auto no-scrollbar py-0.5">
           <button
-            onClick={() => setActiveTab("kanban")}
+            onClick={() => setActiveTab("projects_grid")}
             className={cn(
               "px-3.5 py-2 text-xs font-semibold rounded-xl transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
-              activeTab === "kanban"
+              activeTab === "projects_grid"
                 ? "bg-primary text-primary-foreground shadow-xs font-bold"
                 : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
             )}
           >
-            <i className={cn("fa-solid fa-square-kanban text-xs", activeTab === "kanban" ? "text-primary-foreground" : "text-sky-400")} />
-            <span>Kanban Board</span>
+            <i className={cn("fa-solid fa-table-cells-large text-xs", activeTab === "projects_grid" ? "text-primary-foreground" : "text-rose-500")} />
+            <span>Projects</span>
+            {projects.length > 0 && (
+              <span className={cn("px-1.5 py-0.2 text-[10px] rounded-full font-mono font-bold", activeTab === "projects_grid" ? "bg-white/25 text-white" : "bg-rose-500/15 text-rose-600 dark:text-rose-400")}>
+                {projects.length}
+              </span>
+            )}
+          </button>
+
+          <button
+            onClick={() => setActiveTab("tasks")}
+            className={cn(
+              "px-3.5 py-2 text-xs font-semibold rounded-xl transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
+              activeTab === "tasks"
+                ? "bg-primary text-primary-foreground shadow-xs font-bold"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+            )}
+          >
+            <i className={cn("fa-solid fa-list-check text-xs", activeTab === "tasks" ? "text-primary-foreground" : "text-sky-400")} />
+            <span>Tasks</span>
+            {tasks.length > 0 && (
+              <span className={cn("px-1.5 py-0.2 text-[10px] rounded-full font-mono font-bold", activeTab === "tasks" ? "bg-white/25 text-white" : "bg-sky-500/15 text-sky-600 dark:text-sky-400")}>
+                {tasks.length}
+              </span>
+            )}
           </button>
 
           <button
@@ -1318,13 +1384,13 @@ export function ProjectsDriveWorkspace({ initialTab, hideHeader = false }: Proje
           )}
         </div>
 
-        <div className="flex items-center gap-2 self-end md:self-auto shrink-0 px-1">
+        <div className="flex items-center justify-between sm:justify-end gap-2 w-full md:w-auto shrink-0 px-1 pt-1 md:pt-0 border-t md:border-t-0 border-border/50">
           {can("createProjects") && (
             <Button
               variant="outline"
               size="sm"
               onClick={() => setShowProjectForm(true)}
-              className="gap-2 font-semibold h-8 text-xs border-border/80 hover:bg-muted/60 hover:text-primary transition-colors cursor-pointer"
+              className="gap-1.5 sm:gap-2 font-semibold h-8 text-xs border-border/80 hover:bg-muted/60 hover:text-primary transition-colors cursor-pointer flex-1 sm:flex-initial"
             >
               <i className="fa-solid fa-folder-plus text-xs text-primary" />
               <span>New Project</span>
@@ -1334,7 +1400,7 @@ export function ProjectsDriveWorkspace({ initialTab, hideHeader = false }: Proje
             color="primary"
             size="sm"
             onClick={() => setShowTaskForm(true)}
-            className="gap-2 font-semibold h-8 text-xs shadow-xs cursor-pointer"
+            className="gap-1.5 sm:gap-2 font-semibold h-8 text-xs shadow-xs cursor-pointer flex-1 sm:flex-initial"
           >
             <i className="fa-solid fa-plus text-xs" />
             <span>Create Task</span>
@@ -1343,10 +1409,10 @@ export function ProjectsDriveWorkspace({ initialTab, hideHeader = false }: Proje
       </div>
 
       {/* Active Project HUD & Workspace Scope Bar */}
-      {activeTab !== "trash" && (
-        <Card className="p-3.5 bg-card/70 dark:bg-card/40 backdrop-blur-md border border-border/70 rounded-2xl shadow-xs flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3.5">
-          <div className="flex items-center gap-3 flex-wrap">
-            <div className="flex items-center gap-2">
+      {activeTab !== "trash" && activeTab !== "projects_grid" && activeTab !== "tasks" && (
+        <Card className="p-3 sm:p-3.5 bg-card/70 dark:bg-card/40 backdrop-blur-md border border-border/70 rounded-2xl shadow-xs flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 sm:gap-3.5">
+          <div className="flex items-center gap-2.5 sm:gap-3 flex-wrap">
+            <div className="flex items-center gap-2 w-full sm:w-auto">
               <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground shrink-0 flex items-center gap-1.5">
                 <i className="fa-solid fa-sliders text-xs text-primary" /> Scope:
               </span>
@@ -1357,7 +1423,7 @@ export function ProjectsDriveWorkspace({ initialTab, hideHeader = false }: Proje
                   setSelectedProjectId(val);
                   fetchTasks(val);
                 }}
-                className="h-9 pl-3 pr-7 text-xs bg-background border border-border/80 rounded-xl text-foreground font-semibold focus:outline-none focus:ring-1 focus:ring-primary w-64 cursor-pointer truncate shadow-2xs hover:border-primary/40 transition-colors"
+                className="h-9 pl-3 pr-7 text-xs bg-background border border-border/80 rounded-xl text-foreground font-semibold focus:outline-none focus:ring-1 focus:ring-primary flex-1 sm:w-64 cursor-pointer truncate shadow-2xs hover:border-primary/40 transition-colors"
               >
                 <option value="all">⚡ All Projects (Combined Workspace)</option>
                 {(boardFilter === "starred"
@@ -1446,6 +1512,18 @@ export function ProjectsDriveWorkspace({ initialTab, hideHeader = false }: Proje
               </>
             )}
 
+            {/* Quick Switch to Modern Projects  */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setActiveTab("projects_grid")}
+              className="gap-2 font-semibold text-xs h-8 border-primary/30 text-primary hover:bg-primary/10 rounded-xl cursor-pointer"
+              title="Switch to Modern Projects  View"
+            >
+              <i className="fa-solid fa-table-cells-large text-xs" />
+              <span>Projects </span>
+            </Button>
+
             <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary/10 text-primary border border-primary/25 font-bold text-xs shadow-2xs">
               <i className="fa-solid fa-list-check text-[11px]" />
               <span>Total Tasks:</span>
@@ -1453,6 +1531,85 @@ export function ProjectsDriveWorkspace({ initialTab, hideHeader = false }: Proje
             </div>
           </div>
         </Card>
+      )}
+
+      {/* Modern Projects  (Default View) */}
+      {activeTab === "projects_grid" && (
+        <ProjectsGridModern
+          projects={projects}
+          tasks={tasks}
+          teamMembers={teamMembers}
+          loading={loading}
+          onSelectProject={(pId) => {
+            setSelectedProjectId(pId);
+            fetchTasks(pId);
+            setActiveTab("tasks");
+          }}
+          onOpenClassicKanban={(pId) => {
+            if (pId) {
+              setSelectedProjectId(pId);
+              fetchTasks(pId);
+            }
+            setActiveTab("kanban");
+          }}
+          onOpenTasksView={(pId) => {
+            if (pId) {
+              setSelectedProjectId(pId);
+              fetchTasks(pId);
+            }
+            setActiveTab("tasks");
+          }}
+          onOpenDriveView={(pId) => {
+            if (pId) {
+              setSelectedProjectId(pId);
+            }
+            setActiveTab("drive");
+          }}
+          onAddNewProject={() => setShowProjectForm(true)}
+          onEditProject={handleOpenEditProject}
+          onRequestDeleteProject={handleRequestDeleteProject}
+          onRefresh={async () => {
+            await fetchProjects();
+            await fetchTasks(selectedProjectId || "all");
+            showToast("Projects refreshed", "info");
+          }}
+          canDeleteProject={canDeleteProject}
+        />
+      )}
+
+      {/* Modern Tasks List (DreamsTechnologies Style) */}
+      {activeTab === "tasks" && (
+        <TasksListModern
+          tasks={tasks}
+          projects={projects}
+          teamMembers={teamMembers}
+          selectedProjectId={selectedProjectId}
+          onSelectProject={(pId) => {
+            setSelectedProjectId(pId);
+            fetchTasks(pId);
+          }}
+          onOpenClassicKanban={(pId) => {
+            if (pId) {
+              setSelectedProjectId(pId);
+              fetchTasks(pId);
+            }
+            setActiveTab("kanban");
+          }}
+          onAddNewTask={() => setShowTaskForm(true)}
+          onEditTask={(task) => {
+            setSelectedTask(task);
+          }}
+          onDeleteTask={(taskId, taskTitle) => {
+            setTaskToDelete({ id: taskId, title: taskTitle });
+          }}
+          onUpdateTaskStatus={handleUpdateTaskStatus}
+          onSelectTaskPreview={(task) => setSelectedTask(task)}
+          onRefresh={async () => {
+            await fetchTasks(selectedProjectId || "all");
+            showToast("Tasks refreshed", "info");
+          }}
+          loading={loading}
+        />
       )}
 
       {/* Kanban Board View */}

@@ -9,11 +9,15 @@ export default function ProjectsPage() {
   const searchParams = useSearchParams();
 
   useEffect(() => {
-    const tab = searchParams?.get("tab");
+    const params = new URLSearchParams(searchParams?.toString() || "");
+    const tab = params.get("tab");
     if (tab === "drive") {
-      router.replace("/dashboard/clients?tab=drive");
+      router.replace(`/dashboard/clients?${params.toString()}`);
     } else {
-      router.replace("/dashboard/clients?tab=projects");
+      if (!params.has("tab")) {
+        params.set("tab", "projects");
+      }
+      router.replace(`/dashboard/clients?${params.toString()}`);
     }
   }, [router, searchParams]);
 
