@@ -237,51 +237,111 @@ export default function InvoiceGridView({ invoices, loading = false, scope = "in
       {/* List View */}
       {!loading && viewMode === "list" && (
         <div className="bg-card border border-border/80 rounded-2xl shadow-xs overflow-hidden">
-          <div className="grid grid-cols-12 gap-0 px-4 py-3 border-b border-border/60 bg-muted/30 text-xs font-bold text-muted-foreground uppercase tracking-wider">
-            <div className="col-span-1">Invoice</div>
-            <div className="col-span-3">Client</div>
-            <div className="col-span-2">Category</div>
-            <div className="col-span-2 text-right">Amount</div>
-            <div className="col-span-2">Due Date</div>
-            <div className="col-span-1">Status</div>
-            <div className="col-span-1 text-right">Actions</div>
-          </div>
           {filtered.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 text-center">
               <i className="fa-solid fa-file-invoice-dollar text-4xl mb-3 text-muted-foreground/30" />
               <p className="text-sm font-bold text-foreground">No invoices found</p>
             </div>
           ) : (
-            <div className="divide-y divide-border/60">
-              {filtered.map((inv) => {
-                const sc = STATUS_CONFIG[inv.status] ?? STATUS_CONFIG.Draft;
-                const initials = getInitials(inv.client);
-                const avatarColor = getAvatarColor(inv.client);
-                const daysUntilDue = getDaysUntilDue(inv.dueDate);
-                return (
-                  <div key={inv._id} className="grid grid-cols-12 gap-0 px-4 py-3.5 hover:bg-muted/30 transition-colors items-center group">
-                    <div className="col-span-1"><span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/20">{inv.invoiceNo}</span></div>
-                    <div className="col-span-3 flex items-center gap-2.5 pr-2">
-                      <div className={cn("w-7 h-7 rounded-full flex items-center justify-center text-white text-[9px] font-bold flex-shrink-0", avatarColor)}>{initials}</div>
-                      <div className="truncate">
-                        <p className="text-xs font-bold text-foreground truncate group-hover:text-primary transition-colors">{inv.client}</p>
-                        <p className="text-[10px] text-muted-foreground truncate">{inv.venture || ""}</p>
-                      </div>
-                    </div>
-                    <div className="col-span-2 text-xs text-muted-foreground truncate pr-2">{inv.category || "—"}</div>
-                    <div className="col-span-2 text-right"><span className="text-xs font-black text-foreground font-mono">{inv.currency || "USD"} {fmtDec(inv.amount)}</span></div>
-                    <div className="col-span-2">
-                      <p className={cn("text-xs font-medium", inv.status !== "Paid" && daysUntilDue !== null && daysUntilDue < 0 ? "text-rose-500" : "text-foreground")}>{fmtDate(inv.dueDate)}</p>
-                      {inv.status !== "Paid" && daysUntilDue !== null && daysUntilDue >= 0 && daysUntilDue <= 5 && <p className="text-[10px] text-amber-500 font-bold">{daysUntilDue === 0 ? "Due today" : `${daysUntilDue}d left`}</p>}
-                    </div>
-                    <div className="col-span-1"><span className={cn("inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold border", sc.bg, sc.text, sc.border)}><span className={cn("w-1.5 h-1.5 rounded-full", sc.dot)} />{inv.status}</span></div>
-                    <div className="col-span-1 flex items-center justify-end gap-1">
-                      <button onClick={() => onEditInvoice(inv)} className="w-7 h-7 rounded-lg border border-border bg-background hover:bg-primary/10 hover:border-primary/30 flex items-center justify-center text-muted-foreground hover:text-primary transition-all cursor-pointer" title="Edit"><i className="fa-solid fa-pen text-[10px]" /></button>
-                      <button onClick={() => onDeleteInvoice(inv._id, `${inv.invoiceNo} – ${inv.client}`)} className="w-7 h-7 rounded-lg border border-border bg-background hover:bg-rose-500/10 hover:border-rose-500/30 flex items-center justify-center text-muted-foreground hover:text-rose-500 transition-all cursor-pointer" title="Delete"><i className="fa-solid fa-trash text-[10px]" /></button>
-                    </div>
-                  </div>
-                );
-              })}
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead className="bg-muted/40 border-b border-border/60 text-muted-foreground uppercase font-bold text-[10px] tracking-wider">
+                  <tr>
+                    <th className="py-3 px-4 whitespace-nowrap">Invoice #</th>
+                    <th className="py-3 px-4 min-w-[200px]">Client</th>
+                    <th className="py-3 px-4 whitespace-nowrap">Category</th>
+                    <th className="py-3 px-4 text-right whitespace-nowrap">Amount</th>
+                    <th className="py-3 px-4 whitespace-nowrap">Due Date</th>
+                    <th className="py-3 px-4 text-center whitespace-nowrap">Status</th>
+                    <th className="py-3 px-4 text-right whitespace-nowrap">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/50 text-xs">
+                  {filtered.map((inv) => {
+                    const sc = STATUS_CONFIG[inv.status] ?? STATUS_CONFIG.Draft;
+                    const initials = getInitials(inv.client);
+                    const avatarColor = getAvatarColor(inv.client);
+                    const daysUntilDue = getDaysUntilDue(inv.dueDate);
+                    return (
+                      <tr key={inv._id} className="hover:bg-muted/30 transition-colors group">
+                        {/* Invoice # */}
+                        <td className="py-3.5 px-4 whitespace-nowrap">
+                          <span className="text-[11px] font-mono font-bold px-2 py-0.5 rounded bg-primary/10 text-primary border border-primary/20 inline-block">
+                            {inv.invoiceNo}
+                          </span>
+                        </td>
+
+                        {/* Client */}
+                        <td className="py-3.5 px-4">
+                          <div className="flex items-center gap-2.5">
+                            <div className={cn("w-7 h-7 rounded-full flex items-center justify-center text-white text-[9px] font-bold shrink-0", avatarColor)}>
+                              {initials}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-xs font-bold text-foreground truncate group-hover:text-primary transition-colors">
+                                {inv.client}
+                              </p>
+                              <p className="text-[10px] text-muted-foreground truncate">
+                                {inv.venture || (scope === "external" ? "External" : "Internal")}
+                              </p>
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* Category */}
+                        <td className="py-3.5 px-4 whitespace-nowrap text-muted-foreground font-medium">
+                          {inv.category || "—"}
+                        </td>
+
+                        {/* Amount */}
+                        <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                          <span className="text-xs font-black text-foreground font-mono">
+                            {inv.currency || "USD"} {fmtDec(inv.amount)}
+                          </span>
+                        </td>
+
+                        {/* Due Date */}
+                        <td className="py-3.5 px-4 whitespace-nowrap">
+                          <p className={cn("text-xs font-semibold", inv.status !== "Paid" && daysUntilDue !== null && daysUntilDue < 0 ? "text-rose-500" : "text-foreground")}>
+                            {fmtDate(inv.dueDate)}
+                          </p>
+                          {inv.status !== "Paid" && daysUntilDue !== null && daysUntilDue >= 0 && daysUntilDue <= 5 && (
+                            <p className="text-[10px] text-amber-500 font-bold">{daysUntilDue === 0 ? "Due today" : `${daysUntilDue}d left`}</p>
+                          )}
+                        </td>
+
+                        {/* Status */}
+                        <td className="py-3.5 px-4 text-center whitespace-nowrap">
+                          <span className={cn("inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold border", sc.bg, sc.text, sc.border)}>
+                            <span className={cn("w-1.5 h-1.5 rounded-full", sc.dot)} />
+                            {inv.status}
+                          </span>
+                        </td>
+
+                        {/* Actions */}
+                        <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                          <div className="flex items-center justify-end gap-1">
+                            <button
+                              onClick={() => onEditInvoice(inv)}
+                              className="w-7 h-7 rounded-lg border border-border bg-background hover:bg-primary/10 hover:border-primary/30 flex items-center justify-center text-muted-foreground hover:text-primary transition-all cursor-pointer"
+                              title="Edit"
+                            >
+                              <i className="fa-solid fa-pen text-[10px]" />
+                            </button>
+                            <button
+                              onClick={() => onDeleteInvoice(inv._id, `${inv.invoiceNo} – ${inv.client}`)}
+                              className="w-7 h-7 rounded-lg border border-border bg-background hover:bg-rose-500/10 hover:border-rose-500/30 flex items-center justify-center text-muted-foreground hover:text-rose-500 transition-all cursor-pointer"
+                              title="Delete"
+                            >
+                              <i className="fa-solid fa-trash text-[10px]" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           )}
         </div>

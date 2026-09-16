@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { FinancePortalDashboard, FinanceInvoice, FinanceExpense } from "@/components/finance/FinancePortalDashboard";
 import type { SalesDeal } from "@/components/operations/SalesWorkdeskDashboard";
 import { Button } from "@/components/ui/button";
@@ -9,6 +10,7 @@ import { cn } from "@/lib/utils";
 import { usePermissions } from "@/hooks/usePermissions";
 
 export default function FinancePage() {
+  const router = useRouter();
   const { can, canAccessModule, isAdmin, isOPS, loading: permLoading } = usePermissions();
 
   // ── Invoice State ──
@@ -29,125 +31,6 @@ export default function FinancePage() {
     venture: "Ace Consultancys",
     notes: "",
   });
-
-  // ── Generate Employee Invoice State ──
-  const [showGenerateModal, setShowGenerateModal] = useState(false);
-  const [genEmployees, setGenEmployees] = useState<Array<{ _id: string; name: string; email: string; department?: string; employmentType?: string; salary?: number; role?: string }>>([]);
-  const [genLoadingEmps, setGenLoadingEmps] = useState(false);
-  const [genSearch, setGenSearch] = useState("");
-  const [genSelected, setGenSelected] = useState<typeof genEmployees[0] | null>(null);
-  const [genType, setGenType] = useState<"Full-time" | "Freelancer">("Full-time");
-  const [genForm, setGenForm] = useState({
-    billingPeriod: new Date().toISOString().slice(0, 7), // YYYY-MM
-    amount: "",
-    currency: "USD",
-    hours: "",
-    hourlyRate: "",
-    dueDate: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
-    notes: "",
-    venture: "Ace Consultancys",
-  });
-  const [genSubmitting, setGenSubmitting] = useState(false);
-
-  const fetchGenEmployees = useCallback(async () => {
-    setGenLoadingEmps(true);
-    try {
-      const res = await fetch("/api/team?activeOnly=true");
-      if (res.ok) {
-        const data = await res.json();
-        setGenEmployees(data.employees || data.users || []);
-      }
-    } catch { /* ignore */ } finally {
-      setGenLoadingEmps(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (showGenerateModal) fetchGenEmployees();
-  }, [showGenerateModal, fetchGenEmployees]);
-
-  const handleOpenGenerate = () => {
-    setGenSelected(null);
-    setGenSearch("");
-    setGenType("Full-time");
-    setGenForm({
-      billingPeriod: new Date().toISOString().slice(0, 7),
-      amount: "",
-      currency: "USD",
-      hours: "",
-      hourlyRate: "",
-      dueDate: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
-      notes: "",
-      venture: "Ace Consultancys",
-    });
-    setShowGenerateModal(true);
-  };
-
-  const handleSelectGenEmployee = (emp: typeof genEmployees[0]) => {
-    setGenSelected(emp);
-    const isFreelancer = (emp.employmentType || "").toLowerCase().includes("freelan") || (emp.employmentType || "").toLowerCase().includes("contract");
-    const type = isFreelancer ? "Freelancer" : "Full-time";
-    setGenType(type);
-    setGenForm(prev => ({
-      ...prev,
-      amount: type === "Full-time" ? String(emp.salary || "") : "",
-      hourlyRate: "",
-      hours: "",
-    }));
-    setGenSearch("");
-  };
-
-  const getGenInvoiceNo = () => {
-    if (!genSelected) return "EMP-001";
-    const initials = genSelected.name.split(" ").map(w => w[0]).join("").toUpperCase().slice(0, 3);
-    const period = genForm.billingPeriod.replace("-", "");
-    return `EMP-${initials}-${period}`;
-  };
-
-  const computeGenAmount = () => {
-    if (genType === "Full-time") return Number(genForm.amount) || 0;
-    const hrs = Number(genForm.hours) || 0;
-    const rate = Number(genForm.hourlyRate) || 0;
-    return hrs * rate;
-  };
-
-  const handleSubmitGenerate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!genSelected) return;
-    const amount = computeGenAmount();
-    const [year, month] = genForm.billingPeriod.split("-");
-    const periodLabel = new Date(Number(year), Number(month) - 1, 1).toLocaleDateString("en-US", { month: "long", year: "numeric" });
-    const issuedDate = new Date(Number(year), Number(month) - 1, 1).toISOString().split("T")[0];
-    const payload = {
-      invoiceNo: getGenInvoiceNo(),
-      client: genSelected.name,
-      amount,
-      currency: genForm.currency,
-      status: "Pending",
-      issuedDate,
-      dueDate: genForm.dueDate,
-      category: genType === "Full-time" ? "Employee Payroll" : "Freelancer Payment",
-      venture: genForm.venture,
-      notes: genForm.notes || `${genType} invoice for ${periodLabel}. Dept: ${genSelected.department || "—"}.${genType === "Freelancer" ? ` Hours: ${genForm.hours}h @ ${genForm.currency} ${genForm.hourlyRate}/hr.` : ""}`,
-    };
-    setGenSubmitting(true);
-    try {
-      const res = await fetch("/api/finance/invoices", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      if (res.ok) {
-        await fetchInvoices();
-        setShowGenerateModal(false);
-        showToast(`Invoice generated for ${genSelected.name}`);
-      } else {
-        const err = await res.json();
-        showToast(err.error || "Failed to generate invoice.", "error");
-      }
-    } catch { showToast("Failed to generate invoice.", "error"); }
-    finally { setGenSubmitting(false); }
-  };
 
   // ── Expense State ──
   const [expenses, setExpenses] = useState<FinanceExpense[]>([]);
@@ -522,14 +405,9 @@ export default function FinancePage() {
         </div>
         <div className="flex items-center gap-2 shrink-0">
           {(can("createInvoices") || isAdmin || isOPS) && (
-            <>
-              <Button variant="outline" size="sm" onClick={handleOpenGenerate} className="gap-2 h-8 font-semibold cursor-pointer border-emerald-500/40 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10">
-                <i className="fa-solid fa-wand-magic-sparkles text-xs" /> Generate Invoice
-              </Button>
-              <Button size="sm" onClick={handleNewInvoice} className="gap-2 h-8 font-semibold cursor-pointer">
-                <i className="fa-solid fa-file-invoice-dollar text-xs" /> New Invoice
-              </Button>
-            </>
+            <Button variant="outline" size="sm" onClick={() => router.push("/dashboard/finance/invoices/new")} className="gap-2 h-8 font-semibold cursor-pointer border-emerald-500/40 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10">
+              <i className="fa-solid fa-wand-magic-sparkles text-xs" /> Generate Invoice
+            </Button>
           )}
         </div>
       </div>
@@ -543,7 +421,7 @@ export default function FinancePage() {
         loadingExpenses={loadingExpenses}
         loadingDeals={loadingDeals}
         showToast={showToast}
-        onNewInvoice={handleNewInvoice}
+        onNewInvoice={() => router.push("/dashboard/finance/invoices/new")}
         onEditInvoice={handleEditInvoice}
         onDeleteInvoice={(id, name) => setDeleteTarget({ type: "invoice", id, name })}
         onNewExpense={handleNewExpense}
@@ -555,236 +433,6 @@ export default function FinancePage() {
         onRefresh={() => { fetchInvoices(); fetchExpenses(); fetchDeals(); }}
       />
 
-
-      {/* ── Generate Employee Invoice Modal ── */}
-      {showGenerateModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={() => setShowGenerateModal(false)}>
-          <div className="w-full max-w-2xl bg-card border border-border rounded-2xl shadow-2xl animate-in zoom-in-95 max-h-[92vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-            {/* Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-gradient-to-r from-emerald-500/10 to-transparent">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-500">
-                  <i className="fa-solid fa-wand-magic-sparkles text-base" />
-                </div>
-                <div>
-                  <h2 className="text-base font-bold text-foreground">Generate Employee Invoice</h2>
-                  <p className="text-xs text-muted-foreground">Select an employee to generate a payroll or freelancer invoice</p>
-                </div>
-              </div>
-              <button onClick={() => setShowGenerateModal(false)} className="p-1.5 hover:bg-muted rounded-lg cursor-pointer text-muted-foreground hover:text-foreground transition-colors">
-                <i className="fa-solid fa-xmark text-sm" />
-              </button>
-            </div>
-
-            <div className="p-6 space-y-5">
-              {/* Step 1: Employee Search */}
-              <div className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <div className="w-5 h-5 rounded-full bg-primary text-primary-foreground text-[10px] font-bold flex items-center justify-center">1</div>
-                  <h3 className="text-sm font-bold text-foreground">Select Employee</h3>
-                </div>
-
-                {/* Selected Employee Card */}
-                {genSelected ? (
-                  <div className="flex items-center gap-3 p-3 bg-emerald-500/5 border border-emerald-500/20 rounded-xl">
-                    <div className="w-10 h-10 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center text-primary font-bold text-sm">
-                      {genSelected.name.split(" ").map(w => w[0]).join("").toUpperCase().slice(0, 2)}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-bold text-foreground">{genSelected.name}</p>
-                      <p className="text-xs text-muted-foreground">{genSelected.email} {genSelected.department && `· ${genSelected.department}`}</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className={cn("text-[10px] font-bold px-2 py-0.5 rounded-full border", genType === "Full-time" ? "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20" : "bg-violet-500/10 text-violet-600 dark:text-violet-400 border-violet-500/20")}>
-                        <i className={cn("fa-solid mr-1 text-[9px]", genType === "Full-time" ? "fa-id-badge" : "fa-laptop-code")} />{genType}
-                      </span>
-                      <button type="button" onClick={() => { setGenSelected(null); }} className="text-xs text-muted-foreground hover:text-rose-500 transition-colors cursor-pointer font-semibold">
-                        <i className="fa-solid fa-rotate-left text-[10px]" />
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    <div className="relative">
-                      <i className="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-xs" />
-                      <Input
-                        className="pl-8 h-9 text-sm"
-                        placeholder="Search employee by name or email..."
-                        value={genSearch}
-                        onChange={e => setGenSearch(e.target.value)}
-                        autoFocus
-                      />
-                    </div>
-                    {genLoadingEmps ? (
-                      <div className="flex items-center justify-center py-6 text-muted-foreground text-xs gap-2">
-                        <i className="fa-solid fa-spinner fa-spin" /> Loading employees...
-                      </div>
-                    ) : (
-                      <div className="border border-border rounded-xl overflow-hidden max-h-52 overflow-y-auto">
-                        {genEmployees
-                          .filter(e => {
-                            if (!genSearch) return true;
-                            const q = genSearch.toLowerCase();
-                            return e.name.toLowerCase().includes(q) || e.email.toLowerCase().includes(q) || (e.department || "").toLowerCase().includes(q);
-                          })
-                          .map((emp, i) => {
-                            const isFree = (emp.employmentType || "").toLowerCase().includes("freelan") || (emp.employmentType || "").toLowerCase().includes("contract");
-                            return (
-                              <button
-                                key={emp._id}
-                                type="button"
-                                onClick={() => handleSelectGenEmployee(emp)}
-                                className={cn("w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-muted/50 transition-colors cursor-pointer", i > 0 && "border-t border-border/50")}
-                              >
-                                <div className="w-8 h-8 rounded-full bg-primary/15 flex items-center justify-center text-primary text-xs font-bold shrink-0">
-                                  {emp.name.split(" ").map((w: string) => w[0]).join("").toUpperCase().slice(0, 2)}
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <p className="text-xs font-bold text-foreground truncate">{emp.name}</p>
-                                  <p className="text-[10px] text-muted-foreground truncate">{emp.email} {emp.department && `· ${emp.department}`}</p>
-                                </div>
-                                <div className="flex items-center gap-1.5 shrink-0">
-                                  {emp.salary ? <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">${emp.salary?.toLocaleString()}</span> : null}
-                                  <span className={cn("text-[9px] font-bold px-1.5 py-0.5 rounded-full", isFree ? "bg-violet-500/10 text-violet-500" : "bg-blue-500/10 text-blue-500")}>
-                                    {isFree ? "Freelancer" : "Full-time"}
-                                  </span>
-                                </div>
-                              </button>
-                            );
-                          })}
-                        {genEmployees.filter(e => !genSearch || e.name.toLowerCase().includes(genSearch.toLowerCase()) || e.email.toLowerCase().includes(genSearch.toLowerCase())).length === 0 && (
-                          <div className="py-8 text-center text-xs text-muted-foreground">No employees found</div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* Step 2: Invoice Details — only shown once an employee is selected */}
-              {genSelected && (
-                <form onSubmit={handleSubmitGenerate} className="space-y-4">
-                  <div className="flex items-center gap-2">
-                    <div className="w-5 h-5 rounded-full bg-primary text-primary-foreground text-[10px] font-bold flex items-center justify-center">2</div>
-                    <h3 className="text-sm font-bold text-foreground">Invoice Details</h3>
-                  </div>
-
-                  {/* Employment Type override */}
-                  <div className="flex items-center gap-2 p-3 bg-muted/30 rounded-xl border border-border/60">
-                    <span className="text-xs text-muted-foreground font-semibold shrink-0">Invoice Type:</span>
-                    <div className="flex items-center gap-1.5">
-                      {(["Full-time", "Freelancer"] as const).map(t => (
-                        <button
-                          key={t}
-                          type="button"
-                          onClick={() => {
-                            setGenType(t);
-                            if (t === "Full-time") setGenForm(p => ({ ...p, amount: String(genSelected.salary || ""), hours: "", hourlyRate: "" }));
-                            else setGenForm(p => ({ ...p, amount: "", hours: "", hourlyRate: "" }));
-                          }}
-                          className={cn("px-3 py-1 text-xs font-bold rounded-lg border transition-all cursor-pointer flex items-center gap-1.5",
-                            genType === t ? "bg-primary text-primary-foreground border-primary shadow-xs" : "bg-background text-muted-foreground border-border hover:bg-muted"
-                          )}
-                        >
-                          <i className={cn("fa-solid text-[10px]", t === "Full-time" ? "fa-id-badge" : "fa-laptop-code")} />{t}
-                        </button>
-                      ))}
-                    </div>
-                    <span className="ml-auto text-[10px] text-muted-foreground">Auto-detected from employee type</span>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    {/* Billing Period */}
-                    <div className="space-y-1">
-                      <label className={labelCls}>Billing Period <span className="text-rose-500">*</span></label>
-                      <input
-                        type="month"
-                        required
-                        value={genForm.billingPeriod}
-                        onChange={e => setGenForm(p => ({ ...p, billingPeriod: e.target.value }))}
-                        className="w-full h-9 rounded-md border border-input bg-background text-sm px-3 text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-                      />
-                    </div>
-                    {/* Currency */}
-                    <div className="space-y-1">
-                      <label className={labelCls}>Currency</label>
-                      <select value={genForm.currency} onChange={e => setGenForm(p => ({ ...p, currency: e.target.value }))} className="w-full h-9 rounded-md border border-input bg-background text-sm px-2 text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer">
-                        {["USD", "EUR", "GBP", "PKR", "AED"].map(c => <option key={c} value={c}>{c}</option>)}
-                      </select>
-                    </div>
-                  </div>
-
-                  {/* Amount section */}
-                  {genType === "Full-time" ? (
-                    <div className="space-y-1">
-                      <label className={labelCls}>Monthly Salary / Amount <span className="text-rose-500">*</span></label>
-                      <Input
-                        type="number"
-                        min="0"
-                        required
-                        className={inputCls}
-                        value={genForm.amount}
-                        onChange={e => setGenForm(p => ({ ...p, amount: e.target.value }))}
-                        placeholder={genSelected.salary ? `${genSelected.salary} (from profile)` : "Enter salary amount"}
-                      />
-                      {genSelected.salary && <p className="text-[10px] text-emerald-600 dark:text-emerald-400"><i className="fa-solid fa-circle-info mr-1" />Auto-filled from employee profile ({genForm.currency} {genSelected.salary?.toLocaleString()})</p>}
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="space-y-1">
-                        <label className={labelCls}>Hours Worked <span className="text-rose-500">*</span></label>
-                        <Input type="number" min="0" required className={inputCls} value={genForm.hours} onChange={e => setGenForm(p => ({ ...p, hours: e.target.value }))} placeholder="e.g. 80" />
-                      </div>
-                      <div className="space-y-1">
-                        <label className={labelCls}>Hourly Rate <span className="text-rose-500">*</span></label>
-                        <Input type="number" min="0" required className={inputCls} value={genForm.hourlyRate} onChange={e => setGenForm(p => ({ ...p, hourlyRate: e.target.value }))} placeholder="e.g. 25" />
-                      </div>
-                      {Number(genForm.hours) > 0 && Number(genForm.hourlyRate) > 0 && (
-                        <div className="col-span-2 flex items-center gap-2 px-3 py-2 bg-emerald-500/5 border border-emerald-500/20 rounded-lg">
-                          <i className="fa-solid fa-calculator text-emerald-500 text-xs" />
-                          <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">
-                            Computed: {genForm.hours}h × {genForm.currency} {genForm.hourlyRate} = {genForm.currency} {(Number(genForm.hours) * Number(genForm.hourlyRate)).toLocaleString("en-US", { minimumFractionDigits: 2 })}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1">
-                      <label className={labelCls}>Invoice # (auto)</label>
-                      <Input className={cn(inputCls, "font-mono bg-muted/30")} value={getGenInvoiceNo()} readOnly />
-                    </div>
-                    <div className="space-y-1">
-                      <label className={labelCls}>Due Date</label>
-                      <Input type="date" className={inputCls} value={genForm.dueDate} onChange={e => setGenForm(p => ({ ...p, dueDate: e.target.value }))} />
-                    </div>
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className={labelCls}>Venture</label>
-                    <select value={genForm.venture} onChange={e => setGenForm(p => ({ ...p, venture: e.target.value }))} className="w-full h-9 rounded-md border border-input bg-background text-sm px-2 text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer">
-                      {["Ace Consultancys", "NexAce Tech"].map(v => <option key={v} value={v}>{v}</option>)}
-                    </select>
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className={labelCls}>Notes (optional)</label>
-                    <textarea rows={2} className="w-full rounded-md border border-input bg-background text-sm px-3 py-2 text-foreground resize-none focus:outline-none focus:ring-1 focus:ring-primary" value={genForm.notes} onChange={e => setGenForm(p => ({ ...p, notes: e.target.value }))} placeholder="Auto-generated if left blank..." />
-                  </div>
-
-                  <div className="flex justify-end gap-2.5 pt-2 border-t border-border/60">
-                    <Button type="button" variant="outline" size="sm" onClick={() => setShowGenerateModal(false)} disabled={genSubmitting}>Cancel</Button>
-                    <Button type="submit" size="sm" disabled={genSubmitting || !genSelected} className="gap-2 font-semibold cursor-pointer bg-emerald-600 hover:bg-emerald-700 text-white border-0">
-                      {genSubmitting ? <><i className="fa-solid fa-spinner fa-spin text-xs" /> Generating...</> : <><i className="fa-solid fa-wand-magic-sparkles text-xs" /> Generate Invoice</>}
-                    </Button>
-                  </div>
-                </form>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* ── Invoice Modal ── */}
       {showInvoiceModal && (
