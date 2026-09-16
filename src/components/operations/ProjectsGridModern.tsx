@@ -49,36 +49,83 @@ export function ProjectsGridModern({
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [statusFilter, setStatusFilter] = useState<string>("All");
   const [priorityFilter, setPriorityFilter] = useState<string>("All");
+  const [clientFilter, setClientFilter] = useState<string>("All");
   const [sortBy, setSortBy] = useState<"newest" | "name" | "dueDate" | "budget">("newest");
   const [showFilterDropdown, setShowFilterDropdown] = useState(false);
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
+
+  // Extract unique clients for client filter dropdown
+  const uniqueClients = useMemo(() => {
+    const set = new Set<string>();
+    projects.forEach((p) => {
+      const c = p.clientAccount || (p.isInternal ? "Internal Venture" : "Client Project");
+      if (c) set.add(c.trim());
+    });
+    return Array.from(set).sort();
+  }, [projects]);
+
+  const activeFiltersCount =
+    (statusFilter !== "All" ? 1 : 0) +
+    (priorityFilter !== "All" ? 1 : 0) +
+    (clientFilter !== "All" ? 1 : 0);
 
   // Filter and sort projects
   const filteredProjects = useMemo(() => {
     let list = [...projects];
 
     if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
+      const q = searchQuery.toLowerCase().trim();
       list = list.filter(
         (p) =>
           p.name?.toLowerCase().includes(q) ||
           p.clientAccount?.toLowerCase().includes(q) ||
           p.description?.toLowerCase().includes(q) ||
+          p.requirements?.toLowerCase().includes(q) ||
           p._id?.toLowerCase().includes(q)
       );
     }
 
     if (statusFilter !== "All") {
       list = list.filter((p) => {
-        const s = (p.status || "Planning").toLowerCase();
-        return s === statusFilter.toLowerCase();
+        const s = (p.status || "Planning").toLowerCase().trim();
+        const target = statusFilter.toLowerCase().trim();
+        if (target === "active") {
+          return s === "active" || s === "in progress" || s === "in delivery" || s === "planning";
+        }
+        if (target === "in progress") {
+          return s === "in progress" || s === "active" || s === "in delivery";
+        }
+        if (target === "completed") {
+          return s === "completed" || s === "done";
+        }
+        if (target === "planning") {
+          return s === "planning" || s === "planned";
+        }
+        if (target === "on hold") {
+          return s === "on hold" || s === "paused";
+        }
+        if (target === "in review") {
+          return s === "in review" || s === "review";
+        }
+        return s === target;
       });
     }
 
     if (priorityFilter !== "All") {
       list = list.filter((p) => {
-        const pr = (p.priority || "Medium").toLowerCase();
-        return pr === priorityFilter.toLowerCase();
+        const pr = (p.priority || "Medium").toLowerCase().trim();
+        const target = priorityFilter.toLowerCase().trim();
+        if (target === "high") {
+          return pr === "high" || pr === "urgent";
+        }
+        return pr === target;
+      });
+    }
+
+    if (clientFilter !== "All") {
+      list = list.filter((p) => {
+        const c = p.clientAccount || (p.isInternal ? "Internal Venture" : "Client Project");
+        return c?.toLowerCase().trim() === clientFilter.toLowerCase().trim();
       });
     }
 
@@ -101,7 +148,7 @@ export function ProjectsGridModern({
     });
 
     return list;
-  }, [projects, searchQuery, statusFilter, priorityFilter, sortBy]);
+  }, [projects, searchQuery, statusFilter, priorityFilter, clientFilter, sortBy]);
 
   // Export helper
   const handleExport = (type: "csv" | "json") => {
@@ -259,7 +306,7 @@ export function ProjectsGridModern({
       </div>
 
       {/* Filter & View Switcher Bar */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-2.5 sm:gap-3 bg-card/80 dark:bg-card/40 border border-border/70 rounded-2xl p-2.5 sm:p-3 backdrop-blur-sm shadow-2xs">
+      <div className="relative z-30 flex flex-col md:flex-row md:items-center justify-between gap-2.5 sm:gap-3 bg-card/80 dark:bg-card/40 border border-border/70 rounded-2xl p-2.5 sm:p-3 backdrop-blur-sm shadow-2xs">
         <div className="flex items-center gap-2 flex-1 w-full min-w-0">
           {/* Filter Dropdown Toggle */}
           <div className="relative shrink-0">
@@ -271,71 +318,123 @@ export function ProjectsGridModern({
                 setShowFilterDropdown(!showFilterDropdown);
               }}
               className={cn(
-                "gap-1.5 sm:gap-2 text-xs font-medium cursor-pointer h-9 rounded-xl px-2.5 sm:px-3",
-                (statusFilter !== "All" || priorityFilter !== "All") && "border-primary text-primary bg-primary/5"
+                "gap-1.5 sm:gap-2 text-xs font-medium cursor-pointer h-9 rounded-xl px-2.5 sm:px-3 relative",
+                (showFilterDropdown || activeFiltersCount > 0) && "border-primary text-primary bg-primary/10"
               )}
             >
               <i className="fa-solid fa-filter text-xs" />
               <span>Filter</span>
-              {(statusFilter !== "All" || priorityFilter !== "All") && (
-                <span className="w-2 h-2 rounded-full bg-primary" />
+              {activeFiltersCount > 0 && (
+                <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-primary text-primary-foreground leading-tight">
+                  {activeFiltersCount}
+                </span>
               )}
+              <i className={cn("fa-solid fa-chevron-down text-[9px] transition-transform", showFilterDropdown && "rotate-180")} />
             </Button>
 
             {showFilterDropdown && (
-              <div
-                className="absolute left-0 mt-2 w-[calc(100vw-36px)] max-w-xs sm:w-72 rounded-2xl bg-card border border-border shadow-2xl z-50 p-4 space-y-3.5 text-xs animate-in fade-in zoom-in-95"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <div className="flex items-center justify-between border-b border-border/60 pb-2">
-                  <span className="font-bold text-foreground">Filter Projects</span>
-                  <button
-                    onClick={() => {
-                      setStatusFilter("All");
-                      setPriorityFilter("All");
-                    }}
-                    className="text-primary hover:underline text-[11px] cursor-pointer"
-                  >
-                    Reset
-                  </button>
-                </div>
+              <>
+                {/* Transparent Backdrop Click-Catcher to dismiss on outside click */}
+                <div
+                  className="fixed inset-0 z-40 bg-transparent"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowFilterDropdown(false);
+                  }}
+                />
 
-                <div>
-                  <label className="block font-semibold text-muted-foreground mb-1">Status</label>
-                  <select
-                    value={statusFilter}
-                    onChange={(e) => setStatusFilter(e.target.value)}
-                    className="w-full rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs text-foreground focus:outline-hidden focus:ring-1 focus:ring-primary"
-                  >
-                    <option value="All">All Statuses</option>
-                    <option value="Planning">Planning</option>
-                    <option value="In Progress">In Progress</option>
-                    <option value="In Review">In Review</option>
-                    <option value="On Hold">On Hold</option>
-                    <option value="Completed">Completed</option>
-                  </select>
-                </div>
+                <div
+                  className="absolute top-full left-0 mt-2 w-[calc(100vw-36px)] max-w-xs sm:w-80 rounded-2xl bg-card border border-border shadow-2xl z-50 p-4 space-y-3.5 text-xs animate-in fade-in zoom-in-95 backdrop-blur-xl"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="flex items-center justify-between border-b border-border/60 pb-2">
+                    <div className="flex items-center gap-1.5 font-bold text-foreground">
+                      <i className="fa-solid fa-filter text-primary text-xs" />
+                      <span>Filter Projects</span>
+                    </div>
+                    {activeFiltersCount > 0 && (
+                      <button
+                        onClick={() => {
+                          setStatusFilter("All");
+                          setPriorityFilter("All");
+                          setClientFilter("All");
+                        }}
+                        className="text-primary hover:underline text-[11px] cursor-pointer font-medium"
+                      >
+                        Reset All
+                      </button>
+                    )}
+                  </div>
 
-                <div>
-                  <label className="block font-semibold text-muted-foreground mb-1">Priority</label>
-                  <select
-                    value={priorityFilter}
-                    onChange={(e) => setPriorityFilter(e.target.value)}
-                    className="w-full rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs text-foreground focus:outline-hidden focus:ring-1 focus:ring-primary"
-                  >
-                    <option value="All">All Priorities</option>
-                    <option value="High">High</option>
-                    <option value="Medium">Medium</option>
-                    <option value="Low">Low</option>
-                  </select>
-                </div>
+                  <div>
+                    <label className="block font-semibold text-muted-foreground mb-1 text-[11px]">
+                      Status
+                    </label>
+                    <select
+                      value={statusFilter}
+                      onChange={(e) => setStatusFilter(e.target.value)}
+                      className="w-full rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs text-foreground focus:outline-hidden focus:ring-1 focus:ring-primary cursor-pointer"
+                    >
+                      <option value="All">All Statuses ({projects.length})</option>
+                      <option value="Active">Active / In Progress</option>
+                      <option value="Planning">Planning</option>
+                      <option value="In Progress">In Progress</option>
+                      <option value="In Review">In Review</option>
+                      <option value="On Hold">On Hold</option>
+                      <option value="Completed">Completed</option>
+                    </select>
+                  </div>
 
-                <div className="pt-2 border-t border-border/60 flex justify-end">
-                  <Button size="sm" onClick={() => setShowFilterDropdown(false)} className="h-7 text-xs px-3">
-                    Apply Filters
-                  </Button>
+                  <div>
+                    <label className="block font-semibold text-muted-foreground mb-1 text-[11px]">
+                      Priority
+                    </label>
+                    <select
+                      value={priorityFilter}
+                      onChange={(e) => setPriorityFilter(e.target.value)}
+                      className="w-full rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs text-foreground focus:outline-hidden focus:ring-1 focus:ring-primary cursor-pointer"
+                    >
+                      <option value="All">All Priorities</option>
+                      <option value="High">High & Urgent</option>
+                      <option value="Medium">Medium</option>
+                      <option value="Low">Low</option>
+                    </select>
+                  </div>
+
+                  {uniqueClients.length > 0 && (
+                    <div>
+                      <label className="block font-semibold text-muted-foreground mb-1 text-[11px]">
+                        Client / Account
+                      </label>
+                      <select
+                        value={clientFilter}
+                        onChange={(e) => setClientFilter(e.target.value)}
+                        className="w-full rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs text-foreground focus:outline-hidden focus:ring-1 focus:ring-primary truncate cursor-pointer"
+                      >
+                        <option value="All">All Clients & Accounts</option>
+                        {uniqueClients.map((c) => (
+                          <option key={c} value={c}>
+                            {c}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  <div className="pt-2 border-t border-border/60 flex items-center justify-between">
+                    <span className="text-[11px] text-muted-foreground">
+                      {filteredProjects.length} matching
+                    </span>
+                    <Button
+                      size="sm"
+                      onClick={() => setShowFilterDropdown(false)}
+                      className="h-7 text-xs px-3 bg-primary text-primary-foreground cursor-pointer"
+                    >
+                      Apply
+                    </Button>
+                  </div>
                 </div>
-              </div>
+              </>
             )}
           </div>
 
@@ -404,6 +503,84 @@ export function ProjectsGridModern({
         </div>
       </div>
 
+      {/* Active Filter Chips Strip */}
+      {(statusFilter !== "All" || priorityFilter !== "All" || clientFilter !== "All" || searchQuery) && (
+        <div className="flex flex-wrap items-center gap-2 px-1 text-xs">
+          <span className="text-muted-foreground font-semibold text-[11px] flex items-center gap-1">
+            <i className="fa-solid fa-filter text-[10px] text-primary" /> Active Filters:
+          </span>
+
+          {statusFilter !== "All" && (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 font-medium text-[11px]">
+              <span>Status: <strong>{statusFilter}</strong></span>
+              <button
+                type="button"
+                onClick={() => setStatusFilter("All")}
+                className="hover:text-foreground cursor-pointer ml-0.5"
+                title="Remove status filter"
+              >
+                <i className="fa-solid fa-xmark text-[10px]" />
+              </button>
+            </span>
+          )}
+
+          {priorityFilter !== "All" && (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20 font-medium text-[11px]">
+              <span>Priority: <strong>{priorityFilter}</strong></span>
+              <button
+                type="button"
+                onClick={() => setPriorityFilter("All")}
+                className="hover:text-foreground cursor-pointer ml-0.5"
+                title="Remove priority filter"
+              >
+                <i className="fa-solid fa-xmark text-[10px]" />
+              </button>
+            </span>
+          )}
+
+          {clientFilter !== "All" && (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/20 font-medium text-[11px]">
+              <span>Client: <strong>{clientFilter}</strong></span>
+              <button
+                type="button"
+                onClick={() => setClientFilter("All")}
+                className="hover:text-foreground cursor-pointer ml-0.5"
+                title="Remove client filter"
+              >
+                <i className="fa-solid fa-xmark text-[10px]" />
+              </button>
+            </span>
+          )}
+
+          {searchQuery && (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-muted text-muted-foreground font-medium text-[11px]">
+              <span>Search: &quot;{searchQuery}&quot;</span>
+              <button
+                type="button"
+                onClick={() => setSearchQuery("")}
+                className="hover:text-foreground cursor-pointer ml-0.5"
+                title="Clear search"
+              >
+                <i className="fa-solid fa-xmark text-[10px]" />
+              </button>
+            </span>
+          )}
+
+          <button
+            type="button"
+            onClick={() => {
+              setStatusFilter("All");
+              setPriorityFilter("All");
+              setClientFilter("All");
+              setSearchQuery("");
+            }}
+            className="text-[11px] text-primary hover:underline font-semibold cursor-pointer ml-1"
+          >
+            Clear all ({filteredProjects.length} found)
+          </button>
+        </div>
+      )}
+
       {/* Projects Grid Mode */}
       {viewMode === "grid" && (
         <>
@@ -431,7 +608,7 @@ export function ProjectsGridModern({
                 const gradientClass = PROJECT_GRADIENTS[idx % PROJECT_GRADIENTS.length];
                 const priority = p.priority || "High";
                 const status = p.status || "Planning";
-                const isActive = status === "In Progress" || status === "In Review";
+                const isActive = status === "In Progress" || status === "In Review" || status === "Active" || status === "In Delivery";
 
                 // Assigned members list
                 const assignedList = p.members && p.members.length > 0 ? p.members : [];
@@ -471,7 +648,7 @@ export function ProjectsGridModern({
                               : "bg-indigo-600"
                           )}
                         >
-                          {status === "In Progress" ? "Active" : status}
+                          {status === "In Progress" || status === "Active" || status === "In Delivery" ? "Active" : status}
                         </span>
                       </div>
 
@@ -709,7 +886,7 @@ export function ProjectsGridModern({
                     const gradientClass = PROJECT_GRADIENTS[idx % PROJECT_GRADIENTS.length];
                     const priority = p.priority || "High";
                     const status = p.status || "Planning";
-                    const isActive = status === "In Progress" || status === "In Review";
+                    const isActive = status === "In Progress" || status === "In Review" || status === "Active" || status === "In Delivery";
 
                     return (
                       <tr key={p._id} className="hover:bg-muted/30 transition-colors">
@@ -766,7 +943,7 @@ export function ProjectsGridModern({
                                 : "bg-indigo-600"
                             )}
                           >
-                            {status === "In Progress" ? "Active" : status}
+                            {status === "In Progress" || status === "Active" || status === "In Delivery" ? "Active" : status}
                           </span>
                         </td>
                         <td className="py-3.5 px-4 text-foreground">{formatDueDate(p.dueDate)}</td>

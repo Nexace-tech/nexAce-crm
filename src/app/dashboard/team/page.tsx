@@ -982,14 +982,7 @@ export default function TeamDashboardPage() {
             >
               <i className="fa-solid fa-building" /> Add Department
             </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => router.push("/dashboard/clients?tab=external")}
-              className="gap-2 text-xs font-semibold cursor-pointer border-primary/30 hover:border-primary text-primary"
-            >
-              <i className="fa-solid fa-building-user" /> External Teams Panel
-            </Button>
+
             <Button
               color="primary"
               size="sm"

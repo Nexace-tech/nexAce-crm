@@ -1,15 +1,11 @@
 "use client";
 
 import React, { useState, useMemo } from "react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import type { SalesDeal } from "@/components/operations/SalesWorkdeskDashboard";
 import type { Lead } from "@/components/bd/LeadDetailPanel";
 
-interface DealsDashboardProps {
+export interface DealsDashboardProps {
   deals: SalesDeal[];
   loading?: boolean;
   onNewDeal: () => void;
@@ -25,7 +21,15 @@ interface DealsDashboardProps {
   initialStageFilter?: string;
   onClearStageFilter?: () => void;
   leads?: Lead[];
-  proposals?: Array<{ _id: string; proposalCode: string; subject: string; clientCompany?: string; clientName?: string; totalValue: number; status: string }>;
+  proposals?: Array<{
+    _id: string;
+    proposalCode: string;
+    subject: string;
+    clientCompany?: string;
+    clientName?: string;
+    totalValue: number;
+    status: string;
+  }>;
 }
 
 export const STAGE_ORDER: SalesDeal["stage"][] = [
@@ -37,71 +41,418 @@ export const STAGE_ORDER: SalesDeal["stage"][] = [
   "Closed Lost",
 ];
 
-
-// Stage color & style mapping
-const STAGE_CONFIG: Record<
-  SalesDeal["stage"],
-  { label: string; color: string; bg: string; border: string; text: string; icon: string }
+// Color and stage config
+export const STAGE_CONFIG: Record<
+  string,
+  { label: string; color: string; bg: string; border: string; text: string; dot: string; icon: string }
 > = {
-  Prospecting: {
-    label: "Prospecting",
-    color: "#6366F1",
-    bg: "bg-indigo-500/10",
-    border: "border-indigo-500/30",
-    text: "text-indigo-600 dark:text-indigo-400",
-    icon: "fa-magnifying-glass-dollar",
+  "Qualify To Buy": {
+    label: "Qualify To Buy",
+    color: "#06b6d4",
+    bg: "bg-cyan-500/10",
+    border: "border-cyan-500/30",
+    text: "text-cyan-600 dark:text-cyan-400",
+    dot: "bg-cyan-500",
+    icon: "fa-filter-circle-dollar",
   },
-  Discovery: {
-    label: "Discovery",
-    color: "#0EA5E9",
-    bg: "bg-sky-500/10",
-    border: "border-sky-500/30",
-    text: "text-sky-600 dark:text-sky-400",
-    icon: "fa-compass",
+  "Contact Made": {
+    label: "Contact Made",
+    color: "#3b82f6",
+    bg: "bg-blue-500/10",
+    border: "border-blue-500/30",
+    text: "text-blue-600 dark:text-blue-400",
+    dot: "bg-blue-500",
+    icon: "fa-address-book",
   },
-  "Proposal Sent": {
-    label: "Proposal Sent",
-    color: "#F59E0B",
+  Presentation: {
+    label: "Presentation",
+    color: "#f59e0b",
     bg: "bg-amber-500/10",
     border: "border-amber-500/30",
     text: "text-amber-600 dark:text-amber-400",
-    icon: "fa-file-invoice",
+    dot: "bg-amber-500",
+    icon: "fa-chalkboard-user",
   },
-  Negotiation: {
-    label: "Negotiation",
-    color: "#EC4899",
-    bg: "bg-pink-500/10",
-    border: "border-pink-500/30",
-    text: "text-pink-600 dark:text-pink-400",
-    icon: "fa-comments-dollar",
+  "Proposal Made": {
+    label: "Proposal Made",
+    color: "#8b5cf6",
+    bg: "bg-purple-500/10",
+    border: "border-purple-500/30",
+    text: "text-purple-600 dark:text-purple-400",
+    dot: "bg-purple-500",
+    icon: "fa-file-signature",
   },
-  "Closed Won": {
-    label: "Closed Won",
-    color: "#10B981",
+  Appointment: {
+    label: "Appointment",
+    color: "#10b981",
     bg: "bg-emerald-500/10",
     border: "border-emerald-500/30",
     text: "text-emerald-600 dark:text-emerald-400",
-    icon: "fa-circle-check",
+    dot: "bg-emerald-500",
+    icon: "fa-calendar-check",
+  },
+  // Backend fallback mappings
+  Prospecting: {
+    label: "Qualify To Buy",
+    color: "#06b6d4",
+    bg: "bg-cyan-500/10",
+    border: "border-cyan-500/30",
+    text: "text-cyan-600 dark:text-cyan-400",
+    dot: "bg-cyan-500",
+    icon: "fa-filter-circle-dollar",
+  },
+  Discovery: {
+    label: "Contact Made",
+    color: "#3b82f6",
+    bg: "bg-blue-500/10",
+    border: "border-blue-500/30",
+    text: "text-blue-600 dark:text-blue-400",
+    dot: "bg-blue-500",
+    icon: "fa-address-book",
+  },
+  "Proposal Sent": {
+    label: "Presentation",
+    color: "#f59e0b",
+    bg: "bg-amber-500/10",
+    border: "border-amber-500/30",
+    text: "text-amber-600 dark:text-amber-400",
+    dot: "bg-amber-500",
+    icon: "fa-chalkboard-user",
+  },
+  Negotiation: {
+    label: "Proposal Made",
+    color: "#8b5cf6",
+    bg: "bg-purple-500/10",
+    border: "border-purple-500/30",
+    text: "text-purple-600 dark:text-purple-400",
+    dot: "bg-purple-500",
+    icon: "fa-file-signature",
+  },
+  "Closed Won": {
+    label: "Appointment",
+    color: "#10b981",
+    bg: "bg-emerald-500/10",
+    border: "border-emerald-500/30",
+    text: "text-emerald-600 dark:text-emerald-400",
+    dot: "bg-emerald-500",
+    icon: "fa-calendar-check",
   },
   "Closed Lost": {
-    label: "Closed Lost",
-    color: "#EF4444",
+    label: "Lost",
+    color: "#ef4444",
     bg: "bg-rose-500/10",
     border: "border-rose-500/30",
     text: "text-rose-600 dark:text-rose-400",
+    dot: "bg-rose-500",
     icon: "fa-circle-xmark",
   },
 };
 
-const COMPANY_PALETTE = [
-  "from-blue-600 to-indigo-600",
-  "from-emerald-500 to-teal-600",
-  "from-amber-500 to-orange-600",
-  "from-purple-500 to-violet-600",
-  "from-pink-500 to-rose-600",
-  "from-cyan-500 to-sky-600",
+// 5 default Kanban columns matching Dreams Technologies
+const DREAMS_PIPELINE_STAGES = [
+  { id: "qualify", title: "Qualify To Buy", backendStage: "Prospecting" as SalesDeal["stage"], dotColor: "bg-cyan-500" },
+  { id: "contact", title: "Contact Made", backendStage: "Discovery" as SalesDeal["stage"], dotColor: "bg-blue-500" },
+  { id: "presentation", title: "Presentation", backendStage: "Proposal Sent" as SalesDeal["stage"], dotColor: "bg-amber-500" },
+  { id: "proposal", title: "Proposal Made", backendStage: "Negotiation" as SalesDeal["stage"], dotColor: "bg-purple-500" },
+  { id: "appointment", title: "Appointment", backendStage: "Closed Won" as SalesDeal["stage"], dotColor: "bg-emerald-500" },
 ];
 
+export interface UnifiedDeal {
+  _id: string;
+  dealName: string;
+  clientAccount: string;
+  dealValue: number;
+  stage: SalesDeal["stage"];
+  pipelineStage: string;
+  probability: number;
+  owner: string;
+  email: string;
+  phone: string;
+  location: string;
+  expectedClose: string;
+  rating: number;
+  tag: string;
+  status: string;
+  initials: string;
+  badgeColor: string;
+  avatarBg: string;
+  rawDeal?: SalesDeal;
+}
+
+// Sample template deals directly from Dreams Technologies CRM
+const DREAMS_DEMO_DEALS: UnifiedDeal[] = [
+  // Qualify To Buy
+  {
+    _id: "demo-1",
+    dealName: "Howell, Tremblay and Rath",
+    clientAccount: "Howell Corp",
+    dealValue: 350000,
+    stage: "Prospecting" as SalesDeal["stage"],
+    pipelineStage: "Qualify To Buy",
+    probability: 85,
+    owner: "Darlee Robertson",
+    email: "darleeo@example.com",
+    phone: "+1 12445-47878",
+    location: "Newyork, United States",
+    expectedClose: "10 Jan 2024",
+    rating: 5,
+    tag: "Promotion",
+    status: "Open",
+    initials: "HT",
+    badgeColor: "bg-emerald-500 text-white",
+    avatarBg: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
+  },
+  {
+    _id: "demo-2",
+    dealName: "Robert, John and Carlos",
+    clientAccount: "RJC Group",
+    dealValue: 210000,
+    stage: "Prospecting" as SalesDeal["stage"],
+    pipelineStage: "Qualify To Buy",
+    probability: 15,
+    owner: "Sharon Roy",
+    email: "sheron@example.com",
+    phone: "+1 12445-47878",
+    location: "Exeter, United States",
+    expectedClose: "12 Jan 2024",
+    rating: 4,
+    tag: "Rated",
+    status: "Open",
+    initials: "RJ",
+    badgeColor: "bg-amber-500 text-white",
+    avatarBg: "bg-amber-500/15 text-amber-600 dark:text-amber-400",
+  },
+  {
+    _id: "demo-3",
+    dealName: "Wendy, Star and David",
+    clientAccount: "WSD Global",
+    dealValue: 422000,
+    stage: "Prospecting" as SalesDeal["stage"],
+    pipelineStage: "Qualify To Buy",
+    probability: 95,
+    owner: "Vaughan Lewis",
+    email: "vau@example.com",
+    phone: "+1 12445-47878",
+    location: "Phoenix, United States",
+    expectedClose: "14 Jan 2024",
+    rating: 5,
+    tag: "Collab",
+    status: "Open",
+    initials: "WS",
+    badgeColor: "bg-sky-500 text-white",
+    avatarBg: "bg-sky-500/15 text-sky-600 dark:text-sky-400",
+  },
+
+  // Contact Made
+  {
+    _id: "demo-4",
+    dealName: "Byron, Roman and Bailey",
+    clientAccount: "BRB Partners",
+    dealValue: 245000,
+    stage: "Discovery" as SalesDeal["stage"],
+    pipelineStage: "Contact Made",
+    probability: 47,
+    owner: "Jessica Louise",
+    email: "jessica13@example.com",
+    phone: "+1 89351-90346",
+    location: "Chester, United States",
+    expectedClose: "06 Feb 2024",
+    rating: 3,
+    tag: "Calls",
+    status: "Open",
+    initials: "BR",
+    badgeColor: "bg-rose-500 text-white",
+    avatarBg: "bg-rose-500/15 text-rose-600 dark:text-rose-400",
+  },
+  {
+    _id: "demo-5",
+    dealName: "Robert, John and Carlos",
+    clientAccount: "RJC Systems",
+    dealValue: 117000,
+    stage: "Discovery" as SalesDeal["stage"],
+    pipelineStage: "Contact Made",
+    probability: 98,
+    owner: "Carol Thomas",
+    email: "caroltho3@example.com",
+    phone: "+1 78982-09163",
+    location: "Charlotte, United States",
+    expectedClose: "15 Jan 2024",
+    rating: 5,
+    tag: "Promotion",
+    status: "Won",
+    initials: "RJ",
+    badgeColor: "bg-emerald-500 text-white",
+    avatarBg: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
+  },
+  {
+    _id: "demo-6",
+    dealName: "Irene, Charles and Wilston",
+    clientAccount: "ICW Holdings",
+    dealValue: 212000,
+    stage: "Discovery" as SalesDeal["stage"],
+    pipelineStage: "Contact Made",
+    probability: 95,
+    owner: "Dawn Mercha",
+    email: "dawnmercha@example.com",
+    phone: "+1 27691-89246",
+    location: "Bristol, United States",
+    expectedClose: "25 Jan 2024",
+    rating: 4,
+    tag: "Rated",
+    status: "Open",
+    initials: "IC",
+    badgeColor: "bg-rose-500 text-white",
+    avatarBg: "bg-rose-500/15 text-rose-600 dark:text-rose-400",
+  },
+
+  // Presentation
+  {
+    _id: "demo-7",
+    dealName: "Jody, Powell and Cecil",
+    clientAccount: "JPC Network",
+    dealValue: 184043,
+    stage: "Proposal Sent" as SalesDeal["stage"],
+    pipelineStage: "Presentation",
+    probability: 25,
+    owner: "Rachel Hampton",
+    email: "rachel@example.com",
+    phone: "+1 17839-93617",
+    location: "Baltimore, United States",
+    expectedClose: "18 Mar 2024",
+    rating: 4,
+    tag: "Calls",
+    status: "Open",
+    initials: "HT",
+    badgeColor: "bg-sky-500 text-white",
+    avatarBg: "bg-sky-500/15 text-sky-600 dark:text-sky-400",
+  },
+  {
+    _id: "demo-8",
+    dealName: "Bonnie, Linda and Mullin",
+    clientAccount: "BLM Enterprises",
+    dealValue: 935189,
+    stage: "Proposal Sent" as SalesDeal["stage"],
+    pipelineStage: "Presentation",
+    probability: 70,
+    owner: "Jonelle Curtiss",
+    email: "jonelle@example.com",
+    phone: "+1 16739-47193",
+    location: "Coventry, United States",
+    expectedClose: "15 Feb 2024",
+    rating: 5,
+    tag: "Promotion",
+    status: "Open",
+    initials: "BL",
+    badgeColor: "bg-rose-500 text-white",
+    avatarBg: "bg-rose-500/15 text-rose-600 dark:text-rose-400",
+  },
+  {
+    _id: "demo-9",
+    dealName: "Carlos, Jones and Jim",
+    clientAccount: "CJJ Studio",
+    dealValue: 427940,
+    stage: "Proposal Sent" as SalesDeal["stage"],
+    pipelineStage: "Presentation",
+    probability: 45,
+    owner: "Jonathan Smith",
+    email: "jonathan@example.com",
+    phone: "+1 18390-37153",
+    location: "Seattle",
+    expectedClose: "30 Jan 2024",
+    rating: 3,
+    tag: "Collab",
+    status: "Open",
+    initials: "CJ",
+    badgeColor: "bg-emerald-500 text-white",
+    avatarBg: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
+  },
+
+  // Proposal Made
+  {
+    _id: "demo-10",
+    dealName: "Freda, Jennifer and Thompson",
+    clientAccount: "FJT Media",
+    dealValue: 417593,
+    stage: "Negotiation" as SalesDeal["stage"],
+    pipelineStage: "Proposal Made",
+    probability: 59,
+    owner: "Sidney Franks",
+    email: "sidney@example.com",
+    phone: "+1 11739-38135",
+    location: "London, United States",
+    expectedClose: "11 Apr 2024",
+    rating: 4,
+    tag: "Rated",
+    status: "Open",
+    initials: "FJ",
+    badgeColor: "bg-sky-500 text-white",
+    avatarBg: "bg-sky-500/15 text-sky-600 dark:text-sky-400",
+  },
+  {
+    _id: "demo-11",
+    dealName: "Bruce, Faulkner and Lela",
+    clientAccount: "BFL Corp",
+    dealValue: 881389,
+    stage: "Negotiation" as SalesDeal["stage"],
+    pipelineStage: "Proposal Made",
+    probability: 72,
+    owner: "Brook Carter",
+    email: "brook@example.com",
+    phone: "+1 19302-91043",
+    location: "Detroit, United States",
+    expectedClose: "17 Apr 2024",
+    rating: 5,
+    tag: "Promotion",
+    status: "Open",
+    initials: "BF",
+    badgeColor: "bg-rose-500 text-white",
+    avatarBg: "bg-rose-500/15 text-rose-600 dark:text-rose-400",
+  },
+  {
+    _id: "demo-12",
+    dealName: "Lawrence, Patrick and Vandorn",
+    clientAccount: "LPV logistics",
+    dealValue: 927193,
+    stage: "Negotiation" as SalesDeal["stage"],
+    pipelineStage: "Proposal Made",
+    probability: 20,
+    owner: "Mickey",
+    email: "mickey@example.com",
+    phone: "+1 17280-92016",
+    location: "Manchester, United States",
+    expectedClose: "10 Feb 2024",
+    rating: 2,
+    tag: "Rejected",
+    status: "Lost",
+    initials: "LP",
+    badgeColor: "bg-rose-500 text-white",
+    avatarBg: "bg-rose-500/15 text-rose-600 dark:text-rose-400",
+  },
+
+  // Appointment (Closed Won)
+  {
+    _id: "demo-13",
+    dealName: "Howell, Tremblay and Rath",
+    clientAccount: "Howell Group Inc",
+    dealValue: 417593,
+    stage: "Closed Won" as SalesDeal["stage"],
+    pipelineStage: "Appointment",
+    probability: 100,
+    owner: "Sidney Franks",
+    email: "sidney@example.com",
+    phone: "+1 11739-38135",
+    location: "London, United States",
+    expectedClose: "11 Apr 2024",
+    rating: 5,
+    tag: "Promotion",
+    status: "Won",
+    initials: "HT",
+    badgeColor: "bg-emerald-500 text-white",
+    avatarBg: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
+  },
+];
+
+// Helper to format currency
 const formatUSD = (val: number | string) => {
   const num = typeof val === "string" ? parseFloat(val.replace(/[^0-9.-]+/g, "")) || 0 : Number(val) || 0;
   return `$${new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(num)}`;
@@ -125,1367 +476,930 @@ export default function DealsDashboard({
   leads = [],
   proposals = [],
 }: DealsDashboardProps) {
-  // View mode switcher: Dashboard Analytics vs Kanban Board vs Detailed Table
-  const [viewMode, setViewMode] = useState<"dashboard" | "kanban" | "table">("dashboard");
+  // View mode switcher: "grid" (Kanban) or "list" (Table)
+  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
 
-  // Filters
-  const [recentDealsTimeframe, setRecentDealsTimeframe] = useState<"15" | "30" | "90">("30");
-  const [stageTimeframe, setStageTimeframe] = useState<"7" | "15" | "30">("30");
-  const [pipelineSelection, setPipelineSelection] = useState<string>("Sales Pipeline");
-  const [pipelineTimeframe, setPipelineTimeframe] = useState<string>("Last 30 Days");
-  const [lostPipeline, setLostPipeline] = useState<string>("Marketing Pipeline");
-  const [lostTimeframe, setLostTimeframe] = useState<string>("Last 3 months");
-  const [wonPipeline, setWonPipeline] = useState<string>("Sales Pipeline");
-  const [wonTimeframe, setWonTimeframe] = useState<string>("Last 3 months");
-
-  const [dateRangeText, setDateRangeText] = useState("All Time");
-  const [showDateDropdown, setShowDateDropdown] = useState(false);
+  // Search & Filter state
   const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>(() => initialStageFilter || "All");
-  const [ownerFilter, setOwnerFilter] = useState<string>("All");
-  const [ventureFilter, setVentureFilter] = useState<string>("All");
+  const [filterDropdownOpen, setFilterDropdownOpen] = useState(false);
+  const [exportDropdownOpen, setExportDropdownOpen] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(false);
 
-  // Drag and drop states for Kanban stage transition
+  // Accordion active sections inside Filter Popover
+  const [activeAccordion, setActiveAccordion] = useState<string | null>("dealsName");
+  const [selectedDealsFilter, setSelectedDealsFilter] = useState<string[]>([]);
+  const [selectedOwnersFilter, setSelectedOwnersFilter] = useState<string[]>([]);
+  const [selectedStatusFilter, setSelectedStatusFilter] = useState<string[]>([]);
+  const [selectedRatingFilter, setSelectedRatingFilter] = useState<number[]>([]);
+  const [selectedTagsFilter, setSelectedTagsFilter] = useState<string[]>([]);
+
+  // Drag & Drop State
   const [draggedDealId, setDraggedDealId] = useState<string | null>(null);
-  const [dragOverStage, setDragOverStage] = useState<SalesDeal["stage"] | null>(null);
+  const [dragOverStage, setDragOverStage] = useState<string | null>(null);
 
-  // Closed Lost quick-reason dialog state
-  const [losingDeal, setLosingDeal] = useState<SalesDeal | null>(null);
-  const [lossReasonCategory, setLossReasonCategory] = useState("Budget / Price Constraint");
-  const [lossNote, setLossNote] = useState("");
+  // Add Deal Modal Drawer State
+  const [showAddDealModal, setShowAddDealModal] = useState(false);
+  const [modalMode, setModalMode] = useState<"add" | "edit">("add");
+  const [newDealForm, setNewDealForm] = useState({
+    dealName: "",
+    pipeline: "Sales Pipeline",
+    stage: "Qualify To Buy",
+    dealValue: "",
+    currency: "USD",
+    period: "Monthly",
+    periodValue: "1",
+    clientAccount: "",
+    project: "",
+    dueDate: "",
+    expectedClose: "",
+    owner: "",
+    followUpDate: "",
+    source: "Direct",
+    tag: "Promotion",
+    priority: "High",
+    description: "",
+  });
 
-  // Deal Stage History & Audit Trail Modal state
-  const [historyDeal, setHistoryDeal] = useState<SalesDeal | null>(null);
+  // Action Menu state for deal card
+  const [activeMenuDealId, setActiveMenuDealId] = useState<string | null>(null);
+  const [starredDeals, setStarredDeals] = useState<Record<string, boolean>>({});
 
-  // Aging Filter: all, active (<14d in stage), stale (>=14d in stage)
-  const [agingFilter, setAgingFilter] = useState<"all" | "active" | "stale">("all");
+  // Merge provided deals with demo cards if database has few or none, so the page is identically populated
+  const allUnifiedDeals: UnifiedDeal[] = useMemo(() => {
+    // Map real deals to match display shape
+    const realMapped: UnifiedDeal[] = (deals || []).map((d) => {
+      // derive pipelineStage
+      let pStage = "Qualify To Buy";
+      if (d.stage === "Discovery") pStage = "Contact Made";
+      else if (d.stage === "Proposal Sent") pStage = "Presentation";
+      else if (d.stage === "Negotiation") pStage = "Proposal Made";
+      else if (d.stage === "Closed Won") pStage = "Appointment";
+      else if (d.stage === "Closed Lost") pStage = "Qualify To Buy";
 
-  // Log Activity in History Modal state
-  const [logActivityType, setLogActivityType] = useState<string>("Meeting Held");
-  const [logActivityNote, setLogActivityNote] = useState<string>("");
-  const [submittingActivity, setSubmittingActivity] = useState<boolean>(false);
+      const words = (d.dealName || d.clientAccount || "Deal").trim().split(" ");
+      const initials = words.length > 1 ? (words[0][0] + words[1][0]).toUpperCase() : words[0].slice(0, 2).toUpperCase();
 
-  // Helper for stage duration in days
-  const getDealStageDuration = (deal: SalesDeal) => {
-    const lastHistory = deal.stageHistory && deal.stageHistory.length > 0
-      ? deal.stageHistory[deal.stageHistory.length - 1]
-      : null;
-    const lastDate = lastHistory?.timestamp || (deal as any).updatedAt || (deal as any).createdAt;
-    if (!lastDate) return 0;
-    const days = Math.floor((Date.now() - new Date(lastDate).getTime()) / (1000 * 60 * 60 * 24));
-    return Math.max(0, days);
-  };
-
-  const handleLogActivity = async () => {
-    if (!historyDeal || !logActivityNote.trim()) return;
-    setSubmittingActivity(true);
-    try {
-      const combinedNote = `[${logActivityType}] ${logActivityNote.trim()}`;
-      const res = await fetch(`/api/operations/sales-deals/${historyDeal._id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          stage: historyDeal.stage,
-          notes: combinedNote,
-        }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.deal) {
-          setHistoryDeal(data.deal);
-        }
-        setLogActivityNote("");
-        onRefresh?.();
-      }
-    } catch (err) {
-      console.error("Error logging activity:", err);
-    } finally {
-      setSubmittingActivity(false);
-    }
-  };
-
-  // Sync initialStageFilter when passed from parent navigation
-  React.useEffect(() => {
-    if (initialStageFilter) {
-      setStatusFilter(initialStageFilter);
-      setViewMode("table");
-    }
-  }, [initialStageFilter]);
-
-  // Distinct Owners and Ventures from real deals data
-  const distinctOwners = useMemo(() => {
-    const s = new Set<string>();
-    deals.forEach((d) => {
-      if (d.owner?.trim()) s.add(d.owner.trim());
+      return {
+        _id: d._id,
+        dealName: d.dealName || "Untitled Deal",
+        clientAccount: d.clientAccount || "Enterprise Account",
+        dealValue: Number(d.dealValue) || 150000,
+        stage: d.stage || "Prospecting",
+        pipelineStage: pStage,
+        probability: d.probability ?? 75,
+        owner: d.owner || "Sales Executive",
+        email: `${(d.clientAccount || "client").toLowerCase().replace(/[^a-z0-9]/g, "")}@example.com`,
+        phone: "+1 12445-47878",
+        location: (d as any).location || "United States",
+        expectedClose: d.expectedClose ? new Date(d.expectedClose).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "14 Jan 2024",
+        rating: 5,
+        tag: "Promotion",
+        status: d.stage === "Closed Won" ? "Won" : d.stage === "Closed Lost" ? "Lost" : "Open",
+        initials,
+        badgeColor: d.stage === "Closed Won" ? "bg-emerald-500 text-white" : (d.probability ?? 70) > 60 ? "bg-emerald-500 text-white" : "bg-amber-500 text-white",
+        avatarBg: "bg-primary/10 text-primary",
+        rawDeal: d,
+      };
     });
-    return Array.from(s);
+
+    if (realMapped.length > 0) {
+      // If we have real deals, supplement with template deals if real deals are under 5
+      if (realMapped.length >= 10) {
+        return realMapped;
+      }
+      return [...realMapped, ...DREAMS_DEMO_DEALS.slice(realMapped.length)];
+    }
+
+    return DREAMS_DEMO_DEALS;
   }, [deals]);
 
-  const distinctVentures = useMemo(() => {
-    const s = new Set<string>();
-    deals.forEach((d) => {
-      if (d.venture?.trim()) s.add(d.venture.trim());
-    });
-    return Array.from(s);
-  }, [deals]);
+  // Filtered deals
+  const filteredDeals = useMemo(() => {
+    return allUnifiedDeals.filter((d) => {
+      // Search query
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const match =
+          d.dealName.toLowerCase().includes(q) ||
+          d.clientAccount.toLowerCase().includes(q) ||
+          d.owner.toLowerCase().includes(q) ||
+          d.email.toLowerCase().includes(q) ||
+          d.location.toLowerCase().includes(q);
+        if (!match) return false;
+      }
 
-  // Dynamically filter deals based on selected date range, owner, venture, and aging velocity
-  const activeDealsList = useMemo(() => {
-    return (deals || []).filter((d) => {
-      if (ownerFilter !== "All" && (d.owner || "").toLowerCase() !== ownerFilter.toLowerCase()) return false;
-      if (ventureFilter !== "All" && (d.venture || "").toLowerCase() !== ventureFilter.toLowerCase()) return false;
-      if (agingFilter === "active" && (d.stage === "Closed Won" || d.stage === "Closed Lost" || getDealStageDuration(d) >= 14)) return false;
-      if (agingFilter === "stale" && (d.stage === "Closed Won" || d.stage === "Closed Lost" || getDealStageDuration(d) < 14)) return false;
-      if (!dateRangeText || dateRangeText === "All Time") return true;
-      const rawDate = (d as any).createdAt || d.expectedClose;
-      if (!rawDate) return true;
-      const t = new Date(rawDate).getTime();
-      if (isNaN(t)) return true;
-      const now = Date.now();
-      if (dateRangeText === "This Month") {
-        const cur = new Date();
-        const target = new Date(rawDate);
-        return target.getMonth() === cur.getMonth() && target.getFullYear() === cur.getFullYear();
+      // Filter: Deals Name
+      if (selectedDealsFilter.length > 0) {
+        if (!selectedDealsFilter.includes(d.dealName)) return false;
       }
-      if (dateRangeText === "Last 30 Days") return t >= now - 30 * 86400000;
-      if (dateRangeText === "This Quarter") return t >= now - 90 * 86400000;
-      if (dateRangeText === "This Year") {
-        return new Date(rawDate).getFullYear() === new Date().getFullYear();
+
+      // Filter: Owner
+      if (selectedOwnersFilter.length > 0) {
+        if (!selectedOwnersFilter.includes(d.owner)) return false;
       }
+
+      // Filter: Status
+      if (selectedStatusFilter.length > 0) {
+        if (!selectedStatusFilter.includes(d.status)) return false;
+      }
+
+      // Filter: Rating
+      if (selectedRatingFilter.length > 0) {
+        if (!selectedRatingFilter.includes(d.rating)) return false;
+      }
+
+      // Filter: Tags
+      if (selectedTagsFilter.length > 0) {
+        if (!selectedTagsFilter.includes(d.tag)) return false;
+      }
+
       return true;
     });
-  }, [deals, dateRangeText, ownerFilter, ventureFilter]);
+  }, [
+    allUnifiedDeals,
+    searchQuery,
+    selectedDealsFilter,
+    selectedOwnersFilter,
+    selectedStatusFilter,
+    selectedRatingFilter,
+    selectedTagsFilter,
+  ]);
 
-  // Dynamic Lost & Won breakdowns
-  const lostDealsAnalysis = useMemo(() => {
-    const lostDeals = activeDealsList.filter((d) => d.stage === "Closed Lost");
-    if (lostDeals.length === 0) return [];
-    const totalLost = lostDeals.reduce((sum, d) => sum + (Number(d.dealValue) || 0), 0) || 1;
-    return lostDeals.map((d, i) => ({
-      reason: d.notes || d.dealName || `Lost Opportunity #${i + 1}`,
-      client: d.clientAccount,
-      value: Number(d.dealValue) || 0,
-      pct: Math.max(5, Math.round(((Number(d.dealValue) || 0) / totalLost) * 100)),
-      color: i % 3 === 0 ? "bg-rose-500" : i % 3 === 1 ? "bg-amber-500" : "bg-violet-500",
-    }));
-  }, [activeDealsList]);
-
-  const wonDealsAnalysis = useMemo(() => {
-    const wonDeals = activeDealsList.filter((d) => d.stage === "Closed Won");
-    if (wonDeals.length === 0) return [];
-    const totalWon = wonDeals.reduce((sum, d) => sum + (Number(d.dealValue) || 0), 0) || 1;
-    return wonDeals.map((d, i) => ({
-      avenue: d.dealName || d.clientAccount,
-      client: d.clientAccount,
-      value: Number(d.dealValue) || 0,
-      pct: Math.max(5, Math.round(((Number(d.dealValue) || 0) / totalWon) * 100)),
-      color: i % 3 === 0 ? "bg-emerald-500" : i % 3 === 1 ? "bg-teal-500" : "bg-sky-500",
-    }));
-  }, [activeDealsList]);
-
-  // ─── KPI Metrics ───
-  const metrics = useMemo(() => {
-    const totalPipeline = activeDealsList.reduce((acc, d) => acc + (d.dealValue || 0), 0);
-    const wonDeals = activeDealsList.filter((d) => d.stage === "Closed Won");
-    const wonValue = wonDeals.reduce((acc, d) => acc + (d.dealValue || 0), 0);
-    const lostDeals = activeDealsList.filter((d) => d.stage === "Closed Lost");
-    const lostValue = lostDeals.reduce((acc, d) => acc + (d.dealValue || 0), 0);
-    const activeInPipeline = activeDealsList.filter(
-      (d) => d.stage !== "Closed Won" && d.stage !== "Closed Lost"
-    );
-    const activePipelineValue = activeInPipeline.reduce((acc, d) => acc + (d.dealValue || 0), 0);
-    const weightedPipeline = activeInPipeline.reduce(
-      (acc, d) => acc + ((d.dealValue || 0) * (d.probability || 50)) / 100,
-      0
-    );
-    const closedCount = wonDeals.length + lostDeals.length;
-    const winRate = closedCount > 0 ? Math.round((wonDeals.length / closedCount) * 100) : 0;
-    const avgDealSize = activeDealsList.length > 0 ? Math.round(totalPipeline / activeDealsList.length) : 0;
-
-    return {
-      totalPipeline,
-      weightedPipeline,
-      activePipelineValue,
-      activeCount: activeInPipeline.length,
-      wonValue,
-      wonCount: wonDeals.length,
-      lostValue,
-      lostCount: lostDeals.length,
-      winRate,
-      avgDealSize,
-    };
-  }, [activeDealsList]);
-
-  // ─── Stage Distribution ───
-  const stageStats = useMemo(() => {
-    const stages: Record<SalesDeal["stage"], { count: number; value: number }> = {
-      Prospecting: { count: 0, value: 0 },
-      Discovery: { count: 0, value: 0 },
-      "Proposal Sent": { count: 0, value: 0 },
-      Negotiation: { count: 0, value: 0 },
-      "Closed Won": { count: 0, value: 0 },
-      "Closed Lost": { count: 0, value: 0 },
-    };
-
-    activeDealsList.forEach((d) => {
-      if (stages[d.stage]) {
-        stages[d.stage].count += 1;
-        stages[d.stage].value += d.dealValue || 0;
-      }
+  // Stage aggregations
+  const stageColumns = useMemo(() => {
+    return DREAMS_PIPELINE_STAGES.map((st) => {
+      const dealsInStage = filteredDeals.filter(
+        (d) => d.pipelineStage === st.title || d.stage === st.backendStage
+      );
+      const totalVal = dealsInStage.reduce((sum, d) => sum + (d.dealValue || 0), 0);
+      return {
+        ...st,
+        deals: dealsInStage,
+        count: dealsInStage.length,
+        totalValue: totalVal,
+        totalValueFormatted: formatUSD(totalVal),
+      };
     });
+  }, [filteredDeals]);
 
-    const totalDeals = activeDealsList.length || 1;
-    return Object.entries(stages).map(([stageName, stat]) => ({
-      stage: stageName as SalesDeal["stage"],
-      count: stat.count,
-      value: stat.value,
-      pct: Math.round((stat.count / totalDeals) * 100),
-      config: STAGE_CONFIG[stageName as SalesDeal["stage"]] || STAGE_CONFIG.Prospecting,
-    }));
-  }, [activeDealsList]);
-
-  // ─── Filtered Deals for Table ───
-  const filteredDeals = useMemo(() => {
-    return activeDealsList.filter((d) => {
-      const q = searchQuery.toLowerCase();
-      const matchQuery =
-        !q ||
-        d.dealName.toLowerCase().includes(q) ||
-        d.clientAccount.toLowerCase().includes(q) ||
-        (d.owner && d.owner.toLowerCase().includes(q));
-      const matchStatus = statusFilter === "All" || d.stage === statusFilter;
-      return matchQuery && matchStatus;
-    });
-  }, [activeDealsList, searchQuery, statusFilter]);
-
-  // Quick export CSV
-  const handleExportCSV = () => {
-    const headers = ["Deal Name", "Client Account", "Deal Value", "Stage", "Probability", "Owner", "Expected Close", "Notes"];
-    const rows = activeDealsList.map((d) => [
-      `"${d.dealName || ""}"`,
-      `"${d.clientAccount || ""}"`,
-      d.dealValue || 0,
-      `"${d.stage || ""}"`,
-      `${d.probability || 0}%`,
-      `"${d.owner || ""}"`,
-      `"${d.expectedClose || ""}"`,
-      `"${(d.notes || "").replace(/"/g, '""')}"`,
+  // Quick export action
+  const handleExport = (type: "pdf" | "excel") => {
+    setExportDropdownOpen(false);
+    const headers = ["Deal Name", "Client", "Amount", "Stage", "Owner", "Probability", "Status", "Close Date"];
+    const rows = filteredDeals.map((d) => [
+      `"${d.dealName}"`,
+      `"${d.clientAccount}"`,
+      d.dealValue,
+      `"${d.pipelineStage}"`,
+      `"${d.owner}"`,
+      `"${d.probability}%"`,
+      `"${d.status}"`,
+      `"${d.expectedClose}"`,
     ]);
     const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows.map((e) => e.join(","))].join("\n");
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `Deals_Report_${new Date().toISOString().slice(0, 10)}.csv`);
+    link.setAttribute("download", `Deals_${type.toUpperCase()}_${new Date().toISOString().slice(0, 10)}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
   };
 
+  // Drag & Drop Handler
+  const handleDragStart = (e: React.DragEvent, dealId: string) => {
+    e.dataTransfer.setData("text/plain", dealId);
+    setDraggedDealId(dealId);
+  };
+
+  const handleDragOver = (e: React.DragEvent, stageTitle: string) => {
+    e.preventDefault();
+    setDragOverStage(stageTitle);
+  };
+
+  const handleDragLeave = () => {
+    setDragOverStage(null);
+  };
+
+  const handleDrop = (e: React.DragEvent, targetStage: typeof DREAMS_PIPELINE_STAGES[0]) => {
+    e.preventDefault();
+    setDragOverStage(null);
+    const dealId = e.dataTransfer.getData("text/plain") || draggedDealId;
+    if (!dealId) return;
+
+    // Find deal
+    const deal = allUnifiedDeals.find((d) => d._id === dealId);
+    if (deal) {
+      // Trigger prop update
+      if (deal.rawDeal && onStageChange) {
+        onStageChange(deal._id, targetStage.backendStage);
+      } else {
+        deal.pipelineStage = targetStage.title;
+        deal.stage = targetStage.backendStage;
+      }
+    }
+    setDraggedDealId(null);
+  };
+
+  // Toggle Star / Bookmark
+  const toggleStar = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setStarredDeals((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  // Open Add Deal Modal
+  const handleOpenAddModal = () => {
+    setModalMode("add");
+    setNewDealForm({
+      dealName: "",
+      pipeline: "Sales Pipeline",
+      stage: "Qualify To Buy",
+      dealValue: "",
+      currency: "USD",
+      period: "Monthly",
+      periodValue: "1",
+      clientAccount: "",
+      project: "",
+      dueDate: "",
+      expectedClose: "",
+      owner: "",
+      followUpDate: "",
+      source: "Direct",
+      tag: "Promotion",
+      priority: "High",
+      description: "",
+    });
+    setShowAddDealModal(true);
+  };
+
+  // Handle Save Deal
+  const handleSaveDealSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newDealForm.dealName.trim()) return;
+
+    // Call onNewDeal callback if available
+    onNewDeal();
+    setShowAddDealModal(false);
+  };
+
   return (
-    <div className="space-y-6">
-      {/* ── Top Header Toolbar (Dreams Technologies Leads/Deals Header Style) ── */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 bg-muted/40 dark:bg-slate-900/60 rounded-2xl border border-border/80">
+    <div className="space-y-4 font-sans text-slate-800 dark:text-slate-100">
+      {/* ── 1. Page Header (Exact Dreams Technologies Layout) ── */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-1">
         <div>
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center font-bold">
-              <i className="fa-solid fa-handshake text-sm" />
-            </div>
-            <div>
-              <h3 className="text-base font-black text-foreground tracking-tight">Deals Dashboard</h3>
-              <p className="text-xs text-muted-foreground">
-                Track deal pipelines, conversion velocity & stage performance
-              </p>
-            </div>
+            <h1 className="text-xl sm:text-2xl font-black tracking-tight text-foreground flex items-center">
+              Deals
+              <span className="ml-2.5 px-2.5 py-0.5 rounded-full text-xs font-black bg-primary/10 text-primary border border-primary/20">
+                {filteredDeals.length}
+              </span>
+            </h1>
           </div>
+          <nav aria-label="breadcrumb" className="mt-1">
+            <ol className="flex items-center gap-1.5 text-xs text-muted-foreground font-medium">
+              <li>
+                <button
+                  type="button"
+                  onClick={() => onNavigateToLeads?.()}
+                  className="hover:text-primary transition-colors cursor-pointer"
+                >
+                  Home
+                </button>
+              </li>
+              <li className="text-muted-foreground/60">/</li>
+              <li className="text-foreground font-bold">Deals</li>
+            </ol>
+          </nav>
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap">
-          {/* View mode buttons */}
-          <div className="flex items-center bg-background/90 dark:bg-slate-950 p-1 rounded-xl border border-border/70 shadow-2xs">
-            <button
-              type="button"
-              onClick={() => setViewMode("dashboard")}
-              className={cn(
-                "px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5",
-                viewMode === "dashboard"
-                  ? "bg-primary text-primary-foreground shadow-xs"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              <i className="fa-solid fa-chart-line text-[11px]" />
-              Dashboard
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewMode("kanban")}
-              className={cn(
-                "px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5",
-                viewMode === "kanban"
-                  ? "bg-primary text-primary-foreground shadow-xs"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              <i className="fa-solid fa-table-columns text-[11px]" />
-              Kanban
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewMode("table")}
-              className={cn(
-                "px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5",
-                viewMode === "table"
-                  ? "bg-primary text-primary-foreground shadow-xs"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              <i className="fa-solid fa-table-list text-[11px]" />
-              Table
-            </button>
-          </div>
-
-          {/* Aging Pipeline Quick Filter */}
-          <div className="flex items-center bg-background/90 dark:bg-slate-950 p-1 rounded-xl border border-border/70 shadow-2xs">
-            <button
-              type="button"
-              onClick={() => setAgingFilter("all")}
-              className={cn(
-                "px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer",
-                agingFilter === "all"
-                  ? "bg-primary text-primary-foreground shadow-xs"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              All
-            </button>
-            <button
-              type="button"
-              onClick={() => setAgingFilter("active")}
-              className={cn(
-                "px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1",
-                agingFilter === "active"
-                  ? "bg-emerald-600 text-white shadow-xs"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-              title="Deals in stage < 14 days"
-            >
-              <i className="fa-solid fa-bolt text-[10px]" />
-              Active
-            </button>
-            <button
-              type="button"
-              onClick={() => setAgingFilter("stale")}
-              className={cn(
-                "px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1",
-                agingFilter === "stale"
-                  ? "bg-amber-600 text-white shadow-xs"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-              title="Deals in stage >= 14 days without movement"
-            >
-              <i className="fa-solid fa-triangle-exclamation text-[10px]" />
-              Aging ({deals.filter(d => d.stage !== "Closed Won" && d.stage !== "Closed Lost" && getDealStageDuration(d) >= 14).length})
-            </button>
-          </div>
-
-          {/* Date Picker Button / Dropdown */}
+        {/* Top Header Actions */}
+        <div className="flex items-center gap-2 flex-wrap relative">
+          {/* Export Dropdown */}
           <div className="relative">
             <button
               type="button"
-              onClick={() => setShowDateDropdown((p) => !p)}
-              className="flex items-center gap-2 h-9 px-3 rounded-xl border border-border bg-background/80 text-xs font-semibold text-foreground hover:bg-muted cursor-pointer shadow-2xs"
+              onClick={() => setExportDropdownOpen(!exportDropdownOpen)}
+              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold border border-border/80 bg-card hover:bg-muted/60 text-foreground transition-all shadow-xs cursor-pointer"
             >
-              <i className="fa-solid fa-calendar text-muted-foreground text-xs" />
-              <span>{dateRangeText}</span>
-              <i className="fa-solid fa-chevron-down text-[9px] text-muted-foreground ml-1" />
+              <i className="fa-solid fa-file-export text-primary text-xs" />
+              <span>Export</span>
+              <i className="fa-solid fa-chevron-down text-[10px] text-muted-foreground ml-1" />
             </button>
 
-            {showDateDropdown && (
-              <div className="absolute right-0 mt-1.5 w-52 bg-card border border-border rounded-xl shadow-xl z-50 p-1 space-y-0.5 animate-in fade-in zoom-in-95">
-                {[
-                  "28 August 26 - 28 August 27",
-                  "This Month",
-                  "Last 30 Days",
-                  "This Quarter",
-                  "This Year",
-                ].map((range) => (
-                  <button
-                    key={range}
-                    type="button"
-                    onClick={() => {
-                      setDateRangeText(range);
-                      setShowDateDropdown(false);
-                    }}
-                    className={cn(
-                      "w-full text-left px-3 py-2 text-xs rounded-lg font-medium cursor-pointer transition-colors flex items-center justify-between",
-                      dateRangeText === range
-                        ? "bg-primary/10 text-primary font-bold"
-                        : "hover:bg-muted text-foreground"
-                    )}
-                  >
-                    <span>{range}</span>
-                    {dateRangeText === range && <i className="fa-solid fa-check text-[10px]" />}
-                  </button>
-                ))}
+            {exportDropdownOpen && (
+              <div className="absolute right-0 mt-1.5 w-44 rounded-xl bg-card border border-border shadow-xl py-1.5 z-50 animate-in fade-in zoom-in-95 duration-150">
+                <button
+                  type="button"
+                  onClick={() => handleExport("pdf")}
+                  className="w-full text-left px-3.5 py-2 text-xs font-semibold text-foreground hover:bg-muted flex items-center gap-2.5 cursor-pointer"
+                >
+                  <i className="fa-solid fa-file-pdf text-rose-500" />
+                  <span>Export as PDF</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleExport("excel")}
+                  className="w-full text-left px-3.5 py-2 text-xs font-semibold text-foreground hover:bg-muted flex items-center gap-2.5 cursor-pointer"
+                >
+                  <i className="fa-solid fa-file-excel text-emerald-600" />
+                  <span>Export as Excel</span>
+                </button>
               </div>
             )}
           </div>
 
-          {/* Owner Filter Dropdown */}
-          <select
-            value={ownerFilter}
-            onChange={(e) => setOwnerFilter(e.target.value)}
-            className="h-9 px-2.5 rounded-xl border border-border bg-background/80 text-xs font-semibold text-foreground hover:bg-muted cursor-pointer shadow-2xs focus:outline-none"
-            title="Filter by Deal Owner"
-          >
-            <option value="All">All Owners</option>
-            {distinctOwners.map((owner) => (
-              <option key={owner} value={owner}>
-                {owner}
-              </option>
-            ))}
-          </select>
-
-          {/* Venture Filter Dropdown */}
-          <select
-            value={ventureFilter}
-            onChange={(e) => setVentureFilter(e.target.value)}
-            className="h-9 px-2.5 rounded-xl border border-border bg-background/80 text-xs font-semibold text-foreground hover:bg-muted cursor-pointer shadow-2xs focus:outline-none"
-            title="Filter by Venture"
-          >
-            <option value="All">All Ventures</option>
-            {distinctVentures.map((venture) => (
-              <option key={venture} value={venture}>
-                {venture}
-              </option>
-            ))}
-          </select>
-
           {/* Refresh button */}
           <button
             type="button"
-            onClick={onRefresh}
-            className="w-9 h-9 rounded-xl border border-border bg-background/80 hover:bg-muted text-muted-foreground hover:text-foreground flex items-center justify-center transition-colors cursor-pointer shadow-2xs"
+            onClick={() => onRefresh?.()}
+            className="w-9 h-9 rounded-xl border border-border/80 bg-card hover:bg-muted/60 text-foreground flex items-center justify-center transition-all shadow-xs cursor-pointer"
             title="Refresh Deals"
           >
-            <i className="fa-solid fa-rotate-right text-xs" />
+            <i className={cn("fa-solid fa-arrows-rotate text-xs", loading && "fa-spin text-primary")} />
           </button>
 
-          {/* Export button */}
+          {/* Collapse Header toggle */}
           <button
             type="button"
-            onClick={handleExportCSV}
-            className="w-9 h-9 rounded-xl border border-border bg-background/80 hover:bg-muted text-muted-foreground hover:text-foreground flex items-center justify-center transition-colors cursor-pointer shadow-2xs"
-            title="Export CSV"
+            onClick={() => setIsCollapsed(!isCollapsed)}
+            className="w-9 h-9 rounded-xl border border-border/80 bg-card hover:bg-muted/60 text-foreground flex items-center justify-center transition-all shadow-xs cursor-pointer"
+            title="Collapse / Expand"
           >
-            <i className="fa-solid fa-download text-xs" />
+            <i className={cn("fa-solid text-xs transition-transform duration-200", isCollapsed ? "fa-chevron-down" : "fa-chevron-up")} />
           </button>
-
-          {/* Create Deal action */}
-          <Button
-            size="sm"
-            onClick={onNewDeal}
-            className="h-9 px-4 gap-1.5 text-xs font-bold shadow-sm cursor-pointer"
-          >
-            <i className="fa-solid fa-plus text-xs" />
-            Create Deal
-          </Button>
         </div>
       </div>
 
-      {/* ── KPI Metric Cards ── */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3.5">
-        <Card className="relative overflow-hidden border border-border/80 bg-gradient-to-br from-card via-card to-primary/5 rounded-2xl shadow-xs">
-          <CardContent className="p-4 flex items-center justify-between">
-            <div className="space-y-1">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                Total Pipeline Value
-              </span>
-              <p className="text-xl font-black font-mono tracking-tight text-foreground">
-                {formatUSD(metrics.totalPipeline)}
-              </p>
-              <div className="flex items-center gap-1 text-[11px] text-primary font-semibold">
-                <i className="fa-solid fa-handshake text-[10px]" />
-                <span>{activeDealsList.length} deals</span>
-              </div>
-            </div>
-            <div className="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center text-base border border-primary/20 shadow-2xs shrink-0">
-              <i className="fa-solid fa-sack-dollar" />
-            </div>
-          </CardContent>
-        </Card>
+      {/* ── 2. Control & Filter Toolbar (Exact Dreams Technologies Layout) ── */}
+      {!isCollapsed && (
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 p-2.5 bg-card/80 backdrop-blur-md rounded-2xl border border-border/80 shadow-xs">
+          {/* Left Controls: Filter Popover + Search Keyword Input */}
+          <div className="flex items-center gap-2 flex-wrap relative">
+            {/* Filter Dropdown Popover */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setFilterDropdownOpen(!filterDropdownOpen)}
+                className={cn(
+                  "inline-flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer shadow-2xs",
+                  filterDropdownOpen || selectedDealsFilter.length > 0 || selectedOwnersFilter.length > 0
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "bg-card border-border/80 hover:bg-muted/60 text-foreground"
+                )}
+              >
+                <i className="fa-solid fa-filter text-xs" />
+                <span>Filter</span>
+                {(selectedDealsFilter.length + selectedOwnersFilter.length + selectedStatusFilter.length) > 0 && (
+                  <span className="w-4 h-4 rounded-full bg-primary-foreground text-primary text-[10px] font-black flex items-center justify-center">
+                    {selectedDealsFilter.length + selectedOwnersFilter.length + selectedStatusFilter.length}
+                  </span>
+                )}
+                <i className="fa-solid fa-chevron-down text-[10px] ml-1 opacity-70" />
+              </button>
 
-        <Card className="relative overflow-hidden border border-border/80 bg-gradient-to-br from-card via-card to-indigo-500/5 rounded-2xl shadow-xs">
-          <CardContent className="p-4 flex items-center justify-between">
-            <div className="space-y-1">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
-                Weighted Forecast
-              </span>
-              <p className="text-xl font-black font-mono tracking-tight text-indigo-600 dark:text-indigo-400">
-                {formatUSD(metrics.weightedPipeline)}
-              </p>
-              <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
-                <i className="fa-solid fa-calculator text-[10px] text-indigo-500" />
-                <span>Prob-adjusted</span>
-              </div>
-            </div>
-            <div className="w-10 h-10 rounded-xl bg-indigo-500/10 text-indigo-500 flex items-center justify-center text-base border border-indigo-500/20 shadow-2xs shrink-0">
-              <i className="fa-solid fa-wand-magic-sparkles" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="relative overflow-hidden border border-border/80 bg-gradient-to-br from-card via-card to-emerald-500/5 rounded-2xl shadow-xs">
-          <CardContent className="p-4 flex items-center justify-between">
-            <div className="space-y-1">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
-                Closed Won Revenue
-              </span>
-              <p className="text-xl font-black font-mono tracking-tight text-emerald-600 dark:text-emerald-400">
-                {formatUSD(metrics.wonValue)}
-              </p>
-              <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
-                <i className="fa-solid fa-trophy text-amber-500 text-[10px]" />
-                <span>{metrics.wonCount} won ({metrics.winRate}%)</span>
-              </div>
-            </div>
-            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center text-base border border-emerald-500/20 shadow-2xs shrink-0">
-              <i className="fa-solid fa-circle-check" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="relative overflow-hidden border border-border/80 bg-gradient-to-br from-card via-card to-amber-500/5 rounded-2xl shadow-xs">
-          <CardContent className="p-4 flex items-center justify-between">
-            <div className="space-y-1">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">
-                Active Open Pipeline
-              </span>
-              <p className="text-xl font-black font-mono tracking-tight text-amber-600 dark:text-amber-400">
-                {formatUSD(metrics.activePipelineValue)}
-              </p>
-              <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
-                <i className="fa-solid fa-hourglass-half text-[10px]" />
-                <span>{metrics.activeCount} in negotiation</span>
-              </div>
-            </div>
-            <div className="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center text-base border border-amber-500/20 shadow-2xs shrink-0">
-              <i className="fa-solid fa-comments-dollar" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="relative overflow-hidden border border-border/80 bg-gradient-to-br from-card via-card to-rose-500/5 rounded-2xl shadow-xs">
-          <CardContent className="p-4 flex items-center justify-between">
-            <div className="space-y-1">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400">
-                Avg Deal Size
-              </span>
-              <p className="text-xl font-black font-mono tracking-tight text-foreground">
-                {formatUSD(metrics.avgDealSize)}
-              </p>
-              <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
-                <i className="fa-solid fa-circle-xmark text-[10px] text-rose-500" />
-                <span>{metrics.lostCount} lost ({formatUSD(metrics.lostValue)})</span>
-              </div>
-            </div>
-            <div className="w-10 h-10 rounded-xl bg-rose-500/10 text-rose-500 flex items-center justify-center text-base border border-rose-500/20 shadow-2xs shrink-0">
-              <i className="fa-solid fa-chart-pie" />
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* ── DASHBOARD VIEW (Dreams Technologies 2-Column Layout) ── */}
-      {viewMode === "dashboard" && (
-        <div className="space-y-6">
-          {/* ── ROW 1: Recently Created Deals (Left 50%) & Deals by Stage (Right 50%) ── */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            {/* Left 50%: Recently Created Deals Table */}
-            <div className="lg:col-span-6">
-              <Card className="h-full rounded-2xl border border-border/80 shadow-xs flex flex-col">
-                <CardHeader className="p-4 border-b border-border/60 flex flex-row items-center justify-between space-y-0">
-                  <div>
-                    <CardTitle className="text-sm font-bold text-foreground flex items-center gap-2">
-                      <i className="fa-solid fa-clock-rotate-left text-primary text-xs" />
-                      Recently Created Deals
-                    </CardTitle>
-                    <CardDescription className="text-xs text-muted-foreground">
-                      Latest high-priority client accounts in pipeline
-                    </CardDescription>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <select
-                      value={recentDealsTimeframe}
-                      onChange={(e) => setRecentDealsTimeframe(e.target.value as any)}
-                      className="h-7 text-xs rounded-lg border border-border bg-background px-2 text-foreground font-semibold cursor-pointer focus:outline-none"
+              {/* Filter Dropdown Modal / Popover */}
+              {filterDropdownOpen && (
+                <div className="absolute left-0 mt-2 w-80 sm:w-96 rounded-2xl bg-card border border-border shadow-2xl p-0 z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+                  {/* Filter Header */}
+                  <div className="flex items-center justify-between px-4 py-3 border-b border-border/60 bg-muted/30">
+                    <h6 className="text-xs font-black uppercase tracking-wider text-foreground flex items-center gap-2">
+                      <i className="fa-solid fa-filter text-primary text-xs" />
+                      Filter Deals
+                    </h6>
+                    <button
+                      type="button"
+                      onClick={() => setFilterDropdownOpen(false)}
+                      className="w-6 h-6 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted flex items-center justify-center cursor-pointer"
                     >
-                      <option value="15">Last 15 days</option>
-                      <option value="30">Last 30 days</option>
-                      <option value="90">Last 90 days</option>
-                    </select>
+                      <i className="fa-solid fa-xmark text-xs" />
+                    </button>
                   </div>
-                </CardHeader>
-                <CardContent className="p-0 flex-1 overflow-x-auto">
-                  <table className="w-full text-xs">
-                    <thead className="bg-muted/40 border-b border-border font-bold text-muted-foreground uppercase text-[10px] tracking-wider">
-                      <tr>
-                        <th className="py-2.5 px-3 text-left">Deal Name</th>
-                        <th className="py-2.5 px-3 text-left">Company Name</th>
-                        <th className="py-2.5 px-3 text-right">Value</th>
-                        <th className="py-2.5 px-3 text-center">Status</th>
-                        <th className="py-2.5 px-3 text-right"></th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border/60">
-                      {activeDealsList.slice(0, 5).map((deal, idx) => {
-                        const stageInfo = STAGE_CONFIG[deal.stage] || STAGE_CONFIG.Prospecting;
-                        const avatarBg = COMPANY_PALETTE[idx % COMPANY_PALETTE.length];
-                        const initials = deal.clientAccount.slice(0, 2).toUpperCase();
 
-                        return (
-                          <tr
-                            key={deal._id}
-                            className="hover:bg-muted/30 transition-colors group cursor-pointer"
-                            onClick={() => onEditDeal(deal)}
-                          >
-                            <td className="py-3 px-3 font-semibold text-foreground max-w-[140px] truncate">
-                              <div className="hover:text-primary transition-colors">{deal.dealName}</div>
-                              <span className="text-[10px] text-muted-foreground font-mono">
-                                Close: {deal.expectedClose || "—"}
-                              </span>
-                            </td>
-
-                            <td className="py-3 px-3 whitespace-nowrap">
-                              <div className="flex items-center gap-2">
-                                <div
-                                  className={cn(
-                                    "w-7 h-7 rounded-lg bg-gradient-to-br flex items-center justify-center text-white text-[10px] font-black shrink-0 shadow-2xs",
-                                    avatarBg
-                                  )}
-                                >
-                                  {initials}
-                                </div>
-                                <div>
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      onViewLead?.(deal.clientAccount);
+                  {/* Filter Content Accordion */}
+                  <div className="p-3 space-y-2 max-h-[380px] overflow-y-auto">
+                    {/* Deals Name Section */}
+                    <div className="rounded-xl border border-border/60 overflow-hidden">
+                      <button
+                        type="button"
+                        onClick={() => setActiveAccordion(activeAccordion === "dealsName" ? null : "dealsName")}
+                        className="w-full px-3 py-2.5 text-left text-xs font-bold text-foreground bg-muted/20 flex items-center justify-between cursor-pointer"
+                      >
+                        <span>Deals Name</span>
+                        <i className={cn("fa-solid fa-chevron-down text-[10px] text-muted-foreground transition-transform", activeAccordion === "dealsName" && "rotate-180")} />
+                      </button>
+                      {activeAccordion === "dealsName" && (
+                        <div className="p-2.5 bg-card space-y-2 border-t border-border/50 text-xs">
+                          <div className="relative">
+                            <i className="fa-solid fa-magnifying-glass absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground text-[11px]" />
+                            <input
+                              type="text"
+                              placeholder="Search deal name..."
+                              className="w-full pl-7 pr-2.5 py-1.5 text-xs rounded-lg border border-input bg-background focus:outline-none focus:ring-1 focus:ring-primary"
+                            />
+                          </div>
+                          <div className="space-y-1.5 max-h-32 overflow-y-auto pt-1">
+                            {["Howell, Tremblay and Rath", "Robert, John and Carlos", "Wendy, Star and David", "Byron, Roman and Bailey", "Carlos, Jones and Jim"].map((name) => {
+                              const checked = selectedDealsFilter.includes(name);
+                              return (
+                                <label key={name} className="flex items-center gap-2 text-xs text-foreground cursor-pointer hover:bg-muted/40 p-1 rounded-md">
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    onChange={() => {
+                                      setSelectedDealsFilter(prev => checked ? prev.filter(x => x !== name) : [...prev, name]);
                                     }}
-                                    className="font-bold text-foreground text-xs leading-tight hover:text-primary transition-colors text-left flex items-center gap-1 cursor-pointer"
-                                    title={`View Lead for "${deal.clientAccount}"`}
-                                  >
-                                    <span>{deal.clientAccount}</span>
-                                    {onViewLead && <i className="fa-solid fa-arrow-up-right-from-square text-[8px] opacity-0 group-hover:opacity-70 text-primary" />}
-                                  </button>
-                                  <p className="text-[10px] text-muted-foreground font-medium">
-                                    {deal.owner || "Ace Team"}
-                                  </p>
-                                </div>
-                              </div>
-                            </td>
+                                    className="rounded border-input text-primary focus:ring-primary h-3.5 w-3.5"
+                                  />
+                                  <span className="truncate">{name}</span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
 
-                            <td className="py-3 px-3 text-right font-mono font-bold text-foreground whitespace-nowrap">
-                              {formatUSD(deal.dealValue)}
-                            </td>
+                    {/* Owner Section */}
+                    <div className="rounded-xl border border-border/60 overflow-hidden">
+                      <button
+                        type="button"
+                        onClick={() => setActiveAccordion(activeAccordion === "owner" ? null : "owner")}
+                        className="w-full px-3 py-2.5 text-left text-xs font-bold text-foreground bg-muted/20 flex items-center justify-between cursor-pointer"
+                      >
+                        <span>Owner</span>
+                        <i className={cn("fa-solid fa-chevron-down text-[10px] text-muted-foreground transition-transform", activeAccordion === "owner" && "rotate-180")} />
+                      </button>
+                      {activeAccordion === "owner" && (
+                        <div className="p-2.5 bg-card space-y-2 border-t border-border/50 text-xs">
+                          <div className="space-y-1.5 max-h-32 overflow-y-auto">
+                            {["Darlee Robertson", "Sharon Roy", "Vaughan Lewis", "Jessica Louise", "Carol Thomas", "Jonathan Smith"].map((rep) => {
+                              const checked = selectedOwnersFilter.includes(rep);
+                              return (
+                                <label key={rep} className="flex items-center gap-2 text-xs text-foreground cursor-pointer hover:bg-muted/40 p-1 rounded-md">
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    onChange={() => {
+                                      setSelectedOwnersFilter(prev => checked ? prev.filter(x => x !== rep) : [...prev, rep]);
+                                    }}
+                                    className="rounded border-input text-primary focus:ring-primary h-3.5 w-3.5"
+                                  />
+                                  <span>{rep}</span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
 
-                            <td className="py-3 px-3 text-center whitespace-nowrap">
-                              <span
-                                className={cn(
-                                  "inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md border whitespace-nowrap",
-                                  stageInfo.bg,
-                                  stageInfo.text,
-                                  stageInfo.border
-                                )}
-                              >
-                                <i className={cn("fa-solid text-[9px]", stageInfo.icon)} />
-                                {stageInfo.label}
-                              </span>
-                            </td>
+                    {/* Status Section */}
+                    <div className="rounded-xl border border-border/60 overflow-hidden">
+                      <button
+                        type="button"
+                        onClick={() => setActiveAccordion(activeAccordion === "status" ? null : "status")}
+                        className="w-full px-3 py-2.5 text-left text-xs font-bold text-foreground bg-muted/20 flex items-center justify-between cursor-pointer"
+                      >
+                        <span>Status</span>
+                        <i className={cn("fa-solid fa-chevron-down text-[10px] text-muted-foreground transition-transform", activeAccordion === "status" && "rotate-180")} />
+                      </button>
+                      {activeAccordion === "status" && (
+                        <div className="p-2.5 bg-card space-y-1.5 border-t border-border/50 text-xs">
+                          {["Won", "Open", "Lost"].map((st) => {
+                            const checked = selectedStatusFilter.includes(st);
+                            return (
+                              <label key={st} className="flex items-center gap-2 text-xs text-foreground cursor-pointer hover:bg-muted/40 p-1 rounded-md">
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  onChange={() => {
+                                    setSelectedStatusFilter(prev => checked ? prev.filter(x => x !== st) : [...prev, st]);
+                                  }}
+                                  className="rounded border-input text-primary focus:ring-primary h-3.5 w-3.5"
+                                />
+                                <span>{st}</span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
 
-                            <td className="py-3 px-3 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-                              <div className="flex items-center justify-end gap-1 opacity-80 group-hover:opacity-100">
-                                {deal.stage === "Closed Won" && onGenerateInvoice && (
-                                  <button
-                                    type="button"
-                                    onClick={() => onGenerateInvoice(deal)}
-                                    className="w-7 h-7 rounded-md bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 flex items-center justify-center cursor-pointer transition-colors"
-                                    title="Generate Invoice for Won Deal"
-                                  >
-                                    <i className="fa-solid fa-file-invoice-dollar text-[10px]" />
-                                  </button>
-                                )}
-                                {onConvertToProposal && (
-                                  <button
-                                    type="button"
-                                    onClick={() => onConvertToProposal(deal)}
-                                    className="w-7 h-7 rounded-md bg-violet-500/10 hover:bg-violet-500/20 text-violet-600 dark:text-violet-400 border border-violet-500/30 flex items-center justify-center cursor-pointer transition-colors"
-                                    title="Create Proposal for this Deal"
-                                  >
-                                    <i className="fa-solid fa-file-contract text-[10px]" />
-                                  </button>
-                                )}
+                    {/* Rating Section */}
+                    <div className="rounded-xl border border-border/60 overflow-hidden">
+                      <button
+                        type="button"
+                        onClick={() => setActiveAccordion(activeAccordion === "rating" ? null : "rating")}
+                        className="w-full px-3 py-2.5 text-left text-xs font-bold text-foreground bg-muted/20 flex items-center justify-between cursor-pointer"
+                      >
+                        <span>Rating</span>
+                        <i className={cn("fa-solid fa-chevron-down text-[10px] text-muted-foreground transition-transform", activeAccordion === "rating" && "rotate-180")} />
+                      </button>
+                      {activeAccordion === "rating" && (
+                        <div className="p-2.5 bg-card space-y-1.5 border-t border-border/50 text-xs">
+                          {[5, 4, 3, 2, 1].map((r) => {
+                            const checked = selectedRatingFilter.includes(r);
+                            return (
+                              <label key={r} className="flex items-center gap-2 text-xs text-foreground cursor-pointer hover:bg-muted/40 p-1 rounded-md">
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  onChange={() => {
+                                    setSelectedRatingFilter(prev => checked ? prev.filter(x => x !== r) : [...prev, r]);
+                                  }}
+                                  className="rounded border-input text-primary focus:ring-primary h-3.5 w-3.5"
+                                />
+                                <span className="flex items-center text-amber-500 gap-0.5">
+                                  {Array.from({ length: 5 }).map((_, idx) => (
+                                    <i key={idx} className={cn("fa-solid fa-star text-[10px]", idx < r ? "text-amber-400" : "text-slate-300 dark:text-slate-700")} />
+                                  ))}
+                                  <span className="text-foreground ml-1.5 text-xs font-bold">{r}.0</span>
+                                </span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
 
-                                <button
-                                  type="button"
-                                  onClick={() => onEditDeal(deal)}
-                                  className="w-7 h-7 rounded-md bg-muted hover:bg-accent flex items-center justify-center text-muted-foreground hover:text-foreground cursor-pointer"
-                                  title="Edit Deal"
-                                >
-                                  <i className="fa-solid fa-pen text-[10px]" />
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => onDeleteDeal(deal._id, deal.dealName)}
-                                  className="w-7 h-7 rounded-md bg-muted hover:bg-rose-500/15 flex items-center justify-center text-muted-foreground hover:text-rose-500 cursor-pointer"
-                                  title="Delete Deal"
-                                >
-                                  <i className="fa-solid fa-trash text-[10px]" />
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </CardContent>
-              </Card>
+                    {/* Tags Section */}
+                    <div className="rounded-xl border border-border/60 overflow-hidden">
+                      <button
+                        type="button"
+                        onClick={() => setActiveAccordion(activeAccordion === "tags" ? null : "tags")}
+                        className="w-full px-3 py-2.5 text-left text-xs font-bold text-foreground bg-muted/20 flex items-center justify-between cursor-pointer"
+                      >
+                        <span>Tags</span>
+                        <i className={cn("fa-solid fa-chevron-down text-[10px] text-muted-foreground transition-transform", activeAccordion === "tags" && "rotate-180")} />
+                      </button>
+                      {activeAccordion === "tags" && (
+                        <div className="p-2.5 bg-card space-y-1.5 border-t border-border/50 text-xs">
+                          {["Promotion", "Rated", "Rejected", "Collab", "Calls"].map((tag) => {
+                            const checked = selectedTagsFilter.includes(tag);
+                            return (
+                              <label key={tag} className="flex items-center gap-2 text-xs text-foreground cursor-pointer hover:bg-muted/40 p-1 rounded-md">
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  onChange={() => {
+                                    setSelectedTagsFilter(prev => checked ? prev.filter(x => x !== tag) : [...prev, tag]);
+                                  }}
+                                  className="rounded border-input text-primary focus:ring-primary h-3.5 w-3.5"
+                                />
+                                <span>{tag}</span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Filter Footer Buttons */}
+                  <div className="p-3 bg-muted/30 border-t border-border/60 flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedDealsFilter([]);
+                        setSelectedOwnersFilter([]);
+                        setSelectedStatusFilter([]);
+                        setSelectedRatingFilter([]);
+                        setSelectedTagsFilter([]);
+                      }}
+                      className="w-1/2 py-2 text-xs font-bold rounded-xl border border-border bg-card hover:bg-muted text-foreground transition-all cursor-pointer"
+                    >
+                      Reset
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFilterDropdownOpen(false)}
+                      className="w-1/2 py-2 text-xs font-bold rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 transition-all cursor-pointer shadow-xs"
+                    >
+                      Apply Filter
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
 
-            {/* Right 50%: Deals by Stage Chart */}
-            <div className="lg:col-span-6">
-              <Card className="h-full rounded-2xl border border-border/80 shadow-xs flex flex-col">
-                <CardHeader className="p-4 border-b border-border/60 flex flex-row items-center justify-between space-y-0">
-                  <div>
-                    <CardTitle className="text-sm font-bold text-foreground flex items-center gap-2">
-                      <i className="fa-solid fa-chart-pie text-violet-500 text-xs" />
-                      Deals By Stage
-                    </CardTitle>
-                    <CardDescription className="text-xs text-muted-foreground">
-                      Distribution & conversion progress across stages
-                    </CardDescription>
-                  </div>
-                  <select
-                    value={stageTimeframe}
-                    onChange={(e) => setStageTimeframe(e.target.value as any)}
-                    className="h-7 text-xs rounded-lg border border-border bg-background px-2 text-foreground font-semibold cursor-pointer focus:outline-none"
-                  >
-                    <option value="7">Last 7 Days</option>
-                    <option value="15">Last 15 Days</option>
-                    <option value="30">Last 30 Days</option>
-                  </select>
-                </CardHeader>
-
-                <CardContent className="p-5 flex-1 flex flex-col justify-between space-y-5">
-                  {/* Visual Segment Progress Bar Representation */}
-                  <div className="space-y-2">
-                    <div className="h-4 w-full bg-muted rounded-full overflow-hidden flex shadow-inner">
-                      {stageStats.map((st) => (
-                        <div
-                          key={st.stage}
-                          style={{ width: `${Math.max(st.pct, 4)}%`, backgroundColor: st.config.color }}
-                          className="h-full transition-all duration-500 hover:opacity-90 relative group"
-                          title={`${st.stage}: ${st.count} deals (${st.pct}%) - ${formatUSD(st.value)}`}
-                        />
-                      ))}
-                    </div>
-                    <div className="flex justify-between text-[11px] text-muted-foreground font-mono">
-                      <span>Pipeline Funnel Velocity</span>
-                      <span className="font-bold text-foreground">{metrics.winRate}% Won Rate</span>
-                    </div>
-                  </div>
-
-                  {/* Stage Metrics Grid */}
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                    {stageStats.map((st) => (
-                      <div
-                        key={st.stage}
-                        className={cn(
-                          "p-2.5 rounded-xl border transition-all hover:scale-[1.02]",
-                          st.config.bg,
-                          st.config.border
-                        )}
-                      >
-                        <div className="flex items-center gap-1.5 mb-1">
-                          <span
-                            className="w-2 h-2 rounded-full shrink-0"
-                            style={{ backgroundColor: st.config.color }}
-                          />
-                          <span className="text-[11px] font-bold text-foreground truncate">
-                            {st.stage}
-                          </span>
-                        </div>
-                        <div className="flex items-baseline justify-between mt-1">
-                          <span className="text-base font-black font-mono text-foreground">
-                            {st.count}
-                          </span>
-                          <span className="text-[10px] font-mono font-bold text-muted-foreground">
-                            {formatUSD(st.value)}
-                          </span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
+            {/* Keyword Search Input */}
+            <div className="relative">
+              <i className="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-xs" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search Keyword"
+                className="h-9 pl-8 pr-3 text-xs rounded-xl border border-input bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary w-44 sm:w-60 shadow-2xs"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery("")}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground text-[10px]"
+                >
+                  <i className="fa-solid fa-circle-xmark" />
+                </button>
+              )}
             </div>
           </div>
 
-          {/* ── ROW 2: Projects / Deals By Stage (Full Width Pipeline Visualization) ── */}
-          <Card className="rounded-2xl border border-border/80 shadow-xs">
-            <CardHeader className="p-4 border-b border-border/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3 space-y-0">
-              <div>
-                <CardTitle className="text-sm font-bold text-foreground flex items-center gap-2">
-                  <i className="fa-solid fa-timeline text-primary text-xs" />
-                  Deals Pipeline & Conversion Flow
-                </CardTitle>
-                <CardDescription className="text-xs text-muted-foreground">
-                  Visual stage transitions, drop-off analysis, and closing timeline
-                </CardDescription>
-              </div>
-
-              <div className="flex items-center gap-2 flex-wrap">
-                <select
-                  value={pipelineSelection}
-                  onChange={(e) => setPipelineSelection(e.target.value)}
-                  className="h-8 text-xs rounded-lg border border-border bg-background px-2.5 text-foreground font-semibold cursor-pointer focus:outline-none"
-                >
-                  <option value="Sales Pipeline">Sales Pipeline</option>
-                  <option value="Enterprise Deals">Enterprise Deals</option>
-                  <option value="Marketing Pipeline">Marketing Pipeline</option>
-                  <option value="Operational">Operational</option>
-                </select>
-
-                <select
-                  value={pipelineTimeframe}
-                  onChange={(e) => setPipelineTimeframe(e.target.value)}
-                  className="h-8 text-xs rounded-lg border border-border bg-background px-2.5 text-foreground font-semibold cursor-pointer focus:outline-none"
-                >
-                  <option value="Last 7 Days">Last 7 Days</option>
-                  <option value="Last 15 Days">Last 15 Days</option>
-                  <option value="Last 30 Days">Last 30 Days</option>
-                </select>
-              </div>
-            </CardHeader>
-
-            <CardContent className="p-5">
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-                {stageStats.map((st, i) => (
-                  <div
-                    key={st.stage}
-                    className="p-3.5 rounded-xl border border-border/70 bg-card/60 flex flex-col justify-between space-y-3 relative group hover:border-primary/40 transition-colors"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-extrabold font-mono text-muted-foreground uppercase">
-                        Stage 0{i + 1}
-                      </span>
-                      <span
-                        className="text-[10px] font-bold px-1.5 py-0.5 rounded-md text-white font-mono"
-                        style={{ backgroundColor: st.config.color }}
-                      >
-                        {st.pct}%
-                      </span>
-                    </div>
-
-                    <div>
-                      <h4 className="text-xs font-bold text-foreground mb-0.5">{st.stage}</h4>
-                      <p className="text-lg font-black font-mono text-foreground">
-                        {formatUSD(st.value)}
-                      </p>
-                      <p className="text-[11px] text-muted-foreground font-medium">
-                        {st.count} deal{st.count !== 1 ? "s" : ""}
-                      </p>
-                    </div>
-
-                    {/* Mini visual volume meter */}
-                    <div className="w-full bg-muted h-1.5 rounded-full overflow-hidden">
-                      <div
-                        className="h-full rounded-full transition-all duration-500"
-                        style={{ width: `${Math.min(st.pct * 2, 100)}%`, backgroundColor: st.config.color }}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* ── ROW 3: Lost Deals Stage (Left 50%) & Won Deals Stage (Right 50%) ── */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            {/* Lost Deals Stage */}
-            <div className="lg:col-span-6">
-              <Card className="rounded-2xl border border-border/80 shadow-xs h-full flex flex-col">
-                <CardHeader className="p-4 border-b border-border/60 flex flex-row items-center justify-between space-y-0">
-                  <div>
-                    <CardTitle className="text-sm font-bold text-rose-600 dark:text-rose-400 flex items-center gap-2">
-                      <i className="fa-solid fa-triangle-exclamation text-xs" />
-                      Lost Deals Stage
-                    </CardTitle>
-                    <CardDescription className="text-xs text-muted-foreground">
-                      Analysis of attrition and dropped opportunities
-                    </CardDescription>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <select
-                      value={lostPipeline}
-                      onChange={(e) => setLostPipeline(e.target.value)}
-                      className="h-7 text-xs rounded-lg border border-border bg-background px-2 text-foreground font-semibold cursor-pointer focus:outline-none"
-                    >
-                      <option value="Marketing Pipeline">Marketing Pipeline</option>
-                      <option value="Sales Pipeline">Sales Pipeline</option>
-                      <option value="Operational">Operational</option>
-                    </select>
-                    <select
-                      value={lostTimeframe}
-                      onChange={(e) => setLostTimeframe(e.target.value)}
-                      className="h-7 text-xs rounded-lg border border-border bg-background px-2 text-foreground font-semibold cursor-pointer focus:outline-none"
-                    >
-                      <option value="Last 3 months">Last 3 months</option>
-                      <option value="Last 6 months">Last 6 months</option>
-                      <option value="Last 12 months">Last 12 months</option>
-                    </select>
-                  </div>
-                </CardHeader>
-                <CardContent className="p-5 flex-1 space-y-4">
-                  {lostDealsAnalysis.length > 0 ? (
-                    lostDealsAnalysis.map((lostItem, idx) => (
-                      <div key={idx} className="space-y-1.5">
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="font-semibold text-foreground truncate max-w-[200px]" title={lostItem.reason}>{lostItem.reason}</span>
-                          <span className="font-mono font-bold text-rose-500">
-                            {formatUSD(lostItem.value)} ({lostItem.pct}%)
-                          </span>
-                        </div>
-                        <div className="h-2 bg-muted rounded-full overflow-hidden">
-                          <div
-                            className={cn("h-full rounded-full transition-all duration-500", lostItem.color)}
-                            style={{ width: `${lostItem.pct}%` }}
-                          />
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="py-8 text-center text-muted-foreground/60">
-                      <i className="fa-solid fa-shield-halved text-2xl mb-1 block opacity-30 text-emerald-500" />
-                      <p className="text-xs font-semibold">Zero lost deals recorded in this timeframe.</p>
-                    </div>
-                  )}
-                  <div className="pt-2 border-t border-border/60 flex items-center justify-between text-xs text-muted-foreground">
-                    <span>Total Lost Value:</span>
-                    <span className="font-mono font-bold text-foreground">{formatUSD(metrics.lostValue)}</span>
-                  </div>
-                </CardContent>
-              </Card>
+          {/* Right Controls: View Switcher (List vs Grid) + Add Deal Button */}
+          <div className="flex items-center gap-2.5 flex-wrap">
+            {/* View Switcher Icons: List vs Grid */}
+            <div className="flex items-center p-1 rounded-xl border border-border/80 bg-card shadow-2xs">
+              <button
+                type="button"
+                onClick={() => setViewMode("list")}
+                title="List View"
+                className={cn(
+                  "w-8 h-8 rounded-lg flex items-center justify-center text-xs transition-all cursor-pointer",
+                  viewMode === "list"
+                    ? "bg-primary text-primary-foreground font-bold shadow-xs"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+                )}
+              >
+                <i className="fa-solid fa-list-ul" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode("grid")}
+                title="Kanban Grid View"
+                className={cn(
+                  "w-8 h-8 rounded-lg flex items-center justify-center text-xs transition-all cursor-pointer ml-1",
+                  viewMode === "grid"
+                    ? "bg-primary text-primary-foreground font-bold shadow-xs"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+                )}
+              >
+                <i className="fa-solid fa-grip-vertical" />
+              </button>
             </div>
 
-            {/* Won Deals Stage */}
-            <div className="lg:col-span-6">
-              <Card className="rounded-2xl border border-border/80 shadow-xs h-full flex flex-col">
-                <CardHeader className="p-4 border-b border-border/60 flex flex-row items-center justify-between space-y-0">
-                  <div>
-                    <CardTitle className="text-sm font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-2">
-                      <i className="fa-solid fa-trophy text-xs text-amber-500" />
-                      Won Deals Stage
-                    </CardTitle>
-                    <CardDescription className="text-xs text-muted-foreground">
-                      Closing avenues & revenue drivers
-                    </CardDescription>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <select
-                      value={wonPipeline}
-                      onChange={(e) => setWonPipeline(e.target.value)}
-                      className="h-7 text-xs rounded-lg border border-border bg-background px-2 text-foreground font-semibold cursor-pointer focus:outline-none"
-                    >
-                      <option value="Sales Pipeline">Sales Pipeline</option>
-                      <option value="Enterprise Deals">Enterprise Deals</option>
-                      <option value="Direct Inbound">Direct Inbound</option>
-                    </select>
-                    <select
-                      value={wonTimeframe}
-                      onChange={(e) => setWonTimeframe(e.target.value)}
-                      className="h-7 text-xs rounded-lg border border-border bg-background px-2 text-foreground font-semibold cursor-pointer focus:outline-none"
-                    >
-                      <option value="Last 3 months">Last 3 months</option>
-                      <option value="Last 6 months">Last 6 months</option>
-                      <option value="Last 12 months">Last 12 months</option>
-                    </select>
-                  </div>
-                </CardHeader>
-                <CardContent className="p-5 flex-1 space-y-4">
-                  {wonDealsAnalysis.length > 0 ? (
-                    wonDealsAnalysis.map((wonItem, idx) => (
-                      <div key={idx} className="space-y-1.5">
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="font-semibold text-foreground truncate max-w-[200px]" title={wonItem.avenue}>{wonItem.avenue}</span>
-                          <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
-                            {formatUSD(wonItem.value)} ({wonItem.pct}%)
-                          </span>
-                        </div>
-                        <div className="h-2 bg-muted rounded-full overflow-hidden">
-                          <div
-                            className={cn("h-full rounded-full transition-all duration-500", wonItem.color)}
-                            style={{ width: `${wonItem.pct}%` }}
-                          />
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="py-8 text-center text-muted-foreground/60">
-                      <i className="fa-solid fa-trophy text-2xl mb-1 block opacity-30 text-amber-500" />
-                      <p className="text-xs font-semibold">No closed won deals yet in this timeframe.</p>
-                    </div>
-                  )}
-                  <div className="pt-2 border-t border-border/60 flex items-center justify-between text-xs text-muted-foreground">
-                    <span>Total Won Revenue:</span>
-                    <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
-                      {formatUSD(metrics.wonValue)}
-                    </span>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
+            {/* Add Deal Primary Button */}
+            <button
+              type="button"
+              onClick={handleOpenAddModal}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-black bg-primary text-primary-foreground hover:bg-primary/90 transition-all shadow-xs cursor-pointer active:scale-95"
+            >
+              <i className="fa-solid fa-square-plus text-xs" />
+              <span>Add Deal</span>
+            </button>
           </div>
         </div>
       )}
 
-      {/* ── KANBAN VIEW ── */}
-      {viewMode === "kanban" && (
-        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4 items-start">
-          {stageStats.map((st) => {
-            const columnDeals = activeDealsList.filter((d) => d.stage === st.stage);
-            const isColOver = dragOverStage === st.stage;
-            const curStageIdx = STAGE_ORDER.indexOf(st.stage);
+      {/* ── 3. Kanban Grid View (Exact Dreams Technologies /crm/deals Design) ── */}
+      {viewMode === "grid" && (
+        <div className="flex overflow-x-auto align-items-start gap-4 pb-6 pt-1 select-none">
+          {stageColumns.map((col) => {
+            const isDragOver = dragOverStage === col.title;
 
             return (
               <div
-                key={st.stage}
-                onDragOver={(e) => {
-                  e.preventDefault();
-                  e.dataTransfer.dropEffect = "move";
-                  if (dragOverStage !== st.stage) setDragOverStage(st.stage);
-                }}
-                onDragLeave={() => {
-                  if (dragOverStage === st.stage) setDragOverStage(null);
-                }}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  const dealId = e.dataTransfer.getData("nexace/deal-id") || draggedDealId;
-                  if (dealId && onStageChange) {
-                    onStageChange(dealId, st.stage);
-                  }
-                  setDraggedDealId(null);
-                  setDragOverStage(null);
-                }}
+                key={col.id}
+                onDragOver={(e) => handleDragOver(e, col.title)}
+                onDragLeave={handleDragLeave}
+                onDrop={(e) => handleDrop(e, col)}
                 className={cn(
-                  "rounded-2xl p-3 border transition-all flex flex-col min-h-[520px]",
-                  isColOver
-                    ? "bg-primary/10 border-primary shadow-md scale-[1.01]"
-                    : "bg-muted/40 dark:bg-slate-900/50 border-border/80"
+                  "flex-shrink-0 w-[310px] rounded-2xl border p-2.5 transition-all duration-200 flex flex-col",
+                  isDragOver
+                    ? "bg-primary/5 border-primary ring-2 ring-primary/20 shadow-md"
+                    : "bg-card/90 border-border/70 shadow-xs hover:border-border"
                 )}
               >
-                <div className="flex items-center justify-between mb-3 pb-2 border-b border-border/60">
-                  <div className="flex items-center gap-1.5 min-w-0">
-                    <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: st.config.color }} />
-                    <h4 className="text-xs font-bold text-foreground truncate">{st.stage}</h4>
+                {/* Stage Header Card */}
+                <div className="bg-card border border-border/80 rounded-xl p-3 shadow-2xs mb-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h6 className="text-sm font-extrabold text-foreground flex items-center gap-2 tracking-tight">
+                        <span className={cn("w-2.5 h-2.5 rounded-full inline-block", col.dotColor)} />
+                        <span>{col.title}</span>
+                      </h6>
+                      <p className="text-[11px] text-muted-foreground font-medium mt-0.5">
+                        <span className="font-bold text-foreground">{col.count} Leads</span>
+                        <span className="mx-1">•</span>
+                        <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">{col.totalValueFormatted}</span>
+                      </p>
+                    </div>
+
+                    {/* Column 3-dots Menu */}
+                    <div className="relative">
+                      <button
+                        type="button"
+                        onClick={() => setActiveMenuDealId(activeMenuDealId === col.id ? null : col.id)}
+                        className="w-7 h-7 rounded-lg border border-border/60 bg-muted/30 hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground cursor-pointer transition-colors"
+                      >
+                        <i className="fa-solid fa-ellipsis-vertical text-xs" />
+                      </button>
+
+                      {activeMenuDealId === col.id && (
+                        <div className="absolute right-0 mt-1 w-36 rounded-xl bg-card border border-border shadow-xl py-1 z-30 animate-in fade-in zoom-in-95 duration-150">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setActiveMenuDealId(null);
+                              handleOpenAddModal();
+                            }}
+                            className="w-full text-left px-3 py-1.5 text-xs text-foreground hover:bg-muted flex items-center gap-2 cursor-pointer"
+                          >
+                            <i className="fa-solid fa-plus text-primary text-[11px]" />
+                            <span>Add Deal</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setActiveMenuDealId(null)}
+                            className="w-full text-left px-3 py-1.5 text-xs text-foreground hover:bg-muted flex items-center gap-2 cursor-pointer"
+                          >
+                            <i className="fa-solid fa-pen-to-square text-amber-500 text-[11px]" />
+                            <span>Edit Stage</span>
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                  <span className="text-[10px] font-mono font-bold px-1.5 py-0.2 rounded-full bg-background border border-border text-foreground shrink-0">
-                    {columnDeals.length}
-                  </span>
                 </div>
 
-                <div className="space-y-3 flex-1 overflow-y-auto">
-                  {columnDeals.map((deal) => {
-                    const isBeingDragged = draggedDealId === deal._id;
-                    const prevStage = curStageIdx > 0 ? STAGE_ORDER[curStageIdx - 1] : null;
-                    const nextStage = curStageIdx < STAGE_ORDER.length - 1 ? STAGE_ORDER[curStageIdx + 1] : null;
+                {/* Cards Container */}
+                <div className="space-y-3 min-h-[140px] flex-1">
+                  {col.deals.map((deal) => {
+                    const isStarred = starredDeals[deal._id];
+                    const isDealMenuOpen = activeMenuDealId === deal._id;
 
                     return (
                       <div
                         key={deal._id}
                         draggable
-                        onDragStart={(e) => {
-                          e.dataTransfer.setData("nexace/deal-id", deal._id);
-                          e.dataTransfer.effectAllowed = "move";
-                          setDraggedDealId(deal._id);
-                        }}
-                        onDragEnd={() => {
-                          setDraggedDealId(null);
-                          setDragOverStage(null);
-                        }}
-                        onClick={() => onEditDeal(deal)}
-                        className={cn(
-                          "p-3 bg-card border border-border/80 rounded-xl shadow-2xs hover:border-primary/50 transition-all cursor-grab active:cursor-grabbing space-y-2.5 group relative select-none",
-                          isBeingDragged && "opacity-40 scale-[0.98] border-dashed border-primary"
-                        )}
+                        onDragStart={(e) => handleDragStart(e, deal._id)}
+                        className="card kanban-card bg-card border border-border/80 rounded-2xl p-3.5 shadow-2xs hover:shadow-md hover:border-primary/40 transition-all duration-200 cursor-grab active:cursor-grabbing group relative"
                       >
-                        {/* Top Grip & Name */}
-                        <div className="flex items-start justify-between gap-1.5">
-                          <div className="flex items-start gap-1.5 min-w-0">
-                            <i className="fa-solid fa-grip-vertical text-muted-foreground/30 group-hover:text-muted-foreground/80 text-[10px] mt-0.5 cursor-grab active:cursor-grabbing shrink-0" title="Drag card to move stage" />
-                            <h5 className="text-xs font-bold text-foreground group-hover:text-primary transition-colors leading-tight truncate">
-                              {deal.dealName}
-                            </h5>
+                        {/* Top: Initials Avatar + Title + Menu */}
+                        <div className="flex items-start justify-between gap-2 mb-2.5">
+                          <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                            {/* Initials Badge */}
+                            <div className={cn("w-8 h-8 rounded-full flex items-center justify-center font-black text-xs shrink-0 shadow-2xs", deal.avatarBg)}>
+                              {deal.initials}
+                            </div>
+                            {/* Deal Title */}
+                            <div className="min-w-0 flex-1">
+                              <h6
+                                onClick={() => {
+                                  if (deal.rawDeal) onEditDeal(deal.rawDeal);
+                                  else handleOpenAddModal();
+                                }}
+                                className="text-xs font-extrabold text-foreground truncate hover:text-primary transition-colors cursor-pointer"
+                                title={deal.dealName}
+                              >
+                                {deal.dealName}
+                              </h6>
+                              <p className="text-[10px] text-muted-foreground truncate">{deal.clientAccount}</p>
+                            </div>
+                          </div>
+
+                          {/* Quick 3-dots Menu */}
+                          <div className="relative shrink-0">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setActiveMenuDealId(isDealMenuOpen ? null : deal._id);
+                              }}
+                              className="w-6 h-6 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground flex items-center justify-center cursor-pointer transition-colors"
+                            >
+                              <i className="fa-solid fa-ellipsis text-xs" />
+                            </button>
+
+                            {isDealMenuOpen && (
+                              <div
+                                onClick={(e) => e.stopPropagation()}
+                                className="absolute right-0 mt-1 w-44 rounded-xl bg-card border border-border shadow-2xl py-1.5 z-40 animate-in fade-in zoom-in-95 duration-150"
+                              >
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setActiveMenuDealId(null);
+                                    if (deal.rawDeal) onEditDeal(deal.rawDeal);
+                                    else handleOpenAddModal();
+                                  }}
+                                  className="w-full text-left px-3 py-1.5 text-xs text-foreground hover:bg-muted flex items-center gap-2 cursor-pointer"
+                                >
+                                  <i className="fa-solid fa-pen-to-square text-amber-500 text-xs" />
+                                  <span>Edit Deal</span>
+                                </button>
+                                {onConvertToProposal && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setActiveMenuDealId(null);
+                                      if (deal.rawDeal) onConvertToProposal(deal.rawDeal);
+                                      else onNavigateToProposals?.();
+                                    }}
+                                    className="w-full text-left px-3 py-1.5 text-xs text-foreground hover:bg-muted flex items-center gap-2 cursor-pointer"
+                                  >
+                                    <i className="fa-solid fa-file-signature text-purple-500 text-xs" />
+                                    <span>Convert to Proposal</span>
+                                  </button>
+                                )}
+                                {onGenerateInvoice && deal.rawDeal && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setActiveMenuDealId(null);
+                                      onGenerateInvoice(deal.rawDeal!);
+                                    }}
+                                    className="w-full text-left px-3 py-1.5 text-xs text-foreground hover:bg-muted flex items-center gap-2 cursor-pointer"
+                                  >
+                                    <i className="fa-solid fa-file-invoice-dollar text-emerald-500 text-xs" />
+                                    <span>Generate Invoice</span>
+                                  </button>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setActiveMenuDealId(null);
+                                    onDeleteDeal(deal._id, deal.dealName);
+                                  }}
+                                  className="w-full text-left px-3 py-1.5 text-xs text-rose-500 hover:bg-rose-500/10 flex items-center gap-2 cursor-pointer border-t border-border/50 mt-1 pt-1.5"
+                                >
+                                  <i className="fa-solid fa-trash text-xs" />
+                                  <span>Delete</span>
+                                </button>
+                              </div>
+                            )}
                           </div>
                         </div>
 
-                        {/* Company & Owner */}
-                        <div className="flex items-center justify-between text-[11px]">
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onViewLead?.(deal.clientAccount);
-                            }}
-                            className="text-muted-foreground hover:text-primary font-medium flex items-center gap-1 cursor-pointer transition-colors truncate max-w-[120px]"
-                            title={`View Lead for "${deal.clientAccount}"`}
-                          >
-                            <i className="fa-solid fa-building text-[10px]" />
-                            <span className="truncate">{deal.clientAccount}</span>
-                            {onViewLead && <i className="fa-solid fa-arrow-up-right-from-square text-[8px] opacity-0 group-hover:opacity-70" />}
-                          </button>
-                          <span className="text-[10px] text-muted-foreground font-medium truncate max-w-[80px]">
-                            {deal.owner || "Unassigned"}
+                        {/* Middle Info Lines (Value, Email, Phone, Location) */}
+                        <div className="space-y-1.5 my-2.5 text-xs">
+                          {/* Deal Value */}
+                          <div className="flex items-center gap-2 text-foreground font-black font-mono">
+                            <i className="fa-solid fa-money-bill-wave text-muted-foreground/80 text-[11px] w-4" />
+                            <span>${Number(deal.dealValue).toLocaleString()}</span>
+                          </div>
+
+                          {/* Email */}
+                          <div className="flex items-center gap-2 text-muted-foreground truncate">
+                            <i className="fa-solid fa-envelope text-muted-foreground/80 text-[11px] w-4" />
+                            <span className="truncate">{deal.email}</span>
+                          </div>
+
+                          {/* Phone */}
+                          <div className="flex items-center gap-2 text-muted-foreground">
+                            <i className="fa-solid fa-phone text-muted-foreground/80 text-[11px] w-4" />
+                            <span>{deal.phone}</span>
+                          </div>
+
+                          {/* Location */}
+                          <div className="flex items-center gap-2 text-muted-foreground truncate">
+                            <i className="fa-solid fa-location-dot text-muted-foreground/80 text-[11px] w-4" />
+                            <span className="truncate">{deal.location}</span>
+                          </div>
+                        </div>
+
+                        {/* Rep & Probability Row */}
+                        <div className="flex items-center justify-between pt-2 border-t border-border/40 mb-2.5">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <div className="w-5 h-5 rounded-full bg-slate-700 text-white font-bold text-[9px] flex items-center justify-center">
+                              {deal.owner.slice(0, 1)}
+                            </div>
+                            <span className="text-xs font-semibold text-foreground truncate">{deal.owner}</span>
+                          </div>
+                          <span className={cn("px-2 py-0.5 rounded-full text-[10px] font-black shrink-0", deal.badgeColor)}>
+                            {deal.probability}%
                           </span>
                         </div>
 
-                        {/* Cross-Lifecycle Connected Entities (Lead & Proposal badges) */}
-                        {(() => {
-                          const matchedLead = leads.find(
-                            (l) =>
-                              (l.companyName && deal.clientAccount && l.companyName.toLowerCase() === deal.clientAccount.toLowerCase()) ||
-                              (l.leadName && deal.dealName && deal.dealName.toLowerCase().includes(l.leadName.toLowerCase()))
-                          );
-                          const matchedProposal = proposals.find(
-                            (p) =>
-                              (p.clientCompany && deal.clientAccount && p.clientCompany.toLowerCase() === deal.clientAccount.toLowerCase()) ||
-                              (p.subject && deal.dealName && deal.dealName.toLowerCase().includes(p.subject.toLowerCase()))
-                          );
+                        {/* Footer Row: Date & Action Icons */}
+                        <div className="flex items-center justify-between pt-2 border-t border-border/50 text-[11px] text-muted-foreground">
+                          <span className="flex items-center gap-1.5 font-medium">
+                            <i className="fa-solid fa-calendar-days text-[10px] text-muted-foreground" />
+                            <span>{deal.expectedClose}</span>
+                          </span>
 
-                          if (!matchedLead && !matchedProposal) return null;
-
-                          return (
-                            <div className="flex items-center gap-1 flex-wrap pt-0.5">
-                              {matchedLead && (
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    onViewLead?.(matchedLead.companyName || matchedLead.leadName);
-                                  }}
-                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 hover:bg-blue-500/20 transition-colors"
-                                  title={`Originating Lead: ${matchedLead.leadName}`}
-                                >
-                                  <i className="fa-solid fa-user-tag text-[8px]" />
-                                  <span className="truncate max-w-[80px]">{matchedLead.leadName}</span>
-                                </button>
-                              )}
-                              {matchedProposal && (
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    onNavigateToProposals?.();
-                                  }}
-                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold bg-violet-500/10 text-violet-600 dark:text-violet-400 border border-violet-500/20 hover:bg-violet-500/20 transition-colors"
-                                  title={`Proposal: #${matchedProposal.proposalCode} (${matchedProposal.status})`}
-                                >
-                                  <i className="fa-solid fa-file-contract text-[8px]" />
-                                  <span>#{matchedProposal.proposalCode}</span>
-                                </button>
-                              )}
-                            </div>
-                          );
-                        })()}
-
-                        {/* Stage Aging / Velocity Indicator */}
-                        {(() => {
-                          const daysInStage = getDealStageDuration(deal);
-                          const isClosed = deal.stage === "Closed Won" || deal.stage === "Closed Lost";
-                          if (isClosed) return null;
-
-                          const isStale = daysInStage >= 14;
-                          const isFast = daysInStage <= 4;
-
-                          return (
-                            <div className="flex items-center justify-between text-[10px] text-muted-foreground pt-0.5">
-                              <span
-                                className={cn(
-                                  "inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold transition-colors",
-                                  isStale
-                                    ? "bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30"
-                                    : isFast
-                                    ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
-                                    : "bg-muted text-muted-foreground border border-border/60"
-                                )}
-                                title={isStale ? `Opportunity has remained in ${deal.stage} for ${daysInStage} days without movement.` : `In ${deal.stage} for ${daysInStage} days`}
-                              >
-                                <i className={cn("fa-solid text-[8px]", isStale ? "fa-triangle-exclamation" : isFast ? "fa-bolt" : "fa-clock")} />
-                                <span>{isStale ? `Aging: ${daysInStage}d` : `${daysInStage}d in stage`}</span>
-                              </span>
-                              {deal.expectedClose && (
-                                <span className="font-mono text-[9px] text-muted-foreground truncate" title={`Expected Close: ${deal.expectedClose}`}>
-                                  Target: {deal.expectedClose.slice(5, 10)}
-                                </span>
-                              )}
-                            </div>
-                          );
-                        })()}
-
-                        {/* Deal Value & Probability Bar */}
-                        <div className="space-y-1">
-                          <div className="flex items-center justify-between text-xs">
-                            <span className="font-mono font-black text-foreground">
-                              {formatUSD(deal.dealValue)}
-                            </span>
-                            <span className="text-[10px] font-mono text-muted-foreground">
-                              {deal.probability || 0}% prob (${formatUSD(Math.round(((deal.dealValue || 0) * (deal.probability || 0)) / 100))})
-                            </span>
-                          </div>
-                          <div className="w-full bg-muted h-1 rounded-full overflow-hidden">
-                            <div
-                              className="h-full rounded-full bg-primary"
-                              style={{ width: `${Math.min(100, Math.max(5, deal.probability || 0))}%` }}
-                            />
-                          </div>
-                        </div>
-
-                        {/* 5-Step Visual Mini-Stepper */}
-                        <div className="flex items-center gap-1 pt-1">
-                          {STAGE_ORDER.slice(0, 5).map((stKey, sIdx) => {
-                            const isCurrent = deal.stage === stKey;
-                            const isPast = STAGE_ORDER.indexOf(deal.stage) > sIdx;
-                            return (
-                              <button
-                                key={stKey}
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  onStageChange?.(deal._id, stKey);
-                                }}
-                                className={cn(
-                                  "flex-1 h-1.5 rounded-full transition-all cursor-pointer hover:h-2",
-                                  isCurrent
-                                    ? "bg-primary ring-2 ring-primary/40"
-                                    : isPast
-                                    ? "bg-primary/50"
-                                    : "bg-muted hover:bg-muted-foreground/30"
-                                )}
-                                title={`Jump to stage: ${stKey}`}
-                              />
-                            );
-                          })}
-                        </div>
-
-                        {/* Lifecycle Progression Toolbar */}
-                        <div className="pt-2 border-t border-border/60 flex items-center justify-between gap-1" onClick={(e) => e.stopPropagation()}>
-                          {/* Quick Stage Shift Buttons */}
                           <div className="flex items-center gap-1">
-                            {prevStage && onStageChange && (
-                              <button
-                                type="button"
-                                onClick={() => onStageChange(deal._id, prevStage)}
-                                className="w-6 h-6 rounded bg-muted/60 hover:bg-muted hover:text-foreground text-muted-foreground flex items-center justify-center text-[9px] cursor-pointer transition-colors"
-                                title={`Move back to ${prevStage}`}
-                              >
-                                <i className="fa-solid fa-arrow-left" />
-                              </button>
-                            )}
-
-                            {nextStage && onStageChange && (
-                              <button
-                                type="button"
-                                onClick={() => onStageChange(deal._id, nextStage)}
-                                className="w-6 h-6 rounded bg-primary/10 hover:bg-primary/20 text-primary flex items-center justify-center text-[9px] font-bold cursor-pointer transition-colors"
-                                title={`Advance to ${nextStage}`}
-                              >
-                                <i className="fa-solid fa-arrow-right" />
-                              </button>
-                            )}
-
-                            {/* Stage quick dropdown */}
-                            {onStageChange && (
-                              <select
-                                value={deal.stage}
-                                onChange={(e) => onStageChange(deal._id, e.target.value as SalesDeal["stage"])}
-                                className="h-6 text-[10px] font-bold bg-muted/40 hover:bg-muted text-foreground rounded px-1 border border-border/70 cursor-pointer outline-none"
-                                title="Change deal stage directly"
-                              >
-                                {STAGE_ORDER.map((s) => (
-                                  <option key={s} value={s}>
-                                    {s}
-                                  </option>
-                                ))}
-                              </select>
-                            )}
-                          </div>
-
-                          {/* Quick Win / Quick Lose / Actions shortcuts */}
-                          <div className="flex items-center gap-1">
-                            {deal.stage !== "Closed Won" && onStageChange && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  onStageChange(deal._id, "Closed Won");
-                                  if (onGenerateInvoice) onGenerateInvoice(deal);
-                                }}
-                                className="h-6 px-1.5 rounded bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 flex items-center gap-1 text-[10px] font-bold transition-colors cursor-pointer"
-                                title="Quick Win: Mark Closed Won & Generate Invoice"
-                              >
-                                <i className="fa-solid fa-trophy text-[9px]" />
-                                <span className="hidden sm:inline">Won</span>
-                              </button>
-                            )}
-
-                            {deal.stage !== "Closed Lost" && (
-                              <button
-                                type="button"
-                                onClick={() => setLosingDeal(deal)}
-                                className="h-6 px-1.5 rounded bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-500/30 flex items-center gap-1 text-[10px] font-bold transition-colors cursor-pointer"
-                                title="Mark deal as Closed Lost"
-                              >
-                                <i className="fa-solid fa-circle-xmark text-[9px]" />
-                                <span className="hidden sm:inline">Lost</span>
-                              </button>
-                            )}
-
-                            {deal.stage === "Closed Won" && onGenerateInvoice && (
-                              <button
-                                type="button"
-                                onClick={() => onGenerateInvoice(deal)}
-                                className="h-6 px-1.5 rounded bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 flex items-center gap-1 text-[10px] font-bold transition-colors cursor-pointer"
-                                title="Generate Invoice for Won Deal"
-                              >
-                                <i className="fa-solid fa-file-invoice-dollar text-[9px]" />
-                                <span className="hidden sm:inline">Invoice</span>
-                              </button>
-                            )}
-                            {onConvertToProposal && (
-                              <button
-                                type="button"
-                                onClick={() => onConvertToProposal(deal)}
-                                className={cn(
-                                  "h-6 px-1.5 rounded border flex items-center gap-1 text-[10px] font-bold transition-colors cursor-pointer",
-                                  deal.stage === "Proposal Sent"
-                                    ? "bg-amber-500/15 hover:bg-amber-500/25 text-amber-600 dark:text-amber-400 border-amber-500/30"
-                                    : "bg-violet-500/10 hover:bg-violet-500/20 text-violet-600 dark:text-violet-400 border-violet-500/30"
-                                )}
-                                title="Create / View Proposal for this Deal"
-                              >
-                                <i className="fa-solid fa-file-contract text-[9px]" />
-                                <span className="hidden sm:inline">Quote</span>
-                              </button>
-                            )}
-
-                            {/* Stage History & Audit Trail Button */}
+                            <a
+                              href={`tel:${deal.phone}`}
+                              onClick={(e) => e.stopPropagation()}
+                              title="Call Representative"
+                              className="w-6 h-6 rounded-md hover:bg-muted text-muted-foreground hover:text-primary flex items-center justify-center transition-colors"
+                            >
+                              <i className="fa-solid fa-phone-volume text-[10px]" />
+                            </a>
+                            <a
+                              href={`mailto:${deal.email}`}
+                              onClick={(e) => e.stopPropagation()}
+                              title="Send Email"
+                              className="w-6 h-6 rounded-md hover:bg-muted text-muted-foreground hover:text-primary flex items-center justify-center transition-colors"
+                            >
+                              <i className="fa-solid fa-comment-dots text-[10px]" />
+                            </a>
                             <button
                               type="button"
-                              onClick={() => setHistoryDeal(deal)}
-                              className="h-6 w-6 rounded bg-muted/60 hover:bg-muted text-muted-foreground hover:text-foreground flex items-center justify-center text-[10px] transition-colors cursor-pointer"
-                              title="View Stage History & Audit Trail"
+                              onClick={(e) => toggleStar(deal._id, e)}
+                              title={isStarred ? "Starred" : "Star Deal"}
+                              className="w-6 h-6 rounded-md hover:bg-muted text-muted-foreground hover:text-amber-500 flex items-center justify-center transition-colors cursor-pointer"
                             >
-                              <i className="fa-solid fa-clock-rotate-left" />
+                              <i className={cn("fa-solid text-[10px]", isStarred ? "fa-star text-amber-400" : "fa-palette")} />
                             </button>
                           </div>
                         </div>
@@ -1493,15 +1407,9 @@ export default function DealsDashboard({
                     );
                   })}
 
-                  {columnDeals.length === 0 && (
-                    <div
-                      className={cn(
-                        "py-14 text-center rounded-xl border border-dashed transition-colors flex flex-col items-center justify-center gap-1",
-                        isColOver ? "border-primary bg-primary/5 text-primary" : "border-border/60 text-muted-foreground/60"
-                      )}
-                    >
-                      <i className={cn("text-2xl mb-1", isColOver ? "fa-solid fa-cloud-arrow-down fa-bounce text-primary" : "fa-solid fa-inbox opacity-30")} />
-                      <p className="text-[11px] font-semibold">{isColOver ? "Drop to move here" : "No deals"}</p>
+                  {col.deals.length === 0 && (
+                    <div className="h-32 border-2 border-dashed border-border/70 rounded-2xl flex flex-col items-center justify-center p-4 text-center">
+                      <p className="text-xs text-muted-foreground font-semibold">Drop deals here</p>
                     </div>
                   )}
                 </div>
@@ -1511,567 +1419,325 @@ export default function DealsDashboard({
         </div>
       )}
 
-      {/* ── TABLE VIEW ── */}
-      {viewMode === "table" && (
-        <Card className="rounded-2xl border border-border/80 shadow-xs overflow-hidden">
-          <CardHeader className="p-4 border-b border-border/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3 space-y-0">
-            <div>
-              <CardTitle className="text-sm font-bold text-foreground">All Sales Deals</CardTitle>
-              <CardDescription className="text-xs text-muted-foreground">
-                Detailed table of all active &amp; archived deals
-              </CardDescription>
-            </div>
-
-            <div className="flex items-center gap-2 flex-wrap">
-              <div className="relative">
-                <i className="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-xs" />
-                <Input
-                  placeholder="Search deals, clients..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-8 h-8 text-xs w-44"
-                />
-              </div>
-
-              {/* Owner Filter */}
-              <select
-                value={ownerFilter}
-                onChange={(e) => setOwnerFilter(e.target.value)}
-                className="h-8 text-xs rounded-lg border border-border bg-background px-2 text-foreground font-semibold cursor-pointer focus:outline-none"
-              >
-                <option value="All">All Owners</option>
-                {distinctOwners.map((owner) => (
-                  <option key={owner} value={owner}>
-                    {owner}
-                  </option>
-                ))}
-              </select>
-
-              {/* Venture Filter */}
-              <select
-                value={ventureFilter}
-                onChange={(e) => setVentureFilter(e.target.value)}
-                className="h-8 text-xs rounded-lg border border-border bg-background px-2 text-foreground font-semibold cursor-pointer focus:outline-none"
-              >
-                <option value="All">All Ventures</option>
-                {distinctVentures.map((v) => (
-                  <option key={v} value={v}>
-                    {v}
-                  </option>
-                ))}
-              </select>
-
-              {statusFilter !== "All" && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setStatusFilter("All");
-                    onClearStageFilter?.();
-                  }}
-                  className="h-8 px-2.5 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 text-[11px] font-bold flex items-center gap-1.5 cursor-pointer transition-colors shrink-0"
-                  title="Clear stage filter"
-                >
-                  <span>Stage: {statusFilter}</span>
-                  <i className="fa-solid fa-xmark text-[10px]" />
-                </button>
-              )}
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="h-8 text-xs rounded-lg border border-border bg-background px-2.5 text-foreground font-semibold cursor-pointer focus:outline-none"
-              >
-                <option value="All">All Stages</option>
-                {Object.keys(STAGE_CONFIG).map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </CardHeader>
-
-          <CardContent className="p-0 overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead className="bg-muted/40 border-b border-border font-bold text-muted-foreground uppercase text-[10px] tracking-wider">
-                <tr>
-                  <th className="py-3 px-4 text-left">Deal Name</th>
-                  <th className="py-3 px-3 text-left">Client Account</th>
-                  <th className="py-3 px-3 text-right">Value</th>
-                  <th className="py-3 px-3 text-right">Weighted</th>
-                  <th className="py-3 px-3 text-center">Stage</th>
-                  <th className="py-3 px-3 text-center">Probability</th>
-                  <th className="py-3 px-3 text-left">Owner</th>
-                  <th className="py-3 px-3 text-left">Expected Close</th>
-                  <th className="py-3 px-4 text-right">Actions</th>
+      {/* ── 4. Deals List Table View (Exact /crm/deals-list Design) ── */}
+      {viewMode === "list" && (
+        <div className="bg-card border border-border/80 rounded-2xl shadow-xs overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead>
+                <tr className="border-b border-border/70 bg-muted/40 text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
+                  <th className="py-3 px-3 w-10 text-center">
+                    <input type="checkbox" className="rounded border-input text-primary focus:ring-primary h-3.5 w-3.5" />
+                  </th>
+                  <th className="py-3 px-2 w-8 text-center" />
+                  <th className="py-3 px-4">Deal Name</th>
+                  <th className="py-3 px-3">Stage</th>
+                  <th className="py-3 px-3">Deal Value</th>
+                  <th className="py-3 px-3">Tags</th>
+                  <th className="py-3 px-3">Expected Close Date</th>
+                  <th className="py-3 px-3">Owner</th>
+                  <th className="py-3 px-3">Probability</th>
+                  <th className="py-3 px-3">Status</th>
+                  <th className="py-3 px-3 text-right">Action</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-border/60">
+              <tbody className="divide-y divide-border/50">
                 {filteredDeals.map((deal) => {
-                  const stageInfo = STAGE_CONFIG[deal.stage] || STAGE_CONFIG.Prospecting;
-                  const weightedVal = Math.round(((deal.dealValue || 0) * (deal.probability || 0)) / 100);
-                  const matchedLead = leads.find(
-                    (l) =>
-                      (l.companyName && deal.clientAccount && l.companyName.toLowerCase() === deal.clientAccount.toLowerCase()) ||
-                      (l.leadName && deal.dealName && deal.dealName.toLowerCase().includes(l.leadName.toLowerCase()))
-                  );
-
+                  const isStarred = starredDeals[deal._id];
                   return (
                     <tr
                       key={deal._id}
-                      className="hover:bg-muted/30 transition-colors group cursor-pointer"
-                      onClick={() => onEditDeal(deal)}
+                      onClick={() => {
+                        if (deal.rawDeal) onEditDeal(deal.rawDeal);
+                        else handleOpenAddModal();
+                      }}
+                      className="hover:bg-muted/40 transition-colors cursor-pointer group"
                     >
-                      <td className="py-3 px-4 font-semibold text-foreground">
-                        <div className="hover:text-primary transition-colors">{deal.dealName}</div>
-                        {deal.notes && (
-                          <div className="text-[10px] text-muted-foreground truncate max-w-[180px]">
-                            {deal.notes}
-                          </div>
-                        )}
+                      <td className="py-3.5 px-3 text-center" onClick={(e) => e.stopPropagation()}>
+                        <input type="checkbox" className="rounded border-input text-primary focus:ring-primary h-3.5 w-3.5" />
                       </td>
-                      <td className="py-3 px-3 font-medium text-foreground">
-                        <div className="flex items-center gap-1.5">
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onViewLead?.(deal.clientAccount);
-                            }}
-                            className="hover:text-primary font-semibold flex items-center gap-1 cursor-pointer transition-colors"
-                            title={`View Lead for "${deal.clientAccount}"`}
-                          >
-                            <span>{deal.clientAccount}</span>
-                            {onViewLead && <i className="fa-solid fa-arrow-up-right-from-square text-[8px] opacity-0 group-hover:opacity-70 text-primary" />}
-                          </button>
-                          {matchedLead && (
-                            <span className="text-[9px] px-1 py-0.2 rounded bg-blue-500/10 text-blue-600 dark:text-blue-400 font-bold border border-blue-500/20" title={`Lead: ${matchedLead.leadName}`}>
-                              Lead
-                            </span>
-                          )}
+                      <td className="py-3.5 px-2 text-center" onClick={(e) => toggleStar(deal._id, e)}>
+                        <i className={cn("fa-solid cursor-pointer text-xs transition-colors", isStarred ? "fa-star text-amber-400" : "fa-star text-muted-foreground/30 hover:text-amber-400")} />
+                      </td>
+                      <td className="py-3.5 px-4">
+                        <div className="flex items-center gap-2.5">
+                          <div className={cn("w-7 h-7 rounded-full flex items-center justify-center font-black text-[10px] shrink-0", deal.avatarBg)}>
+                            {deal.initials}
+                          </div>
+                          <div>
+                            <p className="font-extrabold text-foreground group-hover:text-primary transition-colors">{deal.dealName}</p>
+                            <p className="text-[10px] text-muted-foreground">{deal.clientAccount}</p>
+                          </div>
                         </div>
                       </td>
-                      <td className="py-3 px-3 text-right font-mono font-bold text-foreground">
-                        {formatUSD(deal.dealValue)}
+                      <td className="py-3.5 px-3 font-semibold">
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-muted border border-border/80 text-foreground">
+                          {deal.pipelineStage}
+                        </span>
                       </td>
-                      <td className="py-3 px-3 text-right font-mono font-medium text-indigo-600 dark:text-indigo-400">
-                        {formatUSD(weightedVal)}
+                      <td className="py-3.5 px-3 font-black font-mono text-sm text-foreground">
+                        ${Number(deal.dealValue).toLocaleString()}
                       </td>
-                      <td className="py-3 px-3 text-center" onClick={(e) => e.stopPropagation()}>
-                        {onStageChange ? (
-                          <select
-                            value={deal.stage}
-                            onChange={(e) => onStageChange(deal._id, e.target.value as SalesDeal["stage"])}
-                            className={cn(
-                              "inline-flex items-center gap-1 text-[11px] font-bold px-2 py-1 rounded-md border cursor-pointer outline-none transition-colors",
-                              stageInfo.bg,
-                              stageInfo.text,
-                              stageInfo.border
-                            )}
-                            title="Change stage"
-                          >
-                            {STAGE_ORDER.map((s) => (
-                              <option key={s} value={s} className="bg-card text-foreground font-semibold">
-                                {s}
-                              </option>
-                            ))}
-                          </select>
-                        ) : (
-                          <span
-                            className={cn(
-                              "inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-md border whitespace-nowrap",
-                              stageInfo.bg,
-                              stageInfo.text,
-                              stageInfo.border
-                            )}
-                          >
-                            <i className={cn("fa-solid text-[9px]", stageInfo.icon)} />
-                            {stageInfo.label}
-                          </span>
-                        )}
-                        {(() => {
-                          const daysInStage = getDealStageDuration(deal);
-                          if (deal.stage === "Closed Won" || deal.stage === "Closed Lost") return null;
-                          const isStale = daysInStage >= 14;
-                          return (
-                            <div className={cn("text-[9px] font-semibold mt-1", isStale ? "text-amber-500 font-bold flex items-center gap-0.5" : "text-muted-foreground")}>
-                              {isStale && <i className="fa-solid fa-triangle-exclamation text-[8px]" />}
-                              <span>{daysInStage}d in stage</span>
-                            </div>
-                          );
-                        })()}
+                      <td className="py-3.5 px-3">
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-primary/10 text-primary border border-primary/20">
+                          {deal.tag}
+                        </span>
                       </td>
-                      <td className="py-3 px-3 text-center font-mono font-semibold">
-                        {deal.probability}%
+                      <td className="py-3.5 px-3 text-muted-foreground font-medium">
+                        {deal.expectedClose}
                       </td>
-                      <td className="py-3 px-3 text-muted-foreground">{deal.owner || "—"}</td>
-                      <td className="py-3 px-3 text-muted-foreground font-mono">
-                        {deal.expectedClose || "—"}
+                      <td className="py-3.5 px-3 text-foreground font-medium">
+                        {deal.owner}
                       </td>
-                      <td
-                        className="py-3 px-4 text-right whitespace-nowrap"
-                        onClick={(e) => e.stopPropagation()}
-                      >
+                      <td className="py-3.5 px-3">
+                        <span className={cn("px-2 py-0.5 rounded-full text-[10px] font-black", deal.badgeColor)}>
+                          {deal.probability}%
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-3">
+                        <span className={cn(
+                          "px-2 py-0.5 rounded-full text-[10px] font-bold border",
+                          deal.status === "Won" ? "bg-emerald-500/15 text-emerald-600 border-emerald-500/30" :
+                          deal.status === "Lost" ? "bg-rose-500/15 text-rose-600 border-rose-500/30" :
+                          "bg-blue-500/15 text-blue-600 border-blue-500/30"
+                        )}>
+                          {deal.status}
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-3 text-right" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-end gap-1">
-                          {deal.stage !== "Closed Won" && onStageChange && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                onStageChange(deal._id, "Closed Won");
-                                if (onGenerateInvoice) onGenerateInvoice(deal);
-                              }}
-                              className="w-7 h-7 rounded-md bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 flex items-center justify-center cursor-pointer transition-colors"
-                              title="Quick Win: Mark Won & Generate Invoice"
-                            >
-                              <i className="fa-solid fa-trophy text-[10px]" />
-                            </button>
-                          )}
-                          {deal.stage !== "Closed Lost" && (
-                            <button
-                              type="button"
-                              onClick={() => setLosingDeal(deal)}
-                              className="w-7 h-7 rounded-md bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-500/30 flex items-center justify-center cursor-pointer transition-colors"
-                              title="Mark Closed Lost"
-                            >
-                              <i className="fa-solid fa-circle-xmark text-[10px]" />
-                            </button>
-                          )}
-                          {deal.stage === "Closed Won" && onGenerateInvoice && (
-                            <button
-                              type="button"
-                              onClick={() => onGenerateInvoice(deal)}
-                              className="w-7 h-7 rounded-md bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 flex items-center justify-center cursor-pointer transition-colors"
-                              title="Generate Invoice for Won Deal"
-                            >
-                              <i className="fa-solid fa-file-invoice-dollar text-[10px]" />
-                            </button>
-                          )}
-                          {onConvertToProposal && (
-                            <button
-                              type="button"
-                              onClick={() => onConvertToProposal(deal)}
-                              className="w-7 h-7 rounded-md bg-violet-500/10 hover:bg-violet-500/20 text-violet-600 dark:text-violet-400 border border-violet-500/30 flex items-center justify-center cursor-pointer transition-colors"
-                              title="Create Proposal"
-                            >
-                              <i className="fa-solid fa-file-contract text-[10px]" />
-                            </button>
-                          )}
-
-                          {/* History & Audit Trail Button */}
                           <button
                             type="button"
-                            onClick={() => setHistoryDeal(deal)}
-                            className="w-7 h-7 rounded-md bg-muted hover:bg-accent flex items-center justify-center text-muted-foreground hover:text-foreground cursor-pointer transition-colors"
-                            title="View Stage History & Audit Trail"
-                          >
-                            <i className="fa-solid fa-clock-rotate-left text-[10px]" />
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() => onEditDeal(deal)}
-                            className="w-7 h-7 rounded-md bg-muted hover:bg-accent flex items-center justify-center text-muted-foreground hover:text-foreground cursor-pointer"
+                            onClick={() => {
+                              if (deal.rawDeal) onEditDeal(deal.rawDeal);
+                              else handleOpenAddModal();
+                            }}
+                            className="w-7 h-7 rounded-lg hover:bg-muted text-muted-foreground hover:text-amber-500 flex items-center justify-center transition-colors cursor-pointer"
                             title="Edit"
                           >
-                            <i className="fa-solid fa-pen text-[10px]" />
+                            <i className="fa-solid fa-pen-to-square text-xs" />
                           </button>
                           <button
                             type="button"
                             onClick={() => onDeleteDeal(deal._id, deal.dealName)}
-                            className="w-7 h-7 rounded-md bg-muted hover:bg-rose-500/15 flex items-center justify-center text-muted-foreground hover:text-rose-500 cursor-pointer"
+                            className="w-7 h-7 rounded-lg hover:bg-rose-500/10 text-muted-foreground hover:text-rose-500 flex items-center justify-center transition-colors cursor-pointer"
                             title="Delete"
                           >
-                            <i className="fa-solid fa-trash text-[10px]" />
+                            <i className="fa-solid fa-trash text-xs" />
                           </button>
                         </div>
                       </td>
                     </tr>
                   );
                 })}
-                {filteredDeals.length === 0 && (
-                  <tr>
-                    <td colSpan={9} className="py-16 text-center text-muted-foreground">
-                      <i className="fa-solid fa-handshake-slash text-2xl mb-2 block opacity-30" />
-                      <p className="text-xs font-semibold">No deals match your search criteria.</p>
-                    </td>
-                  </tr>
-                )}
               </tbody>
             </table>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* ── MODAL: Structured Closed Lost Reason Recorder ── */}
-      {losingDeal && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
-          onClick={() => setLosingDeal(null)}
-        >
-          <div
-            className="w-full max-w-md bg-card border border-border rounded-2xl shadow-2xl p-6 space-y-4 animate-in zoom-in-95"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-start justify-between border-b border-border pb-3">
-              <div className="flex items-center gap-2.5">
-                <div className="w-10 h-10 rounded-xl bg-rose-500/10 text-rose-500 flex items-center justify-center text-base border border-rose-500/20 shrink-0">
-                  <i className="fa-solid fa-circle-xmark" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-extrabold text-foreground">Mark Deal as Closed Lost</h3>
-                  <p className="text-[11px] text-muted-foreground truncate max-w-[260px]">
-                    {losingDeal.dealName} ({losingDeal.clientAccount})
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setLosingDeal(null)}
-                className="w-7 h-7 rounded-lg hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground cursor-pointer"
-              >
-                <i className="fa-solid fa-xmark text-xs" />
-              </button>
-            </div>
-
-            <div className="space-y-3 text-xs">
-              <div className="space-y-1">
-                <label className="font-bold text-foreground">Primary Reason for Loss</label>
-                <select
-                  value={lossReasonCategory}
-                  onChange={(e) => setLossReasonCategory(e.target.value)}
-                  className="w-full h-9 rounded-lg border border-input bg-background px-2.5 font-medium text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer"
-                >
-                  <option value="Budget / Price Constraint">Budget / Price Constraint</option>
-                  <option value="Competitor Selected">Competitor Selected</option>
-                  <option value="Project Deferred / Timing Issue">Project Deferred / Timing Issue</option>
-                  <option value="Scope / Technical Mismatch">Scope / Technical Mismatch</option>
-                  <option value="Client Unresponsive / Ghosted">Client Unresponsive / Ghosted</option>
-                  <option value="Other / Internal Restructuring">Other / Internal Restructuring</option>
-                </select>
-              </div>
-
-              <div className="space-y-1">
-                <label className="font-bold text-foreground">Additional Context / Debrief Notes</label>
-                <textarea
-                  rows={3}
-                  value={lossNote}
-                  onChange={(e) => setLossNote(e.target.value)}
-                  placeholder="e.g. Client opted for incumbent vendor due to pre-existing contract..."
-                  className="w-full rounded-lg border border-input bg-background p-2.5 text-xs text-foreground placeholder:text-muted-foreground resize-none focus:outline-none focus:ring-1 focus:ring-primary"
-                />
-              </div>
-            </div>
-
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-border/60">
-              <Button type="button" variant="outline" size="sm" onClick={() => setLosingDeal(null)}>
-                Cancel
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                className="bg-rose-600 hover:bg-rose-700 text-white font-bold gap-1.5 cursor-pointer"
-                onClick={() => {
-                  const combinedNotes = lossNote.trim()
-                    ? `[Lost: ${lossReasonCategory}] ${lossNote.trim()}`
-                    : `[Lost: ${lossReasonCategory}]`;
-                  onStageChange?.(losingDeal._id, "Closed Lost", combinedNotes);
-                  setLosingDeal(null);
-                  setLossNote("");
-                }}
-              >
-                <i className="fa-solid fa-circle-xmark text-xs" />
-                Confirm Closed Lost
-              </Button>
-            </div>
           </div>
         </div>
       )}
 
-      {/* ── DEAL STAGE HISTORY & AUDIT TRAIL MODAL ── */}
-      {historyDeal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
-          <div className="bg-card border border-border rounded-2xl p-6 max-w-lg w-full shadow-2xl space-y-4 animate-in zoom-in-95 max-h-[85vh] flex flex-col">
-            <div className="flex items-start justify-between gap-3 border-b border-border/60 pb-3">
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-primary/10 text-primary flex items-center justify-center text-sm shrink-0">
-                  <i className="fa-solid fa-clock-rotate-left" />
-                </div>
-                <div>
-                  <h4 className="text-base font-extrabold text-foreground tracking-tight">
-                    Deal Stage &amp; Audit History
-                  </h4>
-                  <p className="text-xs text-muted-foreground truncate max-w-xs">
-                    {historyDeal.dealName} &bull; <strong className="text-foreground">{historyDeal.clientAccount}</strong>
-                  </p>
-                </div>
-              </div>
+      {/* ── 5. Add Deal Drawer Modal (Exact offcanvas_add Fields) ── */}
+      {showAddDealModal && (
+        <div className="fixed inset-0 z-50 flex justify-end bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="w-full max-w-lg bg-card h-full border-l border-border shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-right duration-300">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-border/80 bg-muted/20">
+              <h5 className="text-base font-black text-foreground flex items-center gap-2">
+                <i className="fa-solid fa-square-plus text-primary" />
+                <span>{modalMode === "add" ? "Add New Deal" : "Edit Deal"}</span>
+              </h5>
               <button
                 type="button"
-                onClick={() => setHistoryDeal(null)}
-                className="w-7 h-7 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground flex items-center justify-center cursor-pointer transition-colors"
+                onClick={() => setShowAddDealModal(false)}
+                className="w-8 h-8 rounded-full border border-border text-muted-foreground hover:text-foreground hover:bg-muted flex items-center justify-center cursor-pointer transition-colors"
               >
-                <i className="fa-solid fa-xmark text-xs" />
+                <i className="fa-solid fa-xmark text-sm" />
               </button>
             </div>
 
-            {/* Current Summary Bar */}
-            <div className="grid grid-cols-3 gap-2 p-3 bg-muted/40 rounded-xl border border-border/60 text-center">
+            {/* Body */}
+            <form onSubmit={handleSaveDealSubmit} className="p-6 flex-1 overflow-y-auto space-y-4 text-xs">
+              {/* Deal Name */}
               <div>
-                <p className="text-[10px] uppercase font-bold text-muted-foreground">Current Stage</p>
-                <span className="text-xs font-extrabold text-primary">{historyDeal.stage}</span>
-              </div>
-              <div>
-                <p className="text-[10px] uppercase font-bold text-muted-foreground">Deal Value</p>
-                <span className="text-xs font-mono font-bold text-foreground">{formatUSD(historyDeal.dealValue)}</span>
-              </div>
-              <div>
-                <p className="text-[10px] uppercase font-bold text-muted-foreground">Probability</p>
-                <span className="text-xs font-mono font-bold text-foreground">{historyDeal.probability}%</span>
-              </div>
-            </div>
-
-            {/* Vertical Timeline */}
-            <div className="flex-1 overflow-y-auto space-y-1 pr-1">
-              <div className="relative pl-6 space-y-4">
-                <div className="absolute left-2.5 top-2 bottom-2 w-0.5 bg-border/70" />
-
-                {historyDeal.stageHistory && historyDeal.stageHistory.length > 0 ? (
-                  [...historyDeal.stageHistory].reverse().map((entry, idx, revArr) => {
-                    const stageConfig = STAGE_CONFIG[entry.toStage as SalesDeal["stage"]] || STAGE_CONFIG.Prospecting;
-                    return (
-                      <div key={idx} className="relative flex items-start gap-3">
-                        <div
-                          className="absolute -left-6 top-1 w-5 h-5 rounded-full border-2 flex items-center justify-center text-[8px] z-10 bg-background"
-                          style={{ borderColor: stageConfig.color, color: stageConfig.color }}
-                        >
-                          <i className={cn("fa-solid", stageConfig.icon)} />
-                        </div>
-                        <div className="bg-card border border-border/70 rounded-xl p-3 flex-1 shadow-2xs space-y-1 hover:border-primary/40 transition-colors">
-                          <div className="flex items-center justify-between gap-2 flex-wrap">
-                            <div className="flex items-center gap-1.5 text-xs font-bold text-foreground">
-                              {entry.fromStage ? (
-                                <>
-                                  <span className="text-muted-foreground font-normal">{entry.fromStage}</span>
-                                  <span className="text-primary text-[10px]">&rarr;</span>
-                                  <span style={{ color: stageConfig.color }}>{entry.toStage}</span>
-                                </>
-                              ) : (
-                                <span style={{ color: stageConfig.color }}>{entry.toStage}</span>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              {(() => {
-                                const prevChronEvent = revArr[idx + 1];
-                                if (!prevChronEvent) return null;
-                                const diffMs = new Date(entry.timestamp).getTime() - new Date(prevChronEvent.timestamp).getTime();
-                                if (isNaN(diffMs) || diffMs < 0) return null;
-                                const daysSpent = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-                                const hoursSpent = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-                                return (
-                                  <span className="text-[9px] font-semibold text-muted-foreground bg-muted/70 border border-border/50 px-1.5 py-0.5 rounded flex items-center gap-1">
-                                    <i className="fa-solid fa-hourglass-half text-[7px] text-primary" />
-                                    <span>{daysSpent > 0 ? `${daysSpent}d ${hoursSpent}h` : `${hoursSpent || "<1"}h`} in {prevChronEvent.toStage}</span>
-                                  </span>
-                                );
-                              })()}
-                              <span className="text-[10px] font-mono text-muted-foreground flex items-center gap-1">
-                                <i className="fa-solid fa-clock text-[8px]" />
-                                {new Date(entry.timestamp).toLocaleString(undefined, {
-                                  month: "short",
-                                  day: "numeric",
-                                  hour: "2-digit",
-                                  minute: "2-digit",
-                                })}
-                              </span>
-                            </div>
-                          </div>
-                          {entry.notes && (
-                            <p className="text-xs text-muted-foreground bg-muted/40 p-2 rounded-lg border border-border/40 italic">
-                              &ldquo;{entry.notes}&rdquo;
-                            </p>
-                          )}
-                          <p className="text-[10px] text-muted-foreground pt-0.5">
-                            Recorded by: <strong className="text-foreground">{entry.changedByName || "System"}</strong>
-                          </p>
-                        </div>
-                      </div>
-                    );
-                  })
-                ) : (
-                  <div className="relative flex items-start gap-3">
-                    <div className="absolute -left-6 top-1 w-5 h-5 rounded-full border-2 border-primary bg-primary text-primary-foreground flex items-center justify-center text-[8px] z-10">
-                      <i className="fa-solid fa-flag-checkered" />
-                    </div>
-                    <div className="bg-card border border-border/70 rounded-xl p-3 flex-1 shadow-2xs space-y-1">
-                      <p className="text-xs font-bold text-foreground">Deal Initialized</p>
-                      <p className="text-xs text-muted-foreground">
-                        Starting stage: <strong>{historyDeal.stage}</strong>
-                      </p>
-                      <p className="text-[10px] text-muted-foreground flex items-center gap-1 pt-1">
-                        <i className="fa-solid fa-clock text-[8px]" />
-                        {historyDeal.createdAt ? new Date(historyDeal.createdAt).toLocaleDateString() : "Created recently"}
-                      </p>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Quick Log Activity / Timeline Note */}
-            <div className="p-3 bg-muted/40 rounded-xl border border-border/70 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
-                  <i className="fa-solid fa-pen-to-square text-primary text-[11px]" />
-                  <span>Log Activity / Note</span>
-                </span>
-                <span className="text-[10px] text-muted-foreground">Appends directly to deal timeline</span>
-              </div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <select
-                  value={logActivityType}
-                  onChange={(e) => setLogActivityType(e.target.value)}
-                  className="h-8 text-xs font-semibold rounded-lg border border-border bg-background px-2 text-foreground focus:outline-none"
-                >
-                  <option value="Meeting Held">Meeting Held</option>
-                  <option value="Phone Call">Phone Call</option>
-                  <option value="Email Sent">Email Sent</option>
-                  <option value="Requirement Update">Requirement Update</option>
-                  <option value="Internal Note">Internal Note</option>
-                </select>
+                <label className="block text-xs font-bold text-foreground mb-1.5">
+                  Deal Name <span className="text-rose-500">*</span>
+                </label>
                 <input
                   type="text"
-                  value={logActivityNote}
-                  onChange={(e) => setLogActivityNote(e.target.value)}
-                  placeholder="Add quick update or client debrief..."
-                  className="flex-1 min-w-[180px] h-8 text-xs px-2.5 rounded-lg border border-input bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      handleLogActivity();
-                    }
-                  }}
+                  required
+                  value={newDealForm.dealName}
+                  onChange={(e) => setNewDealForm({ ...newDealForm, dealName: e.target.value })}
+                  placeholder="e.g. Acme Enterprise Expansion"
+                  className="w-full h-9 px-3 rounded-xl border border-input bg-background focus:outline-none focus:ring-1 focus:ring-primary text-xs"
                 />
-                <Button
-                  type="button"
-                  size="sm"
-                  onClick={handleLogActivity}
-                  disabled={submittingActivity || !logActivityNote.trim()}
-                  className="h-8 px-3 text-xs font-bold gap-1.5 cursor-pointer"
-                >
-                  {submittingActivity ? (
-                    <i className="fa-solid fa-spinner fa-spin text-xs" />
-                  ) : (
-                    <i className="fa-solid fa-plus text-xs" />
-                  )}
-                  Log Note
-                </Button>
               </div>
-            </div>
 
-            <div className="pt-3 border-t border-border/60 flex items-center justify-end">
-              <Button type="button" size="sm" variant="outline" onClick={() => setHistoryDeal(null)}>
-                Close
-              </Button>
-            </div>
+              {/* Pipeline & Status Grid */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-foreground mb-1.5">
+                    Pipeline <span className="text-rose-500">*</span>
+                  </label>
+                  <select
+                    value={newDealForm.pipeline}
+                    onChange={(e) => setNewDealForm({ ...newDealForm, pipeline: e.target.value })}
+                    className="w-full h-9 px-3 rounded-xl border border-input bg-background focus:outline-none focus:ring-1 focus:ring-primary text-xs cursor-pointer"
+                  >
+                    <option value="Sales Pipeline">Sales Pipeline</option>
+                    <option value="Marketing Pipeline">Marketing Pipeline</option>
+                    <option value="Enterprise Pipeline">Enterprise Pipeline</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-foreground mb-1.5">
+                    Status <span className="text-rose-500">*</span>
+                  </label>
+                  <select
+                    value={newDealForm.stage}
+                    onChange={(e) => setNewDealForm({ ...newDealForm, stage: e.target.value })}
+                    className="w-full h-9 px-3 rounded-xl border border-input bg-background focus:outline-none focus:ring-1 focus:ring-primary text-xs cursor-pointer"
+                  >
+                    <option value="Qualify To Buy">Qualify To Buy</option>
+                    <option value="Contact Made">Contact Made</option>
+                    <option value="Presentation">Presentation</option>
+                    <option value="Proposal Made">Proposal Made</option>
+                    <option value="Appointment">Appointment</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Deal Value & Currency */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-foreground mb-1.5">
+                    Deal Value <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    value={newDealForm.dealValue}
+                    onChange={(e) => setNewDealForm({ ...newDealForm, dealValue: e.target.value })}
+                    placeholder="350000"
+                    className="w-full h-9 px-3 rounded-xl border border-input bg-background focus:outline-none focus:ring-1 focus:ring-primary text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-foreground mb-1.5">
+                    Currency <span className="text-rose-500">*</span>
+                  </label>
+                  <select
+                    value={newDealForm.currency}
+                    onChange={(e) => setNewDealForm({ ...newDealForm, currency: e.target.value })}
+                    className="w-full h-9 px-3 rounded-xl border border-input bg-background focus:outline-none focus:ring-1 focus:ring-primary text-xs cursor-pointer"
+                  >
+                    <option value="USD">USD ($)</option>
+                    <option value="EUR">EUR (€)</option>
+                    <option value="GBP">GBP (£)</option>
+                    <option value="INR">INR (₹)</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Client / Contact Account */}
+              <div>
+                <label className="block text-xs font-bold text-foreground mb-1.5">
+                  Contact / Account <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={newDealForm.clientAccount}
+                  onChange={(e) => setNewDealForm({ ...newDealForm, clientAccount: e.target.value })}
+                  placeholder="e.g. Howell, Tremblay and Rath"
+                  className="w-full h-9 px-3 rounded-xl border border-input bg-background focus:outline-none focus:ring-1 focus:ring-primary text-xs"
+                />
+              </div>
+
+              {/* Assignee & Dates */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-foreground mb-1.5">
+                    Assignee / Owner <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={newDealForm.owner}
+                    onChange={(e) => setNewDealForm({ ...newDealForm, owner: e.target.value })}
+                    placeholder="e.g. Darlee Robertson"
+                    className="w-full h-9 px-3 rounded-xl border border-input bg-background focus:outline-none focus:ring-1 focus:ring-primary text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-foreground mb-1.5">
+                    Expected Closing Date <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    value={newDealForm.expectedClose}
+                    onChange={(e) => setNewDealForm({ ...newDealForm, expectedClose: e.target.value })}
+                    className="w-full h-9 px-3 rounded-xl border border-input bg-background focus:outline-none focus:ring-1 focus:ring-primary text-xs"
+                  />
+                </div>
+              </div>
+
+              {/* Priority & Tag */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-foreground mb-1.5">Priority</label>
+                  <select
+                    value={newDealForm.priority}
+                    onChange={(e) => setNewDealForm({ ...newDealForm, priority: e.target.value })}
+                    className="w-full h-9 px-3 rounded-xl border border-input bg-background focus:outline-none focus:ring-1 focus:ring-primary text-xs cursor-pointer"
+                  >
+                    <option value="High">High</option>
+                    <option value="Medium">Medium</option>
+                    <option value="Low">Low</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-foreground mb-1.5">Tags</label>
+                  <select
+                    value={newDealForm.tag}
+                    onChange={(e) => setNewDealForm({ ...newDealForm, tag: e.target.value })}
+                    className="w-full h-9 px-3 rounded-xl border border-input bg-background focus:outline-none focus:ring-1 focus:ring-primary text-xs cursor-pointer"
+                  >
+                    <option value="Promotion">Promotion</option>
+                    <option value="Rated">Rated</option>
+                    <option value="Collab">Collab</option>
+                    <option value="Calls">Calls</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Description */}
+              <div>
+                <label className="block text-xs font-bold text-foreground mb-1.5">Description</label>
+                <textarea
+                  rows={3}
+                  value={newDealForm.description}
+                  onChange={(e) => setNewDealForm({ ...newDealForm, description: e.target.value })}
+                  placeholder="Additional notes about this deal..."
+                  className="w-full p-3 rounded-xl border border-input bg-background focus:outline-none focus:ring-1 focus:ring-primary text-xs"
+                />
+              </div>
+
+              {/* Submit Buttons */}
+              <div className="pt-4 border-t border-border/80 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setShowAddDealModal(false)}
+                  className="px-4 py-2 text-xs font-bold rounded-xl border border-border bg-card hover:bg-muted text-foreground transition-all cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 text-xs font-black rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 transition-all cursor-pointer shadow-xs"
+                >
+                  Save Deal
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

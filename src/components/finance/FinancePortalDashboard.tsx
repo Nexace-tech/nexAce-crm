@@ -11,6 +11,7 @@ import { SalesWorkdeskDashboard } from "@/components/operations/SalesWorkdeskDas
 import type { SalesDeal } from "@/components/operations/SalesWorkdeskDashboard";
 import { AdminInvoicesTab } from "@/components/settings/AdminInvoicesTab";
 import { ExternalFinanceOverview } from "./ExternalFinanceOverview";
+import InvoiceGridView from "./InvoiceGridView";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -412,9 +413,16 @@ export function FinancePortalDashboard({
         ))}
       </div>
 
-      {/* ── INVOICES TAB (Master Invoices) ── */}
+      {/* ── INVOICES TAB ── */}
       {activeTab === "invoices" && (
-        <AdminInvoicesTab showToast={showToast} scope={financeScope} />
+        <InvoiceGridView
+          invoices={activeInvoices}
+          loading={loadingInvoices}
+          scope={financeScope}
+          onNewInvoice={onNewInvoice}
+          onEditInvoice={onEditInvoice}
+          onDeleteInvoice={onDeleteInvoice}
+        />
       )}
 
       {/* ── EXPENSES TAB ── */}

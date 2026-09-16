@@ -17,6 +17,10 @@ import type { ProposalPreviewData } from "@/components/bd/ProposalPreviewModal";
 import SendProposalModal from "@/components/bd/SendProposalModal";
 import DealsDashboard from "@/components/bd/DealsDashboard";
 import { SalesExecutiveDashboard } from "@/components/bd/SalesExecutiveDashboard";
+import ExecutiveOverviewDashboard from "@/components/bd/ExecutiveOverviewDashboard";
+import LeadsDashboardView from "@/components/bd/LeadsDashboardView";
+import RevenueSummaryDashboard from "@/components/bd/RevenueSummaryDashboard";
+import AllSalesView from "@/components/bd/AllSalesView";
 
 // ─── Re-export Lead type for convenience ─────────────────────────────────────
 export type { Lead };
@@ -137,9 +141,20 @@ export default function BDPortalPage() {
   const { user: currentUser } = useAuth();
 
   // ── Tab State ──
-  const [activeTab, setActiveTab] = useState<"dashboard" | "leads">("dashboard");
-  const [leadsSubTab, setLeadsSubTab] = useState<"overview" | "all" | "deals" | "sales" | "proposals">("overview");
+  type BDTab = "dashboard" | "all" | "deals" | "sales" | "proposals";
+  const [activeTab, setActiveTabState] = useState<BDTab>("dashboard");
+  const setActiveTab = (tab: BDTab | "leads") => {
+    if (tab === "leads") setActiveTabState("all");
+    else setActiveTabState(tab);
+  };
+  const leadsSubTab = activeTab;
+  const setLeadsSubTab = (tab: BDTab) => setActiveTab(tab);
+  const [dashboardView, setDashboardView] = useState<"executive" | "analytics">("executive");
   const [leadsLayout, setLeadsLayout] = useState<"list" | "grid">("grid");
+  const [leadsSectionView, setLeadsSectionView] = useState<"dashboard" | "leads">("dashboard");
+  const [dealsSectionView, setDealsSectionView] = useState<"dashboard" | "deals">("dashboard");
+  const [salesSectionView, setSalesSectionView] = useState<"dashboard" | "sales">("dashboard");
+  const [salesOwnerNavFilter, setSalesOwnerNavFilter] = useState<string | undefined>(undefined);
   // Thread stage filter from SalesExecutiveDashboard into DealsDashboard
   const [dealStageNavFilter, setDealStageNavFilter] = useState<string | undefined>(undefined);
   // Track active conversion sources to automatically update status and route across lifecycle
@@ -816,18 +831,16 @@ export default function BDPortalPage() {
   // Navigation shortcuts from BD Dashboard into sub-views
   const navigateToDealStage = (stage?: string) => {
     setDealStageNavFilter(stage);
-    setActiveTab("leads");
-    setLeadsSubTab("deals");
+    setActiveTab("deals");
   };
 
   const navigateToProposals = () => {
-    setActiveTab("leads");
-    setLeadsSubTab("proposals");
+    setActiveTab("proposals");
   };
 
   const navigateToLeads = (statusFilter?: string) => {
-    setActiveTab("leads");
-    setLeadsSubTab("all");
+    setActiveTab("all");
+    setLeadsSectionView("leads");
     if (statusFilter) setLeadStatusFilter(statusFilter);
   };
 
@@ -1277,44 +1290,140 @@ export default function BDPortalPage() {
           <Button variant="outline" size="icon" onClick={() => { fetchDeals(); fetchLeads(); fetchProposals(); }} className="h-9 w-9 cursor-pointer shadow-2xs" title="Refresh">
             <i className={cn("fa-solid fa-arrows-rotate text-xs", (loadingDeals || loadingLeads || loadingProposals) && "fa-spin")} />
           </Button>
-          {/* Show contextual CTA based on current sub-tab */}
+          {/* Show contextual CTA based on current tab */}
           {(can("manageDeals") || isAdmin || isOPS) && (
             <>
-              {(activeTab === "leads" && (leadsSubTab === "all" || leadsSubTab === "overview")) && (
+              {activeTab === "all" && (
                 <Button onClick={() => handleNewLead()} size="sm" className="gap-2 font-bold cursor-pointer h-9 px-4 bg-primary hover:bg-primary/90 text-primary-foreground shadow-xs">
                   <i className="fa-solid fa-user-plus text-xs" /> New Lead
                 </Button>
               )}
-              {(activeTab === "dashboard" || (activeTab === "leads" && (leadsSubTab === "deals" || leadsSubTab === "sales" || leadsSubTab === "overview"))) && (
+              {(activeTab === "dashboard" || activeTab === "deals" || activeTab === "sales") && (
                 <Button onClick={() => handleNewDeal()} size="sm" className="gap-2 font-bold cursor-pointer h-9 px-4 bg-primary hover:bg-primary/90 text-primary-foreground shadow-xs">
                   <i className="fa-solid fa-plus text-xs" /> New Deal
                 </Button>
               )}
-              {activeTab === "leads" && leadsSubTab === "proposals" && (
+              {activeTab === "proposals" && (
                 <Button onClick={() => { setEditingProposal(null); setShowProposalModal(true); }} size="sm" className="gap-2 font-bold cursor-pointer h-9 px-4 bg-primary hover:bg-primary/90 text-primary-foreground shadow-xs">
                   <i className="fa-solid fa-file-plus text-xs" /> New Proposal
                 </Button>
               )}
-
             </>
           )}
         </div>
       </div>
 
-      {/* ── Tab Navigation ── */}
-      <div className="flex items-center gap-1 bg-muted/50 p-1 rounded-xl border border-border/60 w-fit">
-        {([
-          { key: "dashboard", label: "Dashboard", icon: "fa-chart-pie" },
-          { key: "leads", label: "Leads", icon: "fa-user-tag" },
-        ] as const).map(tab => (
-          <button key={tab.key} type="button" onClick={() => setActiveTab(tab.key)}
-            className={cn("flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer",
-              activeTab === tab.key ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
-            )}>
-            <i className={`fa-solid ${tab.icon} text-[11px]`} />{tab.label}
-            {tab.key === "leads" && <span className={cn("text-[10px] font-mono px-1.5 py-0.5 rounded-full", activeTab === "leads" ? "bg-white/20" : "bg-muted")}>{activeLeads.length}</span>}
+      {/* ── Top Navigation Bar: Unified BD Suite Control ── */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-1.5 bg-card/60 backdrop-blur-md rounded-2xl border border-border/80 shadow-xs">
+        <div className="flex items-center flex-wrap gap-1 p-0.5 bg-muted/40 rounded-xl border border-border/50">
+          <button
+            type="button"
+            onClick={() => setActiveTab("dashboard")}
+            className={cn(
+              "flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all duration-150 cursor-pointer",
+              activeTab === "dashboard"
+                ? "bg-primary text-primary-foreground shadow-sm scale-[1.02]"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+            )}
+          >
+            <i className="fa-solid fa-chart-pie text-[11px]" />
+            Overview
           </button>
-        ))}
+          <button
+            type="button"
+            onClick={() => setActiveTab("all")}
+            className={cn(
+              "flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all duration-150 cursor-pointer",
+              activeTab === "all"
+                ? "bg-primary text-primary-foreground shadow-sm scale-[1.02]"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+            )}
+          >
+            <i className="fa-solid fa-table-list text-[11px]" />
+            All Leads
+            <span className={cn(
+              "text-[10px] font-mono px-1.5 py-0.2 rounded-full font-bold",
+              activeTab === "all" ? "bg-primary-foreground/20 text-primary-foreground" : "bg-muted text-muted-foreground border border-border/60"
+            )}>
+              {activeLeads.length}
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setDealStageNavFilter(undefined);
+              setActiveTab("deals");
+            }}
+            className={cn(
+              "flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all duration-150 cursor-pointer",
+              activeTab === "deals"
+                ? "bg-primary text-primary-foreground shadow-sm scale-[1.02]"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+            )}
+          >
+            <i className="fa-solid fa-handshake text-[11px]" />
+            Deals
+            <span className={cn(
+              "text-[10px] font-mono px-1.5 py-0.2 rounded-full font-bold",
+              activeTab === "deals" ? "bg-primary-foreground/20 text-primary-foreground" : "bg-muted text-muted-foreground border border-border/60"
+            )}>
+              {deals.length}
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("sales")}
+            className={cn(
+              "flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all duration-150 cursor-pointer",
+              activeTab === "sales"
+                ? "bg-primary text-primary-foreground shadow-sm scale-[1.02]"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+            )}
+          >
+            <i className="fa-solid fa-chart-line text-[11px]" />
+            Sales
+            <span className={cn(
+              "text-[10px] font-mono px-2 py-0.2 rounded-full font-bold",
+              activeTab === "sales" ? "bg-primary-foreground/20 text-primary-foreground" : "bg-muted text-muted-foreground border border-border/60"
+            )}>
+              {totalClosedWonRevenue > 0 ? `$${formatUSD(totalClosedWonRevenue)}` : `${deals.length} deals`}
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("proposals")}
+            className={cn(
+              "flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all duration-150 cursor-pointer",
+              activeTab === "proposals"
+                ? "bg-primary text-primary-foreground shadow-sm scale-[1.02]"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+            )}
+          >
+            <i className="fa-solid fa-file-contract text-[11px]" />
+            Proposals
+            <span className={cn(
+              "text-[10px] font-mono px-1.5 py-0.2 rounded-full font-bold",
+              activeTab === "proposals" ? "bg-primary-foreground/20 text-primary-foreground" : "bg-muted text-muted-foreground border border-border/60"
+            )}>
+              {proposals.length}
+            </span>
+          </button>
+        </div>
+
+        <div className="flex items-center gap-2 px-2">
+          <span className="text-xs text-muted-foreground font-medium hidden sm:inline-flex items-center gap-1.5">
+            <i className="fa-solid fa-sparkles text-primary text-[10px]" />
+            {activeTab === "dashboard"
+              ? "Executive overview, revenue trends & velocity metrics"
+              : activeTab === "deals"
+              ? "Track sales deals, pipeline velocity & stage analytics"
+              : activeTab === "sales"
+              ? "Executive dashboard, rep performance & revenue forecasting"
+              : activeTab === "proposals"
+              ? "Manage client proposals & track real-time status"
+              : "Click any lead or KPI card to inspect full profile & activity"}
+          </span>
+        </div>
       </div>
 
       {/* ══════════════════════════════════════════════════════════ */}
@@ -2031,875 +2140,10 @@ export default function BDPortalPage() {
       )}
 
       {/* ══════════════════════════════════════════════════════════ */}
-      {/* LEADS TAB — reference: dreamstechnologies leads-dashboard  */}
+      {/* BD PIPELINE MODULES (Overview, All Leads, Deals, Sales, Proposals) */}
       {/* ══════════════════════════════════════════════════════════ */}
-      {activeTab === "leads" && (
+      {activeTab !== "dashboard" && (
         <div className="space-y-6">
-          {/* ── Global Interactive Lifecycle Stepper (Connected Flow Pipeline) ── */}
-          <div className="relative overflow-hidden bg-gradient-to-r from-card/95 via-card/85 to-card/95 backdrop-blur-xl border border-border/80 rounded-2xl p-4 shadow-sm">
-            {/* Ambient Background Accent */}
-            <div className="absolute -top-24 -right-24 w-64 h-64 bg-primary/5 rounded-full blur-3xl pointer-events-none" />
-            <div className="absolute -bottom-24 -left-24 w-64 h-64 bg-blue-500/5 rounded-full blur-3xl pointer-events-none" />
-
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 mb-3 border-b border-border/50">
-              <div className="flex items-center gap-2.5">
-                <span className="relative flex h-2.5 w-2.5">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
-                </span>
-                <h4 className="text-xs font-black uppercase tracking-wider text-foreground flex items-center gap-2">
-                  <span>Business Development Lifecycle Journey</span>
-                  <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">
-                    5-Stage Pipeline
-                  </span>
-                </h4>
-              </div>
-              <div className="flex items-center gap-2 text-[11px] text-muted-foreground font-medium">
-                <span className="hidden md:inline-flex items-center gap-1.5 bg-muted/40 px-2.5 py-1 rounded-lg border border-border/40 font-mono text-[10px]">
-                  <i className="fa-solid fa-circle-nodes text-primary text-[9px]" />
-                  <span>Pipeline: <strong>{formatDealsTotal(deals, totalPipelineVal)}</strong></span>
-                  <span className="text-border/80">•</span>
-                  <span>Win Rate: <strong className="text-emerald-500">{conversionRate}%</strong></span>
-                </span>
-                <span className="hidden sm:inline-block text-[11px] text-muted-foreground/80">
-                  Click any stage to filter &amp; navigate
-                </span>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-2.5 relative">
-              {/* Step 1: Leads */}
-              <button
-                type="button"
-                onClick={() => {
-                  setLeadStatusFilter("All");
-                  setLeadStageFilter("All");
-                  setLeadSearch("");
-                  setLeadsSubTab("all");
-                }}
-                className={cn(
-                  "relative p-3 rounded-xl border text-left transition-all duration-200 cursor-pointer group flex flex-col justify-between h-[88px] overflow-hidden",
-                  leadsSubTab === "all"
-                    ? "bg-blue-500/15 border-blue-500/60 shadow-xs ring-2 ring-blue-500/20"
-                    : "bg-muted/20 hover:bg-muted/50 border-border/70 hover:border-blue-500/40 hover:-translate-y-0.5 hover:shadow-xs"
-                )}
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-extrabold uppercase tracking-wider text-blue-600 dark:text-blue-400 flex items-center gap-1.5">
-                    <span className="w-4 h-4 rounded-md bg-blue-500/10 dark:bg-blue-500/20 flex items-center justify-center text-[9px] font-mono font-bold">1</span>
-                    <i className="fa-solid fa-user-tag text-[10px]" /> Leads
-                  </span>
-                  <span className="text-[10px] font-mono font-black bg-background/80 backdrop-blur-xs px-2 py-0.5 rounded-md text-foreground border border-border/70 shadow-2xs">
-                    {activeLeads.length}
-                  </span>
-                </div>
-                <div>
-                  <p className="text-sm font-black font-mono text-foreground tracking-tight truncate group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
-                    {formatLeadsTotal(activeLeads)}
-                  </p>
-                  <p className="text-[10px] text-muted-foreground truncate font-medium flex items-center justify-between">
-                    <span>Prospective Pool</span>
-                    <i className="fa-solid fa-chevron-right text-[8px] opacity-0 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all text-blue-500" />
-                  </p>
-                </div>
-              </button>
-
-              {/* Step 2: Deals */}
-              <button
-                type="button"
-                onClick={() => {
-                  setDealStageNavFilter(undefined);
-                  setLeadsSubTab("deals");
-                }}
-                className={cn(
-                  "relative p-3 rounded-xl border text-left transition-all duration-200 cursor-pointer group flex flex-col justify-between h-[88px] overflow-hidden",
-                  leadsSubTab === "deals" && !dealStageNavFilter
-                    ? "bg-indigo-500/15 border-indigo-500/60 shadow-xs ring-2 ring-indigo-500/20"
-                    : "bg-muted/20 hover:bg-muted/50 border-border/70 hover:border-indigo-500/40 hover:-translate-y-0.5 hover:shadow-xs"
-                )}
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-extrabold uppercase tracking-wider text-indigo-600 dark:text-indigo-400 flex items-center gap-1.5">
-                    <span className="w-4 h-4 rounded-md bg-indigo-500/10 dark:bg-indigo-500/20 flex items-center justify-center text-[9px] font-mono font-bold">2</span>
-                    <i className="fa-solid fa-handshake text-[10px]" /> Deals
-                  </span>
-                  <span className="text-[10px] font-mono font-black bg-background/80 backdrop-blur-xs px-2 py-0.5 rounded-md text-foreground border border-border/70 shadow-2xs">
-                    {deals.length}
-                  </span>
-                </div>
-                <div>
-                  <p className="text-sm font-black font-mono text-foreground tracking-tight truncate group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
-                    {formatDealsTotal(deals, totalPipelineVal)}
-                  </p>
-                  <p className="text-[10px] text-muted-foreground truncate font-medium flex items-center justify-between">
-                    <span>Active Pipeline</span>
-                    <i className="fa-solid fa-chevron-right text-[8px] opacity-0 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all text-indigo-500" />
-                  </p>
-                </div>
-              </button>
-
-              {/* Step 3: Proposals */}
-              <button
-                type="button"
-                onClick={() => setLeadsSubTab("proposals")}
-                className={cn(
-                  "relative p-3 rounded-xl border text-left transition-all duration-200 cursor-pointer group flex flex-col justify-between h-[88px] overflow-hidden",
-                  leadsSubTab === "proposals"
-                    ? "bg-purple-500/15 border-purple-500/60 shadow-xs ring-2 ring-purple-500/20"
-                    : "bg-muted/20 hover:bg-muted/50 border-border/70 hover:border-purple-500/40 hover:-translate-y-0.5 hover:shadow-xs"
-                )}
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-extrabold uppercase tracking-wider text-purple-600 dark:text-purple-400 flex items-center gap-1.5">
-                    <span className="w-4 h-4 rounded-md bg-purple-500/10 dark:bg-purple-500/20 flex items-center justify-center text-[9px] font-mono font-bold">3</span>
-                    <i className="fa-solid fa-file-contract text-[10px]" /> Quotes
-                  </span>
-                  <span className="text-[10px] font-mono font-black bg-background/80 backdrop-blur-xs px-2 py-0.5 rounded-md text-foreground border border-border/70 shadow-2xs">
-                    {proposals.length}
-                  </span>
-                </div>
-                <div>
-                  <p className="text-sm font-black font-mono text-foreground tracking-tight truncate group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors">
-                    {formatProposalsTotal(proposals)}
-                  </p>
-                  <p className="text-[10px] text-muted-foreground truncate font-medium flex items-center justify-between">
-                    <span>Proposals Sent</span>
-                    <i className="fa-solid fa-chevron-right text-[8px] opacity-0 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all text-purple-500" />
-                  </p>
-                </div>
-              </button>
-
-              {/* Step 4: Closed Won */}
-              <button
-                type="button"
-                onClick={() => {
-                  setDealStageNavFilter("Closed Won");
-                  setLeadsSubTab("deals");
-                }}
-                className={cn(
-                  "relative p-3 rounded-xl border text-left transition-all duration-200 cursor-pointer group flex flex-col justify-between h-[88px] overflow-hidden",
-                  leadsSubTab === "deals" && dealStageNavFilter === "Closed Won"
-                    ? "bg-emerald-500/15 border-emerald-500/60 shadow-xs ring-2 ring-emerald-500/20"
-                    : "bg-muted/20 hover:bg-muted/50 border-border/70 hover:border-emerald-500/40 hover:-translate-y-0.5 hover:shadow-xs"
-                )}
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
-                    <span className="w-4 h-4 rounded-md bg-emerald-500/10 dark:bg-emerald-500/20 flex items-center justify-center text-[9px] font-mono font-bold">4</span>
-                    <i className="fa-solid fa-trophy text-[10px]" /> Won
-                  </span>
-                  <span className="text-[10px] font-mono font-black bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 px-2 py-0.5 rounded-md border border-emerald-500/30 shadow-2xs">
-                    {wonDealsCount}
-                  </span>
-                </div>
-                <div>
-                  <p className="text-sm font-black font-mono text-emerald-600 dark:text-emerald-400 tracking-tight truncate">
-                    {formatDealsTotal(deals, totalClosedWonRevenue)}
-                  </p>
-                  <p className="text-[10px] text-muted-foreground truncate font-medium flex items-center justify-between">
-                    <span>{conversionRate}% Win Rate</span>
-                    <i className="fa-solid fa-chevron-right text-[8px] opacity-0 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all text-emerald-500" />
-                  </p>
-                </div>
-              </button>
-
-              {/* Step 5: Sales Reps & Quotas */}
-              <button
-                type="button"
-                onClick={() => setLeadsSubTab("sales")}
-                className={cn(
-                  "relative p-3 rounded-xl border text-left transition-all duration-200 cursor-pointer group flex flex-col justify-between h-[88px] col-span-2 md:col-span-1 overflow-hidden",
-                  leadsSubTab === "sales"
-                    ? "bg-amber-500/15 border-amber-500/60 shadow-xs ring-2 ring-amber-500/20"
-                    : "bg-muted/20 hover:bg-muted/50 border-border/70 hover:border-amber-500/40 hover:-translate-y-0.5 hover:shadow-xs"
-                )}
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-extrabold uppercase tracking-wider text-amber-600 dark:text-amber-400 flex items-center gap-1.5">
-                    <span className="w-4 h-4 rounded-md bg-amber-500/10 dark:bg-amber-500/20 flex items-center justify-center text-[9px] font-mono font-bold">5</span>
-                    <i className="fa-solid fa-chart-line text-[10px]" /> Executive
-                  </span>
-                  <span className="text-[10px] font-mono font-bold bg-background/80 backdrop-blur-xs px-2 py-0.5 rounded-md text-foreground border border-border/70 shadow-2xs">
-                    Quota
-                  </span>
-                </div>
-                <div>
-                  <p className="text-sm font-black font-mono text-amber-600 dark:text-amber-400 tracking-tight truncate">
-                    {formatDealsTotal(deals, totalClosedWonRevenue)}
-                  </p>
-                  <p className="text-[10px] text-muted-foreground truncate font-medium flex items-center justify-between">
-                    <span>Leaderboard &amp; Quotas</span>
-                    <i className="fa-solid fa-chevron-right text-[8px] opacity-0 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all text-amber-500" />
-                  </p>
-                </div>
-              </button>
-            </div>
-          </div>
-
-          {/* ── Sub-navigation: Sleek Executive Segmented Control ── */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-1.5 bg-card/60 backdrop-blur-md rounded-2xl border border-border/80 shadow-xs">
-            <div className="flex items-center flex-wrap gap-1 p-0.5 bg-muted/40 rounded-xl border border-border/50">
-              <button
-                type="button"
-                onClick={() => setLeadsSubTab("overview")}
-                className={cn(
-                  "flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all duration-150 cursor-pointer",
-                  leadsSubTab === "overview"
-                    ? "bg-primary text-primary-foreground shadow-sm scale-[1.02]"
-                    : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
-                )}
-              >
-                <i className="fa-solid fa-chart-pie text-[11px]" />
-                Overview
-              </button>
-              <button
-                type="button"
-                onClick={() => setLeadsSubTab("all")}
-                className={cn(
-                  "flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all duration-150 cursor-pointer",
-                  leadsSubTab === "all"
-                    ? "bg-primary text-primary-foreground shadow-sm scale-[1.02]"
-                    : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
-                )}
-              >
-                <i className="fa-solid fa-table-list text-[11px]" />
-                All Leads
-                <span className={cn(
-                  "text-[10px] font-mono px-1.5 py-0.2 rounded-full font-bold",
-                  leadsSubTab === "all" ? "bg-primary-foreground/20 text-primary-foreground" : "bg-muted text-muted-foreground border border-border/60"
-                )}>
-                  {activeLeads.length}
-                </span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setLeadsSubTab("deals")}
-                className={cn(
-                  "flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all duration-150 cursor-pointer",
-                  leadsSubTab === "deals"
-                    ? "bg-primary text-primary-foreground shadow-sm scale-[1.02]"
-                    : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
-                )}
-              >
-                <i className="fa-solid fa-handshake text-[11px]" />
-                Deals
-                <span className={cn(
-                  "text-[10px] font-mono px-1.5 py-0.2 rounded-full font-bold",
-                  leadsSubTab === "deals" ? "bg-primary-foreground/20 text-primary-foreground" : "bg-muted text-muted-foreground border border-border/60"
-                )}>
-                  {deals.length}
-                </span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setLeadsSubTab("sales")}
-                className={cn(
-                  "flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all duration-150 cursor-pointer",
-                  leadsSubTab === "sales"
-                    ? "bg-primary text-primary-foreground shadow-sm scale-[1.02]"
-                    : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
-                )}
-              >
-                <i className="fa-solid fa-chart-line text-[11px]" />
-                Sales
-                <span className={cn(
-                  "text-[10px] font-mono px-2 py-0.2 rounded-full font-bold",
-                  leadsSubTab === "sales" ? "bg-primary-foreground/20 text-primary-foreground" : "bg-muted text-muted-foreground border border-border/60"
-                )}>
-                  {totalClosedWonRevenue > 0 ? `$${formatUSD(totalClosedWonRevenue)}` : `${deals.length} deals`}
-                </span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setLeadsSubTab("proposals")}
-                className={cn(
-                  "flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all duration-150 cursor-pointer",
-                  leadsSubTab === "proposals"
-                    ? "bg-primary text-primary-foreground shadow-sm scale-[1.02]"
-                    : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
-                )}
-              >
-                <i className="fa-solid fa-file-contract text-[11px]" />
-                Proposals
-                <span className={cn(
-                  "text-[10px] font-mono px-1.5 py-0.2 rounded-full font-bold",
-                  leadsSubTab === "proposals" ? "bg-primary-foreground/20 text-primary-foreground" : "bg-muted text-muted-foreground border border-border/60"
-                )}>
-                  {proposals.length}
-                </span>
-              </button>
-            </div>
-
-            <div className="flex items-center gap-2 px-2">
-              <span className="text-xs text-muted-foreground font-medium hidden sm:inline-flex items-center gap-1.5">
-                <i className="fa-solid fa-sparkles text-primary text-[10px]" />
-                {leadsSubTab === "deals"
-                  ? "Track sales deals, pipeline velocity & stage analytics"
-                  : leadsSubTab === "sales"
-                  ? "Executive dashboard, rep performance & revenue forecasting"
-                  : leadsSubTab === "proposals"
-                  ? "Manage client proposals & track real-time status"
-                  : "Click any lead or KPI card to inspect full profile & activity"}
-              </span>
-            </div>
-          </div>
-
-          {/* ── SUB-VIEW 1: OVERVIEW DASHBOARD ── */}
-          {leadsSubTab === "overview" && (
-            <div className="space-y-6">
-              {/* ── Interactive KPI Summary Cards (Live Data with Real Rates) ── */}
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                {[
-                  {
-                    label: "Total Leads",
-                    value: activeLeads.length,
-                    badge: `${formatLeadsTotal(activeLeads)} Pool`,
-                    subtext: "Active leads in database",
-                    icon: "fa-users-viewfinder",
-                    color: "text-blue-500 dark:text-blue-400",
-                    bg: "bg-blue-500/10 dark:bg-blue-950/40",
-                    border: "border-blue-500/25",
-                    glow: "from-blue-500/10 via-transparent to-transparent",
-                    onClick: () => { setLeadStatusFilter("All"); setLeadStageFilter("All"); setLeadSearch(""); setLeadsSubTab("all"); },
-                    hint: "View All Leads",
-                  },
-                  {
-                    label: "Closed / Won Leads",
-                    value: activeLeads.filter(l => l.status === "Closed").length,
-                    badge: `${Math.round((activeLeads.filter(l => l.status === "Closed").length / (activeLeads.length || 1)) * 100)}% Won`,
-                    subtext: "Successfully converted",
-                    icon: "fa-circle-check",
-                    color: "text-emerald-500 dark:text-emerald-400",
-                    bg: "bg-emerald-500/10 dark:bg-emerald-950/40",
-                    border: "border-emerald-500/25",
-                    glow: "from-emerald-500/10 via-transparent to-transparent",
-                    onClick: () => { setLeadStatusFilter("Closed"); setLeadStageFilter("All"); setLeadSearch(""); setLeadsSubTab("all"); },
-                    hint: "Filter Closed",
-                  },
-                  {
-                    label: "Contacted & Reached",
-                    value: activeLeads.filter(l => l.status === "Contacted").length,
-                    badge: `${activeLeads.filter(l => l.status === "Contacted").length}/${activeLeads.length} Reached`,
-                    subtext: "Direct outreach in motion",
-                    icon: "fa-headset",
-                    color: "text-amber-500 dark:text-amber-400",
-                    bg: "bg-amber-500/10 dark:bg-amber-950/40",
-                    border: "border-amber-500/25",
-                    glow: "from-amber-500/10 via-transparent to-transparent",
-                    onClick: () => { setLeadStatusFilter("Contacted"); setLeadStageFilter("All"); setLeadSearch(""); setLeadsSubTab("all"); },
-                    hint: "Filter Contacted",
-                  },
-                  {
-                    label: "In Active Pipeline",
-                    value: activeLeads.filter(l => l.stage === "Inpipeline").length,
-                    badge: `${Math.round((activeLeads.filter(l => l.stage === "Inpipeline").length / (activeLeads.length || 1)) * 100)}% Velocity`,
-                    subtext: "Advancing to deal stage",
-                    icon: "fa-filter-circle-dollar",
-                    color: "text-violet-500 dark:text-violet-400",
-                    bg: "bg-violet-500/10 dark:bg-violet-950/40",
-                    border: "border-violet-500/25",
-                    glow: "from-violet-500/10 via-transparent to-transparent",
-                    onClick: () => { setLeadStageFilter("Inpipeline"); setLeadStatusFilter("All"); setLeadSearch(""); setLeadsSubTab("all"); },
-                    hint: "Filter In Pipeline",
-                  },
-                ].map((kpi, i) => (
-                  <button
-                    key={i}
-                    type="button"
-                    onClick={kpi.onClick}
-                    className={cn(
-                      "relative overflow-hidden bg-card hover:bg-muted/30 border border-border/80 hover:border-primary/50 rounded-2xl p-5 shadow-xs hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 text-left group cursor-pointer flex flex-col justify-between"
-                    )}
-                    title={`Click to jump to All Leads (${kpi.hint})`}
-                  >
-                    {/* Top ambient highlight */}
-                    <div className={cn("absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r", kpi.glow)} />
-
-                    <div>
-                      <div className="flex items-center justify-between mb-3">
-                        <div className={cn("w-11 h-11 rounded-xl flex items-center justify-center border transition-all duration-200 group-hover:scale-110 shadow-2xs", kpi.bg, kpi.border)}>
-                          <i className={`fa-solid ${kpi.icon} ${kpi.color} text-lg`} />
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <span className="text-[11px] font-mono font-bold text-foreground bg-muted/60 border border-border/60 px-2 py-0.5 rounded-full shadow-2xs">
-                            {kpi.badge}
-                          </span>
-                        </div>
-                      </div>
-                      <p className="text-xs font-bold text-muted-foreground group-hover:text-foreground transition-colors">{kpi.label}</p>
-                      <p className="text-2xl font-black text-foreground font-mono mt-1 tracking-tight">{kpi.value}</p>
-                    </div>
-
-                    <div className="pt-3 mt-3 border-t border-border/40 flex items-center justify-between text-[11px]">
-                      <span className="text-muted-foreground truncate">{kpi.subtext}</span>
-                      <span className="font-bold text-primary opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 shrink-0 ml-1">
-                        Filter <i className="fa-solid fa-arrow-right text-[9px] group-hover:translate-x-0.5 transition-transform" />
-                      </span>
-                    </div>
-                  </button>
-                ))}
-              </div>
-
-              {/* ── Cross-Module Quick Access Command Hub ── */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div
-                  onClick={() => setLeadsSubTab("all")}
-                  className="relative overflow-hidden bg-gradient-to-br from-blue-500/10 via-card to-card border border-blue-500/30 hover:border-blue-500/60 rounded-2xl p-4 flex flex-col justify-between hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 cursor-pointer group"
-                >
-                  <div className="flex items-start justify-between gap-3 mb-2">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-blue-500/15 border border-blue-500/30 text-blue-600 dark:text-blue-400 flex items-center justify-center text-base shrink-0 group-hover:scale-105 transition-transform">
-                        <i className="fa-solid fa-table-list" />
-                      </div>
-                      <div>
-                        <p className="text-xs font-black text-foreground group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">Leads Directory</p>
-                        <p className="text-[11px] text-muted-foreground font-medium">{activeLeads.length} leads in database</p>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="pt-2.5 mt-1 border-t border-border/40 flex items-center justify-between">
-                    <span className="text-[10px] font-mono text-muted-foreground">Status &amp; contact logs</span>
-                    <span className="text-xs font-bold text-blue-600 dark:text-blue-400 flex items-center gap-1 group-hover:translate-x-1 transition-transform">
-                      Explore <i className="fa-solid fa-arrow-right text-[10px]" />
-                    </span>
-                  </div>
-                </div>
-
-                <div
-                  onClick={() => setLeadsSubTab("deals")}
-                  className="relative overflow-hidden bg-gradient-to-br from-emerald-500/10 via-card to-card border border-emerald-500/30 hover:border-emerald-500/60 rounded-2xl p-4 flex flex-col justify-between hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 cursor-pointer group"
-                >
-                  <div className="flex items-start justify-between gap-3 mb-2">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-base shrink-0 group-hover:scale-105 transition-transform">
-                        <i className="fa-solid fa-handshake" />
-                      </div>
-                      <div>
-                        <p className="text-xs font-black text-foreground group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">Sales Deals Pipeline</p>
-                        <p className="text-[11px] text-muted-foreground font-medium">{deals.length} deals active</p>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="pt-2.5 mt-1 border-t border-border/40 flex items-center justify-between">
-                    <span className="text-[10px] font-mono text-muted-foreground font-bold text-emerald-600 dark:text-emerald-400">{formatDealsTotal(deals, totalPipelineVal)} in motion</span>
-                    <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1 group-hover:translate-x-1 transition-transform">
-                      Deals <i className="fa-solid fa-arrow-right text-[10px]" />
-                    </span>
-                  </div>
-                </div>
-
-                <div
-                  onClick={() => setLeadsSubTab("sales")}
-                  className="relative overflow-hidden bg-gradient-to-br from-amber-500/10 via-card to-card border border-amber-500/30 hover:border-amber-500/60 rounded-2xl p-4 flex flex-col justify-between hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 cursor-pointer group"
-                >
-                  <div className="flex items-start justify-between gap-3 mb-2">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-600 dark:text-amber-400 flex items-center justify-center text-base shrink-0 group-hover:scale-105 transition-transform">
-                        <i className="fa-solid fa-chart-line" />
-                      </div>
-                      <div>
-                        <p className="text-xs font-black text-foreground group-hover:text-amber-600 dark:group-hover:text-amber-400 transition-colors">Executive Sales Hub</p>
-                        <p className="text-[11px] text-muted-foreground font-medium">Rep velocity &amp; quotas</p>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="pt-2.5 mt-1 border-t border-border/40 flex items-center justify-between">
-                    <span className="text-[10px] font-mono text-muted-foreground">{conversionRate}% win rate</span>
-                    <span className="text-xs font-bold text-amber-600 dark:text-amber-400 flex items-center gap-1 group-hover:translate-x-1 transition-transform">
-                      Sales <i className="fa-solid fa-arrow-right text-[10px]" />
-                    </span>
-                  </div>
-                </div>
-
-                <div
-                  onClick={() => setLeadsSubTab("proposals")}
-                  className="relative overflow-hidden bg-gradient-to-br from-violet-500/10 via-card to-card border border-violet-500/30 hover:border-violet-500/60 rounded-2xl p-4 flex flex-col justify-between hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 cursor-pointer group"
-                >
-                  <div className="flex items-start justify-between gap-3 mb-2">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-violet-500/15 border border-violet-500/30 text-violet-600 dark:text-violet-400 flex items-center justify-center text-base shrink-0 group-hover:scale-105 transition-transform">
-                        <i className="fa-solid fa-file-contract" />
-                      </div>
-                      <div>
-                        <p className="text-xs font-black text-foreground group-hover:text-violet-600 dark:group-hover:text-violet-400 transition-colors">Client Proposals</p>
-                        <p className="text-[11px] text-muted-foreground font-medium">{proposals.length} active quotes</p>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="pt-2.5 mt-1 border-t border-border/40 flex items-center justify-between">
-                    <span className="text-[10px] font-mono text-muted-foreground font-bold text-violet-600 dark:text-violet-400">{formatProposalsTotal(proposals)} total</span>
-                    <span className="text-xs font-bold text-violet-600 dark:text-violet-400 flex items-center gap-1 group-hover:translate-x-1 transition-transform">
-                      Proposals <i className="fa-solid fa-arrow-right text-[10px]" />
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* ── Executive Conversion Funnel (Cross-Pipeline Velocity) ── */}
-              <div className="bg-card border border-border/80 rounded-2xl p-5 shadow-xs">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-4 border-b border-border/60">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                      <h2 className="text-sm font-extrabold text-foreground tracking-tight">Full Lifecycle Conversion Funnel</h2>
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-0.5">Click any stage to filter directory or jump to pipeline modules</p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-[11px] font-semibold text-muted-foreground bg-muted/50 px-2.5 py-1 rounded-md">
-                      Overall Win Rate: <strong className="text-emerald-600 dark:text-emerald-400 font-mono font-bold">{conversionRate}%</strong>
-                    </span>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 pt-4">
-                  {[
-                    {
-                      step: "01",
-                      title: "1. Leads Generated",
-                      count: activeLeads.length || demoLeads.length,
-                      subtext: "Total in BD pool",
-                      icon: "fa-user-tag",
-                      color: "text-blue-500",
-                      bg: "bg-blue-500/10 dark:bg-blue-950/30",
-                      border: "border-blue-500/20 hover:border-blue-500/60",
-                      action: () => { setLeadStatusFilter("All"); setLeadStageFilter("All"); setLeadSearch(""); setLeadsSubTab("all"); },
-                      actionLabel: "View All Leads",
-                    },
-                    {
-                      step: "02",
-                      title: "2. Qualified / In Pipeline",
-                      count: activeLeads.filter(l => l.status === "Contacted" || l.stage === "Inpipeline" || l.status === "Closed").length,
-                      subtext: "Nurtured prospects",
-                      icon: "fa-filter-circle-dollar",
-                      color: "text-violet-500",
-                      bg: "bg-violet-500/10 dark:bg-violet-950/30",
-                      border: "border-violet-500/20 hover:border-violet-500/60",
-                      action: () => { setLeadStageFilter("Inpipeline"); setLeadStatusFilter("All"); setLeadSearch(""); setLeadsSubTab("all"); },
-                      actionLabel: "Filter In-Pipeline",
-                    },
-                    {
-                      step: "03",
-                      title: "3. Deals Negotiating",
-                      count: deals.length,
-                      subtext: `${formatDealsTotal(deals)} pipeline`,
-                      icon: "fa-handshake",
-                      color: "text-amber-500",
-                      bg: "bg-amber-500/10 dark:bg-amber-950/30",
-                      border: "border-amber-500/20 hover:border-amber-500/60",
-                      action: () => { setDealStageNavFilter("Negotiation"); setLeadsSubTab("deals"); },
-                      actionLabel: "Open Negotiating Deals",
-                    },
-                    {
-                      step: "04",
-                      title: "4. Proposals Active",
-                      count: proposals.length,
-                      subtext: `${formatProposalsTotal(proposals)} value`,
-                      icon: "fa-file-contract",
-                      color: "text-sky-500",
-                      bg: "bg-sky-500/10 dark:bg-sky-950/30",
-                      border: "border-sky-500/20 hover:border-sky-500/60",
-                      action: () => { setLeadsSubTab("proposals"); },
-                      actionLabel: "Open Proposals",
-                    },
-                    {
-                      step: "05",
-                      title: "5. Closed Won Revenue",
-                      count: wonDealsCount,
-                      subtext: `${formatDealsTotal(deals.filter(d => d.stage === "Closed Won"))} closed`,
-                      icon: "fa-circle-check",
-                      color: "text-emerald-500",
-                      bg: "bg-emerald-500/10 dark:bg-emerald-950/30",
-                      border: "border-emerald-500/20 hover:border-emerald-500/60",
-                      action: () => { setDealStageNavFilter("Closed Won"); setLeadsSubTab("deals"); },
-                      actionLabel: "Review Won Deals",
-                    },
-
-                  ].map((f, idx) => (
-                    <div
-                      key={idx}
-                      onClick={f.action}
-                      className={cn(
-                        "relative p-3.5 rounded-xl border bg-card hover:bg-muted/30 transition-all cursor-pointer group flex flex-col justify-between shadow-2xs hover:shadow-xs",
-                        f.border
-                      )}
-                    >
-                      <div>
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-[10px] font-mono font-black text-muted-foreground/60 tracking-wider uppercase">Stage {f.step}</span>
-                          <div className={cn("w-7 h-7 rounded-lg flex items-center justify-center text-xs", f.bg, f.color)}>
-                            <i className={`fa-solid ${f.icon}`} />
-                          </div>
-                        </div>
-                        <p className="text-xs font-bold text-foreground group-hover:text-primary transition-colors">{f.title}</p>
-                        <p className="text-xl font-extrabold text-foreground font-mono mt-1">{f.count}</p>
-                        <p className="text-[11px] text-muted-foreground font-medium truncate">{f.subtext}</p>
-                      </div>
-                      <div className="pt-3 mt-2 border-t border-border/40 flex items-center justify-between text-[10px] font-bold text-primary opacity-75 group-hover:opacity-100 transition-opacity">
-                        <span>{f.actionLabel}</span>
-                        <i className="fa-solid fa-chevron-right text-[8px] group-hover:translate-x-0.5 transition-transform" />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* ── Row 1: Recently Created Leads Table + Leads By Stage Donut ── */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-
-                {/* Recently Created Leads */}
-                <div className="bg-card border border-border/80 rounded-2xl shadow-xs overflow-hidden flex flex-col justify-between">
-                  <div>
-                    <div className="flex items-center justify-between p-5 border-b border-border/60">
-                      <div>
-                        <h2 className="text-base font-extrabold text-foreground tracking-tight">Recently Created Leads</h2>
-                        <p className="text-xs text-muted-foreground mt-0.5">Click any row to open lead component</p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="relative">
-                          <button type="button" onClick={() => setShowLeadsTimeDropdown(!showLeadsTimeDropdown)} className="flex items-center gap-1.5 bg-muted/40 hover:bg-muted/70 px-3 py-1.5 rounded-lg border border-border/60 text-xs font-semibold text-foreground transition-colors cursor-pointer">
-                            <span>{leadsTimeFilter}</span><i className="fa-solid fa-chevron-down text-[10px] text-muted-foreground" />
-                          </button>
-                          {showLeadsTimeDropdown && (
-                            <div className="absolute right-0 mt-1 w-36 bg-card border border-border rounded-lg shadow-lg py-1 z-20">
-                              {["Last 7 days", "Last 30 days", "Last 3 months", "All time"].map(t => (
-                                <button key={t} type="button" onClick={() => { setLeadsTimeFilter(t); setShowLeadsTimeDropdown(false); }} className={cn("w-full text-left px-3 py-1.5 text-xs transition-colors cursor-pointer", leadsTimeFilter === t ? "bg-primary/10 text-primary font-bold" : "hover:bg-muted/50 text-foreground")}>{t}</button>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => setLeadsSubTab("all")}
-                          className="text-xs font-bold text-primary hover:underline flex items-center gap-1 cursor-pointer pl-1"
-                        >
-                          All <i className="fa-solid fa-arrow-right text-[10px]" />
-                        </button>
-                      </div>
-                    </div>
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-xs">
-                        <thead>
-                          <tr className="border-b border-border/50 bg-muted/30">
-                            <th className="text-left py-3 px-5 font-bold text-muted-foreground uppercase tracking-wide text-[11px]">Lead Name</th>
-                            <th className="text-left py-3 px-3 font-bold text-muted-foreground uppercase tracking-wide text-[11px]">Company Name</th>
-                            <th className="text-left py-3 px-3 font-bold text-muted-foreground uppercase tracking-wide text-[11px]">Phone</th>
-                            <th className="text-left py-3 px-3 font-bold text-muted-foreground uppercase tracking-wide text-[11px]">Status</th>
-                            <th className="py-3 px-3 text-right" />
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-border/40">
-                          {(leads.length > 0 ? leads : demoLeads).slice(0, 7).map((lead, idx) => {
-                            const sc = STATUS_CONFIG[lead.status] || STATUS_CONFIG["New"];
-                            const colorIdx = lead.companyName.charCodeAt(0) % COMPANY_COLORS.length;
-                            const initials = lead.companyName.split(" ").map(w => w[0]).slice(0, 2).join("").toUpperCase();
-                            return (
-                              <tr
-                                key={lead._id || idx}
-                                onClick={() => handleOpenLead(lead)}
-                                className="hover:bg-muted/40 transition-colors cursor-pointer group"
-                              >
-                                <td className="py-3.5 px-5 font-semibold text-foreground group-hover:text-primary transition-colors flex items-center gap-2">
-                                  <span>{lead.leadName}</span>
-                                  <i className="fa-solid fa-arrow-up-right-from-square text-[9px] text-muted-foreground/50 opacity-0 group-hover:opacity-100 transition-opacity" />
-                                </td>
-                                <td className="py-3.5 px-3">
-                                  <div className="flex items-center gap-2.5">
-                                    <div className={cn("w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-[10px] shrink-0", COMPANY_COLORS[colorIdx])}>{initials}</div>
-                                    <span className="font-semibold text-foreground text-xs">{lead.companyName}</span>
-                                  </div>
-                                </td>
-                                <td className="py-3.5 px-3 text-muted-foreground font-mono">{lead.phone || "—"}</td>
-                                <td className="py-3.5 px-3">
-                                  <span className={cn("inline-block px-3 py-1 rounded-full text-[11px] font-bold", sc.cls)}>{sc.label}</span>
-                                </td>
-                                <td className="py-3.5 px-3 text-right" onClick={e => e.stopPropagation()}>
-                                  <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <button
-                                      type="button"
-                                      onClick={() => handleConvertToDeal(lead)}
-                                      className="w-7 h-7 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 flex items-center justify-center transition-colors cursor-pointer"
-                                      title="Convert to Sales Deal"
-                                    >
-                                      <i className="fa-solid fa-handshake text-[10px]" />
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => handleConvertToProposalFromLead(lead)}
-                                      className="w-7 h-7 rounded-lg bg-violet-500/10 hover:bg-violet-500/20 text-violet-600 dark:text-violet-400 border border-violet-500/30 flex items-center justify-center transition-colors cursor-pointer"
-                                      title="Create Client Proposal"
-                                    >
-                                      <i className="fa-solid fa-file-contract text-[10px]" />
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => handleOpenLead(lead)}
-                                      className="w-7 h-7 rounded-lg border border-border flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors cursor-pointer"
-                                      title="View Lead Profile"
-                                    >
-                                      <i className="fa-solid fa-eye text-[10px]" />
-                                    </button>
-                                  </div>
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                  <div className="p-3 bg-muted/20 border-t border-border/40 text-center">
-                    <button
-                      type="button"
-                      onClick={() => setLeadsSubTab("all")}
-                      className="text-xs font-semibold text-primary hover:underline cursor-pointer"
-                    >
-                      View all {activeLeads.length} leads in database &rarr;
-                    </button>
-                  </div>
-                </div>
-
-                {/* Leads By Stage — Donut Chart */}
-                <div className="bg-card border border-border/80 rounded-2xl shadow-xs p-5 flex flex-col justify-between">
-                  <div className="flex items-center justify-between mb-5">
-                    <div>
-                      <h2 className="text-base font-extrabold text-foreground tracking-tight">Leads By Stage</h2>
-                      <p className="text-xs text-muted-foreground mt-0.5">Click any stage to filter in All Leads</p>
-                    </div>
-                    <div className="relative">
-                      <button type="button" onClick={() => setShowStageTimeDropdown(!showStageTimeDropdown)} className="flex items-center gap-1.5 bg-muted/40 hover:bg-muted/70 px-3 py-1.5 rounded-lg border border-border/60 text-xs font-semibold text-foreground transition-colors cursor-pointer">
-                        <span>{stageTimeFilter}</span><i className="fa-solid fa-chevron-down text-[10px] text-muted-foreground" />
-                      </button>
-                      {showStageTimeDropdown && (
-                        <div className="absolute right-0 mt-1 w-36 bg-card border border-border rounded-lg shadow-lg py-1 z-20">
-                          {["Last 7 Days", "Last 30 Days", "Last 3 Months", "All Time"].map(t => (
-                            <button key={t} type="button" onClick={() => { setStageTimeFilter(t); setShowStageTimeDropdown(false); }} className={cn("w-full text-left px-3 py-1.5 text-xs transition-colors cursor-pointer", stageTimeFilter === t ? "bg-primary/10 text-primary font-bold" : "hover:bg-muted/50 text-foreground")}>{t}</button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* SVG Pie Chart */}
-                  <div className="flex flex-col items-center gap-6 my-auto">
-                    <div className="relative">
-                      <svg viewBox="0 0 240 240" className="w-52 h-52">
-                        {(() => {
-                          const stages = Object.entries(STAGE_CONFIG);
-                          const total = stages.reduce((s, [, v]) => s + v.pct, 0);
-                          let cumulative = 0;
-                          return stages.map(([name, cfg], i) => {
-                            const pct = cfg.pct / total;
-                            const startAngle = cumulative * 2 * Math.PI - Math.PI / 2;
-                            cumulative += pct;
-                            const endAngle = cumulative * 2 * Math.PI - Math.PI / 2;
-                            const cx = 120, cy = 120, r = 100;
-                            const x1 = cx + r * Math.cos(startAngle), y1 = cy + r * Math.sin(startAngle);
-                            const x2 = cx + r * Math.cos(endAngle), y2 = cy + r * Math.sin(endAngle);
-                            const largeArc = pct > 0.5 ? 1 : 0;
-                            return (
-                              <path
-                                key={name}
-                                d={`M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 ${largeArc} 1 ${x2} ${y2} Z`}
-                                fill={cfg.color}
-                                stroke="white"
-                                strokeWidth="3"
-                                onClick={() => { setLeadStageFilter(name); setLeadStatusFilter("All"); setLeadSearch(""); setLeadsSubTab("all"); }}
-                                className="hover:opacity-80 transition-opacity cursor-pointer"
-                              >
-                                <title>{`${name}: ${stageCounts[name] || 0} leads (Click to filter)`}</title>
-                              </path>
-                            );
-                          });
-                        })()}
-                        <circle cx="120" cy="120" r="55" fill="var(--card)" />
-                        <text x="120" y="115" textAnchor="middle" className="text-[11px] font-bold fill-muted-foreground">Total</text>
-                        <text x="120" y="133" textAnchor="middle" className="text-xl font-extrabold fill-foreground font-mono">{totalLeads}</text>
-                      </svg>
-                    </div>
-
-                    {/* Legend */}
-                    <div className="grid grid-cols-2 gap-x-8 gap-y-3 w-full">
-                      {Object.entries(STAGE_CONFIG).map(([name, cfg]) => {
-                        const count = stageCounts[name] || 0;
-                        const pct = Math.round((count / totalLeads) * 100) || cfg.pct;
-                        return (
-                          <button
-                            key={name}
-                            type="button"
-                            onClick={() => { setLeadStageFilter(name); setLeadStatusFilter("All"); setLeadSearch(""); setLeadsSubTab("all"); }}
-                            className="flex items-center gap-2.5 hover:bg-muted/40 p-1.5 rounded-lg transition-colors text-left cursor-pointer group"
-                            title={`Filter All Leads by stage "${name}"`}
-                          >
-                            <span className="w-3 h-3 rounded-full shrink-0 group-hover:scale-125 transition-transform" style={{ backgroundColor: cfg.color }} />
-                            <div className="min-w-0 flex-1">
-                              <p className="text-xs font-semibold text-foreground truncate group-hover:text-primary transition-colors">{name}</p>
-                              <p className="text-[11px] text-muted-foreground">{pct}% ({count})</p>
-                            </div>
-                            <i className="fa-solid fa-arrow-right text-[9px] text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* ── Row 2: Leads Growth Spline Chart ── */}
-              <div className="bg-card border border-border/80 rounded-2xl p-6 shadow-xs">
-                <div className="flex items-center justify-between pb-4">
-                  <div>
-                    <h2 className="text-base font-extrabold text-foreground tracking-tight">Leads Progression by Stage</h2>
-                    <p className="text-xs text-muted-foreground mt-0.5">Pipeline volume and touchpoint progression</p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="relative">
-                      <button type="button" onClick={() => setShowPipelineDropdown(!showPipelineDropdown)} className="flex items-center gap-1.5 bg-muted/40 hover:bg-muted/70 px-3 py-1.5 rounded-lg border border-border/60 text-xs font-semibold text-foreground transition-colors cursor-pointer">
-                        <span>{pipelineFilter}</span><i className="fa-solid fa-chevron-down text-[10px] text-muted-foreground" />
-                      </button>
-                      {showPipelineDropdown && (
-                        <div className="absolute right-0 mt-1 w-40 bg-card border border-border rounded-lg shadow-lg py-1 z-20">
-                          {["Sales Pipeline", "BD Pipeline", "All Leads"].map(t => (
-                            <button key={t} type="button" onClick={() => { setPipelineFilter(t); setShowPipelineDropdown(false); }} className={cn("w-full text-left px-3 py-1.5 text-xs transition-colors cursor-pointer", pipelineFilter === t ? "bg-primary/10 text-primary font-bold" : "hover:bg-muted/50 text-foreground")}>{t}</button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                    <div className="relative">
-                      <button type="button" onClick={() => setShowStageTimeDropdown(v => !v)} className="flex items-center gap-1.5 bg-muted/40 hover:bg-muted/70 px-3 py-1.5 rounded-lg border border-border/60 text-xs font-semibold text-foreground transition-colors cursor-pointer">
-                        <span>{stageTimeFilter}</span><i className="fa-solid fa-chevron-down text-[10px] text-muted-foreground" />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-                <div className="relative pt-2">
-                  <svg viewBox="0 0 1000 220" className="w-full h-56 overflow-visible">
-                    <defs>
-                      <linearGradient id="leadsGrowthGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#8B5CF6" stopOpacity="0.35" />
-                        <stop offset="100%" stopColor="#8B5CF6" stopOpacity="0.02" />
-                      </linearGradient>
-                    </defs>
-                    {[{ label: "6K", y: 20 }, { label: "5K", y: 55 }, { label: "4K", y: 90 }, { label: "3K", y: 125 }, { label: "2K", y: 160 }, { label: "1K", y: 190 }].map((g, i) => (
-                      <g key={i}>
-                        <text x="0" y={g.y + 4} className="text-[11px] font-semibold fill-muted-foreground font-mono">{g.label}</text>
-                        <line x1="35" y1={g.y} x2="1000" y2={g.y} stroke="currentColor" strokeDasharray="4 4" className="text-border/50" />
-                      </g>
-                    ))}
-                    <path d={`M 50 160 C 150 130, 250 150, 300 130 C 350 110, 400 90, 480 80 C 560 70, 580 100, 640 90 C 700 80, 730 50, 790 45 C 830 40, 880 60, 950 55 L 950 200 L 50 200 Z`} fill="url(#leadsGrowthGrad)" />
-                    <path d={`M 50 160 C 150 130, 250 150, 300 130 C 350 110, 400 90, 480 80 C 560 70, 580 100, 640 90 C 700 80, 730 50, 790 45 C 830 40, 880 60, 950 55`} fill="none" stroke="#8B5CF6" strokeWidth="3" strokeLinecap="round" />
-                    {["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"].map((m, i) => {
-                      const x = 50 + (i / 11) * 900;
-                      return <text key={i} x={x} y="215" textAnchor="middle" className="text-[10px] font-semibold fill-muted-foreground">{m}</text>;
-                    })}
-                    {[{ x: 50, y: 160 }, { x: 200, y: 140 }, { x: 300, y: 130 }, { x: 480, y: 80 }, { x: 640, y: 90 }, { x: 790, y: 45 }, { x: 950, y: 55 }].map((pt, i) => (
-                      <circle key={i} cx={pt.x} cy={pt.y} r="4" fill="#8B5CF6" stroke="white" strokeWidth="2" className="cursor-pointer hover:r-6 transition-all" />
-                    ))}
-                  </svg>
-                </div>
-              </div>
-            </div>
-          )}
 
           {/* ── SUB-VIEW 3: PROPOSALS GRID & LIST ── */}
           {leadsSubTab === "proposals" && (() => {
@@ -3517,85 +2761,341 @@ export default function BDPortalPage() {
 
           {/* ── SUB-VIEW: DEALS DASHBOARD & ANALYTICS ── */}
           {leadsSubTab === "deals" && (
-            <DealsDashboard
-              deals={deals}
-              loading={loadingDeals}
-              leads={activeLeads}
-              proposals={proposals}
-              onNewDeal={handleNewDeal}
-              onEditDeal={handleEditDeal}
-              onDeleteDeal={(id, name) => setDeleteTarget({ type: "deal", id, name })}
-              onRefresh={fetchDeals}
-              onStageChange={handleDealStageChange}
-              onGenerateInvoice={handleGenerateInvoiceFromDeal}
-              initialStageFilter={dealStageNavFilter}
-              onClearStageFilter={() => setDealStageNavFilter(undefined)}
-              onViewLead={(clientAccount) => {
-                setLeadSearch(clientAccount);
-                setLeadStatusFilter("All");
-                setLeadStageFilter("All");
-                setLeadsSubTab("all");
-              }}
-              onNavigateToProposals={() => setLeadsSubTab("proposals")}
-              onNavigateToLeads={() => setLeadsSubTab("all")}
-              onConvertToProposal={(deal) => {
-                setConvertingDealId(deal._id);
-                setEditingProposal({
-                  _id: "",
-                  proposalCode: "",
-                  subject: deal.dealName,
-                  projectName: `${deal.clientAccount} Deal Project`,
-                  clientName: deal.clientAccount,
-                  clientCompany: deal.clientAccount,
-                  clientEmail: "",
-                  subtotal: deal.dealValue,
-                  taxRate: 0,
-                  taxAmount: 0,
-                  totalValue: deal.dealValue,
-                  currency: "USD",
-                  issueDate: new Date().toISOString(),
-                  openTill: deal.expectedClose || new Date(Date.now() + 30 * 86400000).toISOString(),
-                  status: "Draft",
-                  items: [{ description: deal.dealName, quantity: 1, unitPrice: deal.dealValue, amount: deal.dealValue }],
-                  terms: "Standard professional services agreement. Pricing valid for 30 days.",
-                });
-                setShowProposalModal(true);
-              }}
-            />
+            <div className="space-y-4">
+              {/* ── View switcher between Deals Dashboard (Revenue Summary) and Deals Pipeline ── */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-1.5 bg-card/60 backdrop-blur-md rounded-2xl border border-border/80 shadow-xs">
+                <div className="flex items-center gap-1 p-0.5 bg-muted/40 rounded-xl border border-border/50">
+                  <button
+                    type="button"
+                    onClick={() => setDealsSectionView("dashboard")}
+                    className={cn(
+                      "flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all duration-150 cursor-pointer",
+                      dealsSectionView === "dashboard"
+                        ? "bg-primary text-primary-foreground shadow-sm scale-[1.02]"
+                        : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+                    )}
+                  >
+                    <i className="fa-solid fa-chart-pie text-[11px]" />
+                    Overview
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDealsSectionView("deals")}
+                    className={cn(
+                      "flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all duration-150 cursor-pointer",
+                      dealsSectionView === "deals"
+                        ? "bg-primary text-primary-foreground shadow-sm scale-[1.02]"
+                        : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+                    )}
+                  >
+                    <i className="fa-solid fa-handshake text-[11px]" />
+                    Deals
+                    <span className={cn(
+                      "text-[10px] font-mono px-1.5 py-0.2 rounded-full font-bold",
+                      dealsSectionView === "deals" ? "bg-primary-foreground/20 text-primary-foreground" : "bg-muted text-muted-foreground border border-border/60"
+                    )}>
+                      {deals.length}
+                    </span>
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {dealsSectionView === "dashboard" ? (
+                    <Button
+                      size="sm"
+                      onClick={() => setDealsSectionView("deals")}
+                      variant="outline"
+                      className="gap-1.5 text-xs font-bold cursor-pointer h-8 shadow-2xs"
+                    >
+                      <span>View Deals Pipeline</span>
+                      <i className="fa-solid fa-arrow-right text-[10px]" />
+                    </Button>
+                  ) : (
+                    (can("manageDeals") || isAdmin || isOPS) && (
+                      <Button
+                        size="sm"
+                        onClick={() => handleNewDeal()}
+                        className="gap-1.5 text-xs font-bold cursor-pointer h-8 bg-primary hover:bg-primary/90 text-primary-foreground shadow-xs"
+                      >
+                        <i className="fa-solid fa-plus text-[10px]" />
+                        <span>Add Deal</span>
+                      </Button>
+                    )
+                  )}
+                </div>
+              </div>
+
+              {dealsSectionView === "dashboard" ? (
+                <RevenueSummaryDashboard
+                  deals={deals}
+                  loading={loadingDeals}
+                  onNavigateToDeals={() => setDealsSectionView("deals")}
+                  onNewDeal={handleNewDeal}
+                  onRefresh={() => {
+                    fetchDeals();
+                    showToast("Refreshed Deals & Revenue Summary metrics!");
+                  }}
+                />
+              ) : (
+                <DealsDashboard
+                  deals={deals}
+                  loading={loadingDeals}
+                  leads={activeLeads}
+                  proposals={proposals}
+                  onNewDeal={handleNewDeal}
+                  onEditDeal={handleEditDeal}
+                  onDeleteDeal={(id, name) => setDeleteTarget({ type: "deal", id, name })}
+                  onRefresh={fetchDeals}
+                  onStageChange={handleDealStageChange}
+                  onGenerateInvoice={handleGenerateInvoiceFromDeal}
+                  initialStageFilter={dealStageNavFilter}
+                  onClearStageFilter={() => setDealStageNavFilter(undefined)}
+                  onViewLead={(clientAccount) => {
+                    setLeadSearch(clientAccount);
+                    setLeadStatusFilter("All");
+                    setLeadStageFilter("All");
+                    setLeadsSubTab("all");
+                  }}
+                  onNavigateToProposals={() => setLeadsSubTab("proposals")}
+                  onNavigateToLeads={() => setLeadsSubTab("all")}
+                  onConvertToProposal={(deal) => {
+                    setConvertingDealId(deal._id);
+                    setEditingProposal({
+                      _id: "",
+                      proposalCode: "",
+                      subject: deal.dealName,
+                      projectName: `${deal.clientAccount} Deal Project`,
+                      clientName: deal.clientAccount,
+                      clientCompany: deal.clientAccount,
+                      clientEmail: "",
+                      subtotal: deal.dealValue,
+                      taxRate: 0,
+                      taxAmount: 0,
+                      totalValue: deal.dealValue,
+                      currency: "USD",
+                      issueDate: new Date().toISOString(),
+                      openTill: deal.expectedClose || new Date(Date.now() + 30 * 86400000).toISOString(),
+                      status: "Draft",
+                      items: [{ description: deal.dealName, quantity: 1, unitPrice: deal.dealValue, amount: deal.dealValue }],
+                      terms: "Standard professional services agreement. Pricing valid for 30 days.",
+                    });
+                    setShowProposalModal(true);
+                  }}
+                />
+              )}
+            </div>
           )}
 
-          {/* ── SUB-VIEW: EXECUTIVE SALES DASHBOARD ── */}
+          {/* ── SUB-VIEW: EXECUTIVE SALES DASHBOARD & ALL SALES ── */}
           {leadsSubTab === "sales" && (
-            <SalesExecutiveDashboard
-              deals={deals}
-              leads={activeLeads}
-              proposalsCount={proposals.length}
-              onRefresh={() => { fetchDeals(); fetchLeads(); }}
-              onStageChange={handleDealStageChange}
-              onGenerateInvoice={handleGenerateInvoiceFromDeal}
-              onNavigateToLeads={(filterOwner) => {
-                if (filterOwner) setLeadSearch(filterOwner);
-                setLeadStatusFilter("All");
-                setLeadStageFilter("All");
-                setLeadsSubTab("all");
-              }}
-              onNavigateToDeals={(stageFilter) => {
-                // Thread stage filter so DealsDashboard can pre-filter to the right stage
-                setDealStageNavFilter(stageFilter);
-                setLeadsSubTab("deals");
-              }}
-              onNavigateToProposals={() => setLeadsSubTab("proposals")}
-              onOpenDealModal={(prefillOwner) => handleNewDeal(prefillOwner ? { owner: prefillOwner } : undefined)}
-              onEditDeal={handleEditDeal}
-              onOpenLead={handleOpenLead}
-            />
+            <div className="space-y-4">
+              {/* ── View switcher between Sales Dashboard and All Sales ── */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-1.5 bg-card/60 backdrop-blur-md rounded-2xl border border-border/80 shadow-xs">
+                <div className="flex items-center gap-1 p-0.5 bg-muted/40 rounded-xl border border-border/50">
+                  <button
+                    type="button"
+                    onClick={() => setSalesSectionView("dashboard")}
+                    className={cn(
+                      "flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all duration-150 cursor-pointer",
+                      salesSectionView === "dashboard"
+                        ? "bg-primary text-primary-foreground shadow-sm scale-[1.02]"
+                        : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+                    )}
+                  >
+                    <i className="fa-solid fa-chart-line text-[11px]" />
+                    Overview
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSalesOwnerNavFilter(undefined);
+                      setSalesSectionView("sales");
+                    }}
+                    className={cn(
+                      "flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all duration-150 cursor-pointer",
+                      salesSectionView === "sales"
+                        ? "bg-primary text-primary-foreground shadow-sm scale-[1.02]"
+                        : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+                    )}
+                  >
+                    <i className="fa-solid fa-file-invoice-dollar text-[11px]" />
+                    All Sales
+                    <span className={cn(
+                      "text-[10px] font-mono px-1.5 py-0.2 rounded-full font-bold",
+                      salesSectionView === "sales"
+                        ? "bg-primary-foreground/20 text-primary-foreground"
+                        : "bg-muted text-muted-foreground border border-border/60"
+                    )}>
+                      {deals.length}
+                    </span>
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-2 px-3">
+                  <span className="text-xs text-muted-foreground font-medium">
+                    {salesSectionView === "dashboard"
+                      ? "Executive sales velocity, rep quotas & revenue forecasting"
+                      : "Verified sales transactions, contract fulfillment & invoicing"}
+                  </span>
+                </div>
+              </div>
+
+              {salesSectionView === "dashboard" ? (
+                <SalesExecutiveDashboard
+                  deals={deals}
+                  leads={activeLeads}
+                  proposalsCount={proposals.length}
+                  onRefresh={() => { fetchDeals(); fetchLeads(); }}
+                  onStageChange={handleDealStageChange}
+                  onGenerateInvoice={handleGenerateInvoiceFromDeal}
+                  onNavigateToAllSales={(filterOwner) => {
+                    if (filterOwner) setSalesOwnerNavFilter(filterOwner);
+                    setSalesSectionView("sales");
+                  }}
+                  onNavigateToLeads={(filterOwner) => {
+                    if (filterOwner) setLeadSearch(filterOwner);
+                    setLeadStatusFilter("All");
+                    setLeadStageFilter("All");
+                    setLeadsSubTab("all");
+                  }}
+                  onNavigateToDeals={(stageFilter) => {
+                    // Thread stage filter so DealsDashboard can pre-filter to the right stage
+                    setDealStageNavFilter(stageFilter);
+                    setLeadsSubTab("deals");
+                  }}
+                  onNavigateToProposals={() => setLeadsSubTab("proposals")}
+                  onOpenDealModal={(prefillOwner) => handleNewDeal(prefillOwner ? { owner: prefillOwner } : undefined)}
+                  onEditDeal={handleEditDeal}
+                  onOpenLead={handleOpenLead}
+                />
+              ) : (
+                <AllSalesView
+                  deals={deals}
+                  leads={activeLeads}
+                  initialOwnerFilter={salesOwnerNavFilter}
+                  onBackToDashboard={() => setSalesSectionView("dashboard")}
+                  onNewDeal={() => handleNewDeal()}
+                  onEditDeal={handleEditDeal}
+                  onGenerateInvoice={handleGenerateInvoiceFromDeal}
+                  onConvertToProposal={(deal) => {
+                    setConvertingDealId(deal._id);
+                    setEditingProposal({
+                      _id: "",
+                      proposalCode: "",
+                      subject: deal.dealName,
+                      projectName: `${deal.clientAccount} Deal Project`,
+                      clientName: deal.clientAccount,
+                      clientCompany: deal.clientAccount,
+                      clientEmail: "",
+                      subtotal: deal.dealValue,
+                      taxRate: 0,
+                      taxAmount: 0,
+                      totalValue: deal.dealValue,
+                      currency: "USD",
+                      issueDate: new Date().toISOString(),
+                      openTill: deal.expectedClose || new Date(Date.now() + 30 * 86400000).toISOString(),
+                      status: "Draft",
+                      items: [{ description: deal.dealName, quantity: 1, unitPrice: deal.dealValue, amount: deal.dealValue }],
+                      terms: "Standard professional services agreement. Pricing valid for 30 days.",
+                    });
+                    setShowProposalModal(true);
+                  }}
+                  onViewLead={(clientAccount) => {
+                    setLeadSearch(clientAccount);
+                    setLeadStatusFilter("All");
+                    setLeadStageFilter("All");
+                    setLeadsSubTab("all");
+                    setLeadsSectionView("leads");
+                  }}
+                  onRefresh={() => { fetchDeals(); fetchLeads(); }}
+                />
+              )}
+            </div>
           )}
 
-          {/* ── SUB-VIEW 2: ALL LEADS (LIST & GRID) ── */}
+          {/* ── SUB-VIEW 2: ALL LEADS (DASHBOARD & LEADS LIST/GRID) ── */}
           {leadsSubTab === "all" && (
             <div className="space-y-4">
-              {/* ── All Leads Controls & View Switcher ── */}
-              <div className="bg-card border border-border/80 rounded-2xl p-3 sm:p-4 shadow-xs flex flex-col xl:flex-row xl:items-center justify-between gap-3">
+              {/* ── View switcher between Leads Dashboard and Leads List/Grid ── */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-1.5 bg-card/60 backdrop-blur-md rounded-2xl border border-border/80 shadow-xs">
+                <div className="flex items-center gap-1 p-0.5 bg-muted/40 rounded-xl border border-border/50">
+                  <button
+                    type="button"
+                    onClick={() => setLeadsSectionView("dashboard")}
+                    className={cn(
+                      "flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all duration-150 cursor-pointer",
+                      leadsSectionView === "dashboard"
+                        ? "bg-primary text-primary-foreground shadow-sm scale-[1.02]"
+                        : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+                    )}
+                  >
+                    <i className="fa-solid fa-chart-pie text-[11px]" />
+                    Overview
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setLeadsSectionView("leads")}
+                    className={cn(
+                      "flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all duration-150 cursor-pointer",
+                      leadsSectionView === "leads"
+                        ? "bg-primary text-primary-foreground shadow-sm scale-[1.02]"
+                        : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+                    )}
+                  >
+                    <i className="fa-solid fa-users text-[11px]" />
+                    Leads
+                    <span className={cn(
+                      "text-[10px] font-mono px-1.5 py-0.2 rounded-full font-bold",
+                      leadsSectionView === "leads" ? "bg-primary-foreground/20 text-primary-foreground" : "bg-muted text-muted-foreground border border-border/60"
+                    )}>
+                      {activeLeads.length}
+                    </span>
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {leadsSectionView === "dashboard" ? (
+                    <Button
+                      size="sm"
+                      onClick={() => setLeadsSectionView("leads")}
+                      variant="outline"
+                      className="gap-1.5 text-xs font-bold cursor-pointer h-8 shadow-2xs"
+                    >
+                      <span>View All Leads</span>
+                      <i className="fa-solid fa-arrow-right text-[10px]" />
+                    </Button>
+                  ) : (
+                    (can("manageDeals") || isAdmin || isOPS) && (
+                      <Button
+                        size="sm"
+                        onClick={() => handleNewLead()}
+                        className="gap-1.5 text-xs font-bold cursor-pointer h-8 bg-primary hover:bg-primary/90 text-primary-foreground shadow-xs"
+                      >
+                        <i className="fa-solid fa-user-plus text-[10px]" />
+                        <span>New Lead</span>
+                      </Button>
+                    )
+                  )}
+                </div>
+              </div>
+
+              {leadsSectionView === "dashboard" ? (
+                <LeadsDashboardView
+                  leads={activeLeads}
+                  onNavigateToLeads={() => setLeadsSectionView("leads")}
+                  onOpenLead={(lead) => {
+                    setSelectedLead(lead);
+                    setLeadsSectionView("leads");
+                  }}
+                  onRefresh={() => {
+                    fetchLeads();
+                    showToast("Refreshed leads data.");
+                  }}
+                />
+              ) : (
+                <div className="space-y-4">
+                  {/* ── All Leads Controls & View Switcher ── */}
+                  <div className="bg-card border border-border/80 rounded-2xl p-3 sm:p-4 shadow-xs flex flex-col xl:flex-row xl:items-center justify-between gap-3">
                 {/* Left: Title + Count + Grid Hint */}
                 <div className="flex items-center gap-2.5 shrink-0 whitespace-nowrap">
                   <h2 className="text-base font-extrabold text-foreground tracking-tight flex items-center gap-2 whitespace-nowrap">
@@ -4233,6 +3733,8 @@ export default function BDPortalPage() {
                   })}
                 </div>
               )}
+            </div>
+          )}
             </div>
           )}
         </div>

@@ -13,6 +13,7 @@ interface SalesExecutiveDashboardProps {
   proposalsCount?: number;
   onNavigateToLeads?: (filterOwner?: string) => void;
   onNavigateToDeals?: (stageFilter?: string) => void;
+  onNavigateToAllSales?: (filterOwner?: string) => void;
   onNavigateToProposals?: () => void;
   onOpenDealModal?: (prefillOwner?: string) => void;
   onEditDeal?: (deal: SalesDeal) => void;
@@ -49,24 +50,19 @@ export interface DynamicSalesRep {
 }
 
 const REP_COLORS = [
-  "bg-indigo-600",
-  "bg-rose-600",
-  "bg-amber-600",
-  "bg-emerald-600",
-  "bg-purple-600",
-  "bg-sky-600",
   "bg-blue-600",
-  "bg-teal-600",
+  "bg-purple-600",
+  "bg-emerald-600",
+  "bg-amber-600",
+  "bg-rose-600",
+  "bg-cyan-600",
 ];
 
 const TERRITORIES = [
-  "North America (East)",
+  "North America (Enterprise)",
   "EMEA & UK",
-  "APAC & Gulf",
-  "North America (West)",
-  "LATAM",
-  "Enterprise Accounts",
-  "Global Operations",
+  "APAC & Middle East",
+  "LATAM & Emerging",
 ];
 
 export function SalesExecutiveDashboard({
@@ -75,6 +71,7 @@ export function SalesExecutiveDashboard({
   proposalsCount = 0,
   onNavigateToLeads,
   onNavigateToDeals,
+  onNavigateToAllSales,
   onNavigateToProposals,
   onOpenDealModal,
   onEditDeal,
@@ -510,6 +507,19 @@ export function SalesExecutiveDashboard({
             )}
           </div>
 
+          {/* View All Sales button */}
+          {onNavigateToAllSales && (
+            <button
+              type="button"
+              onClick={() => onNavigateToAllSales()}
+              className="flex items-center gap-1.5 bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-2xs cursor-pointer"
+              title="Inspect all closed sales and transactions"
+            >
+              <i className="fa-solid fa-file-invoice-dollar text-xs" />
+              <span>All Sales</span>
+            </button>
+          )}
+
           {/* New Deal button */}
           {onOpenDealModal && (
             <button
@@ -654,9 +664,9 @@ export function SalesExecutiveDashboard({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4">
             {/* 1. Sales Revenue */}
             <div
-              onClick={() => onNavigateToDeals?.("Closed Won")}
+              onClick={() => (onNavigateToAllSales ? onNavigateToAllSales() : onNavigateToDeals?.("Closed Won"))}
               className="p-4 rounded-xl border border-emerald-500/20 bg-gradient-to-br from-emerald-500/5 via-transparent to-transparent flex flex-col justify-between shadow-2xs hover:border-emerald-500/50 transition-all cursor-pointer group"
-              title="Click to view Closed Won Deals"
+              title="Click to view All Closed Sales"
             >
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2.5">
@@ -907,9 +917,9 @@ export function SalesExecutiveDashboard({
               {/* Legends */}
               <div className="space-y-2 flex-1">
                 <div
-                  onClick={() => onNavigateToDeals?.("Closed Won")}
+                  onClick={() => (onNavigateToAllSales ? onNavigateToAllSales() : onNavigateToDeals?.("Closed Won"))}
                   className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-between hover:bg-emerald-500/20 transition-colors cursor-pointer"
-                  title="View Won Deals"
+                  title="View All Closed Won Sales"
                 >
                   <div className="flex items-center gap-1.5">
                     <span className="w-2 h-2 rounded-full bg-emerald-500" />
@@ -1084,7 +1094,13 @@ export function SalesExecutiveDashboard({
               {pipelineBreakdown.map((stage) => (
                 <div
                   key={stage.name}
-                  onClick={() => onNavigateToDeals?.(stage.stageKey)}
+                  onClick={() => {
+                    if (stage.stageKey === "Closed Won" && onNavigateToAllSales) {
+                      onNavigateToAllSales();
+                    } else {
+                      onNavigateToDeals?.(stage.stageKey);
+                    }
+                  }}
                   className="group cursor-pointer hover:bg-muted/30 p-2 rounded-xl transition-all border border-transparent hover:border-border/60"
                   title={`View deals in ${stage.name}`}
                 >
@@ -1132,7 +1148,7 @@ export function SalesExecutiveDashboard({
                   <p className="font-black font-mono text-amber-600 dark:text-amber-400 text-xs mt-0.5">{lifecycleFunnel.dealToPropPct}%</p>
                 </div>
                 <div
-                  onClick={() => onNavigateToDeals?.("Closed Won")}
+                  onClick={() => (onNavigateToAllSales ? onNavigateToAllSales() : onNavigateToDeals?.("Closed Won"))}
                   className="p-1.5 rounded-lg bg-muted/40 border border-border/60 hover:bg-emerald-500/10 hover:border-emerald-500/30 transition-colors cursor-pointer"
                   title="Click to view Won Deals"
                 >
