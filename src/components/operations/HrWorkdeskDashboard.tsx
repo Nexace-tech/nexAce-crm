@@ -37,9 +37,9 @@ interface ScheduleMeeting {
 interface HrWorkdeskDashboardProps {
   allocations: ResourceAllocation[];
   loading?: boolean;
-  onNewAllocation: () => void;
-  onEditAllocation: (allocation: ResourceAllocation) => void;
-  onDeleteAllocation: (id: string) => void;
+  onNewAllocation?: () => void;
+  onEditAllocation?: (allocation: ResourceAllocation) => void;
+  onDeleteAllocation?: (id: string) => void;
   onRefresh?: () => void;
 }
 
@@ -51,6 +51,9 @@ export default function HrWorkdeskDashboard({
   onDeleteAllocation,
   onRefresh,
 }: HrWorkdeskDashboardProps) {
+  // ── View Employee Details Modal State ──
+  const [viewingEmployee, setViewingEmployee] = useState<ResourceAllocation | null>(null);
+
   // ── Filters & Search State ──
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("All");
@@ -266,10 +269,10 @@ export default function HrWorkdeskDashboard({
     }
   };
 
-  // ── Bulk Delete ──
+  // ── Bulk Delete (Disabled in View Only mode) ──
   const handleBulkDelete = () => {
-    if (confirm(`Are you sure you want to delete ${selectedIds.length} staff record(s)?`)) {
-      selectedIds.forEach((id) => onDeleteAllocation(id));
+    if (onDeleteAllocation && confirm(`Are you sure you want to delete ${selectedIds.length} staff record(s)?`)) {
+      selectedIds.forEach((id) => onDeleteAllocation?.(id));
       setSelectedIds([]);
     }
   };
@@ -982,7 +985,7 @@ export default function HrWorkdeskDashboard({
 
           {/* ── Row 3: Employee Status Data Table Card ── */}
           <Card className="border border-border/70 shadow-xs rounded-2xl overflow-hidden bg-card">
-            <CardHeader className="p-5 pb-3 border-b border-border/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <CardHeader className="p-5 pb-3 border-b border-border/40 flex flex-col md:flex-row md:items-center justify-between gap-3">
               <div>
                 <CardTitle className="text-base font-bold text-foreground flex items-center gap-2">
                   <span>Employee Status</span>
@@ -996,7 +999,7 @@ export default function HrWorkdeskDashboard({
               </div>
 
               {/* Status Tabs & Department Filter Toolbar */}
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center gap-2 shrink-0 flex-wrap sm:flex-nowrap">
                 {/* Department Dropdown */}
                 <select
                   value={deptFilter}
@@ -1032,7 +1035,7 @@ export default function HrWorkdeskDashboard({
                 </select>
 
                 {/* Show Entries */}
-                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground shrink-0">
                   <span>Show</span>
                   <select
                     value={entriesPerPage}
@@ -1067,15 +1070,6 @@ export default function HrWorkdeskDashboard({
                   >
                     Deselect All
                   </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleBulkDelete}
-                    className="h-7 text-xs px-2.5 gap-1 cursor-pointer text-destructive border-destructive/30 hover:bg-destructive/10"
-                  >
-                    <i className="fa-solid fa-trash text-[10px]" />
-                    Bulk Delete
-                  </Button>
                 </div>
               </div>
             )}
@@ -1084,7 +1078,7 @@ export default function HrWorkdeskDashboard({
               <table className="w-full text-left text-xs">
                 <thead className="bg-muted/30 border-b border-border/50 text-muted-foreground font-semibold">
                   <tr>
-                    <th className="py-3.5 px-4 w-10">
+                    <th className="py-3.5 px-4 w-10 whitespace-nowrap">
                       <input
                         type="checkbox"
                         checked={
@@ -1097,7 +1091,7 @@ export default function HrWorkdeskDashboard({
                       />
                     </th>
                     <th
-                      className="py-3.5 px-4 cursor-pointer hover:text-foreground select-none"
+                      className="py-3.5 px-4 cursor-pointer hover:text-foreground select-none whitespace-nowrap"
                       onClick={() => handleSort("name")}
                     >
                       <div className="flex items-center gap-1.5">
@@ -1115,7 +1109,7 @@ export default function HrWorkdeskDashboard({
                       </div>
                     </th>
                     <th
-                      className="py-3.5 px-4 cursor-pointer hover:text-foreground select-none"
+                      className="py-3.5 px-4 cursor-pointer hover:text-foreground select-none whitespace-nowrap"
                       onClick={() => handleSort("role")}
                     >
                       <div className="flex items-center gap-1.5">
@@ -1133,7 +1127,7 @@ export default function HrWorkdeskDashboard({
                       </div>
                     </th>
                     <th
-                      className="py-3.5 px-4 cursor-pointer hover:text-foreground select-none"
+                      className="py-3.5 px-4 cursor-pointer hover:text-foreground select-none whitespace-nowrap"
                       onClick={() => handleSort("status")}
                     >
                       <div className="flex items-center gap-1.5">
@@ -1150,45 +1144,27 @@ export default function HrWorkdeskDashboard({
                         <span>Status</span>
                       </div>
                     </th>
-                    <th
-                      className="py-3.5 px-4 cursor-pointer hover:text-foreground select-none"
-                      onClick={() => handleSort("date")}
-                    >
-                      <div className="flex items-center gap-1.5">
-                        <i
-                          className={cn(
-                            "fa-solid text-[10px]",
-                            sortField === "date"
-                              ? sortOrder === "asc"
-                                ? "fa-sort-up text-primary"
-                                : "fa-sort-down text-primary"
-                              : "fa-sort opacity-40"
-                          )}
-                        />
-                        <span>Join Date</span>
-                      </div>
-                    </th>
-                    <th className="py-3.5 px-4">
+                    <th className="py-3.5 px-4 whitespace-nowrap">
                       <div className="flex items-center gap-1.5">
                         <i className="fa-solid fa-indian-rupee-sign text-[10px] opacity-60" />
                         <span>Monthly Salary</span>
                       </div>
                     </th>
-                    <th className="py-3.5 px-4 text-right">Actions</th>
+                    <th className="py-3.5 px-4 text-right whitespace-nowrap">Actions</th>
                   </tr>
                 </thead>
 
                 <tbody className="divide-y divide-border/40">
                   {loading ? (
                     <tr>
-                      <td colSpan={7} className="py-12 text-center text-muted-foreground">
+                      <td colSpan={6} className="py-12 text-center text-muted-foreground">
                         <i className="fa-solid fa-spinner fa-spin mr-2 text-primary text-base" />
                         Loading employee registry...
                       </td>
                     </tr>
                   ) : paginatedAllocations.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="py-12 text-center text-muted-foreground">
+                      <td colSpan={6} className="py-12 text-center text-muted-foreground">
                         <div className="flex flex-col items-center justify-center gap-2">
                           <i className="fa-solid fa-user-slash text-2xl opacity-40" />
                           <p className="font-semibold text-sm">No employees match your search</p>
@@ -1286,8 +1262,9 @@ export default function HrWorkdeskDashboard({
                               </div>
                               <div>
                                 <p
-                                  onClick={() => onEditAllocation(emp)}
+                                  onClick={() => setViewingEmployee(emp)}
                                   className="font-bold text-foreground hover:text-primary cursor-pointer transition-colors"
+                                  title="View employee details"
                                 >
                                   {emp.employeeName}
                                 </p>
@@ -1303,15 +1280,10 @@ export default function HrWorkdeskDashboard({
                           </td>
 
                           {/* Status */}
-                          <td className="py-4 px-4">{statusBadge}</td>
-
-                          {/* Join Date */}
-                          <td className="py-4 px-4 text-muted-foreground font-medium">
-                            {emp.startDate || "—"}
-                          </td>
+                          <td className="py-4 px-4 whitespace-nowrap">{statusBadge}</td>
 
                           {/* Monthly Salary */}
-                          <td className="py-4 px-4">
+                          <td className="py-4 px-4 whitespace-nowrap">
                             {emp.salary && emp.salary > 0 ? (
                               <span className="inline-flex items-center gap-1 font-semibold text-foreground">
                                 <i className="fa-solid fa-indian-rupee-sign text-[10px] text-primary" />
@@ -1323,27 +1295,18 @@ export default function HrWorkdeskDashboard({
                             )}
                           </td>
 
-                          {/* Actions */}
-                          <td className="py-4 px-4 text-right">
-                            <div className="flex items-center justify-end gap-1">
+                          {/* Actions - View Only */}
+                          <td className="py-4 px-4 text-right whitespace-nowrap">
+                            <div className="flex items-center justify-end">
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                onClick={() => onEditAllocation(emp)}
+                                onClick={() => setViewingEmployee(emp)}
                                 className="h-8 px-2.5 rounded-lg hover:bg-muted font-semibold text-xs gap-1.5 cursor-pointer text-primary"
-                                title="Edit Employee Allocation"
+                                title="View Employee Details"
                               >
-                                <i className="fa-solid fa-pen text-[10px]" />
-                                <span className="hidden sm:inline">Edit</span>
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => onDeleteAllocation(emp._id)}
-                                className="h-8 px-2 rounded-lg hover:bg-muted text-destructive hover:text-destructive cursor-pointer"
-                                title="Remove from registry"
-                              >
-                                <i className="fa-solid fa-trash text-xs" />
+                                <i className="fa-solid fa-eye text-xs" />
+                                <span>View</span>
                               </Button>
                             </div>
                           </td>
@@ -1886,6 +1849,177 @@ export default function HrWorkdeskDashboard({
                 size="sm"
                 onClick={() => setShowScheduleModal(false)}
                 className="text-xs cursor-pointer"
+              >
+                Close
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── View Employee Details Modal (Read-Only) ── */}
+      {viewingEmployee && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in">
+          <div className="bg-card border border-border rounded-2xl p-6 w-full max-w-lg shadow-2xl space-y-5 animate-in zoom-in-95 duration-150">
+            {/* Modal Header */}
+            <div className="flex items-start justify-between border-b border-border pb-4">
+              <div className="flex items-center gap-3.5">
+                <div className="w-12 h-12 rounded-2xl bg-primary/10 text-primary flex items-center justify-center text-sm font-bold shadow-xs">
+                  {viewingEmployee.employeeName
+                    .split(" ")
+                    .map((n) => n[0])
+                    .join("")
+                    .slice(0, 2)
+                    .toUpperCase()}
+                </div>
+                <div>
+                  <h3 className="font-bold text-base text-foreground leading-tight">
+                    {viewingEmployee.employeeName}
+                  </h3>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {viewingEmployee.email ||
+                      `${viewingEmployee.employeeName.toLowerCase().replace(/\s+/g, "")}@nexace.com`}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setViewingEmployee(null)}
+                className="text-muted-foreground hover:text-foreground text-sm cursor-pointer p-1 rounded-md hover:bg-muted transition-colors"
+                title="Close"
+              >
+                <i className="fa-solid fa-xmark text-base" />
+              </button>
+            </div>
+
+            {/* Modal Body - Key Employee Details Grid */}
+            <div className="grid grid-cols-2 gap-3 text-xs">
+              <div className="p-3 rounded-xl bg-muted/30 border border-border/50">
+                <span className="text-[11px] text-muted-foreground font-medium block mb-1">
+                  <i className="fa-solid fa-briefcase mr-1.5 opacity-60" /> Role / Designation
+                </span>
+                <span className="font-semibold text-foreground text-sm">
+                  {viewingEmployee.role || "—"}
+                </span>
+              </div>
+
+              <div className="p-3 rounded-xl bg-muted/30 border border-border/50">
+                <span className="text-[11px] text-muted-foreground font-medium block mb-1">
+                  <i className="fa-solid fa-building mr-1.5 opacity-60" /> Department
+                </span>
+                <span className="font-semibold text-foreground text-sm">
+                  {viewingEmployee.department || "—"}
+                </span>
+              </div>
+
+              <div className="p-3 rounded-xl bg-muted/30 border border-border/50">
+                <span className="text-[11px] text-muted-foreground font-medium block mb-1">
+                  <i className="fa-solid fa-circle-check mr-1.5 opacity-60" /> Employment Status
+                </span>
+                <div>
+                  {viewingEmployee.status === "Bench" ? (
+                    <span className="inline-flex items-center gap-1.5 font-medium text-amber-600 dark:text-amber-400">
+                      <span className="w-2 h-2 rounded-full bg-amber-500" />
+                      <span>Onboarding (Bench)</span>
+                    </span>
+                  ) : viewingEmployee.status === "On Leave" ? (
+                    <span className="inline-flex items-center gap-1.5 font-medium text-rose-600 dark:text-rose-400">
+                      <span className="w-2 h-2 rounded-full bg-rose-500" />
+                      <span>Inactive (On Leave)</span>
+                    </span>
+                  ) : viewingEmployee.status === "Partially Allocated" ? (
+                    <span className="inline-flex items-center gap-1.5 font-medium text-cyan-600 dark:text-cyan-400">
+                      <span className="w-2 h-2 rounded-full bg-cyan-500" />
+                      <span>Partial</span>
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 font-medium text-emerald-600 dark:text-emerald-400">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                      <span>Active (Deployed)</span>
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="p-3 rounded-xl bg-muted/30 border border-border/50">
+                <span className="text-[11px] text-muted-foreground font-medium block mb-1">
+                  <i className="fa-solid fa-calendar-day mr-1.5 opacity-60" /> Join Date
+                </span>
+                <span className="font-semibold text-foreground text-sm">
+                  {viewingEmployee.startDate || "—"}
+                </span>
+              </div>
+
+              <div className="p-3 rounded-xl bg-muted/30 border border-border/50">
+                <span className="text-[11px] text-muted-foreground font-medium block mb-1">
+                  <i className="fa-solid fa-indian-rupee-sign mr-1.5 opacity-60" /> Monthly Salary
+                </span>
+                <span className="font-bold text-foreground text-sm">
+                  {viewingEmployee.salary && viewingEmployee.salary > 0 ? (
+                    <>
+                      ₹ {Number(viewingEmployee.salary).toLocaleString("en-IN")}{" "}
+                      <span className="text-[11px] font-normal text-muted-foreground">/mo</span>
+                    </>
+                  ) : (
+                    "—"
+                  )}
+                </span>
+              </div>
+
+              <div className="p-3 rounded-xl bg-muted/30 border border-border/50">
+                <span className="text-[11px] text-muted-foreground font-medium block mb-1">
+                  <i className="fa-solid fa-diagram-project mr-1.5 opacity-60" /> Assigned Project
+                </span>
+                <span className="font-semibold text-foreground text-sm">
+                  {viewingEmployee.assignedProject || "General Operations"}
+                </span>
+              </div>
+
+              <div className="p-3 rounded-xl bg-muted/30 border border-border/50">
+                <span className="text-[11px] text-muted-foreground font-medium block mb-1">
+                  <i className="fa-solid fa-clock mr-1.5 opacity-60" /> Allocated Hours
+                </span>
+                <span className="font-semibold text-foreground text-sm">
+                  {viewingEmployee.allocatedHoursPerWeek || 40} hrs / week
+                </span>
+              </div>
+
+              <div className="p-3 rounded-xl bg-muted/30 border border-border/50">
+                <span className="text-[11px] text-muted-foreground font-medium block mb-1">
+                  <i className="fa-solid fa-chart-pie mr-1.5 opacity-60" /> Utilization Rate
+                </span>
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold text-foreground text-sm">
+                    {viewingEmployee.utilizationRate || 0}%
+                  </span>
+                  <div className="flex-1 bg-muted rounded-full h-1.5 overflow-hidden">
+                    <div
+                      className="bg-primary h-full rounded-full transition-all"
+                      style={{ width: `${Math.min(100, viewingEmployee.utilizationRate || 0)}%` }}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {viewingEmployee.notes && (
+              <div className="p-3 rounded-xl bg-muted/20 border border-border/40 text-xs">
+                <span className="text-[11px] text-muted-foreground font-semibold block mb-1">
+                  <i className="fa-solid fa-note-sticky mr-1.5 opacity-60" /> Notes & Remarks
+                </span>
+                <p className="text-muted-foreground leading-relaxed">
+                  {viewingEmployee.notes}
+                </p>
+              </div>
+            )}
+
+            {/* Modal Footer */}
+            <div className="flex items-center justify-end pt-3 border-t border-border">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setViewingEmployee(null)}
+                className="cursor-pointer px-4 font-semibold text-xs"
               >
                 Close
               </Button>
