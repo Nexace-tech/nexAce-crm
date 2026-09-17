@@ -2115,7 +2115,7 @@ const makeEmptyDevice = (assignedTo = "", department = "", assetTag = ""): Omit<
   warrantyExpiry: "",
   assignedTo,
   department,
-  location: "HQ - Main Office",
+  location: "",
   os: "",
   lastSeen: new Date().toISOString().slice(0, 10),
   condition: "Good",
@@ -2208,18 +2208,6 @@ function DeviceModal({
     const defaults = ["Engineering", "Design", "Product", "Operations", "HR", "Marketing", "Sales", "Finance", "IT"];
     return Array.from(new Set([...defaults, ...fromTeam]));
   }, [teamMembers]);
-
-  const locationPresets = [
-    "HQ - Main Office",
-    "HQ - Floor 1",
-    "HQ - Floor 2",
-    "HQ - IT Lab",
-    "HQ - Server Room",
-    "HQ - Storage Room",
-    "Remote / WFH",
-    "Branch Office",
-    "Client Site",
-  ];
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">

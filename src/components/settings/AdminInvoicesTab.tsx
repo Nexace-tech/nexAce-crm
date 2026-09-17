@@ -89,7 +89,8 @@ export function AdminInvoicesTab({ showToast, scope = "internal" }: AdminInvoice
   const [paymentModal, setPaymentModal] = useState<PaymentModalState>({ open: false, invoiceId: "", invoiceNo: "" });
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("Bank Transfer");
   const { user } = useAuth();
-  const userUpiId = (user?.bankDetails?.upiId || (user as any)?.upiId || "").trim();
+  // Admin's own UPI ID (used ONLY for "Paid From" source option, NEVER for "Paid To" payee)
+  const adminProfileUpiId = (user?.bankDetails?.upiId || (user as any)?.upiId || "").trim();
   const [orgUpiId, setOrgUpiId] = useState<string>("nexace@okaxis");
 
   // Paid From (Sender)
@@ -228,19 +229,16 @@ export function AdminInvoicesTab({ showToast, scope = "internal" }: AdminInvoice
       // Default Paid From
       setFromUpiId(orgUpiId || "nexace@okaxis");
 
-      // Default Paid To (Auto-pick User UPI ID)
+      // Default Paid To (Auto-pick payee UPI ID if available for this invoice/creator)
       const targetInv = invoices.find((i) => (i._id || i.id) === invoiceId);
       const invUserUpi = (
         targetInv?.userUpiId ||
         (targetInv as any)?.bankDetails?.upiId ||
-        (targetInv as any)?.paymentDetails?.toUpiId ||
-        (targetInv as any)?.paymentDetails?.upiId ||
-        userUpiId ||
         ""
       ).trim();
 
       setTargetPayeeUpiId(invUserUpi);
-      setToUpiId(invUserUpi || userUpiId || "");
+      setToUpiId(invUserUpi);
 
       setUpiTxnId("");
       setUpiScreenshot(null);
@@ -312,8 +310,8 @@ export function AdminInvoicesTab({ showToast, scope = "internal" }: AdminInvoice
     // Save custom UPI IDs to localStorage for future use
     if (paymentMethod === "UPI") {
       const toSave = [
-        ...(effectiveFromUpi && effectiveFromUpi !== orgUpiId && effectiveFromUpi !== userUpiId ? [effectiveFromUpi] : []),
-        ...(effectiveToUpi && effectiveToUpi !== orgUpiId && effectiveToUpi !== targetPayeeUpiId && effectiveToUpi !== userUpiId ? [effectiveToUpi] : []),
+        ...(effectiveFromUpi && effectiveFromUpi !== orgUpiId && effectiveFromUpi !== adminProfileUpiId ? [effectiveFromUpi] : []),
+        ...(effectiveToUpi && effectiveToUpi !== orgUpiId && effectiveToUpi !== targetPayeeUpiId && effectiveToUpi !== adminProfileUpiId ? [effectiveToUpi] : []),
       ];
       if (toSave.length > 0) {
         const updated = Array.from(new Set([...toSave, ...savedUpiIds])).slice(0, 10);
@@ -468,14 +466,11 @@ export function AdminInvoicesTab({ showToast, scope = "internal" }: AdminInvoice
           const invUserUpi = (
             viewInvoice?.userUpiId ||
             (viewInvoice as any)?.bankDetails?.upiId ||
-            (viewInvoice as any)?.paymentDetails?.toUpiId ||
-            (viewInvoice as any)?.paymentDetails?.upiId ||
-            userUpiId ||
             ""
           ).trim();
 
           setTargetPayeeUpiId(invUserUpi);
-          setToUpiId(invUserUpi || userUpiId || "");
+          setToUpiId(invUserUpi);
 
           setUpiTxnId("");
           setUpiScreenshot(null);
@@ -856,7 +851,7 @@ export function AdminInvoicesTab({ showToast, scope = "internal" }: AdminInvoice
                         setPaymentMethod(method);
                         if (method === "UPI") {
                           if (!fromUpiId) setFromUpiId(orgUpiId || "nexace@okaxis");
-                          if (!toUpiId) setToUpiId(targetPayeeUpiId || userUpiId || "");
+                          if (!toUpiId) setToUpiId(targetPayeeUpiId || "");
                         }
                       }}
                       className={cn(
@@ -947,19 +942,19 @@ export function AdminInvoicesTab({ showToast, scope = "internal" }: AdminInvoice
                         </button>
                       )}
 
-                      {userUpiId && userUpiId !== orgUpiId && (
+                      {adminProfileUpiId && adminProfileUpiId !== orgUpiId && (
                         <button
                           type="button"
-                          onClick={() => setFromUpiId(userUpiId)}
+                          onClick={() => setFromUpiId(adminProfileUpiId)}
                           className={cn(
                             "px-2 py-0.5 rounded-md text-[11px] font-mono flex items-center gap-1 transition-all cursor-pointer border",
-                            fromUpiId.trim() === userUpiId
+                            fromUpiId.trim() === adminProfileUpiId
                               ? "border-sky-500 bg-sky-500/15 text-sky-700 dark:text-sky-300 font-bold shadow-2xs"
                               : "border-border/60 bg-background/60 hover:bg-background text-muted-foreground"
                           )}
                         >
                           <i className="fa-solid fa-user text-[10px] text-sky-500" />
-                          <span>User Profile ({userUpiId})</span>
+                          <span>Admin Profile ({adminProfileUpiId})</span>
                         </button>
                       )}
                     </div>
@@ -972,25 +967,25 @@ export function AdminInvoicesTab({ showToast, scope = "internal" }: AdminInvoice
                         <i className="fa-solid fa-arrow-down-left-and-up-right-to-ceiling text-emerald-500 text-xs" />
                         <span>Pay UPI ID (Paid To) <span className="text-rose-500">*</span></span>
                       </label>
-                      {(targetPayeeUpiId || userUpiId) ? (
+                      {targetPayeeUpiId ? (
                         <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded-full flex items-center gap-1">
                           <i className="fa-solid fa-wand-magic-sparkles text-[9px]" /> Auto-picked User UPI
                         </span>
                       ) : (
-                        <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded-full">
-                          Payee / Destination
+                        <span className="text-[10px] text-amber-600 dark:text-amber-400 font-bold bg-amber-500/10 px-2 py-0.5 rounded-full flex items-center gap-1">
+                          <i className="fa-solid fa-pen text-[9px]" /> Enter Payee UPI
                         </span>
                       )}
                     </div>
 
-                    {/* Direct Pay UPI ID Input — Auto-picked and editable */}
+                    {/* Direct Pay UPI ID Input — Auto-picked if user UPI exists, otherwise empty with dummy placeholder */}
                     <div className="relative">
                       <div className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none">
                         <i className="fa-solid fa-qrcode text-xs text-emerald-500" />
                       </div>
                       <Input
                         className="h-9 font-mono text-xs pl-8 pr-8 bg-background border-border/80 focus:border-emerald-500"
-                        placeholder="e.g. user@okaxis or 9876543210@paytm"
+                        placeholder="e.g. username@okhdfcbank or 9876543210@paytm"
                         value={toUpiId}
                         onChange={(e) => setToUpiId(e.target.value)}
                       />
@@ -1007,28 +1002,28 @@ export function AdminInvoicesTab({ showToast, scope = "internal" }: AdminInvoice
                     </div>
 
                     {/* Quick Pick Chips */}
-                    {((targetPayeeUpiId || userUpiId) || savedUpiIds.some(id => id && id !== (targetPayeeUpiId || userUpiId) && id !== orgUpiId)) && (
+                    {(targetPayeeUpiId || savedUpiIds.some(id => id && id !== targetPayeeUpiId && id !== orgUpiId && id !== adminProfileUpiId)) && (
                       <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
                         <span className="text-[10px] text-muted-foreground font-medium">Quick Pick:</span>
-                        {(targetPayeeUpiId || userUpiId) && (
+                        {targetPayeeUpiId && (
                           <button
                             type="button"
-                            onClick={() => setToUpiId(targetPayeeUpiId || userUpiId)}
+                            onClick={() => setToUpiId(targetPayeeUpiId)}
                             className={cn(
                               "px-2 py-0.5 rounded-md text-[11px] font-mono flex items-center gap-1 transition-all cursor-pointer border",
-                              toUpiId.trim() === (targetPayeeUpiId || userUpiId)
+                              toUpiId.trim() === targetPayeeUpiId
                                 ? "border-emerald-500 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 font-bold shadow-2xs"
                                 : "border-border/60 bg-background/60 hover:bg-background text-muted-foreground"
                             )}
                           >
                             <i className="fa-solid fa-user-check text-[10px] text-emerald-500" />
-                            <span>User UPI ({targetPayeeUpiId || userUpiId})</span>
+                            <span>User UPI ({targetPayeeUpiId})</span>
                           </button>
                         )}
 
-                      {savedUpiIds
-                        .filter((id) => id && id !== (targetPayeeUpiId || userUpiId) && id !== orgUpiId)
-                        .map((savedId) => (
+                        {savedUpiIds
+                          .filter((id) => id && id !== targetPayeeUpiId && id !== orgUpiId && id !== adminProfileUpiId)
+                          .map((savedId) => (
                           <div
                             key={savedId}
                             className={cn(

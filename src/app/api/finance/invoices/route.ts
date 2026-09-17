@@ -1,10 +1,9 @@
 import { NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/db";
 import { FinanceInvoice } from "@/models/FinanceInvoice";
+import { User } from "@/models/User";
 import { ActivityLog } from "@/models/ActivityLog";
 import { requireTenantSession, isAuthError } from "@/lib/auth-guard";
-
-
 
 export async function GET() {
   try {
@@ -25,41 +24,94 @@ export async function GET() {
       .populate("createdBy", "name email bankDetails upiId")
       .sort({ createdAt: -1 })
       .lean();
-    
-    const mappedFinanceInvoices = invoices.map((inv: any) => ({
-      ...inv,
-      userUpiId:
-        inv.paymentDetails?.toUpiId ||
-        inv.paymentDetails?.upiId ||
-        (inv.bankDetails?.upiId) ||
-        (inv.createdBy as any)?.bankDetails?.upiId ||
-        (inv.createdBy as any)?.upiId ||
-        "",
-    }));
 
-    const mappedEmployeeInvoices = itInvoices.map((inv: any) => ({
-      _id: inv._id,
-      invoiceNo: inv.invoiceNo,
-      client: inv.businessName || "Unknown Employee",
-      amount: inv.total || 0,
-      currency: inv.currency || "USD",
-      status: inv.status || "Draft",
-      issuedDate: inv.invoiceDate || new Date().toISOString().split("T")[0],
-      dueDate: inv.dueDate || "",
-      category: "Employee Invoice",
-      venture: inv.billedToName || "Ace Consultancys",
-      notes: inv.notes || "",
-      createdAt: inv.createdAt,
-      userUpiId:
-        inv.paymentDetails?.toUpiId ||
-        inv.paymentDetails?.upiId ||
-        (inv.bankDetails?.upiId) ||
-        (inv.createdBy as any)?.bankDetails?.upiId ||
-        (inv.createdBy as any)?.upiId ||
-        "",
-      bankDetails: inv.bankDetails || (inv.createdBy as any)?.bankDetails,
-      paymentDetails: inv.paymentDetails,
-    }));
+    // Load tenant users to accurately match the invoice payee
+    const tenantUsers = await User.find({ tenantId: tenantObjectId })
+      .select("name email bankDetails upiId")
+      .lean();
+
+    // Helper to find the actual payee's bank/UPI details
+    const getInvoicePayeeInfo = (inv: any) => {
+      // 1. Explicitly stored on the invoice itself
+      if (inv.bankDetails?.upiId?.trim()) {
+        return {
+          userUpiId: inv.bankDetails.upiId.trim(),
+          bankDetails: inv.bankDetails,
+        };
+      }
+
+      // 2. If already Paid, return the confirmed toUpiId
+      if (inv.status === "Paid" && inv.paymentDetails?.toUpiId?.trim()) {
+        return {
+          userUpiId: inv.paymentDetails.toUpiId.trim(),
+          bankDetails: inv.bankDetails,
+        };
+      }
+
+      // 3. Match payee by businessEmail or client name against employee accounts
+      const payeeEmail = (inv.businessEmail || "").toLowerCase().trim();
+      const payeeName = (inv.businessName || inv.client || "").toLowerCase().trim();
+
+      const matchedUser = tenantUsers.find((u: any) => {
+        const uEmail = (u.email || "").toLowerCase().trim();
+        const uName = (u.name || "").toLowerCase().trim();
+        if (payeeEmail && uEmail === payeeEmail) return true;
+        if (
+          payeeName &&
+          payeeName !== "ace consultancys" &&
+          payeeName !== "nex ace" &&
+          payeeName !== "unknown employee" &&
+          uName === payeeName
+        ) {
+          return true;
+        }
+        return false;
+      });
+
+      if (matchedUser) {
+        const upi = (matchedUser.bankDetails?.upiId || (matchedUser as any).upiId || "").trim();
+        return {
+          userUpiId: upi,
+          bankDetails: inv.bankDetails || matchedUser.bankDetails || undefined,
+        };
+      }
+
+      // 4. No payee user found — DO NOT fall back to createdBy (who is just the CRM admin/recorder)
+      return {
+        userUpiId: "",
+        bankDetails: inv.bankDetails || undefined,
+      };
+    };
+
+    const mappedFinanceInvoices = invoices.map((inv: any) => {
+      const payeeInfo = getInvoicePayeeInfo(inv);
+      return {
+        ...inv,
+        userUpiId: payeeInfo.userUpiId,
+        bankDetails: payeeInfo.bankDetails,
+      };
+    });
+
+    const mappedEmployeeInvoices = itInvoices.map((inv: any) => {
+      const payeeInfo = getInvoicePayeeInfo(inv);
+      return {
+        _id: inv._id,
+        invoiceNo: inv.invoiceNo,
+        client: inv.businessName || "Unknown Employee",
+        amount: inv.total || 0,
+        currency: inv.currency || "USD",
+        status: inv.status || "Draft",
+        issuedDate: inv.invoiceDate || new Date().toISOString().split("T")[0],
+        dueDate: inv.dueDate || "",
+        category: "Employee Invoice",
+        venture: inv.billedToName || "Ace Consultancys",
+        notes: inv.notes || "",
+        createdAt: inv.createdAt,
+        userUpiId: payeeInfo.userUpiId,
+        bankDetails: payeeInfo.bankDetails,
+        paymentDetails: inv.paymentDetails,
+      };
+    });
 
     // Merge both arrays
     const allInvoices = [...mappedFinanceInvoices, ...mappedEmployeeInvoices].sort((a: any, b: any) => {
