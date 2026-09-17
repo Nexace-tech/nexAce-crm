@@ -35,7 +35,7 @@ const ITDeviceSchema = new Schema<IITDevice>(
     warrantyExpiry: { type: String, trim: true, default: "" },
     assignedTo: { type: String, trim: true, default: "—" },
     department: { type: String, trim: true, default: "—" },
-    location: { type: String, trim: true, default: "HQ - Main Office" },
+    location: { type: String, trim: true, default: "" },
     os: { type: String, trim: true, default: "" },
     lastSeen: { type: String, default: () => new Date().toISOString().slice(0, 10) },
     condition: {

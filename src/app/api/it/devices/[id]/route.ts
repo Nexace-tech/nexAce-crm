@@ -71,7 +71,7 @@ export async function PATCH(
     if (specs !== undefined) updatePayload.specs = specs;
     if (purchaseDate !== undefined) updatePayload.purchaseDate = purchaseDate;
     if (warrantyExpiry !== undefined) updatePayload.warrantyExpiry = warrantyExpiry;
-    if (location !== undefined) updatePayload.location = location;
+    if (location !== undefined) updatePayload.location = (location || "").trim();
     if (os !== undefined) updatePayload.os = os;
     if (lastSeen !== undefined) updatePayload.lastSeen = lastSeen;
     if (condition !== undefined) updatePayload.condition = condition;

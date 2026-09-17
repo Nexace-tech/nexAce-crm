@@ -2499,23 +2499,25 @@ function DeviceModal({
 }
 
 const getLocationMeta = (loc?: string) => {
-  const l = (loc || "HQ - Main Office").toLowerCase();
+  if (!loc || !loc.trim()) return null;
+  const trimmed = loc.trim();
+  const l = trimmed.toLowerCase();
   if (l.includes("remote") || l.includes("wfh") || l.includes("home")) {
-    return { icon: "fa-solid fa-house-laptop", color: "text-amber-500", bg: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30", label: loc || "Remote / WFH" };
+    return { icon: "fa-solid fa-house-laptop", color: "text-amber-500", bg: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30", label: trimmed };
   }
   if (l.includes("server")) {
-    return { icon: "fa-solid fa-server", color: "text-violet-500", bg: "bg-violet-500/10 text-violet-600 dark:text-violet-400 border-violet-500/30", label: loc || "HQ - Server Room" };
+    return { icon: "fa-solid fa-server", color: "text-violet-500", bg: "bg-violet-500/10 text-violet-600 dark:text-violet-400 border-violet-500/30", label: trimmed };
   }
   if (l.includes("lab") || l.includes("test")) {
-    return { icon: "fa-solid fa-flask-vial", color: "text-emerald-500", bg: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30", label: loc || "HQ - IT Lab" };
+    return { icon: "fa-solid fa-flask-vial", color: "text-emerald-500", bg: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30", label: trimmed };
   }
   if (l.includes("storage") || l.includes("warehouse")) {
-    return { icon: "fa-solid fa-boxes-stacked", color: "text-slate-400", bg: "bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/30", label: loc || "HQ - Storage Room" };
+    return { icon: "fa-solid fa-boxes-stacked", color: "text-slate-400", bg: "bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/30", label: trimmed };
   }
   if (l.includes("branch")) {
-    return { icon: "fa-solid fa-code-branch", color: "text-sky-500", bg: "bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/30", label: loc || "Branch Office" };
+    return { icon: "fa-solid fa-code-branch", color: "text-sky-500", bg: "bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/30", label: trimmed };
   }
-  return { icon: "fa-solid fa-building", color: "text-blue-500", bg: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30", label: loc || "HQ - Main Office" };
+  return { icon: "fa-solid fa-location-dot", color: "text-primary", bg: "bg-primary/10 text-primary border-primary/30", label: trimmed };
 };
 
 const getWarrantyMeta = (expiry?: string) => {
@@ -2583,14 +2585,16 @@ function DevicesTab({
   }, [autoOpenAdd]);
 
   const types = useMemo(() => ["All", ...Array.from(new Set(devices.map((d) => d.type).filter(Boolean)))], [devices]);
-  const locations = useMemo(() => ["All", ...Array.from(new Set(devices.map((d) => d.location || "HQ - Main Office").filter(Boolean)))], [devices]);
+  const locations = useMemo(() => ["All", ...Array.from(new Set(devices.map((d) => d.location?.trim()).filter(Boolean))) as string[]], [devices]);
   const conditions = useMemo(() => ["All", "Excellent", "Good", "Fair", "Poor"], []);
 
   const locationCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     devices.forEach((d) => {
-      const loc = d.location || "HQ - Main Office";
-      counts[loc] = (counts[loc] || 0) + 1;
+      const loc = d.location?.trim();
+      if (loc) {
+        counts[loc] = (counts[loc] || 0) + 1;
+      }
     });
     return counts;
   }, [devices]);
@@ -2607,14 +2611,14 @@ function DevicesTab({
 
   const filtered = useMemo(() => devices.filter((d) => {
     const q = search.toLowerCase();
-    const loc = d.location || "HQ - Main Office";
+    const loc = (d.location || "").trim();
     const matchesSearch = !q ||
       d.assetTag.toLowerCase().includes(q) ||
       d.brand?.toLowerCase().includes(q) ||
       d.modelName?.toLowerCase().includes(q) ||
       d.assignedTo?.toLowerCase().includes(q) ||
       d.department?.toLowerCase().includes(q) ||
-      loc.toLowerCase().includes(q) ||
+      (loc && loc.toLowerCase().includes(q)) ||
       (d.serialNumber && d.serialNumber.toLowerCase().includes(q));
 
     return matchesSearch
@@ -2738,6 +2742,7 @@ function DevicesTab({
                   </span>
                   {(() => {
                     const locMeta = getLocationMeta(inspectDevice.location);
+                    if (!locMeta) return <span className="text-xs text-muted-foreground font-medium">—</span>;
                     return (
                       <span className={cn("inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold border", locMeta.bg)}>
                         <i className={locMeta.icon} />
@@ -3020,7 +3025,7 @@ function DevicesTab({
               </span>
             </button>
             {Object.entries(locationCounts).map(([loc, count]) => {
-              const locMeta = getLocationMeta(loc);
+              const locMeta = getLocationMeta(loc) || { icon: "fa-solid fa-location-dot", color: "text-primary", bg: "bg-muted/50 border-border text-foreground", label: loc };
               const isSelected = filterLocation === loc;
               return (
                 <button
@@ -3128,7 +3133,7 @@ function DevicesTab({
           <table className="w-full text-xs">
             <tbody>
               {Array.from({ length: 5 }).map((_, i) => (
-                <SkeletonRow key={i} cols={10} />
+                <SkeletonRow key={i} cols={6} />
               ))}
             </tbody>
           </table>
@@ -3201,10 +3206,14 @@ function DevicesTab({
 
                   {/* Location & Warranty Pills */}
                   <div className="mt-2.5 flex items-center justify-between gap-1 flex-wrap">
-                    <span className={cn("inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-semibold border truncate max-w-[130px]", locMeta.bg)}>
-                      <i className={cn(locMeta.icon, "text-[9px]")} />
-                      <span className="truncate">{locMeta.label}</span>
-                    </span>
+                    {locMeta ? (
+                      <span className={cn("inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-semibold border truncate max-w-[130px]", locMeta.bg)}>
+                        <i className={cn(locMeta.icon, "text-[9px]")} />
+                        <span className="truncate">{locMeta.label}</span>
+                      </span>
+                    ) : (
+                      <span />
+                    )}
 
                     {wMeta ? (
                       <span className={cn("inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-semibold border truncate", wMeta.cls)}>
@@ -3265,15 +3274,13 @@ function DevicesTab({
           <table className="w-full text-xs">
             <thead>
               <tr className="bg-muted/50 border-b border-border">
-                {["Asset Tag", "Type", "Brand / Model", "Assigned Custodian", "Dept.", "Physical Location", "Warranty", "Condition", "Status", ""].map((h) => (
-                  <th key={h} className="text-left px-3.5 py-3 font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap text-[10px]">{h}</th>
+                {["Asset Tag", "Type", "Brand / Model", "Assigned Custodian", "Status", "Actions"].map((h) => (
+                  <th key={h} className={cn("px-3.5 py-3 font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap text-[10px]", h === "Actions" ? "text-right pr-4" : "text-left")}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {filtered.map((row, idx) => {
-                const locMeta = getLocationMeta(row.location);
-                const wMeta = getWarrantyMeta(row.warrantyExpiry);
                 return (
                   <tr
                     key={row.id}
@@ -3283,13 +3290,13 @@ function DevicesTab({
                     )}
                   >
                     {/* Asset Tag */}
-                    <td className="px-3.5 py-2.5 whitespace-nowrap">
+                    <td className="px-3.5 py-3 whitespace-nowrap">
                       <div className="flex items-center gap-1.5">
                         <button
                           type="button"
                           onClick={() => setInspectDevice(row)}
                           className="font-mono font-bold text-primary hover:underline flex items-center gap-1.5 cursor-pointer text-xs"
-                          title="Click to inspect asset details"
+                          title="Click to view device details"
                         >
                           <i className="fa-solid fa-laptop-code text-[10px] opacity-70 group-hover:opacity-100" />
                           <span>{row.assetTag}</span>
@@ -3306,7 +3313,7 @@ function DevicesTab({
                     </td>
 
                     {/* Type */}
-                    <td className="px-3.5 py-2.5 whitespace-nowrap">
+                    <td className="px-3.5 py-3 whitespace-nowrap">
                       <span className="inline-flex items-center gap-1.5 text-muted-foreground font-semibold">
                         <i className={cn(deviceIcon(row.type), "text-xs text-primary/80")} />
                         <span>{row.type}</span>
@@ -3314,79 +3321,39 @@ function DevicesTab({
                     </td>
 
                     {/* Brand / Model */}
-                    <td className="px-3.5 py-2.5 text-foreground whitespace-nowrap font-medium">
-                      <div className="font-bold hover:text-primary cursor-pointer text-xs" onClick={() => setInspectDevice(row)}>
+                    <td className="px-3.5 py-3 whitespace-nowrap font-medium">
+                      <div className="font-bold text-foreground hover:text-primary cursor-pointer text-xs" onClick={() => setInspectDevice(row)}>
                         {row.brand} {row.modelName}
                       </div>
-                      {row.specs && <div className="text-[10px] text-muted-foreground font-normal truncate max-w-[150px]">{row.specs}</div>}
+                      {row.specs && <div className="text-[10px] text-muted-foreground font-normal truncate max-w-[180px]">{row.specs}</div>}
                     </td>
 
                     {/* Assigned Custodian */}
-                    <td className="px-3.5 py-2.5 whitespace-nowrap">
+                    <td className="px-3.5 py-3 whitespace-nowrap">
                       <div className="flex items-center gap-2">
                         <div className="w-6 h-6 rounded-full bg-primary/10 text-primary border border-primary/20 flex items-center justify-center text-[10px] font-bold shrink-0">
                           {(row.assignedTo || "U").slice(0, 2).toUpperCase()}
                         </div>
-                        <span className="font-semibold text-foreground">{row.assignedTo || "Unassigned"}</span>
+                        <div>
+                          <p className="font-semibold text-foreground text-xs leading-tight">{row.assignedTo || "Unassigned"}</p>
+                          <div className="text-[10px] text-muted-foreground font-normal flex items-center gap-1.5 mt-0.5">
+                            <span>{row.department || "General"}</span>
+                            {row.location && (
+                              <>
+                                <span className="text-border">•</span>
+                                <span className="inline-flex items-center gap-0.5 text-muted-foreground/80">
+                                  <i className="fa-solid fa-location-dot text-[8px] text-primary/70" />
+                                  {row.location}
+                                </span>
+                              </>
+                            )}
+                          </div>
+                        </div>
                       </div>
                     </td>
 
-                    {/* Department */}
-                    <td className="px-3.5 py-2.5 text-muted-foreground whitespace-nowrap font-medium">{row.department || "—"}</td>
-
-                    {/* Physical Location Input Field */}
-                    <td className="px-3.5 py-2.5 whitespace-nowrap">
-                      {isPrivileged ? (
-                        <div className="relative flex items-center w-36">
-                          <i className="fa-solid fa-location-dot absolute left-2.5 text-muted-foreground text-[10px] pointer-events-none" />
-                          <input
-                            type="text"
-                            key={row.location || ""}
-                            defaultValue={row.location || ""}
-                            placeholder="Location..."
-                            onBlur={(e) => {
-                              const val = e.target.value.trim();
-                              if (val !== (row.location || "")) {
-                                handleQuickRelocate(row, val);
-                              }
-                            }}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter") {
-                                (e.target as HTMLInputElement).blur();
-                              }
-                            }}
-                            className="h-7 w-full pl-6 pr-2 rounded-lg border border-border/80 bg-background text-xs font-medium text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
-                          />
-                        </div>
-                      ) : (
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-border/80 bg-muted/40 text-[11px] font-semibold text-foreground">
-                          <i className="fa-solid fa-location-dot text-[10px] text-muted-foreground" />
-                          <span>{row.location || "—"}</span>
-                        </span>
-                      )}
-                    </td>
-
-                    {/* Warranty */}
-                    <td className="px-3.5 py-2.5 whitespace-nowrap">
-                      {wMeta ? (
-                        <span className={cn("inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold border", wMeta.cls)}>
-                          <i className={wMeta.icon} />
-                          {wMeta.label}
-                        </span>
-                      ) : (
-                        <span className="text-muted-foreground text-[10px]">—</span>
-                      )}
-                    </td>
-
-                    {/* Condition */}
-                    <td className="px-3.5 py-2.5 whitespace-nowrap">
-                      <span className={cn("px-2.5 py-0.5 rounded-full text-[10px] font-bold border", statusBadge(row.condition))}>
-                        {row.condition}
-                      </span>
-                    </td>
-
                     {/* Status */}
-                    <td className="px-3.5 py-2.5 whitespace-nowrap">
+                    <td className="px-3.5 py-3 whitespace-nowrap">
                       {isPrivileged ? (
                         <select
                           value={row.status}
@@ -3419,18 +3386,18 @@ function DevicesTab({
                     </td>
 
                     {/* Action Toolbar */}
-                    <td className="px-3.5 py-2.5 whitespace-nowrap">
-                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <td className="px-3.5 py-3 whitespace-nowrap text-right pr-4">
+                      <div className="flex items-center justify-end gap-1">
                         <button
                           onClick={() => setInspectDevice(row)}
-                          className="w-7 h-7 rounded-lg bg-muted hover:bg-accent flex items-center justify-center text-muted-foreground hover:text-foreground cursor-pointer shadow-2xs"
-                          title="Inspect Telemetry"
+                          className="w-7 h-7 rounded-lg bg-muted/70 hover:bg-primary/15 hover:text-primary flex items-center justify-center text-muted-foreground cursor-pointer shadow-2xs transition-colors"
+                          title="View Details"
                         >
                           <i className="fa-solid fa-eye text-[10px]" />
                         </button>
                         <button
                           onClick={() => setBadgeDevice(row)}
-                          className="w-7 h-7 rounded-lg bg-muted hover:bg-accent flex items-center justify-center text-muted-foreground hover:text-foreground cursor-pointer shadow-2xs"
+                          className="w-7 h-7 rounded-lg bg-muted/70 hover:bg-muted text-muted-foreground hover:text-foreground flex items-center justify-center text-xs cursor-pointer shadow-2xs transition-colors"
                           title="Print Label"
                         >
                           <i className="fa-solid fa-qrcode text-[10px]" />
@@ -3439,15 +3406,15 @@ function DevicesTab({
                           <>
                             <button
                               onClick={() => setModal({ mode: "edit", item: row })}
-                              className="w-7 h-7 rounded-lg bg-muted hover:bg-accent flex items-center justify-center text-muted-foreground hover:text-foreground cursor-pointer shadow-2xs"
-                              title="Edit"
+                              className="w-7 h-7 rounded-lg bg-muted/70 hover:bg-primary/15 hover:text-primary flex items-center justify-center text-muted-foreground cursor-pointer shadow-2xs transition-colors"
+                              title="Edit Device"
                             >
                               <i className="fa-solid fa-pen text-[10px]" />
                             </button>
                             <button
                               onClick={() => setDeleteId(row.id)}
-                              className="w-7 h-7 rounded-lg bg-muted hover:bg-red-500/10 flex items-center justify-center text-muted-foreground hover:text-red-500 cursor-pointer shadow-2xs"
-                              title="Delete"
+                              className="w-7 h-7 rounded-lg bg-muted/70 hover:bg-destructive/15 hover:text-destructive flex items-center justify-center text-muted-foreground cursor-pointer shadow-2xs transition-colors"
+                              title="Delete Device"
                             >
                               <i className="fa-solid fa-trash text-[10px]" />
                             </button>

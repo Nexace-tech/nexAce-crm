@@ -179,7 +179,7 @@ export async function POST(request: Request) {
       warrantyExpiry: warrantyExpiry?.trim() || "",
       assignedTo: assignedTo?.trim() || session.userName || "—",
       department: department?.trim() || "—",
-      location: location?.trim() || "HQ - Main Office",
+      location: location?.trim() || "",
       os: os?.trim() || "",
       lastSeen: lastSeen || new Date().toISOString().slice(0, 10),
       condition: condition || "Good",
