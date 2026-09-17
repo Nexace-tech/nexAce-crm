@@ -825,56 +825,101 @@ export function ContractsOnboardingTab() {
               )}
             </div>
           ) : (
-            <div className="bg-card border border-border rounded-2xl overflow-hidden">
+            <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-border bg-muted/40">
-                      {["Client", "Admin Co.", "Type", "POC", "Location", "Status", "Created", ""].map((h) => (
-                        <th key={h} className="text-left text-xs font-semibold text-muted-foreground px-4 py-3">{h}</th>
+                    <tr className="border-b border-border bg-muted/50">
+                      {[
+                        { h: "Client",    w: "min-w-[160px]" },
+                        { h: "Sender",    w: "min-w-[130px]" },
+                        { h: "Type",      w: "min-w-[100px]" },
+                        { h: "POC",       w: "min-w-[160px]" },
+                        { h: "Period",    w: "min-w-[140px]" },
+                        { h: "Location",  w: "min-w-[100px]" },
+                        { h: "Status",    w: "min-w-[100px]" },
+                        { h: "",          w: "w-[90px]" },
+                      ].map(({ h, w }) => (
+                        <th key={h} className={cn("text-left text-[11px] font-semibold text-muted-foreground/70 uppercase tracking-wider px-4 py-3", w)}>{h}</th>
                       ))}
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-border">
+                  <tbody className="divide-y divide-border/60">
                     {filteredContracts.map((c) => {
-                      const typeCfg = CONTRACT_TYPE_CFG[c.contractType];
+                      const typeCfg   = CONTRACT_TYPE_CFG[c.contractType];
                       const statusCfg = CONTRACT_STATUS_CFG[c.status];
                       const typeLabel = c.contractType === "Custom" && c.customTypeLabel ? c.customTypeLabel : typeCfg.label;
+                      const isExpiringSoon = c.endDate && (() => {
+                        const diff = (new Date(c.endDate).getTime() - Date.now()) / 86400000;
+                        return diff >= 0 && diff <= 30;
+                      })();
                       return (
-                        <tr key={c._id} className="hover:bg-muted/30 transition-colors group">
-                          <td className="px-4 py-3">
-                            <p className="font-semibold text-foreground text-sm leading-tight">{c.receiver?.name}</p>
+                        <tr key={c._id} className="hover:bg-muted/25 transition-colors group cursor-pointer" onClick={() => setViewContract(c)}>
+                          {/* Client */}
+                          <td className="px-4 py-3.5">
+                            <div className="flex items-center gap-2.5">
+                              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary/20 to-primary/5 border border-primary/20 flex items-center justify-center shrink-0">
+                                <span className="text-xs font-bold text-primary">{(c.receiver?.name?.[0] ?? "?").toUpperCase()}</span>
+                              </div>
+                              <div>
+                                <p className="font-semibold text-foreground text-sm leading-tight">{c.receiver?.name}</p>
+                                {c.receiver?.city && <p className="text-[11px] text-muted-foreground">{c.receiver.city}{c.receiver.country ? `, ${c.receiver.country}` : ""}</p>}
+                              </div>
+                            </div>
                           </td>
-                          <td className="px-4 py-3">
-                            <p className="text-xs text-muted-foreground">{c.sender?.name}</p>
+                          {/* Sender */}
+                          <td className="px-4 py-3.5">
+                            <div className="flex items-center gap-1.5">
+                              <i className="fa-solid fa-building text-[10px] text-muted-foreground/60" />
+                              <p className="text-xs font-medium text-muted-foreground">{c.sender?.name || "—"}</p>
+                            </div>
                           </td>
-                          <td className="px-4 py-3">
-                            <span className={cn("inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border", typeCfg.cls)}>
+                          {/* Type */}
+                          <td className="px-4 py-3.5">
+                            <span className={cn("inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold border", typeCfg.cls)}>
                               {typeLabel}
                             </span>
                           </td>
-                          <td className="px-4 py-3">
-                            <p className="text-xs font-medium text-foreground">{c.pocName}</p>
-                            <p className="text-xs text-muted-foreground">{c.pocEmail}</p>
+                          {/* POC */}
+                          <td className="px-4 py-3.5">
+                            <p className="text-xs font-semibold text-foreground">{c.pocName}</p>
+                            <p className="text-[11px] text-muted-foreground">{c.pocEmail}</p>
                           </td>
-                          <td className="px-4 py-3">
-                            <p className="text-xs text-muted-foreground">{c.location || "—"}</p>
+                          {/* Period */}
+                          <td className="px-4 py-3.5">
+                            {c.startDate || c.endDate ? (
+                              <div className="space-y-0.5">
+                                <p className="text-[11px] text-muted-foreground"><span className="font-medium text-foreground/70">From</span> {fmtDate(c.startDate)}</p>
+                                <div className="flex items-center gap-1">
+                                  <p className="text-[11px] text-muted-foreground"><span className="font-medium text-foreground/70">To</span> {fmtDate(c.endDate)}</p>
+                                  {isExpiringSoon && <span className="text-[10px] font-semibold text-amber-500 bg-amber-500/10 px-1.5 py-0.5 rounded-full">Soon</span>}
+                                </div>
+                              </div>
+                            ) : <p className="text-[11px] text-muted-foreground">—</p>}
                           </td>
-                          <td className="px-4 py-3">
-                            <span className={cn("inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium border", statusCfg.cls)}>
-                              <i className={`fa-solid ${statusCfg.icon} text-[10px]`} />
+                          {/* Location */}
+                          <td className="px-4 py-3.5">
+                            {c.location ? (
+                              <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                                <i className="fa-solid fa-location-dot text-[10px]" />
+                                {c.location}
+                              </div>
+                            ) : <p className="text-[11px] text-muted-foreground">—</p>}
+                          </td>
+                          {/* Status */}
+                          <td className="px-4 py-3.5">
+                            <span className={cn("inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold border", statusCfg.cls)}>
+                              <i className={`fa-solid ${statusCfg.icon} text-[9px]`} />
                               {c.status}
                             </span>
                           </td>
-                          <td className="px-4 py-3">
-                            <p className="text-xs text-muted-foreground">{fmtDate(c.createdAt)}</p>
-                          </td>
-                          <td className="px-4 py-3">
+                          {/* Actions */}
+                          <td className="px-4 py-3.5" onClick={(e) => e.stopPropagation()}>
                             <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                               <button
                                 onClick={() => setViewContract(c)}
-                                title="View"
-                                className="w-7 h-7 rounded-lg bg-muted hover:bg-muted/80 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                                title="View details"
+                                className="w-7 h-7 rounded-lg bg-primary/10 hover:bg-primary/20 flex items-center justify-center text-primary transition-colors cursor-pointer"
                               >
                                 <i className="fa-solid fa-eye text-xs" />
                               </button>
@@ -883,7 +928,7 @@ export function ContractsOnboardingTab() {
                                   <button
                                     onClick={() => openEditModal(c)}
                                     title="Edit"
-                                    className="w-7 h-7 rounded-lg bg-muted hover:bg-muted/80 flex items-center justify-center text-muted-foreground hover:text-primary transition-colors cursor-pointer"
+                                    className="w-7 h-7 rounded-lg bg-muted hover:bg-blue-500/10 flex items-center justify-center text-muted-foreground hover:text-blue-500 transition-colors cursor-pointer"
                                   >
                                     <i className="fa-solid fa-pen text-xs" />
                                   </button>
@@ -904,96 +949,182 @@ export function ContractsOnboardingTab() {
                   </tbody>
                 </table>
               </div>
+              <div className="px-4 py-2.5 border-t border-border/60 bg-muted/20 flex items-center justify-between">
+                <p className="text-[11px] text-muted-foreground">Showing <span className="font-semibold text-foreground">{filteredContracts.length}</span> of <span className="font-semibold text-foreground">{contracts.length}</span> contracts</p>
+                {contracts.length > 0 && <p className="text-[11px] text-muted-foreground">Click a row to view details</p>}
+              </div>
             </div>
           )}
 
           {/* ── View Slide-Over ───────────────────────────────────────────── */}
           {viewContract && (
-            <div className="fixed inset-0 z-[100] flex">
-              <div className="flex-1 bg-black/40 backdrop-blur-sm" onClick={() => setViewContract(null)} />
-              <div className="w-full max-w-md bg-background border-l border-border flex flex-col overflow-y-auto shadow-2xl">
-                <div className="flex items-center justify-between p-5 border-b border-border">
-                  <div>
-                    <h3 className="font-bold text-base text-foreground">{viewContract.receiver?.name}</h3>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      {CONTRACT_TYPE_CFG[viewContract.contractType].label}
-                      {viewContract.contractType === "Custom" && viewContract.customTypeLabel && ` — ${viewContract.customTypeLabel}`}
-                    </p>
+            <div className="fixed inset-0 z-[100] flex animate-in fade-in duration-150">
+              <div className="flex-1 bg-black/50 backdrop-blur-sm" onClick={() => setViewContract(null)} />
+              <div className="w-full max-w-lg bg-background border-l border-border flex flex-col overflow-y-auto shadow-2xl animate-in slide-in-from-right-4 duration-200">
+
+                {/* Header */}
+                <div className="relative overflow-hidden">
+                  <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-primary/5 to-transparent" />
+                  <div className="relative flex items-start justify-between p-6 border-b border-border">
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-primary/30 to-primary/10 border border-primary/20 flex items-center justify-center shrink-0 shadow-sm">
+                        <span className="text-lg font-bold text-primary">{(viewContract.receiver?.name?.[0] ?? "?").toUpperCase()}</span>
+                      </div>
+                      <div>
+                        <h3 className="font-bold text-lg text-foreground leading-tight">{viewContract.receiver?.name}</h3>
+                        <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                          <span className={cn("inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold border", CONTRACT_STATUS_CFG[viewContract.status].cls)}>
+                            <i className={`fa-solid ${CONTRACT_STATUS_CFG[viewContract.status].icon} text-[9px]`} />
+                            {viewContract.status}
+                          </span>
+                          <span className={cn("inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold border", CONTRACT_TYPE_CFG[viewContract.contractType].cls)}>
+                            {viewContract.contractType === "Custom" && viewContract.customTypeLabel ? viewContract.customTypeLabel : CONTRACT_TYPE_CFG[viewContract.contractType].label}
+                          </span>
+                          {viewContract.linkedInvoiceId && (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold border bg-blue-500/10 text-blue-600 border-blue-500/30">
+                              <i className="fa-solid fa-file-invoice text-[9px]" /> Invoice
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <button onClick={() => setViewContract(null)} className="w-8 h-8 rounded-lg bg-background/80 border border-border hover:bg-muted flex items-center justify-center cursor-pointer transition-colors mt-0.5 shrink-0">
+                      <i className="fa-solid fa-xmark text-sm" />
+                    </button>
                   </div>
-                  <button onClick={() => setViewContract(null)} className="w-8 h-8 rounded-lg bg-muted hover:bg-muted/70 flex items-center justify-center cursor-pointer">
-                    <i className="fa-solid fa-xmark text-sm" />
-                  </button>
                 </div>
-                <div className="p-5 space-y-4 flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className={cn("inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border", CONTRACT_STATUS_CFG[viewContract.status].cls)}>
-                      <i className={`fa-solid ${CONTRACT_STATUS_CFG[viewContract.status].icon} text-[10px]`} />
-                      {viewContract.status}
-                    </span>
-                    {viewContract.linkedInvoiceId && (
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border bg-blue-500/10 text-blue-600 border-blue-500/30">
-                        <i className="fa-solid fa-file-invoice text-[10px]" /> Invoice Generated
-                      </span>
-                    )}
+
+                <div className="p-5 space-y-5 flex-1">
+
+                  {/* Contract Period */}
+                  {(viewContract.startDate || viewContract.endDate) && (
+                    <div className="bg-muted/40 rounded-xl p-4 flex items-center justify-between gap-4 border border-border">
+                      <div className="text-center flex-1">
+                        <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Start Date</p>
+                        <p className="text-sm font-bold text-foreground mt-1">{fmtDate(viewContract.startDate)}</p>
+                      </div>
+                      <div className="flex flex-col items-center gap-1">
+                        <i className="fa-solid fa-arrow-right text-muted-foreground/50 text-xs" />
+                        <div className="h-px w-8 bg-border" />
+                      </div>
+                      <div className="text-center flex-1">
+                        <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">End Date</p>
+                        <p className="text-sm font-bold text-foreground mt-1">{fmtDate(viewContract.endDate)}</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Company Cards — Sender & Receiver */}
+                  <div className="grid grid-cols-1 gap-3">
+                    {/* Sender */}
+                    <div className="rounded-xl border border-border bg-card p-4 space-y-2">
+                      <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                        <i className="fa-solid fa-building-user text-primary" /> Sender — Our Company
+                      </p>
+                      <p className="font-bold text-foreground text-sm">{viewContract.sender?.name || "—"}</p>
+                      <div className="space-y-1 text-xs text-muted-foreground">
+                        {viewContract.sender?.address && <p className="flex items-center gap-1.5"><i className="fa-solid fa-location-dot w-3" />{viewContract.sender.address}{viewContract.sender.city ? `, ${viewContract.sender.city}` : ""}{viewContract.sender.country ? `, ${viewContract.sender.country}` : ""}</p>}
+                        {viewContract.sender?.email && <p className="flex items-center gap-1.5"><i className="fa-solid fa-envelope w-3" />{viewContract.sender.email}</p>}
+                        {viewContract.sender?.phone && <p className="flex items-center gap-1.5"><i className="fa-solid fa-phone w-3" />{viewContract.sender.phone}</p>}
+                        {viewContract.sender?.taxId && <p className="flex items-center gap-1.5"><i className="fa-solid fa-receipt w-3" />GST/Tax: {viewContract.sender.taxId}</p>}
+                        {viewContract.sender?.website && <a href={viewContract.sender.website} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 text-primary hover:underline"><i className="fa-solid fa-globe w-3" />{viewContract.sender.website}</a>}
+                      </div>
+                    </div>
+                    {/* Receiver */}
+                    <div className="rounded-xl border border-border bg-card p-4 space-y-2">
+                      <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                        <i className="fa-solid fa-handshake text-emerald-500" /> Receiver — Client
+                      </p>
+                      <p className="font-bold text-foreground text-sm">{viewContract.receiver?.name || "—"}</p>
+                      <div className="space-y-1 text-xs text-muted-foreground">
+                        {viewContract.receiver?.address && <p className="flex items-center gap-1.5"><i className="fa-solid fa-location-dot w-3" />{viewContract.receiver.address}{viewContract.receiver.city ? `, ${viewContract.receiver.city}` : ""}{viewContract.receiver.country ? `, ${viewContract.receiver.country}` : ""}</p>}
+                        {viewContract.receiver?.email && <p className="flex items-center gap-1.5"><i className="fa-solid fa-envelope w-3" />{viewContract.receiver.email}</p>}
+                        {viewContract.receiver?.phone && <p className="flex items-center gap-1.5"><i className="fa-solid fa-phone w-3" />{viewContract.receiver.phone}</p>}
+                        {viewContract.receiver?.taxId && <p className="flex items-center gap-1.5"><i className="fa-solid fa-receipt w-3" />GST/Tax: {viewContract.receiver.taxId}</p>}
+                        {viewContract.receiver?.website && <a href={viewContract.receiver.website} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 text-primary hover:underline"><i className="fa-solid fa-globe w-3" />{viewContract.receiver.website}</a>}
+                      </div>
+                    </div>
                   </div>
 
-                  {([
-                    { label: "Sender (Admin)",   value: viewContract.sender?.name },
-                    { label: "POC Name",         value: viewContract.pocName },
-                    { label: "POC Email",        value: viewContract.pocEmail },
-                    { label: "Location",         value: viewContract.location || "—" },
-                    { label: "Start Date",       value: fmtDate(viewContract.startDate) },
-                    { label: "End Date",         value: fmtDate(viewContract.endDate) },
-                  ] as Array<{label:string;value:string}>).map(({ label, value }) => (
-                    <div key={label} className="flex flex-col gap-0.5">
-                      <p className="text-xs font-medium text-muted-foreground">{label}</p>
-                      <p className="text-sm text-foreground">{value}</p>
+                  {/* POC */}
+                  <div className="rounded-xl border border-border bg-muted/30 p-4 space-y-2">
+                    <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                      <i className="fa-solid fa-user-tie text-violet-500" /> Point of Contact
+                    </p>
+                    <p className="font-semibold text-foreground text-sm">{viewContract.pocName}</p>
+                    <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
+                      <a href={`mailto:${viewContract.pocEmail}`} className="flex items-center gap-1.5 hover:text-primary transition-colors"><i className="fa-solid fa-envelope" />{viewContract.pocEmail}</a>
+                      {viewContract.pocPhone && <a href={`tel:${viewContract.pocPhone}`} className="flex items-center gap-1.5 hover:text-primary transition-colors"><i className="fa-solid fa-phone" />{viewContract.pocPhone}</a>}
                     </div>
-                  ))}
+                  </div>
+
+                  {/* Location */}
+                  {viewContract.location && (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <i className="fa-solid fa-location-dot text-primary" />
+                      <span>{viewContract.location}</span>
+                    </div>
+                  )}
 
                   {/* Attachments */}
                   {(viewContract.ndaAttachment || viewContract.agreementAttachment || (viewContract.otherAttachments?.length ?? 0) > 0) && (
-                    <div>
-                      <p className="text-xs font-semibold text-muted-foreground mb-2">Attachments</p>
-                      <div className="space-y-1.5">
+                    <div className="space-y-2">
+                      <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Attachments</p>
+                      <div className="space-y-2">
                         {viewContract.ndaAttachment && (
                           <a href={viewContract.ndaAttachment.url} target="_blank" rel="noreferrer"
-                            className="flex items-center gap-2 text-xs text-primary hover:underline">
-                            <i className="fa-solid fa-file-pdf" /> NDA — {viewContract.ndaAttachment.name}
+                            className="flex items-center gap-2.5 text-xs text-foreground bg-muted/40 border border-border rounded-lg px-3 py-2 hover:bg-muted transition-colors">
+                            <i className="fa-solid fa-file-pdf text-rose-500" />
+                            <span className="flex-1 font-medium">NDA</span>
+                            <span className="text-muted-foreground truncate max-w-[130px]">{viewContract.ndaAttachment.name}</span>
+                            <i className="fa-solid fa-external-link text-muted-foreground/50 text-[10px]" />
                           </a>
                         )}
                         {viewContract.agreementAttachment && (
                           <a href={viewContract.agreementAttachment.url} target="_blank" rel="noreferrer"
-                            className="flex items-center gap-2 text-xs text-primary hover:underline">
-                            <i className="fa-solid fa-file-lines" /> Agreement — {viewContract.agreementAttachment.name}
+                            className="flex items-center gap-2.5 text-xs text-foreground bg-muted/40 border border-border rounded-lg px-3 py-2 hover:bg-muted transition-colors">
+                            <i className="fa-solid fa-file-lines text-blue-500" />
+                            <span className="flex-1 font-medium">Agreement</span>
+                            <span className="text-muted-foreground truncate max-w-[130px]">{viewContract.agreementAttachment.name}</span>
+                            <i className="fa-solid fa-external-link text-muted-foreground/50 text-[10px]" />
                           </a>
                         )}
                         {viewContract.otherAttachments?.map((at, i) => (
                           <a key={i} href={at.url} target="_blank" rel="noreferrer"
-                            className="flex items-center gap-2 text-xs text-primary hover:underline">
-                            <i className="fa-solid fa-paperclip" /> {at.name}
+                            className="flex items-center gap-2.5 text-xs text-foreground bg-muted/40 border border-border rounded-lg px-3 py-2 hover:bg-muted transition-colors">
+                            <i className="fa-solid fa-paperclip text-amber-500" />
+                            <span className="flex-1 text-muted-foreground truncate">{at.name}</span>
+                            <i className="fa-solid fa-external-link text-muted-foreground/50 text-[10px]" />
                           </a>
                         ))}
                       </div>
                     </div>
                   )}
 
+                  {/* Notes */}
                   {viewContract.notes && (
-                    <div>
-                      <p className="text-xs font-semibold text-muted-foreground mb-1">Notes</p>
-                      <p className="text-sm text-foreground bg-muted/40 rounded-lg p-3">{viewContract.notes}</p>
+                    <div className="space-y-1.5">
+                      <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Notes</p>
+                      <p className="text-sm text-foreground bg-muted/40 rounded-xl p-3.5 leading-relaxed border border-border/60">{viewContract.notes}</p>
                     </div>
                   )}
+
+                  {/* Meta */}
+                  <div className="text-[11px] text-muted-foreground/60 flex items-center gap-1.5 pt-1">
+                    <i className="fa-solid fa-clock" />
+                    Created {fmtDate(viewContract.createdAt)}
+                    {viewContract.createdBy && ` by ${viewContract.createdBy.name}`}
+                  </div>
                 </div>
 
                 {isManagerOrAdmin && (
-                  <div className="p-5 border-t border-border flex gap-2">
-                    <Button size="sm" variant="outline" className="flex-1 gap-1.5 cursor-pointer" onClick={() => { setViewContract(null); openEditModal(viewContract); }}>
-                      <i className="fa-solid fa-pen text-xs" /> Edit
+                  <div className="p-5 border-t border-border flex gap-2 bg-background/80">
+                    <Button size="sm" className="flex-1 gap-1.5 cursor-pointer" onClick={() => { setViewContract(null); openEditModal(viewContract); }}>
+                      <i className="fa-solid fa-pen text-xs" /> Edit Contract
                     </Button>
-                    <Button size="sm" variant="outline" className="gap-1.5 cursor-pointer text-rose-500 hover:text-rose-600 border-rose-200"
+                    <Button size="sm" variant="outline" className="gap-1.5 cursor-pointer text-rose-500 hover:text-rose-600 border-rose-200 hover:bg-rose-500/5"
                       onClick={() => { setViewContract(null); setDeleteContractId(viewContract._id); }}>
-                      <i className="fa-solid fa-trash text-xs" /> Delete
+                      <i className="fa-solid fa-trash text-xs" />
                     </Button>
                   </div>
                 )}
