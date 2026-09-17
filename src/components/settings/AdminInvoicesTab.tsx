@@ -1062,7 +1062,8 @@ export function AdminInvoicesTab({ showToast, scope = "internal" }: AdminInvoice
                             </button>
                           </div>
                         ))}
-                    </div>
+                      </div>
+                    )}
                   </div>
 
                   {/* UPI Transaction ID */}

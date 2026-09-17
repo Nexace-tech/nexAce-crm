@@ -915,77 +915,63 @@ export default function FinancePage() {
                     </div>
 
                     {/* Quick Pick Chips */}
-                    <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-                      <span className="text-[10px] text-muted-foreground font-medium">Quick Pick:</span>
-                      {(targetPayeeUpiId || userUpiId) && (
-                        <button
-                          type="button"
-                          onClick={() => setToUpiId(targetPayeeUpiId || userUpiId)}
-                          className={cn(
-                            "px-2 py-0.5 rounded-md text-[11px] font-mono flex items-center gap-1 transition-all cursor-pointer border",
-                            toUpiId.trim() === (targetPayeeUpiId || userUpiId)
-                              ? "border-emerald-500 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 font-bold shadow-2xs"
-                              : "border-border/60 bg-background/60 hover:bg-background text-muted-foreground"
-                          )}
-                        >
-                          <i className="fa-solid fa-user-check text-[10px] text-emerald-500" />
-                          <span>User UPI ({targetPayeeUpiId || userUpiId})</span>
-                        </button>
-                      )}
-
-                      {orgUpiId && orgUpiId !== (targetPayeeUpiId || userUpiId) && (
-                        <button
-                          type="button"
-                          onClick={() => setToUpiId(orgUpiId)}
-                          className={cn(
-                            "px-2 py-0.5 rounded-md text-[11px] font-mono flex items-center gap-1 transition-all cursor-pointer border",
-                            toUpiId.trim() === orgUpiId
-                              ? "border-violet-500 bg-violet-500/15 text-violet-700 dark:text-violet-300 font-bold shadow-2xs"
-                              : "border-border/60 bg-background/60 hover:bg-background text-muted-foreground"
-                          )}
-                        >
-                          <i className="fa-solid fa-shield-halved text-[10px] text-violet-500" />
-                          <span>Org Default ({orgUpiId})</span>
-                        </button>
-                      )}
-
-                      {savedUpiIds
-                        .filter((id) => id && id !== (targetPayeeUpiId || userUpiId) && id !== orgUpiId)
-                        .map((savedId) => (
-                          <div
-                            key={savedId}
+                    {((targetPayeeUpiId || userUpiId) || savedUpiIds.some(id => id && id !== (targetPayeeUpiId || userUpiId) && id !== orgUpiId)) && (
+                      <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                        <span className="text-[10px] text-muted-foreground font-medium">Quick Pick:</span>
+                        {(targetPayeeUpiId || userUpiId) && (
+                          <button
+                            type="button"
+                            onClick={() => setToUpiId(targetPayeeUpiId || userUpiId)}
                             className={cn(
-                              "px-2 py-0.5 rounded-md text-[11px] font-mono flex items-center gap-1 border transition-all",
-                              toUpiId.trim() === savedId
-                                ? "border-sky-500 bg-sky-500/15 text-sky-700 dark:text-sky-300 font-bold"
-                                : "border-border/60 bg-background/60 text-muted-foreground"
+                              "px-2 py-0.5 rounded-md text-[11px] font-mono flex items-center gap-1 transition-all cursor-pointer border",
+                              toUpiId.trim() === (targetPayeeUpiId || userUpiId)
+                                ? "border-emerald-500 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 font-bold shadow-2xs"
+                                : "border-border/60 bg-background/60 hover:bg-background text-muted-foreground"
                             )}
                           >
-                            <button
-                              type="button"
-                              onClick={() => setToUpiId(savedId)}
-                              className="cursor-pointer hover:text-foreground"
+                            <i className="fa-solid fa-user-check text-[10px] text-emerald-500" />
+                            <span>User UPI ({targetPayeeUpiId || userUpiId})</span>
+                          </button>
+                        )}
+
+                        {savedUpiIds
+                          .filter((id) => id && id !== (targetPayeeUpiId || userUpiId) && id !== orgUpiId)
+                          .map((savedId) => (
+                            <div
+                              key={savedId}
+                              className={cn(
+                                "px-2 py-0.5 rounded-md text-[11px] font-mono flex items-center gap-1 border transition-all",
+                                toUpiId.trim() === savedId
+                                  ? "border-sky-500 bg-sky-500/15 text-sky-700 dark:text-sky-300 font-bold"
+                                  : "border-border/60 bg-background/60 text-muted-foreground"
+                              )}
                             >
-                              {savedId}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                const filtered = savedUpiIds.filter((id) => id !== savedId);
-                                setSavedUpiIds(filtered);
-                                try {
-                                  localStorage.setItem("nexace_upi_ids", JSON.stringify(filtered));
-                                } catch {}
-                              }}
-                              className="text-muted-foreground hover:text-rose-500 text-[9px] ml-0.5 cursor-pointer"
-                              title="Remove"
-                            >
-                              <i className="fa-solid fa-xmark" />
-                            </button>
-                          </div>
-                        ))}
-                    </div>
+                              <button
+                                type="button"
+                                onClick={() => setToUpiId(savedId)}
+                                className="cursor-pointer hover:text-foreground"
+                              >
+                                {savedId}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const filtered = savedUpiIds.filter((id) => id !== savedId);
+                                  setSavedUpiIds(filtered);
+                                  try {
+                                    localStorage.setItem("nexace_upi_ids", JSON.stringify(filtered));
+                                  } catch {}
+                                }}
+                                className="text-muted-foreground hover:text-rose-500 text-[9px] ml-0.5 cursor-pointer"
+                                title="Remove"
+                              >
+                                <i className="fa-solid fa-xmark" />
+                              </button>
+                            </div>
+                          ))}
+                      </div>
+                    )}
                   </div>
 
                   {/* UPI Transaction ID */}
