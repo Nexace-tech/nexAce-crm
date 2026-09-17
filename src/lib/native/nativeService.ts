@@ -57,49 +57,11 @@ export const NativeService = {
 
   /**
    * Obtain GPS coordinates for shift clock-in and geofence verification
+  /**
+   * Geolocation completely removed - returns null immediately without prompting for browser/device permissions
    */
-  async getLocation(): Promise<GeoCoordinates> {
-    if (this.isNative()) {
-      const perm = await Geolocation.checkPermissions();
-      if (perm.location !== "granted") {
-        const req = await Geolocation.requestPermissions();
-        if (req.location !== "granted") {
-          throw new Error("Location permission denied by user");
-        }
-      }
-
-      const position: Position = await Geolocation.getCurrentPosition({
-        enableHighAccuracy: true,
-        timeout: 10000,
-      });
-
-      return {
-        latitude: position.coords.latitude,
-        longitude: position.coords.longitude,
-        accuracy: position.coords.accuracy,
-        timestamp: position.timestamp,
-      };
-    }
-
-    // Web Fallback (HTML5 Geolocation API)
-    return new Promise((resolve, reject) => {
-      if (typeof window === "undefined" || !navigator.geolocation) {
-        return reject(new Error("Geolocation not supported by device browser"));
-      }
-
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          resolve({
-            latitude: pos.coords.latitude,
-            longitude: pos.coords.longitude,
-            accuracy: pos.coords.accuracy,
-            timestamp: pos.timestamp,
-          });
-        },
-        (err) => reject(new Error(err.message || "Failed to retrieve location")),
-        { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }
-      );
-    });
+  async getLocation(): Promise<GeoCoordinates | null> {
+    return null;
   },
 
   /**

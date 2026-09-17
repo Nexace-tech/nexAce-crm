@@ -102,15 +102,16 @@ export async function GET(request: Request) {
       .sort({ name: 1 })
       .lean();
 
-    // Attach today's live shift attendance status
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
-    const todayEnd = new Date();
-    todayEnd.setHours(23, 59, 59, 999);
+    // Attach today's live shift attendance status (using IST normalized day boundaries)
+    const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+    const now = new Date();
+    const istDayIndex = Math.floor((now.getTime() + IST_OFFSET_MS) / 86400000);
+    const istDayStart = new Date(istDayIndex * 86400000 - IST_OFFSET_MS);
+    const istDayEnd = new Date(istDayStart.getTime() + 86400000);
 
     const todayAttendances = await Attendance.find({
       tenantId: tenantObjectId,
-      date: { $gte: todayStart, $lte: todayEnd }
+      date: { $gte: istDayStart, $lt: istDayEnd }
     }).lean();
 
     const attendanceMap: Record<string, any> = {};

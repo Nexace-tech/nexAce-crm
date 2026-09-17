@@ -126,6 +126,19 @@ export function TeamShiftOverviewCard() {
   const [viewMode, setViewMode] = useState<"table" | "cards">("table");
   const [now, setNow] = useState(new Date());
   const [clocking, setClocking] = useState(false);
+  const [myAttendance, setMyAttendance] = useState<{ clockIn?: string; clockOut?: string } | null>(null);
+
+  const fetchMyAttendance = async () => {
+    try {
+      const res = await fetch("/api/attendance");
+      if (res.ok) {
+        const data = await res.json();
+        setMyAttendance(data.attendance || null);
+      }
+    } catch (err) {
+      console.error("Failed to fetch my attendance:", err);
+    }
+  };
 
   // Member detail drawer
   const [selectedMember, setSelectedMember] = useState<any | null>(null);
@@ -271,7 +284,11 @@ export function TeamShiftOverviewCard() {
 
   useEffect(() => {
     fetchTeamShifts();
-    const tick = setInterval(() => setNow(new Date()), 60_000);
+    fetchMyAttendance();
+    const tick = setInterval(() => {
+      setNow(new Date());
+      fetchMyAttendance();
+    }, 60_000);
     return () => clearInterval(tick);
   }, [currentUser, isAdmin, isOPS]);
 
@@ -391,7 +408,11 @@ export function TeamShiftOverviewCard() {
   };
 
   const myRecord = enriched.find((m) => m.email?.toLowerCase() === currentUser?.email?.toLowerCase());
-  const isCurrentlyClockedIn = Boolean(myRecord?.isClockedIn || myRecord?.status === "active");
+  const isCurrentlyClockedIn = Boolean(
+    myAttendance
+      ? (myAttendance.clockIn && !myAttendance.clockOut)
+      : myRecord?.isClockedIn
+  );
 
   const handleQuickClockAction = async () => {
     setClocking(true);
@@ -399,30 +420,19 @@ export function TeamShiftOverviewCard() {
       NativeService.haptic("medium");
       const action = isCurrentlyClockedIn ? "out" : "in";
 
-      let location: { latitude: number; longitude: number; accuracy?: number } | undefined;
-      try {
-        const coords = await NativeService.getLocation();
-        if (coords) {
-          location = {
-            latitude: coords.latitude,
-            longitude: coords.longitude,
-            accuracy: coords.accuracy,
-          };
-        }
-      } catch (locErr) {
-        console.warn("Location capture skipped/failed:", locErr);
-      }
-
       const res = await fetch("/api/attendance", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action, location }),
+        body: JSON.stringify({ action }),
       });
+      const data = await res.json().catch(() => ({}));
       if (res.ok) {
         NativeService.haptic("success");
-        await fetchTeamShifts();
+        setMyAttendance(data.attendance || null);
+        await Promise.all([fetchTeamShifts(), fetchMyAttendance()]);
       } else {
         NativeService.haptic("error");
+        console.error("Clock action failed:", data.error);
       }
     } catch (err) {
       NativeService.haptic("error");
