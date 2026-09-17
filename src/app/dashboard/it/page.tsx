@@ -2391,41 +2391,16 @@ function DeviceModal({
 
             {/* Physical Location */}
             <div className="col-span-2 space-y-1.5">
-              <div className="flex items-center justify-between">
-                <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
-                  <i className="fa-solid fa-location-dot text-primary text-[9px]" /> Physical Asset Location
-                </label>
-                <span className="text-[10px] text-muted-foreground">Quick select or type custom</span>
-              </div>
-              <div className="flex items-center gap-1 overflow-x-auto no-scrollbar pb-0.5">
-                {locationPresets.map((l) => (
-                  <button
-                    key={l}
-                    type="button"
-                    onClick={() => set("location", l)}
-                    className={cn(
-                      "px-2 py-0.5 text-[9px] font-semibold rounded-md border transition-all cursor-pointer whitespace-nowrap shrink-0",
-                      form.location === l
-                        ? "bg-primary text-primary-foreground border-primary shadow-xs"
-                        : "bg-muted/60 text-muted-foreground border-border hover:border-primary/50"
-                    )}
-                  >
-                    {l}
-                  </button>
-                ))}
-              </div>
+              <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
+                <i className="fa-solid fa-location-dot text-primary text-[9px]" /> Physical Asset Location
+              </label>
               <input
-                list="device-locations-datalist"
+                type="text"
                 className={fieldCls}
                 value={form.location || ""}
                 onChange={(e) => set("location", e.target.value)}
-                placeholder="e.g. HQ - Floor 2, Remote / WFH, Server Room…"
+                placeholder="e.g. UP, HQ - Floor 2, Remote, Server Room…"
               />
-              <datalist id="device-locations-datalist">
-                {locationPresets.map((l) => (
-                  <option key={l} value={l} />
-                ))}
-              </datalist>
             </div>
 
             {/* Condition */}
@@ -2600,7 +2575,6 @@ function DevicesTab({
   const [copiedTag, setCopiedTag] = useState(false);
   const [copiedSerial, setCopiedSerial] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [relocatingId, setRelocatingId] = useState<string | null>(null);
 
   useEffect(() => {
     if (autoOpenAdd) {
@@ -2689,7 +2663,6 @@ function DevicesTab({
       if (inspectDevice?.id === device.id) {
         setInspectDevice({ ...inspectDevice, location: newLocation });
       }
-      setRelocatingId(null);
     } catch {
       // handled by parent
     }
@@ -2711,18 +2684,6 @@ function DevicesTab({
     setCopiedSerial(true);
     setTimeout(() => setCopiedSerial(false), 2500);
   };
-
-  const QUICK_LOCATIONS = [
-    "HQ - Main Office",
-    "HQ - Floor 1",
-    "HQ - Floor 2",
-    "HQ - IT Lab",
-    "HQ - Server Room",
-    "HQ - Storage Room",
-    "Remote / WFH",
-    "Dwarka Delhi",
-    "Branch Office",
-  ];
 
   return (
     <div className="space-y-4">
@@ -2787,28 +2748,29 @@ function DevicesTab({
                 </div>
                 
                 <div className="pt-2 border-t border-border/60">
-                  <p className="text-[10px] font-semibold text-muted-foreground mb-1.5">Quick Relocate Asset:</p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {QUICK_LOCATIONS.map((loc) => {
-                      const isCurrent = (inspectDevice.location || "HQ - Main Office") === loc;
-                      return (
-                        <button
-                          key={loc}
-                          type="button"
-                          disabled={isCurrent}
-                          onClick={() => handleQuickRelocate(inspectDevice, loc)}
-                          className={cn(
-                            "px-2 py-1 rounded-lg text-[10px] font-semibold border transition-all cursor-pointer flex items-center gap-1",
-                            isCurrent
-                              ? "bg-primary text-primary-foreground border-primary opacity-90 cursor-default"
-                              : "bg-background text-muted-foreground border-border hover:border-primary hover:text-foreground hover:bg-muted/80"
-                          )}
-                        >
-                          <i className={getLocationMeta(loc).icon} />
-                          {loc}
-                        </button>
-                      );
-                    })}
+                  <p className="text-[10px] font-semibold text-muted-foreground mb-1.5">Update Location:</p>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      defaultValue={inspectDevice.location || ""}
+                      key={inspectDevice.location}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          const val = (e.target as HTMLInputElement).value.trim();
+                          if (val !== (inspectDevice.location || "")) {
+                            handleQuickRelocate(inspectDevice, val);
+                          }
+                        }
+                      }}
+                      onBlur={(e) => {
+                        const val = e.target.value.trim();
+                        if (val !== (inspectDevice.location || "")) {
+                          handleQuickRelocate(inspectDevice, val);
+                        }
+                      }}
+                      placeholder="Enter location..."
+                      className="h-8 flex-1 rounded-lg border border-border bg-background px-3 text-xs text-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+                    />
                   </div>
                 </div>
               </div>
@@ -3372,49 +3334,34 @@ function DevicesTab({
                     {/* Department */}
                     <td className="px-3.5 py-2.5 text-muted-foreground whitespace-nowrap font-medium">{row.department || "—"}</td>
 
-                    {/* Physical Location with Inline Quick Relocate Dropdown */}
+                    {/* Physical Location Input Field */}
                     <td className="px-3.5 py-2.5 whitespace-nowrap">
                       {isPrivileged ? (
-                        <div className="relative inline-block">
-                          <button
-                            type="button"
-                            onClick={() => setRelocatingId(relocatingId === row.id ? null : row.id)}
-                            className={cn("inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[11px] font-semibold cursor-pointer hover:shadow-xs transition-all", locMeta.bg)}
-                            title="Click to relocate device"
-                          >
-                            <i className={cn(locMeta.icon, locMeta.color)} />
-                            <span>{locMeta.label}</span>
-                            <i className="fa-solid fa-chevron-down text-[8px] opacity-60 ml-0.5" />
-                          </button>
-
-                          {relocatingId === row.id && (
-                            <div className="absolute left-0 top-full mt-1.5 z-30 w-48 bg-card border border-border rounded-xl shadow-2xl p-1.5 space-y-1 animate-in fade-in zoom-in-95">
-                              <p className="text-[9px] font-bold text-muted-foreground uppercase px-2 py-1 flex items-center gap-1">
-                                <i className="fa-solid fa-arrows-split-up-and-left text-primary" /> Relocate Asset
-                              </p>
-                              {QUICK_LOCATIONS.map((ql) => (
-                                <button
-                                  key={ql}
-                                  type="button"
-                                  onClick={() => handleQuickRelocate(row, ql)}
-                                  className={cn(
-                                    "w-full text-left px-2 py-1 rounded-lg text-[11px] font-semibold transition-colors cursor-pointer flex items-center gap-1.5",
-                                    (row.location || "HQ - Main Office") === ql
-                                      ? "bg-primary/15 text-primary"
-                                      : "hover:bg-muted text-foreground"
-                                  )}
-                                >
-                                  <i className={cn(getLocationMeta(ql).icon, "text-[10px]")} />
-                                  <span className="truncate">{ql}</span>
-                                </button>
-                              ))}
-                            </div>
-                          )}
+                        <div className="relative flex items-center w-36">
+                          <i className="fa-solid fa-location-dot absolute left-2.5 text-muted-foreground text-[10px] pointer-events-none" />
+                          <input
+                            type="text"
+                            key={row.location || ""}
+                            defaultValue={row.location || ""}
+                            placeholder="Location..."
+                            onBlur={(e) => {
+                              const val = e.target.value.trim();
+                              if (val !== (row.location || "")) {
+                                handleQuickRelocate(row, val);
+                              }
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                (e.target as HTMLInputElement).blur();
+                              }
+                            }}
+                            className="h-7 w-full pl-6 pr-2 rounded-lg border border-border/80 bg-background text-xs font-medium text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                          />
                         </div>
                       ) : (
-                        <span className={cn("inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[11px] font-semibold", locMeta.bg)}>
-                          <i className={cn(locMeta.icon, locMeta.color)} />
-                          <span>{locMeta.label}</span>
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-border/80 bg-muted/40 text-[11px] font-semibold text-foreground">
+                          <i className="fa-solid fa-location-dot text-[10px] text-muted-foreground" />
+                          <span>{row.location || "—"}</span>
                         </span>
                       )}
                     </td>
