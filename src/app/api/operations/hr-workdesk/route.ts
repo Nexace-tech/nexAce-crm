@@ -34,7 +34,7 @@ export async function GET() {
 
     // 2. Fetch all real team members / employees for this tenant
     const realUsers = await User.find({ tenantId: tenantObjectId })
-      .select("name email role department departments status joinDate createdAt")
+      .select("name email role department departments status joinDate createdAt salary")
       .sort({ name: 1 })
       .lean();
 
@@ -134,14 +134,16 @@ export async function GET() {
       .sort({ employeeName: 1 })
       .lean();
 
-    // Attach email and join date if missing on any record
+    // Attach email, join date, and salary from the matched user record
     const userMap = new Map(realUsers.map((u: any) => [u._id.toString(), u]));
     const enrichedAllocations = allocations.map((alloc: any) => {
       const matchedUser = alloc.userId ? userMap.get(alloc.userId.toString()) : null;
+      const salary = matchedUser?.salary ?? 0;
       return {
         ...alloc,
         email: alloc.email || matchedUser?.email || "",
         startDate: alloc.startDate || (matchedUser?.joinDate ? new Date(matchedUser.joinDate).toISOString().slice(0, 10) : ""),
+        salary,
       };
     });
 

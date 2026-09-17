@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo, useCallback, useRef, startTransition } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import { usePermissions } from "@/hooks/usePermissions";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
@@ -34,6 +34,7 @@ export interface ProjectsDriveWorkspaceProps {
 
 export function ProjectsDriveWorkspace({ initialTab, hideHeader = false }: ProjectsDriveWorkspaceProps = {}) {
   const { user: currentUser, loading: authLoading } = useAuth();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const { can, canAccessModule, isAdmin, isOPS, loading: permLoading } = usePermissions();
   const canDeleteProject = isAdmin || can("deleteProjects");
@@ -65,6 +66,8 @@ export function ProjectsDriveWorkspace({ initialTab, hideHeader = false }: Proje
     if (tab === "trash" && !canAccessTrash) return;
     setActiveTabState(tab);
     setPersistedTab(tab);
+    const queryTab = tab === "projects_grid" ? "projects" : tab;
+    router.replace(`/dashboard/clients?tab=${queryTab}`, { scroll: false });
   };
   const [loading, setLoading] = useState(true);
   const [mounted, setMounted] = useState(false);

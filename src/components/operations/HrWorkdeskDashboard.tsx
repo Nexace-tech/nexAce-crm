@@ -19,6 +19,7 @@ export interface ResourceAllocation {
   status: "Deployed" | "Partially Allocated" | "Bench" | "On Leave";
   startDate: string;
   notes?: string;
+  salary?: number;
 }
 
 interface ScheduleMeeting {
@@ -1167,6 +1168,12 @@ export default function HrWorkdeskDashboard({
                         <span>Join Date</span>
                       </div>
                     </th>
+                    <th className="py-3.5 px-4">
+                      <div className="flex items-center gap-1.5">
+                        <i className="fa-solid fa-indian-rupee-sign text-[10px] opacity-60" />
+                        <span>Monthly Salary</span>
+                      </div>
+                    </th>
                     <th className="py-3.5 px-4 text-right">Actions</th>
                   </tr>
                 </thead>
@@ -1174,14 +1181,14 @@ export default function HrWorkdeskDashboard({
                 <tbody className="divide-y divide-border/40">
                   {loading ? (
                     <tr>
-                      <td colSpan={6} className="py-12 text-center text-muted-foreground">
+                      <td colSpan={7} className="py-12 text-center text-muted-foreground">
                         <i className="fa-solid fa-spinner fa-spin mr-2 text-primary text-base" />
                         Loading employee registry...
                       </td>
                     </tr>
                   ) : paginatedAllocations.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="py-12 text-center text-muted-foreground">
+                      <td colSpan={7} className="py-12 text-center text-muted-foreground">
                         <div className="flex flex-col items-center justify-center gap-2">
                           <i className="fa-solid fa-user-slash text-2xl opacity-40" />
                           <p className="font-semibold text-sm">No employees match your search</p>
@@ -1301,6 +1308,19 @@ export default function HrWorkdeskDashboard({
                           {/* Join Date */}
                           <td className="py-4 px-4 text-muted-foreground font-medium">
                             {emp.startDate || "—"}
+                          </td>
+
+                          {/* Monthly Salary */}
+                          <td className="py-4 px-4">
+                            {emp.salary && emp.salary > 0 ? (
+                              <span className="inline-flex items-center gap-1 font-semibold text-foreground">
+                                <i className="fa-solid fa-indian-rupee-sign text-[10px] text-primary" />
+                                {Number(emp.salary).toLocaleString("en-IN")}
+                                <span className="text-[10px] text-muted-foreground font-normal">/mo</span>
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground text-[11px]">—</span>
+                            )}
                           </td>
 
                           {/* Actions */}
