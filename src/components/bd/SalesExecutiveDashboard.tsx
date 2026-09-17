@@ -419,7 +419,7 @@ export function SalesExecutiveDashboard({
             </div>
             <div>
               <h2 className="text-base font-extrabold text-foreground tracking-tight flex items-center gap-2 flex-wrap">
-                Executive Sales Dashboard
+                Executive Dashboard
                 <span className="text-[10px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded-full flex items-center gap-1">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> Live Data Flow
                 </span>

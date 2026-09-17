@@ -4,7 +4,9 @@ import { ClientContract } from "@/models/ClientContract";
 import { FinanceInvoice } from "@/models/FinanceInvoice";
 import { Notification } from "@/models/Notification";
 import { User } from "@/models/User";
+import { Tenant } from "@/models/Tenant";
 import { requireTenantSession, isAuthError } from "@/lib/auth-guard";
+import { sendEmail } from "@/lib/mail";
 
 // ── GET  /api/ops/contracts ────────────────────────────────────────────────────
 export async function GET() {
@@ -15,12 +17,26 @@ export async function GET() {
 
     await connectToDatabase();
 
-    const contracts = await ClientContract.find({ tenantId: tenantObjectId })
-      .populate("createdBy", "name email")
-      .sort({ createdAt: -1 })
-      .lean();
+    const [contracts, tenant] = await Promise.all([
+      ClientContract.find({ tenantId: tenantObjectId })
+        .populate("createdBy", "name email")
+        .sort({ createdAt: -1 })
+        .lean(),
+      Tenant.findById(tenantObjectId).lean(),
+    ]);
 
-    return NextResponse.json({ contracts });
+    const organization = tenant ? {
+      name:    tenant.legalName?.trim() || tenant.name?.trim() || "",
+      address: tenant.address?.trim() || "",
+      city:    tenant.city?.trim() || "",
+      country: tenant.country?.trim() || "",
+      phone:   tenant.phone?.trim() || tenant.tollFreePhone?.trim() || "",
+      email:   tenant.email?.trim() || tenant.billingEmail?.trim() || "",
+      website: tenant.website?.trim() || "",
+      taxId:   tenant.taxId?.trim() || "",
+    } : null;
+
+    return NextResponse.json({ contracts, organization });
   } catch (err) {
     console.error("[OPS/CONTRACTS GET]", err);
     return NextResponse.json({ error: "Failed to fetch contracts" }, { status: 500 });
@@ -48,26 +64,42 @@ export async function POST(req: NextRequest) {
       location,
       startDate,
       endDate,
+      budget,
+      currency,
       ndaAttachment,
       agreementAttachment,
       otherAttachments,
       status,
+      mailSent,
       notifyOnCreate,
       generateInvoice,
       notes,
     } = body;
 
-    // Basic validation
-    if (!sender?.name?.trim() || !receiver?.name?.trim() || !pocName?.trim() || !pocEmail?.trim() || !contractType) {
-      return NextResponse.json(
-        { error: "sender.name, receiver.name, pocName, pocEmail, and contractType are required" },
-        { status: 400 }
-      );
+    // Detailed validation with clear field-level feedback
+    if (!sender?.name?.trim()) {
+      return NextResponse.json({ error: "Sender company name is required" }, { status: 400 });
     }
+    if (!receiver?.name?.trim()) {
+      return NextResponse.json({ error: "Client company name is required" }, { status: 400 });
+    }
+    if (!pocName?.trim()) {
+      return NextResponse.json({ error: "Point of contact (POC) name is required" }, { status: 400 });
+    }
+    if (!pocEmail?.trim()) {
+      return NextResponse.json({ error: "Point of contact (POC) email is required" }, { status: 400 });
+    }
+    if (!contractType) {
+      return NextResponse.json({ error: "Contract type is required" }, { status: 400 });
+    }
+
+    const parsedStart = startDate && !isNaN(new Date(startDate).getTime()) ? new Date(startDate) : undefined;
+    const parsedEnd   = endDate   && !isNaN(new Date(endDate).getTime())   ? new Date(endDate)   : undefined;
 
     const contract = await ClientContract.create({
       tenantId: tenantObjectId,
       createdBy: userObjectId,
+      clientCompany: receiver.name.trim(),
       sender: {
         name:    sender.name.trim(),
         address: sender.address?.trim() || undefined,
@@ -94,12 +126,15 @@ export async function POST(req: NextRequest) {
       contractType,
       customTypeLabel: contractType === "Custom" ? customTypeLabel?.trim() || undefined : undefined,
       location: location?.trim() || "",
-      startDate: startDate ? new Date(startDate) : undefined,
-      endDate:   endDate ? new Date(endDate) : undefined,
+      startDate: parsedStart,
+      endDate:   parsedEnd,
+      budget:    typeof budget === "number" ? budget : (parseFloat(budget) || 0),
+      currency:  currency?.trim() || "USD",
       ndaAttachment:       ndaAttachment?.url ? ndaAttachment : undefined,
       agreementAttachment: agreementAttachment?.url ? agreementAttachment : undefined,
       otherAttachments:    Array.isArray(otherAttachments) ? otherAttachments.filter((a: any) => a?.url) : [],
       status:          status || "Draft",
+      mailSent:        !!mailSent,
       notifyOnCreate:  !!notifyOnCreate,
       generateInvoice: !!generateInvoice,
       notes: notes?.trim() || undefined,
@@ -122,13 +157,16 @@ export async function POST(req: NextRequest) {
             ? "Ad Hoc"
             : contractType;
 
+        const contractBudget = typeof budget === "number" ? budget : (parseFloat(budget) || 0);
+        const contractCurrency = currency?.trim() || "USD";
+
         const invoice = await FinanceInvoice.create({
           tenantId:  tenantObjectId,
           createdBy: userObjectId,
           invoiceNo,
           client:    receiver.name.trim(),
-          amount:    0,
-          currency:  "USD",
+          amount:    contractBudget,
+          currency:  contractCurrency,
           status:    "Draft",
           issuedDate: today.toISOString().split("T")[0],
           dueDate:    dueDate.toISOString().split("T")[0],
@@ -138,8 +176,8 @@ export async function POST(req: NextRequest) {
             {
               description: `${typeLabel} Contract — ${pocName.trim()}`,
               quantity:    1,
-              unitPrice:   0,
-              amount:      0,
+              unitPrice:   contractBudget,
+              amount:      contractBudget,
             },
           ],
           notes: `Auto-generated from Client Contract. Client: ${receiver.name.trim()}, POC: ${pocName.trim()} <${pocEmail.trim()}>`,
@@ -183,13 +221,95 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // ── Send Email confirmation to POC if requested ──────────────────────────
+    if (mailSent && pocEmail) {
+      try {
+        const typeLabel =
+          contractType === "Custom" && customTypeLabel
+            ? customTypeLabel
+            : contractType.replace("_", " ");
+
+        const formattedStart = startDate
+          ? new Date(startDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
+          : "Not specified";
+        const formattedEnd = endDate
+          ? new Date(endDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
+          : "Not specified";
+
+        await sendEmail({
+          to: pocEmail.trim().toLowerCase(),
+          subject: `Contract Agreement: ${sender.name.trim()} & ${receiver.name.trim()}`,
+          text: `Dear ${pocName.trim()},\n\nA new ${typeLabel} contract has been confirmed between ${sender.name.trim()} and ${receiver.name.trim()}.\nContract Period: ${formattedStart} to ${formattedEnd}\nStatus: ${status || "Draft"}\n\nBest regards,\n${sender.name.trim()}`,
+          html: `
+            <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff; color: #1e293b;">
+              <div style="border-bottom: 2px solid #2563eb; padding-bottom: 16px; margin-bottom: 20px;">
+                <h2 style="margin: 0; color: #1e293b; font-size: 20px; font-weight: 700;">Client Contract Confirmation</h2>
+                <p style="margin: 4px 0 0; color: #64748b; font-size: 13px;">NexAce CRM • Operations</p>
+              </div>
+              <p style="font-size: 15px; line-height: 1.5; margin: 0 0 16px;">Dear <strong>${pocName.trim()}</strong>,</p>
+              <p style="font-size: 14px; line-height: 1.6; color: #475569; margin: 0 0 20px;">
+                This email confirms that the contract agreement between <strong>${sender.name.trim()}</strong> and <strong>${receiver.name.trim()}</strong> has been recorded in our system.
+              </p>
+              <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; margin: 20px 0;">
+                <table style="width: 100%; font-size: 13px; border-collapse: collapse;">
+                  <tbody>
+                    <tr>
+                      <td style="padding: 6px 0; color: #64748b; width: 35%;">Contract Type:</td>
+                      <td style="padding: 6px 0; font-weight: 600; color: #1e293b;">${typeLabel}</td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 6px 0; color: #64748b;">Client (Receiver):</td>
+                      <td style="padding: 6px 0; font-weight: 600; color: #1e293b;">${receiver.name.trim()}</td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 6px 0; color: #64748b;">Issuer (Sender):</td>
+                      <td style="padding: 6px 0; font-weight: 600; color: #1e293b;">${sender.name.trim()}</td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 6px 0; color: #64748b;">Effective Period:</td>
+                      <td style="padding: 6px 0; font-weight: 600; color: #1e293b;">${formattedStart} — ${formattedEnd}</td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 6px 0; color: #64748b;">Status:</td>
+                      <td style="padding: 6px 0; font-weight: 600; color: #1e293b;">${status || "Draft"}</td>
+                    </tr>
+                    ${notes?.trim() ? `
+                    <tr>
+                      <td style="padding: 6px 0; color: #64748b; vertical-align: top;">Notes:</td>
+                      <td style="padding: 6px 0; color: #334155;">${notes.trim()}</td>
+                    </tr>` : ""}
+                  </tbody>
+                </table>
+              </div>
+              <p style="font-size: 13px; color: #64748b; line-height: 1.5; margin-top: 24px;">
+                If you have any questions, please reply directly or contact ${sender.email || sender.name.trim()}.
+              </p>
+              <div style="border-top: 1px solid #e2e8f0; margin-top: 24px; padding-top: 12px; font-size: 11px; color: #94a3b8; text-align: center;">
+                Generated by NexAce CRM • Automated Notification
+              </div>
+            </div>
+          `,
+        });
+      } catch (mailErr) {
+        console.error("[OPS/CONTRACTS] Email notification failed:", mailErr);
+      }
+    }
+
     const populated = await ClientContract.findById(contract._id)
       .populate("createdBy", "name email")
       .lean();
 
     return NextResponse.json({ contract: populated }, { status: 201 });
-  } catch (err) {
+  } catch (err: any) {
     console.error("[OPS/CONTRACTS POST]", err);
-    return NextResponse.json({ error: "Failed to create contract" }, { status: 500 });
+    let errorMsg = "Failed to create contract";
+    if (err?.name === "ValidationError") {
+      errorMsg = Object.values(err.errors || {})
+        .map((e: any) => e.message)
+        .join(", ") || err.message;
+    } else if (err?.message) {
+      errorMsg = err.message;
+    }
+    return NextResponse.json({ error: errorMsg }, { status: 500 });
   }
 }

@@ -1381,13 +1381,7 @@ export default function BDPortalPage() {
             )}
           >
             <i className="fa-solid fa-chart-line text-[11px]" />
-            Sales
-            <span className={cn(
-              "text-[10px] font-mono px-2 py-0.2 rounded-full font-bold",
-              activeTab === "sales" ? "bg-primary-foreground/20 text-primary-foreground" : "bg-muted text-muted-foreground border border-border/60"
-            )}>
-              {totalClosedWonRevenue > 0 ? `$${formatUSD(totalClosedWonRevenue)}` : `${deals.length} deals`}
-            </span>
+            Executive Dashboard
           </button>
           <button
             type="button"

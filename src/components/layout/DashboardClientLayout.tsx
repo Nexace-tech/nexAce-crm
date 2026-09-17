@@ -128,7 +128,7 @@ const navSections: NavSection[] = [
               { id: "ops-history", name: "Project History", href: "/dashboard/clients?tab=history" },
             ],
           },
-          { id: "ops-contracts", name: "Contracts & Onboarding", href: "/dashboard/clients?tab=contracts" },
+          { id: "ops-contracts", name: "Contracts", href: "/dashboard/clients?tab=contracts" },
           { id: "ops-hr", name: "HR Overview", href: "/dashboard/clients?tab=hr", badge: 15 },
           { id: "ops-external", name: "External Teams", href: "/dashboard/clients?tab=external", badge: 3 },
           { id: "ops-reports", name: "Reports & Data Export", href: "/dashboard/clients?tab=reports" },

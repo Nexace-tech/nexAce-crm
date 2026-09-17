@@ -25,6 +25,7 @@ export interface IClientContract extends Document {
 
   // ── Receiver (Client Company) ────────────────────────────────────────────────
   receiver: ICompanyDetails;
+  clientCompany?: string;
 
   // ── Point of Contact (client side) ──────────────────────────────────────────
   pocName: string;
@@ -47,10 +48,15 @@ export interface IClientContract extends Document {
   agreementAttachment?: IClientContractAttachment;
   otherAttachments?: IClientContractAttachment[];
 
+  // ── Financials ──────────────────────────────────────────────────────────────
+  budget?: number;
+  currency?: string;
+
   // ── Status ──────────────────────────────────────────────────────────────────
   status: "Draft" | "Active" | "Expired" | "Terminated";
 
   // ── Actions on Create ───────────────────────────────────────────────────────
+  mailSent: boolean;
   notifyOnCreate: boolean;
   generateInvoice: boolean;
 
@@ -116,12 +122,19 @@ const ClientContractSchema = new Schema<IClientContract>(
     agreementAttachment: { type: AttachmentSchema },
     otherAttachments:   { type: [AttachmentSchema], default: [] },
 
+    budget:   { type: Number, default: 0 },
+    currency: { type: String, trim: true, default: "USD" },
+
     status: {
       type: String,
       enum: ["Draft", "Active", "Expired", "Terminated"],
       default: "Draft",
     },
 
+    // Backwards compatibility alias for receiver name
+    clientCompany: { type: String, trim: true },
+
+    mailSent:        { type: Boolean, default: false },
     notifyOnCreate:  { type: Boolean, default: false },
     generateInvoice: { type: Boolean, default: false },
 
@@ -134,6 +147,11 @@ const ClientContractSchema = new Schema<IClientContract>(
 
 ClientContractSchema.index({ tenantId: 1, status: 1 });
 ClientContractSchema.index({ tenantId: 1, createdAt: -1 });
+
+// Ensure any stale cached schema in development is refreshed
+if (process.env.NODE_ENV !== "production" && mongoose.models.ClientContract) {
+  delete (mongoose.models as any).ClientContract;
+}
 
 export const ClientContract: Model<IClientContract> =
   mongoose.models.ClientContract ||
