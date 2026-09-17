@@ -360,16 +360,23 @@ export function AdminInvoicesTab({ showToast, scope = "internal" }: AdminInvoice
     setUpiScreenshotPreview(url);
   };
 
-  const filteredInvoices = scopedInvoices.filter((inv) => {
-    const q = search.toLowerCase();
-    const matchesSearch =
-      inv.invoiceNo.toLowerCase().includes(q) ||
-      inv.businessName.toLowerCase().includes(q) ||
-      inv.billedToName.toLowerCase().includes(q) ||
-      inv.customerNo.toLowerCase().includes(q);
-    const matchesStatus = statusFilter === "All" || inv.status === statusFilter;
-    return matchesSearch && matchesStatus;
-  });
+  const filteredInvoices = scopedInvoices
+    .filter((inv) => {
+      const q = search.toLowerCase();
+      const matchesSearch =
+        inv.invoiceNo.toLowerCase().includes(q) ||
+        inv.businessName.toLowerCase().includes(q) ||
+        inv.billedToName.toLowerCase().includes(q) ||
+        inv.customerNo.toLowerCase().includes(q);
+      const matchesStatus = statusFilter === "All" || inv.status === statusFilter;
+      return matchesSearch && matchesStatus;
+    })
+    .sort((a, b) => {
+      const timeA = new Date((a as any).createdAt || a.invoiceDate || 0).getTime();
+      const timeB = new Date((b as any).createdAt || b.invoiceDate || 0).getTime();
+      if (timeB !== timeA) return timeB - timeA;
+      return new Date(b.invoiceDate || 0).getTime() - new Date(a.invoiceDate || 0).getTime();
+    });
 
   const getStatusBadge = (status: string) => {
     const configs: Record<string, { cls: string; icon: string }> = {

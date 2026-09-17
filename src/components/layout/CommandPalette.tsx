@@ -111,7 +111,7 @@ export function CommandPalette({
     { id: "act-client", title: "Add Operations Project", subtitle: "Create new client workflow or retainer", category: "Quick Actions", icon: "fa-solid fa-list-check text-cyan-500", href: "/dashboard/clients", featureKey: "createClients", keywords: ["new client", "new retainer", "project"] },
     { id: "act-deal", title: "Create New Sales Deal", subtitle: "Add lead to CRM pipeline workdesk", category: "Quick Actions", icon: "fa-solid fa-handshake text-emerald-500", href: "/dashboard/clients?tab=sales", featureKey: "manageDeals", keywords: ["new deal", "pipeline", "lead"] },
     { id: "act-it-device", title: "Register Hardware Device", subtitle: "Log company laptop, monitor, or asset", category: "Quick Actions", icon: "fa-solid fa-laptop-medical text-blue-500", href: "/dashboard/it", featureKey: "manageITDevices", keywords: ["add device", "laptop", "hardware"] },
-    { id: "act-it-invoice", title: "Generate Invoice", subtitle: "Create self-service or IT billing invoice", category: "Quick Actions", icon: "fa-solid fa-file-invoice-dollar text-teal-500", href: "/dashboard/settings?tab=invoice", keywords: ["billing", "invoice", "payment"] },
+    { id: "act-it-invoice", title: "Generate Invoice", subtitle: "Create self-service or billing invoice", category: "Quick Actions", icon: "fa-solid fa-file-invoice-dollar text-teal-500", href: "/dashboard/finance?tab=generate", keywords: ["billing", "invoice", "payment", "generate invoice"] },
 
     // System
     {

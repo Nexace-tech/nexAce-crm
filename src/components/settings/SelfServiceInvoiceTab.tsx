@@ -80,18 +80,31 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
   const searchParams = useSearchParams();
   const targetInvoiceNo = searchParams.get("invoiceNo");
   const targetInvoiceId = searchParams.get("invoiceId");
+  const urlTab = searchParams.get("tab");
 
   const { user } = useAuth();
-  const [activeSubTab, setActiveSubTab] = useState<"history" | "generate">("history");
+  const [activeSubTab, setActiveSubTab] = useState<"history" | "generate">(() => {
+    return urlTab === "generate" ? "generate" : "history";
+  });
+
+  useEffect(() => {
+    if (urlTab === "generate") {
+      setActiveSubTab("generate");
+    } else if (urlTab === "invoices" || urlTab === "history") {
+      setActiveSubTab("history");
+    }
+  }, [urlTab]);
   const [myInvoices, setMyInvoices] = useState<Invoice[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [invoiceSubmitting, setInvoiceSubmitting] = useState(false);
   const [viewInvoice, setViewInvoice] = useState<Invoice | null>(null);
 
-  // Filter & Pagination States
+  // Filter, View Mode & Pagination States
+  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 5;
+  const itemsPerPage = viewMode === "grid" ? 6 : 5;
 
   // Shift & Timesheet Sync States
   const [syncingTimeData, setSyncingTimeData] = useState(false);
@@ -540,20 +553,29 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
         const userEmail = user.email?.trim().toLowerCase();
         const userName = user.name?.trim().toLowerCase();
         const userCleanName = userName?.replace(/\s+/g, "");
+        const userId = (user as any)?._id || (user as any)?.id;
 
         const filtered = allInvoices.filter((inv) => {
-          const invEmail = inv.businessEmail?.trim().toLowerCase();
-          const invBusinessName = inv.businessName?.trim().toLowerCase();
-          const invCustNo = inv.customerNo?.trim().toLowerCase();
+          // If it's an IT tool subscription invoice (INV-SUB-), exclude from personal salary/contractor invoices
+          if (inv.invoiceNo?.startsWith("INV-SUB-")) {
+            return false;
+          }
+
+          const invEmail = (inv.businessEmail || "").trim().toLowerCase();
+          const invBusinessName = (inv.businessName || "").trim().toLowerCase();
+          const invCustNo = (inv.customerNo || "").trim().toLowerCase();
+          const invCreatedBy = String((inv as any).createdBy?._id || (inv as any).createdBy || "");
 
           return (
             (userEmail && invEmail === userEmail) ||
+            (userName && invBusinessName === userName) ||
             (userCleanName && invCustNo && invCustNo.includes(userCleanName)) ||
-            (userName && invBusinessName === userName)
+            (userId && invCreatedBy && invCreatedBy === String(userId) && (invCustNo.startsWith("emp-") || inv.invoiceNo?.startsWith("INV-EMP-") || inv.invoiceNo?.startsWith("INV-SAL-")))
           );
         });
 
-        const effectiveInvoices = filtered.length > 0 ? filtered : allInvoices;
+        // Only show matching personal invoices belonging to this user
+        const effectiveInvoices = filtered;
         setMyInvoices(effectiveInvoices);
 
         // Auto-open target invoice if requested via notification deep-link
@@ -776,6 +798,7 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
       if (res.ok) {
         showToast(`Invoice ${invoiceNo} generated and submitted to Finance for approval!`, "success");
         fetchMyInvoiceHistory(); // Refresh history log immediately!
+        setActiveSubTab("history");
       } else {
         const err = await res.json();
         showToast(err.error || "Failed to generate invoice.", "error");
@@ -1037,6 +1060,7 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
       if (res.ok) {
         showToast(`Permanent Salary Invoice ${invoiceNo} submitted to Finance for approval!`, "success");
         fetchMyInvoiceHistory();
+        setActiveSubTab("history");
       } else {
         const err = await res.json();
         showToast(err.error || "Failed to generate salary invoice.", "error");
@@ -1184,8 +1208,16 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
 
   // Filter & Pagination Logic
   const filteredPersonalInvoices = myInvoices.filter((inv) => {
-    if (statusFilter === "All") return true;
-    return inv.status === statusFilter;
+    const matchesStatus = statusFilter === "All" || inv.status === statusFilter;
+    const q = searchQuery.trim().toLowerCase();
+    const matchesSearch =
+      !q ||
+      inv.invoiceNo.toLowerCase().includes(q) ||
+      inv.billedToName.toLowerCase().includes(q) ||
+      (inv.paymentDetails?.method && inv.paymentDetails.method.toLowerCase().includes(q)) ||
+      (inv.paymentDetails?.upiId && inv.paymentDetails.upiId.toLowerCase().includes(q)) ||
+      (inv.paymentDetails?.transactionId && inv.paymentDetails.transactionId.toLowerCase().includes(q));
+    return matchesStatus && matchesSearch;
   });
 
   const totalPages = Math.ceil(filteredPersonalInvoices.length / itemsPerPage) || 1;
@@ -1193,6 +1225,11 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
     (currentPage - 1) * itemsPerPage,
     currentPage * itemsPerPage
   );
+
+  const handleViewModeChange = (mode: "grid" | "list") => {
+    setViewMode(mode);
+    setCurrentPage(1);
+  };
 
   const getStatusBadge = (status: string) => {
     const config: Record<string, { color: string; icon: string }> = {
@@ -1223,9 +1260,46 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
-        {/* Invoice Generator Form */}
-        <Card className="border border-border shadow-sm lg:col-span-2">
+      {/* Sub-Navigation Tabs */}
+      <div className="flex border-b border-border space-x-1 overflow-x-auto no-scrollbar pb-px">
+        <button
+          type="button"
+          onClick={() => setActiveSubTab("history")}
+          className={cn(
+            "px-4 py-2.5 text-sm font-semibold border-b-2 transition-all flex items-center gap-2 cursor-pointer shrink-0",
+            activeSubTab === "history"
+              ? "border-primary text-primary bg-primary/10 rounded-t-md font-bold -mb-px"
+              : "border-transparent text-muted-foreground hover:text-foreground"
+          )}
+        >
+          <i className="fa-solid fa-file-invoice text-sm" />
+          My Invoices
+          <span className={cn(
+            "ml-1 text-[10px] px-2 py-0.5 rounded-full font-mono font-bold",
+            activeSubTab === "history" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+          )}>
+            {filteredPersonalInvoices.length}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveSubTab("generate")}
+          className={cn(
+            "px-4 py-2.5 text-sm font-semibold border-b-2 transition-all flex items-center gap-2 cursor-pointer shrink-0",
+            activeSubTab === "generate"
+              ? "border-primary text-primary bg-primary/10 rounded-t-md font-bold -mb-px"
+              : "border-transparent text-muted-foreground hover:text-foreground"
+          )}
+        >
+          <i className="fa-solid fa-wand-magic-sparkles text-sm text-emerald-500" />
+          Generate My Invoice
+        </button>
+      </div>
+
+      {activeSubTab === "generate" && (
+        /* Invoice Generator Form */
+        <Card className="border border-border shadow-sm">
           <CardHeader className="pb-3 border-b border-border bg-muted/20">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
@@ -1247,17 +1321,28 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
                 </CardDescription>
               </div>
 
-              <span
-                className={cn(
-                  "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border self-start sm:self-auto shrink-0",
-                  generatorType === "permanent"
-                    ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
-                    : "bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/30"
-                )}
-              >
-                <i className={cn("fa-solid text-[9px]", generatorType === "permanent" ? "fa-shield-halved" : "fa-laptop-code")} />
-                {generatorType === "permanent" ? "Salaried Permanent Staff" : "Independent Contractor"}
-              </span>
+              <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setActiveSubTab("history")}
+                  className="gap-1.5 text-xs font-semibold cursor-pointer border-border hover:bg-muted"
+                >
+                  <i className="fa-solid fa-file-invoice text-xs text-primary" /> View My Invoices
+                </Button>
+                <span
+                  className={cn(
+                    "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border",
+                    generatorType === "permanent"
+                      ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
+                      : "bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/30"
+                  )}
+                >
+                  <i className={cn("fa-solid text-[9px]", generatorType === "permanent" ? "fa-shield-halved" : "fa-laptop-code")} />
+                  {generatorType === "permanent" ? "Salaried Permanent Staff" : "Independent Contractor"}
+                </span>
+              </div>
             </div>
           </CardHeader>
           <CardContent className="p-6">
@@ -2558,36 +2643,122 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
               </div>
             </form>
           )}
-        </CardContent>
+          </CardContent>
         </Card>
+      )}
 
-        {/* Personal Invoices Tracker History */}
-        <Card className="border border-border shadow-sm flex flex-col h-full min-h-[500px]">
+      {/* Personal Invoices Tracker History */}
+      {activeSubTab === "history" && (
+        <Card className="border border-border shadow-sm flex flex-col min-h-[500px]">
           <CardHeader className="pb-3 border-b border-border bg-muted/20">
-            <CardTitle className="text-base font-bold flex items-center gap-2">
-              <i className="fa-solid fa-clock-rotate-left text-primary" /> My Submitted Invoices
-            </CardTitle>
-            <CardDescription>
-              Track approval statuses and download PDFs of your generated invoices.
-            </CardDescription>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <CardTitle className="text-base font-bold flex items-center gap-2">
+                  <i className="fa-solid fa-file-invoice text-primary" /> My Submitted Invoices
+                </CardTitle>
+                <CardDescription>
+                  Track approval statuses, view payment receipts, and download PDFs of your generated invoices.
+                </CardDescription>
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => setActiveSubTab("generate")}
+                className="gap-2 font-semibold cursor-pointer border-emerald-500/40 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 self-start sm:self-auto"
+                variant="outline"
+              >
+                <i className="fa-solid fa-wand-magic-sparkles text-xs" /> Generate My Invoice
+              </Button>
+            </div>
           </CardHeader>
 
-          {/* Filter Bar */}
-          <div className="p-3 border-b border-border bg-card/50 flex items-center justify-between gap-2">
-            <span className="text-[11px] font-bold text-muted-foreground uppercase">Filter Status:</span>
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="h-8 px-2 text-[11px] bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer font-medium"
-            >
-              <option value="All">All Invoices</option>
-              <option value="Pending">Pending</option>
-              <option value="Paid">Paid</option>
-              <option value="Sent">Sent</option>
-              <option value="Draft">Draft</option>
-              <option value="Overdue">Overdue</option>
-              <option value="Cancelled">Cancelled</option>
-            </select>
+          {/* Filter & View Mode Switcher Toolbar */}
+          <div className="p-3 border-b border-border bg-card/50 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                <i className="fa-solid fa-filter text-[10px]" /> Filter Status:
+              </span>
+              <select
+                value={statusFilter}
+                onChange={(e) => {
+                  setStatusFilter(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="h-8 px-2.5 text-[11px] bg-background border border-border rounded-lg text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer font-medium shadow-2xs"
+              >
+                <option value="All">All Invoices ({myInvoices.length})</option>
+                <option value="Pending">Pending ({myInvoices.filter((i) => i.status === "Pending").length})</option>
+                <option value="Paid">Paid ({myInvoices.filter((i) => i.status === "Paid").length})</option>
+                <option value="Sent">Sent ({myInvoices.filter((i) => i.status === "Sent").length})</option>
+                <option value="Draft">Draft ({myInvoices.filter((i) => i.status === "Draft").length})</option>
+                <option value="Overdue">Overdue ({myInvoices.filter((i) => i.status === "Overdue").length})</option>
+                <option value="Cancelled">Cancelled ({myInvoices.filter((i) => i.status === "Cancelled").length})</option>
+              </select>
+
+              {/* Quick Search */}
+              <div className="relative">
+                <i className="fa-solid fa-magnifying-glass absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground text-[10px]" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                  placeholder="Search invoice #, entity..."
+                  className="h-8 pl-7 pr-7 text-[11px] bg-background border border-border rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary w-40 sm:w-48 shadow-2xs"
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearchQuery("");
+                      setCurrentPage(1);
+                    }}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground text-[10px] cursor-pointer"
+                  >
+                    <i className="fa-solid fa-xmark" />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* View Mode Toggle (Grid vs List) */}
+            <div className="flex items-center gap-2 shrink-0">
+              <span className="text-[11px] text-muted-foreground font-medium hidden sm:inline-block">
+                Showing {filteredPersonalInvoices.length} {filteredPersonalInvoices.length === 1 ? "invoice" : "invoices"}
+              </span>
+              <div className="flex items-center bg-muted/60 p-0.5 rounded-lg border border-border/80">
+                <button
+                  type="button"
+                  onClick={() => handleViewModeChange("grid")}
+                  className={cn(
+                    "h-7 px-2.5 rounded-md flex items-center gap-1.5 text-xs font-semibold transition-all cursor-pointer",
+                    viewMode === "grid"
+                      ? "bg-primary text-primary-foreground shadow-xs"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                  title="Grid View (Dreams CRM style)"
+                >
+                  <i className="fa-solid fa-grip text-[11px]" />
+                  <span className="text-[11px]">Grid</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleViewModeChange("list")}
+                  className={cn(
+                    "h-7 px-2.5 rounded-md flex items-center gap-1.5 text-xs font-semibold transition-all cursor-pointer",
+                    viewMode === "list"
+                      ? "bg-primary text-primary-foreground shadow-xs"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                  title="List View"
+                >
+                  <i className="fa-solid fa-list text-[11px]" />
+                  <span className="text-[11px]">List</span>
+                </button>
+              </div>
+            </div>
           </div>
 
           <CardContent className="p-4 flex-1 flex flex-col justify-between">
@@ -2598,18 +2769,195 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
                 </span>
               </div>
             ) : filteredPersonalInvoices.length === 0 ? (
-              <div className="py-8 text-center text-xs text-muted-foreground flex-1 flex items-center justify-center">
-                <div>
-                  <i className="fa-solid fa-file-invoice text-2xl block opacity-30 mb-1.5" />
-                  No matching invoices found.
+              <div className="py-12 text-center text-xs text-muted-foreground flex-1 flex flex-col items-center justify-center">
+                <div className="w-12 h-12 rounded-2xl bg-muted/50 flex items-center justify-center mb-2">
+                  <i className="fa-solid fa-file-invoice text-xl text-muted-foreground/40" />
                 </div>
+                <p className="font-semibold text-foreground text-sm">No matching invoices found</p>
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  {searchQuery || statusFilter !== "All"
+                    ? "Try resetting your search or filter selection."
+                    : "You haven't generated any invoices yet."}
+                </p>
+              </div>
+            ) : viewMode === "grid" ? (
+              /* Dreams Technologies Inspired Invoice Grid View */
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 flex-1">
+                {paginatedInvoices.map((inv) => {
+                  const curr = inv.currency === "EUR" ? "€" : inv.currency === "GBP" ? "£" : inv.currency === "INR" ? "₹" : "$";
+                  const isPaid = inv.status === "Paid";
+                  return (
+                    <div
+                      key={inv._id || inv.id}
+                      className="bg-card border border-border/80 hover:border-primary/50 rounded-2xl p-4 shadow-2xs hover:shadow-md transition-all duration-200 flex flex-col justify-between group space-y-3.5"
+                    >
+                      {/* Top Row: Invoice Number Pill + Status Badge */}
+                      <div className="flex items-center justify-between gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setViewInvoice(inv)}
+                          className="font-mono text-xs font-bold text-primary bg-primary/10 hover:bg-primary/20 border border-primary/25 px-2.5 py-1 rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+                          title="Click to view details"
+                        >
+                          <i className="fa-solid fa-file-invoice text-[10px]" />
+                          {inv.invoiceNo}
+                        </button>
+                        <div className="flex items-center gap-1.5">
+                          {getStatusBadge(inv.status)}
+                        </div>
+                      </div>
+
+                      {/* Company / Recipient Entity */}
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-primary/10 border border-primary/20 text-primary flex items-center justify-center font-bold text-sm shadow-2xs shrink-0">
+                          <i className="fa-solid fa-building text-sm" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-bold text-foreground truncate group-hover:text-primary transition-colors">
+                            {inv.billedToName || "NexAce Technologies"}
+                          </p>
+                          <p className="text-[10px] text-muted-foreground truncate">
+                            {inv.customerNo ? `Client #${inv.customerNo}` : "Corporate Billing"}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Prominent Amount Box */}
+                      <div className="bg-muted/30 border border-border/60 rounded-xl p-3 flex items-center justify-between">
+                        <div className="space-y-0.5">
+                          <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Amount Billed</p>
+                          {isPaid && inv.paymentDetails?.method && (
+                            <span className={cn(
+                              "inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold border",
+                              inv.paymentDetails.method === "UPI"
+                                ? "bg-violet-500/10 text-violet-600 dark:text-violet-400 border-violet-500/20"
+                                : inv.paymentDetails.method === "Cash"
+                                ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
+                                : "bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/20"
+                            )}>
+                              <i className={cn(
+                                "fa-solid text-[8px]",
+                                inv.paymentDetails.method === "UPI" ? "fa-qrcode" :
+                                inv.paymentDetails.method === "Cash" ? "fa-money-bill-transfer" :
+                                "fa-building-columns"
+                              )} />
+                              {inv.paymentDetails.method}
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-right">
+                          <p className="text-base font-black font-mono text-foreground">
+                            {curr}{inv.total.toLocaleString()}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Dates Grid */}
+                      <div className="grid grid-cols-2 gap-2 text-[11px] pt-1 border-t border-border/40">
+                        <div>
+                          <span className="text-[10px] text-muted-foreground block font-medium flex items-center gap-1">
+                            <i className="fa-solid fa-calendar-days text-[9px]" /> Issued Date:
+                          </span>
+                          <span className="font-semibold text-foreground text-[11px]">
+                            {inv.invoiceDate || "—"}
+                          </span>
+                        </div>
+                        <div>
+                          {isPaid ? (
+                            <>
+                              <span className="text-[10px] text-emerald-600 dark:text-emerald-400 block font-medium flex items-center gap-1">
+                                <i className="fa-solid fa-circle-check text-[9px]" /> Paid on:
+                              </span>
+                              <span className="font-semibold text-emerald-600 dark:text-emerald-400 text-[11px]">
+                                {inv.paymentDetails?.paidAt
+                                  ? new Date(inv.paymentDetails.paidAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })
+                                  : inv.invoiceDate}
+                              </span>
+                            </>
+                          ) : (
+                            <>
+                              <span className="text-[10px] text-muted-foreground block font-medium flex items-center gap-1">
+                                <i className="fa-solid fa-clock text-[9px]" /> Due Date:
+                              </span>
+                              <span className="font-semibold text-foreground text-[11px]">
+                                {inv.dueDate || "—"}
+                              </span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Paid Details Box if Paid */}
+                      {isPaid && inv.paymentDetails && (
+                        <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-lg p-2 text-[10px] text-emerald-700 dark:text-emerald-400 space-y-1">
+                          <div className="flex items-center justify-between">
+                            <span className="font-semibold flex items-center gap-1">
+                              <i className="fa-solid fa-circle-check text-emerald-500" /> Payment Verified
+                            </span>
+                            {inv.paymentDetails.screenshotUrl && (
+                              <a
+                                href={inv.paymentDetails.screenshotUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-[10px] font-bold text-violet-600 dark:text-violet-400 hover:underline flex items-center gap-1"
+                              >
+                                <i className="fa-solid fa-receipt text-[9px]" /> Receipt
+                              </a>
+                            )}
+                          </div>
+                          {(inv.paymentDetails.upiId || inv.paymentDetails.transactionId) && (
+                            <div className="font-mono text-[9px] text-muted-foreground truncate">
+                              {inv.paymentDetails.upiId && <span>UPI: {inv.paymentDetails.upiId} </span>}
+                              {inv.paymentDetails.transactionId && <span>Txn: {inv.paymentDetails.transactionId}</span>}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Card Action Buttons Footer */}
+                      <div className="flex items-center gap-2 pt-2 border-t border-border/60">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setViewInvoice(inv)}
+                          className="flex-1 h-8 text-[11px] font-semibold gap-1.5 cursor-pointer hover:bg-primary/10 hover:text-primary hover:border-primary/30"
+                        >
+                          <i className="fa-solid fa-eye text-xs" /> View Details
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handlePrintPDF(inv)}
+                          className="h-8 px-3 text-[11px] font-semibold gap-1.5 text-rose-500 border-rose-500/20 bg-rose-500/5 hover:bg-rose-500/10 hover:border-rose-500/40 cursor-pointer"
+                          title="Download PDF"
+                        >
+                          <i className="fa-solid fa-file-pdf text-xs" /> PDF
+                        </Button>
+                        {isPaid && inv.paymentDetails?.screenshotUrl && (
+                          <a
+                            href={inv.paymentDetails.screenshotUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="h-8 px-2.5 rounded-lg border border-violet-500/20 bg-violet-500/10 hover:bg-violet-500/20 text-violet-600 dark:text-violet-400 flex items-center justify-center text-xs cursor-pointer transition-colors"
+                            title="View Receipt"
+                          >
+                            <i className="fa-solid fa-receipt text-xs" />
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             ) : (
+              /* List View */
               <div className="space-y-3 flex-1">
                 {paginatedInvoices.map((inv) => {
                   const curr = inv.currency === "EUR" ? "€" : inv.currency === "GBP" ? "£" : inv.currency === "INR" ? "₹" : "$";
                   return (
-                    <div key={inv._id || inv.id} className="rounded-xl border border-border/80 overflow-hidden">
+                    <div key={inv._id || inv.id} className="rounded-xl border border-border/80 overflow-hidden bg-card">
                       <div
                         className="p-3 bg-muted/20 hover:bg-muted/30 flex items-center justify-between gap-3 text-xs transition-colors cursor-default"
                       >
@@ -2754,7 +3102,7 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
             )}
           </CardContent>
         </Card>
-      </div>
+      )}
     </div>
   );
 }

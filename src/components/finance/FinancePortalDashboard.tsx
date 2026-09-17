@@ -231,7 +231,7 @@ export function FinancePortalDashboard({
         headcount: data.count,
         status: data.status,
         date: data.date,
-      }));
+      })).sort((a, b) => (b.date || "").localeCompare(a.date || ""));
     }
 
     // Internal Scope: group real employee invoices from MongoDB by billing period
@@ -314,6 +314,11 @@ export function FinancePortalDashboard({
       const matchCat = expenseCatFilter === "All" || exp.category === expenseCatFilter;
       const matchStatus = expenseStatusFilter === "All" || exp.status === expenseStatusFilter;
       return matchSearch && matchCat && matchStatus;
+    }).sort((a, b) => {
+      const timeA = new Date((a as any).createdAt || a.date || 0).getTime();
+      const timeB = new Date((b as any).createdAt || b.date || 0).getTime();
+      if (timeB !== timeA) return timeB - timeA;
+      return new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime();
     }), [activeExpenses, expenseSearch, expenseCatFilter, expenseStatusFilter]);
 
   const expenseCatOptions = useMemo(() => ["All", ...Array.from(new Set(activeExpenses.map(e => e.category)))], [activeExpenses]);

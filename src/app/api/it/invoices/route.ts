@@ -38,21 +38,22 @@ export async function GET() {
       const userEmail = (userDoc as { email?: string; name?: string } | null)?.email?.trim();
       const userName = (userDoc as { email?: string; name?: string } | null)?.name?.trim() || session.userName?.trim();
 
-      const orConditions: any[] = [];
+      const orConditions: any[] = [
+        { createdBy: userObjectId },
+      ];
       if (userName) {
         const escapedName = userName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        orConditions.push({ businessName: new RegExp(`^${escapedName}$`, "i") });
         orConditions.push({ billedToName: new RegExp(`^${escapedName}$`, "i") });
+        orConditions.push({ customerNo: new RegExp(userName.replace(/\s+/g, ""), "i") });
       }
       if (userEmail) {
         const escapedEmail = userEmail.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        orConditions.push({ businessEmail: new RegExp(`^${escapedEmail}$`, "i") });
         orConditions.push({ billedToEmail: new RegExp(`^${escapedEmail}$`, "i") });
       }
 
-      if (orConditions.length > 0) {
-        query.$or = orConditions;
-      } else {
-        query.billedToName = "__NO_USER__";
-      }
+      query.$or = orConditions;
     }
 
     const invoices = await ITInvoice.find(query).sort({ createdAt: -1 }).lean();

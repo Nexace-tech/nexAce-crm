@@ -110,6 +110,21 @@ export async function GET() {
         userUpiId: payeeInfo.userUpiId,
         bankDetails: payeeInfo.bankDetails,
         paymentDetails: inv.paymentDetails,
+        items: inv.items || [],
+        lineItems: inv.items || [],
+        subtotal: inv.subtotal || inv.total || 0,
+        taxRate: inv.taxRate || 0,
+        taxAmount: inv.taxAmount || 0,
+        total: inv.total || 0,
+        billedToName: inv.billedToName || "NexAce Technologies",
+        billedToAddress: inv.billedToAddress,
+        billedToEmail: inv.billedToEmail,
+        businessName: inv.businessName || "Unknown Employee",
+        businessAddress: inv.businessAddress,
+        businessEmail: inv.businessEmail,
+        customerNo: inv.customerNo,
+        shiftAttendance: inv.shiftAttendance || null,
+        timesheetEntries: inv.timesheetEntries || null,
       };
     });
 

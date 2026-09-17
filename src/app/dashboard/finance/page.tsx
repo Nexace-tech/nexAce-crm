@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useRef } from "react";
-import { useRouter } from "next/navigation";
+import React, { useState, useEffect, useCallback, useRef, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { FinancePortalDashboard, FinanceInvoice, FinanceExpense } from "@/components/finance/FinancePortalDashboard";
 import type { SalesDeal } from "@/components/operations/SalesWorkdeskDashboard";
 import { Button } from "@/components/ui/button";
@@ -9,10 +9,15 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useAuth } from "@/hooks/useAuth";
+import { Preloader } from "@/components/ui/Preloader";
+import { SelfServiceInvoiceTab } from "@/components/settings/SelfServiceInvoiceTab";
 
-export default function FinancePage() {
+function FinancePageContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const currentTab = searchParams.get("tab");
   const { can, canAccessModule, isAdmin, isOPS, loading: permLoading } = usePermissions();
+  const isRegularUser = !isAdmin && !isOPS;
 
   // ── Invoice State ──
   const [invoices, setInvoices] = useState<FinanceInvoice[]>([]);
@@ -175,10 +180,12 @@ export default function FinancePage() {
   };
 
   useEffect(() => {
-    fetchInvoices();
-    fetchExpenses();
-    fetchDeals();
-  }, []);
+    if (isAdmin || isOPS) {
+      fetchInvoices();
+      fetchExpenses();
+      fetchDeals();
+    }
+  }, [isAdmin, isOPS]);
 
   // ── Invoice Auto-number ──
   const getNextInvoiceNo = () => {
@@ -596,6 +603,40 @@ export default function FinancePage() {
     );
   }
 
+  if (isRegularUser) {
+    return (
+      <div className="space-y-6">
+        {/* Toast */}
+        {toast && (
+          <div className={cn(
+            "fixed top-5 right-5 z-[9999] flex items-center gap-3 px-4 py-3 rounded-xl shadow-2xl border text-sm font-semibold max-w-sm animate-in slide-in-from-right-5",
+            toast.type === "success"
+              ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400"
+              : "bg-rose-500/10 border-rose-500/30 text-rose-600 dark:text-rose-400"
+          )}>
+            <i className={cn("fa-solid text-base", toast.type === "success" ? "fa-circle-check" : "fa-circle-xmark")} />
+            {toast.message}
+          </div>
+        )}
+
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
+              <i className="fa-solid fa-coins text-primary text-xl" /> Finance Portal
+            </h1>
+            <p className="text-sm text-muted-foreground mt-0.5">
+              Review your personal invoice history and generate monthly salary or contractor billing.
+            </p>
+          </div>
+        </div>
+
+        {/* Self-Service Portal for regular users */}
+        <SelfServiceInvoiceTab showToast={showToast} />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-8">
       {/* Toast */}
@@ -618,38 +659,63 @@ export default function FinancePage() {
             <i className="fa-solid fa-coins text-primary text-xl" /> Finance Portal
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Invoices, expenses, budget utilization, payroll overview, and sales pipeline.
+            {currentTab === "generate"
+              ? "Generate self-service monthly salary or contractor fee invoices."
+              : "Invoices, expenses, budget utilization, payroll overview, and sales pipeline."}
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
+          {currentTab === "generate" ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => router.push("/dashboard/finance?tab=invoices")}
+              className="gap-2 h-8 font-semibold cursor-pointer border-border hover:bg-muted"
+            >
+              <i className="fa-solid fa-building-columns text-xs text-primary" /> Corporate Financials
+            </Button>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => router.push("/dashboard/finance?tab=generate")}
+              className="gap-2 h-8 font-semibold cursor-pointer border-emerald-500/40 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10"
+            >
+              <i className="fa-solid fa-wand-magic-sparkles text-xs" /> Generate My Invoice
+            </Button>
+          )}
           {(can("createInvoices") || isAdmin || isOPS) && (
-            <Button variant="outline" size="sm" onClick={() => router.push("/dashboard/finance/invoices/new")} className="gap-2 h-8 font-semibold cursor-pointer border-emerald-500/40 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10">
-              <i className="fa-solid fa-wand-magic-sparkles text-xs" /> Generate Invoice
+            <Button variant="outline" size="sm" onClick={() => router.push("/dashboard/finance/invoices/new")} className="gap-2 h-8 font-semibold cursor-pointer border-primary/40 text-primary hover:bg-primary/10">
+              <i className="fa-solid fa-plus text-xs" /> Create Corporate Invoice
             </Button>
           )}
         </div>
       </div>
 
-      {/* Main Dashboard */}
-      <FinancePortalDashboard
-        invoices={invoices}
-        expenses={expenses}
-        deals={deals}
-        loadingInvoices={loadingInvoices}
-        loadingExpenses={loadingExpenses}
-        loadingDeals={loadingDeals}
-        showToast={showToast}
-        onNewInvoice={() => router.push("/dashboard/finance/invoices/new")}
-        onEditInvoice={handleEditInvoice}
-        onDeleteInvoice={(id, name) => setDeleteTarget({ type: "invoice", id, name })}
-        onNewExpense={handleNewExpense}
-        onEditExpense={handleEditExpense}
-        onDeleteExpense={(id, name) => setDeleteTarget({ type: "expense", id, name })}
-        onNewDeal={handleNewDeal}
-        onEditDeal={handleEditDeal}
-        onDeleteDeal={(id, name) => setDeleteTarget({ type: "deal", id, name })}
-        onRefresh={() => { fetchInvoices(); fetchExpenses(); fetchDeals(); }}
-      />
+      {/* Main Dashboard / Self-Service view */}
+      {currentTab === "generate" ? (
+        <SelfServiceInvoiceTab showToast={showToast} />
+      ) : (
+        <FinancePortalDashboard
+          invoices={invoices}
+          expenses={expenses}
+          deals={deals}
+          loadingInvoices={loadingInvoices}
+          loadingExpenses={loadingExpenses}
+          loadingDeals={loadingDeals}
+          showToast={showToast}
+          onNewInvoice={() => router.push("/dashboard/finance/invoices/new")}
+          onEditInvoice={handleEditInvoice}
+          onDeleteInvoice={(id, name) => setDeleteTarget({ type: "invoice", id, name })}
+          onNewExpense={handleNewExpense}
+          onEditExpense={handleEditExpense}
+          onDeleteExpense={(id, name) => setDeleteTarget({ type: "expense", id, name })}
+          onNewDeal={handleNewDeal}
+          onEditDeal={handleEditDeal}
+          onDeleteDeal={(id, name) => setDeleteTarget({ type: "deal", id, name })}
+          onRefresh={() => { fetchInvoices(); fetchExpenses(); fetchDeals(); }}
+        />
+      )}
 
 
       {/* ── Invoice Modal ── */}
@@ -1336,5 +1402,13 @@ export default function FinancePage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function FinancePage() {
+  return (
+    <Suspense fallback={<Preloader label="Loading Finance Portal..." />}>
+      <FinancePageContent />
+    </Suspense>
   );
 }

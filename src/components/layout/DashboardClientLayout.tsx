@@ -118,10 +118,9 @@ const navSections: NavSection[] = [
             id: "ops-control",
             name: "Operations Control",
             href: "/dashboard/clients?tab=operations",
-            badge: 21,
             nestedItems: [
-              { id: "ops-projects", name: "Projects", href: "/dashboard/clients?tab=projects", badge: 42 },
-              { id: "ops-tasks", name: "Tasks", href: "/dashboard/clients?tab=tasks", badge: 105 },
+              { id: "ops-projects", name: "Projects", href: "/dashboard/clients?tab=projects" },
+              { id: "ops-tasks", name: "Tasks", href: "/dashboard/clients?tab=tasks" },
               { id: "ops-gantt", name: "Gantt Timeline", href: "/dashboard/clients?tab=gantt" },
               { id: "ops-wiki", name: "SOP Wiki", href: "/dashboard/clients?tab=wiki" },
               { id: "ops-drive", name: "Drive Space", href: "/dashboard/clients?tab=drive" },
@@ -129,8 +128,8 @@ const navSections: NavSection[] = [
             ],
           },
           { id: "ops-contracts", name: "Contracts", href: "/dashboard/clients?tab=contracts" },
-          { id: "ops-hr", name: "HR Overview", href: "/dashboard/clients?tab=hr", badge: 15 },
-          { id: "ops-external", name: "External Teams", href: "/dashboard/clients?tab=external", badge: 3 },
+          { id: "ops-hr", name: "HR Overview", href: "/dashboard/clients?tab=hr" },
+          { id: "ops-external", name: "External Teams", href: "/dashboard/clients?tab=external" },
           { id: "ops-reports", name: "Reports & Data Export", href: "/dashboard/clients?tab=reports" },
           { id: "ops-shifts", name: "Shifts & Status", href: "/dashboard/clients?tab=shifts" },
         ],
@@ -253,34 +252,43 @@ function SidebarNavMenu({ canAccessModule, isEmployeeOrHR, isPending, onNavigate
     tasks?: number;
     hr?: number;
     external?: number;
-  }>({
-    operations: 21,
-    projects: 42,
-    tasks: 105,
-    hr: 15,
-    external: 3,
-  });
+  }>({});
 
   useEffect(() => {
-    Promise.allSettled([
-      fetch("/api/clients?limit=1").then((r) => r.ok && r.json()),
-      fetch("/api/tasks?limit=1").then((r) => r.ok && r.json()),
-    ]).then(([clientsRes, tasksRes]) => {
-      if (clientsRes.status === "fulfilled" && clientsRes.value?.pagination?.total !== undefined) {
+    const fetchCounts = () => {
+      Promise.allSettled([
+        fetch("/api/projects").then((r) => r.ok && r.json()),
+        fetch("/api/tasks").then((r) => r.ok && r.json()),
+        fetch("/api/clients?limit=1").then((r) => r.ok && r.json()),
+      ]).then(([projectsRes, tasksRes, clientsRes]) => {
+        const pCount =
+          projectsRes.status === "fulfilled" && Array.isArray(projectsRes.value?.projects)
+            ? projectsRes.value.projects.length
+            : undefined;
+        const tCount =
+          tasksRes.status === "fulfilled" && Array.isArray(tasksRes.value?.tasks)
+            ? tasksRes.value.tasks.length
+            : undefined;
+        const cCount =
+          clientsRes.status === "fulfilled" && typeof clientsRes.value?.pagination?.total === "number"
+            ? clientsRes.value.pagination.total
+            : undefined;
+
         setOpsCounts((prev) => ({
           ...prev,
-          operations: clientsRes.value.pagination.total,
-          projects: clientsRes.value.pagination.total,
+          projects: pCount ?? prev.projects,
+          tasks: tCount ?? prev.tasks,
+          operations: isEmployeeOrHR ? (pCount ?? prev.projects) : (cCount ?? pCount ?? prev.operations),
         }));
-      }
-      if (tasksRes.status === "fulfilled" && tasksRes.value?.pagination?.total !== undefined) {
-        setOpsCounts((prev) => ({
-          ...prev,
-          tasks: tasksRes.value.pagination.total,
-        }));
-      }
-    });
-  }, []);
+      });
+    };
+
+    fetchCounts();
+    if (typeof window !== "undefined") {
+      window.addEventListener("focus", fetchCounts);
+      return () => window.removeEventListener("focus", fetchCounts);
+    }
+  }, [isEmployeeOrHR]);
 
   const [openNested, setOpenNested] = useState<Record<string, boolean>>({
     "ops-control": true,
@@ -329,6 +337,9 @@ function SidebarNavMenu({ canAccessModule, isEmployeeOrHR, isPending, onNavigate
     <div className="flex-1 overflow-y-auto py-3 space-y-4 px-2.5">
       {navSections.map((sec) => {
         const allowedCategories = sec.categories.filter((cat) => {
+          if (cat.id === "bd" && isEmployeeOrHR && !canAccessModule("bd")) {
+            return false;
+          }
           if (cat.key && !canAccessModule(cat.key)) {
             if (!cat.subItems) return false;
             return cat.subItems.some((sub) => sub.key && canAccessModule(sub.key));
@@ -341,12 +352,12 @@ function SidebarNavMenu({ canAccessModule, isEmployeeOrHR, isPending, onNavigate
         return (
           <div key={sec.title} className="space-y-1.5">
             <div className="px-3 py-1 text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider select-none">
-              {sec.title}
+              {sec.title === "OPS Portal" && isEmployeeOrHR ? "Workspace" : sec.title}
             </div>
 
             <div className="space-y-1">
               {allowedCategories.map((cat) => {
-                const visibleSubItems = cat.subItems
+                let visibleSubItems = cat.subItems
                   ? cat.subItems.filter((sub) => {
                       if (sub.key) return canAccessModule(sub.key);
                       if (cat.key) return canAccessModule(cat.key);
@@ -354,10 +365,55 @@ function SidebarNavMenu({ canAccessModule, isEmployeeOrHR, isPending, onNavigate
                     })
                   : [];
 
+                if (cat.id === "operations") {
+                  if (isEmployeeOrHR) {
+                    visibleSubItems = [
+                      {
+                        id: "ops-control",
+                        name: "Projects & Tasks",
+                        href: "/dashboard/clients?tab=projects",
+                        badge: opsCounts.projects,
+                        nestedItems: [
+                          { id: "ops-projects", name: "Projects", href: "/dashboard/clients?tab=projects", badge: opsCounts.projects },
+                          { id: "ops-tasks", name: "Tasks", href: "/dashboard/clients?tab=tasks", badge: opsCounts.tasks },
+                          { id: "ops-gantt", name: "Gantt Timeline", href: "/dashboard/clients?tab=gantt" },
+                          { id: "ops-wiki", name: "SOP Wiki", href: "/dashboard/clients?tab=wiki" },
+                          { id: "ops-drive", name: "Drive Space", href: "/dashboard/clients?tab=drive" },
+                        ],
+                      },
+                    ];
+                  }
+                }
+
+                if (cat.id === "management" && isEmployeeOrHR) {
+                  visibleSubItems = visibleSubItems.filter((sub) => sub.key === "goals");
+                }
+
+                if (cat.id === "finance") {
+                  if (isEmployeeOrHR) {
+                    visibleSubItems = [
+                      { id: "fin-invoices", name: "My Invoices", href: "/dashboard/finance?tab=invoices" },
+                      { id: "fin-generate", name: "Generate My Invoice", href: "/dashboard/finance?tab=generate" },
+                    ];
+                  } else {
+                    visibleSubItems = [
+                      { id: "fin-invoices", name: "Invoices", href: "/dashboard/finance?tab=invoices" },
+                      { id: "fin-generate", name: "Generate Invoice", href: "/dashboard/finance?tab=generate" },
+                      { id: "fin-expenses", name: "Expenses", href: "/dashboard/finance?tab=expenses" },
+                      { id: "fin-budget", name: "Budget & Forecast", href: "/dashboard/finance?tab=budget" },
+                      { id: "fin-payroll", name: "Payroll", href: "/dashboard/finance?tab=payroll" },
+                    ];
+                  }
+                }
+
                 const hasSubItems = visibleSubItems.length > 0;
+                if (!hasSubItems && !cat.href) return null;
+
                 const isOpen = !!openCategories[cat.id];
                 const active = isCategoryActive(cat, pathname, currentTab);
                 const disabled = isPending && cat.href !== "/dashboard";
+                const catDisplayName = cat.id === "operations" && isEmployeeOrHR ? "Projects & Workspace" : cat.name;
+                const catDisplayIcon = cat.id === "operations" && isEmployeeOrHR ? "fa-solid fa-diagram-project" : cat.icon;
 
                 // Normal Flat Menu Item (e.g. Main Menu options matching screenshot)
                 if (!hasSubItems && cat.href) {
@@ -382,14 +438,14 @@ function SidebarNavMenu({ canAccessModule, isEmployeeOrHR, isPending, onNavigate
                       <div className="flex items-center gap-3 min-w-0 flex-1">
                         <i
                           className={cn(
-                            cat.icon,
+                            catDisplayIcon,
                             "text-sm shrink-0 w-4.5 text-center transition-colors",
                             active
                               ? "text-[#00c5a0]"
                               : "text-slate-400 dark:text-slate-400 group-hover:text-slate-700 dark:group-hover:text-slate-200"
                           )}
                         />
-                        <span className="text-xs truncate">{cat.name}</span>
+                        <span className="text-xs truncate">{catDisplayName}</span>
                       </div>
 
                       {active && (
@@ -432,9 +488,9 @@ function SidebarNavMenu({ canAccessModule, isEmployeeOrHR, isPending, onNavigate
                               : "bg-slate-100 dark:bg-[#1e2632] text-slate-500 dark:text-slate-400 group-hover:bg-slate-200 dark:group-hover:bg-[#253040] group-hover:text-slate-900 dark:group-hover:text-white"
                           )}
                         >
-                          <i className={cn(cat.icon, "text-xs")} />
+                          <i className={cn(catDisplayIcon, "text-xs")} />
                         </div>
-                        <span className="text-xs truncate">{cat.name}</span>
+                        <span className="text-xs truncate">{catDisplayName}</span>
                       </div>
 
                       {hasSubItems && (
@@ -467,7 +523,7 @@ function SidebarNavMenu({ canAccessModule, isEmployeeOrHR, isPending, onNavigate
 
                           const dynamicBadge =
                             sub.id === "ops-control"
-                              ? opsCounts.operations ?? sub.badge
+                              ? (isEmployeeOrHR ? (opsCounts.projects ?? sub.badge) : (opsCounts.operations ?? sub.badge))
                               : sub.id === "ops-projects"
                               ? opsCounts.projects ?? sub.badge
                               : sub.id === "ops-tasks"

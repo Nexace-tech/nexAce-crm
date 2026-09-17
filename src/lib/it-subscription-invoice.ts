@@ -37,8 +37,8 @@ export async function autoGenerateSubscriptionInvoice({
   const cost = Number(sub.costPerMonth) || 0;
   const seats = Number(sub.seats) || 1;
   const plan = sub.plan || "Standard";
-  const invDate = sub.renewalDate || new Date().toISOString().slice(0, 10);
-  const dueDate = invDate;
+  const invDate = sub.startDate ? new Date(sub.startDate).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10);
+  const dueDate = sub.renewalDate || invDate;
 
   // Determine createdBy: fallback to sub.createdBy or an Admin user
   let creatorId = sub.createdBy;

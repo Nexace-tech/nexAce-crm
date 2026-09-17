@@ -3,12 +3,14 @@
 import React, { useState, useMemo } from "react";
 import { cn } from "@/lib/utils";
 import type { FinanceInvoice } from "./FinancePortalDashboard";
+import { InvoiceDetailsView, type InvoiceDetailsData, type InvoiceDetailsItem } from "./InvoiceDetailsView";
 
 interface InvoiceGridViewProps {
   invoices: FinanceInvoice[];
   loading?: boolean;
   scope?: "internal" | "external";
   onNewInvoice: () => void;
+  onViewInvoice?: (inv: FinanceInvoice) => void;
   onEditInvoice: (inv: FinanceInvoice) => void;
   onDeleteInvoice: (id: string, name: string) => void;
 }
@@ -47,12 +49,72 @@ function getAvatarColor(name: string) {
   return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
 }
 
-export default function InvoiceGridView({ invoices, loading = false, scope = "internal", onNewInvoice, onEditInvoice, onDeleteInvoice }: InvoiceGridViewProps) {
+function formatForInvoiceDetails(inv: any): InvoiceDetailsData {
+  const rawItems = inv.items || inv.lineItems || [];
+  const items: InvoiceDetailsItem[] = rawItems.length > 0
+    ? rawItems.map((it: any) => ({
+        description: it.description || "Services Rendered",
+        quantity: Number(it.quantity) || 1,
+        unitPrice: Number(it.unitPrice ?? it.amount) || Number(inv.amount) || 0,
+        amount: Number(it.amount) || (Number(it.quantity || 1) * Number(it.unitPrice || 0)) || Number(inv.amount) || 0,
+      }))
+    : [
+        {
+          description: inv.notes || `${inv.category || "Professional Consulting"} Deliverables`,
+          quantity: 1,
+          unitPrice: Number(inv.amount) || 0,
+          amount: Number(inv.amount) || 0,
+        },
+      ];
+
+  const subtotal = Number(inv.subtotal) || items.reduce((s, it) => s + it.amount, 0) || Number(inv.amount) || 0;
+  const taxRate = Number(inv.taxRate) || 0;
+  const taxAmount = Number(inv.taxAmount) || 0;
+  const total = Number(inv.total) || Number(inv.amount) || (subtotal + taxAmount);
+
+  return {
+    _id: inv._id,
+    id: inv._id,
+    invoiceNo: inv.invoiceNo,
+    invoiceDate: inv.issuedDate || inv.invoiceDate || new Date().toISOString().slice(0, 10),
+    dueDate: inv.dueDate || "",
+    customerNo: inv.customerNo || "",
+    businessName: inv.businessName || inv.client || "NexAce Technologies",
+    businessAddress: inv.businessAddress || "",
+    businessEmail: inv.businessEmail || "",
+    billedToName: inv.billedToName || inv.venture || "NexAce Technologies",
+    billedToAddress: inv.billedToAddress || "",
+    billedToEmail: inv.billedToEmail || "",
+    items,
+    subtotal,
+    taxRate,
+    taxAmount,
+    total,
+    currency: inv.currency || "USD",
+    status: inv.status || "Draft",
+    notes: inv.notes || "",
+    bankDetails: inv.bankDetails,
+    paymentDetails: inv.paymentDetails,
+    shiftAttendance: inv.shiftAttendance || null,
+    timesheetEntries: inv.timesheetEntries || null,
+  };
+}
+
+export default function InvoiceGridView({ invoices, loading = false, scope = "internal", onNewInvoice, onViewInvoice, onEditInvoice, onDeleteInvoice }: InvoiceGridViewProps) {
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [sortBy, setSortBy] = useState<"date_desc" | "date_asc" | "amount_desc" | "amount_asc" | "name">("date_desc");
   const [actionMenu, setActionMenu] = useState<string | null>(null);
+  const [viewingInvoice, setViewingInvoice] = useState<FinanceInvoice | null>(null);
+
+  const handleViewInvoice = (inv: FinanceInvoice) => {
+    if (onViewInvoice) {
+      onViewInvoice(inv);
+    } else {
+      setViewingInvoice(inv);
+    }
+  };
 
   const kpis = useMemo(() => {
     return {
@@ -75,8 +137,18 @@ export default function InvoiceGridView({ invoices, loading = false, scope = "in
       return matchSearch && matchStatus;
     });
     return [...list].sort((a, b) => {
-      if (sortBy === "date_desc") return new Date(b.issuedDate || b.createdAt || 0).getTime() - new Date(a.issuedDate || a.createdAt || 0).getTime();
-      if (sortBy === "date_asc")  return new Date(a.issuedDate || a.createdAt || 0).getTime() - new Date(b.issuedDate || b.createdAt || 0).getTime();
+      if (sortBy === "date_desc") {
+        const timeA = new Date(a.createdAt || a.issuedDate || 0).getTime();
+        const timeB = new Date(b.createdAt || b.issuedDate || 0).getTime();
+        if (timeB !== timeA) return timeB - timeA;
+        return new Date(b.issuedDate || 0).getTime() - new Date(a.issuedDate || 0).getTime();
+      }
+      if (sortBy === "date_asc") {
+        const timeA = new Date(a.createdAt || a.issuedDate || 0).getTime();
+        const timeB = new Date(b.createdAt || b.issuedDate || 0).getTime();
+        if (timeA !== timeB) return timeA - timeB;
+        return new Date(a.issuedDate || 0).getTime() - new Date(b.issuedDate || 0).getTime();
+      }
       if (sortBy === "amount_desc") return b.amount - a.amount;
       if (sortBy === "amount_asc")  return a.amount - b.amount;
       if (sortBy === "name") return a.client.localeCompare(b.client);
@@ -90,6 +162,15 @@ export default function InvoiceGridView({ invoices, loading = false, scope = "in
     { label: "Pending",        value: `$${fmt(kpis.pending)}`, sub: `${kpis.pendingCount} invoices`, icon: "fa-clock",                 color: "text-amber-600 dark:text-amber-400",   bg: "bg-amber-500/10",   border: "border-amber-500/20" },
     { label: "Overdue",        value: `$${fmt(kpis.overdue)}`, sub: `${kpis.overdueCount} invoices`, icon: "fa-triangle-exclamation",  color: "text-rose-600 dark:text-rose-400",     bg: "bg-rose-500/10",    border: "border-rose-500/20" },
   ];
+
+  if (viewingInvoice) {
+    return (
+      <InvoiceDetailsView
+        invoice={formatForInvoiceDetails(viewingInvoice)}
+        onClose={() => setViewingInvoice(null)}
+      />
+    );
+  }
 
   return (
     <div className="space-y-5 animate-in fade-in duration-200">
@@ -172,7 +253,14 @@ export default function InvoiceGridView({ invoices, loading = false, scope = "in
                 <div key={inv._id} className="group bg-card border border-border/80 rounded-2xl shadow-xs hover:shadow-md transition-all hover:-translate-y-0.5 duration-200 flex flex-col overflow-hidden">
                   <div className="px-4 pt-3.5 pb-3 flex items-center justify-between gap-2 border-b border-border/50 bg-muted/20">
                     <div className="flex items-center gap-1.5 min-w-0 overflow-hidden">
-                      <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 truncate max-w-[130px] shrink-0" title={inv.invoiceNo}>{inv.invoiceNo}</span>
+                      <button
+                        type="button"
+                        onClick={() => handleViewInvoice(inv)}
+                        className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 truncate max-w-[130px] shrink-0 cursor-pointer transition-colors text-left"
+                        title="Click to view details"
+                      >
+                        {inv.invoiceNo}
+                      </button>
                       {inv.category && <span className="text-[10px] font-medium text-muted-foreground truncate hidden sm:block">{inv.category}</span>}
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0">
@@ -185,10 +273,11 @@ export default function InvoiceGridView({ invoices, loading = false, scope = "in
                         <button type="button" onClick={() => setActionMenu(isMenuOpen ? null : inv._id)} className="w-7 h-7 rounded-lg border border-border bg-background hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-all cursor-pointer"><i className="fa-solid fa-ellipsis-vertical text-xs" /></button>
                         {isMenuOpen && (
                           <div className="absolute right-0 top-8 z-50 w-44 bg-popover border border-border rounded-xl shadow-xl py-1 animate-in fade-in slide-in-from-top-2 duration-150">
-                            <button onClick={() => { onEditInvoice(inv); setActionMenu(null); }} className="w-full flex items-center gap-2.5 px-3 py-2 text-xs hover:bg-muted text-foreground transition-colors text-left cursor-pointer"><i className="fa-solid fa-pen-to-square text-blue-500 w-4" />Edit Invoice</button>
-                            <button onClick={() => { navigator.clipboard?.writeText(inv.invoiceNo); setActionMenu(null); }} className="w-full flex items-center gap-2.5 px-3 py-2 text-xs hover:bg-muted text-foreground transition-colors text-left cursor-pointer"><i className="fa-solid fa-copy text-violet-500 w-4" />Copy Invoice #</button>
+                            <button onClick={() => { handleViewInvoice(inv); setActionMenu(null); }} className="w-full flex items-center gap-2.5 px-3 py-2 text-xs hover:bg-muted text-foreground transition-colors text-left cursor-pointer font-medium"><i className="fa-solid fa-eye text-primary w-4" />View Invoice</button>
+                            <button onClick={() => { onEditInvoice(inv); setActionMenu(null); }} className="w-full flex items-center gap-2.5 px-3 py-2 text-xs hover:bg-muted text-foreground transition-colors text-left cursor-pointer font-medium"><i className="fa-solid fa-pen-to-square text-blue-500 w-4" />Edit Invoice</button>
+                            <button onClick={() => { navigator.clipboard?.writeText(inv.invoiceNo); setActionMenu(null); }} className="w-full flex items-center gap-2.5 px-3 py-2 text-xs hover:bg-muted text-foreground transition-colors text-left cursor-pointer font-medium"><i className="fa-solid fa-copy text-violet-500 w-4" />Copy Invoice #</button>
                             <div className="border-t border-border my-1" />
-                            <button onClick={() => { onDeleteInvoice(inv._id, `${inv.invoiceNo} – ${inv.client}`); setActionMenu(null); }} className="w-full flex items-center gap-2.5 px-3 py-2 text-xs hover:bg-rose-500/10 text-rose-500 transition-colors text-left cursor-pointer"><i className="fa-solid fa-trash w-4" />Delete</button>
+                            <button onClick={() => { onDeleteInvoice(inv._id, `${inv.invoiceNo} – ${inv.client}`); setActionMenu(null); }} className="w-full flex items-center gap-2.5 px-3 py-2 text-xs hover:bg-rose-500/10 text-rose-500 transition-colors text-left cursor-pointer font-medium"><i className="fa-solid fa-trash w-4" />Delete</button>
                           </div>
                         )}
                       </div>
@@ -223,6 +312,7 @@ export default function InvoiceGridView({ invoices, loading = false, scope = "in
                       <i className={cn("fa-solid text-[9px]", sc.icon)} />{inv.status}
                     </span>
                     <div className="flex items-center gap-1">
+                      <button onClick={() => handleViewInvoice(inv)} className="w-7 h-7 rounded-lg border border-border bg-background hover:bg-primary/10 hover:border-primary/30 flex items-center justify-center text-muted-foreground hover:text-primary transition-all cursor-pointer" title="View Invoice"><i className="fa-solid fa-eye text-[10px]" /></button>
                       <button onClick={() => onEditInvoice(inv)} className="w-7 h-7 rounded-lg border border-border bg-background hover:bg-primary/10 hover:border-primary/30 flex items-center justify-center text-muted-foreground hover:text-primary transition-all cursor-pointer" title="Edit"><i className="fa-solid fa-pen text-[10px]" /></button>
                       <button onClick={() => onDeleteInvoice(inv._id, `${inv.invoiceNo} – ${inv.client}`)} className="w-7 h-7 rounded-lg border border-border bg-background hover:bg-rose-500/10 hover:border-rose-500/30 flex items-center justify-center text-muted-foreground hover:text-rose-500 transition-all cursor-pointer" title="Delete"><i className="fa-solid fa-trash text-[10px]" /></button>
                     </div>
@@ -321,6 +411,13 @@ export default function InvoiceGridView({ invoices, loading = false, scope = "in
                         {/* Actions */}
                         <td className="py-3.5 px-4 text-right whitespace-nowrap">
                           <div className="flex items-center justify-end gap-1">
+                            <button
+                              onClick={() => handleViewInvoice(inv)}
+                              className="w-7 h-7 rounded-lg border border-border bg-background hover:bg-primary/10 hover:border-primary/30 flex items-center justify-center text-muted-foreground hover:text-primary transition-all cursor-pointer"
+                              title="View Invoice"
+                            >
+                              <i className="fa-solid fa-eye text-[10px]" />
+                            </button>
                             <button
                               onClick={() => onEditInvoice(inv)}
                               className="w-7 h-7 rounded-lg border border-border bg-background hover:bg-primary/10 hover:border-primary/30 flex items-center justify-center text-muted-foreground hover:text-primary transition-all cursor-pointer"

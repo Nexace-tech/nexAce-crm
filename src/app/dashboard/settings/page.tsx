@@ -14,7 +14,6 @@ import { BrokenPhotoPlaceholder, BrokenPhotoBanner } from "@/components/ui/Broke
 import { cn, generateSecurePassword } from "@/lib/utils";
 import { useTabPersistence } from "@/hooks/useTabPersistence";
 import { RoleDataControlTab } from "@/components/settings/RoleDataControlTab";
-import { SelfServiceInvoiceTab } from "@/components/settings/SelfServiceInvoiceTab";
 import { AccessRestricted } from "@/components/ui/AccessRestricted";
 
 function SettingsPageContent() {
@@ -23,10 +22,10 @@ function SettingsPageContent() {
   const { user, loading: authLoading, refreshUser } = useAuth();
   const { can, isAdmin, isOPS, canAccessModule, loading: permLoading } = usePermissions();
 
-  const [activeTab, setActiveTab] = useTabPersistence<"profile" | "security" | "invoice" | "subscription" | "permissions" | "organization">(
-    "settings_active_tab_v2",
+  const [activeTab, setActiveTab] = useTabPersistence<"profile" | "security" | "subscription" | "permissions" | "organization">(
+    "settings_active_tab_v3",
     "profile",
-    ["profile", "security", "invoice", "subscription", "permissions", "organization"]
+    ["profile", "security", "subscription", "permissions", "organization"]
   );
 
   // Sync tab with URL searchParams and handle redirection for moved tabs
@@ -41,8 +40,9 @@ function SettingsPageContent() {
       return;
     }
 
+    // Invoices and Generate My Invoice moved to Finance Portal
     if (tabParam === "self-invoices" || tabParam === "invoice") {
-      setActiveTab("invoice");
+      router.replace("/dashboard/finance?tab=generate");
       return;
     }
 
@@ -52,7 +52,7 @@ function SettingsPageContent() {
       return;
     }
 
-    if (["profile", "security", "invoice", "subscription", "permissions", "organization"].includes(tabParam)) {
+    if (["profile", "security", "subscription", "permissions", "organization"].includes(tabParam)) {
       setActiveTab(tabParam as any);
     }
   }, [searchParams, router, setActiveTab]);
@@ -947,18 +947,6 @@ function SettingsPageContent() {
           <i className="fa-solid fa-shield-halved text-emerald-500 text-sm" /> Password &amp; Security
         </button>
 
-        <button
-          onClick={() => setActiveTab("invoice")}
-          className={cn(
-            "px-3 py-2 text-xs sm:text-sm font-medium rounded-lg transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap shrink-0 sm:shrink",
-            activeTab === "invoice"
-              ? "bg-background text-primary shadow-xs font-bold border border-border"
-              : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
-          )}
-        >
-          <i className="fa-solid fa-file-invoice-dollar text-primary text-sm" /> Generate My Invoice
-        </button>
-
         {(isAdmin || isOPS) && (
           <button
             onClick={() => setActiveTab("organization")}
@@ -1005,9 +993,6 @@ function SettingsPageContent() {
 
       {/* Active Tab Content with Smooth Transition */}
       <div key={activeTab} className="animate-in fade-in-50 slide-in-from-bottom-2 duration-300 ease-out transition-all">
-        {/* TAB: SELF-SERVICE INVOICE GENERATOR */}
-        {activeTab === "invoice" && <SelfServiceInvoiceTab showToast={showToast} />}
-
         {/* TAB: ORGANIZATION DETAILS (Admin & OPS only) */}
         {activeTab === "organization" && (isAdmin || isOPS) && (
           <div className="space-y-6">
