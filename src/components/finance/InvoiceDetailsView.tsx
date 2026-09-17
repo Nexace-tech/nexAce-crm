@@ -942,13 +942,32 @@ export function InvoiceDetailsView({
 
                 {invoice.paymentDetails.method === "UPI" && (
                   <>
-                    <div className={cn("flex justify-between py-1", invoice.paymentDetails.transactionId ? "border-b border-border/50" : "")}>
-                      <span className="text-muted-foreground">UPI ID:</span>
-                      <span className="font-mono font-bold text-foreground bg-violet-500/10 px-2 py-0.5 rounded-full border border-violet-500/20 text-violet-600 dark:text-violet-400">
-                        <i className="fa-solid fa-qrcode mr-1 text-[9px]" />
-                        {invoice.paymentDetails.upiId || invoice.bankDetails?.upiId || "nexace@okaxis"}
-                      </span>
-                    </div>
+                    {(invoice.paymentDetails as any).fromUpiId && (
+                      <div className="flex justify-between py-1 border-b border-border/50">
+                        <span className="text-muted-foreground">Paid From UPI:</span>
+                        <span className="font-mono font-bold text-foreground bg-sky-500/10 px-2 py-0.5 rounded-full border border-sky-500/20 text-sky-600 dark:text-sky-400">
+                          <i className="fa-solid fa-arrow-up-right-from-square mr-1 text-[9px]" />
+                          {(invoice.paymentDetails as any).fromUpiId}
+                        </span>
+                      </div>
+                    )}
+                    {(invoice.paymentDetails as any).toUpiId ? (
+                      <div className={cn("flex justify-between py-1", invoice.paymentDetails.transactionId ? "border-b border-border/50" : "")}>
+                        <span className="text-muted-foreground">Paid To UPI:</span>
+                        <span className="font-mono font-bold text-foreground bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20 text-emerald-600 dark:text-emerald-400">
+                          <i className="fa-solid fa-arrow-down-left-and-up-right-to-ceiling mr-1 text-[9px]" />
+                          {(invoice.paymentDetails as any).toUpiId}
+                        </span>
+                      </div>
+                    ) : (
+                      <div className={cn("flex justify-between py-1", invoice.paymentDetails.transactionId ? "border-b border-border/50" : "")}>
+                        <span className="text-muted-foreground">UPI ID:</span>
+                        <span className="font-mono font-bold text-foreground bg-violet-500/10 px-2 py-0.5 rounded-full border border-violet-500/20 text-violet-600 dark:text-violet-400">
+                          <i className="fa-solid fa-qrcode mr-1 text-[9px]" />
+                          {invoice.paymentDetails.upiId || invoice.bankDetails?.upiId || "nexace@okaxis"}
+                        </span>
+                      </div>
+                    )}
                     {invoice.paymentDetails.transactionId && (
                       <div className="flex justify-between py-1">
                         <span className="text-muted-foreground">Transaction ID:</span>

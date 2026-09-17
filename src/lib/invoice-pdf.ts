@@ -366,16 +366,35 @@ export function generateInvoicePdfDoc(invoice: InvoicePdfData): jsPDF {
       doc.setFont("helvetica", "bold");
       doc.text(invoice.bankDetails?.ifscCode || "NEXA0004128", 104, payY, { align: "right" });
     } else if (invoice.paymentDetails.method === "UPI") {
-      const effectiveUpiId =
-        (invoice.paymentDetails.upiId && invoice.paymentDetails.upiId.trim()) ||
-        (invoice.bankDetails?.upiId && invoice.bankDetails.upiId.trim()) ||
-        "nexace@okaxis";
+      const fromUpi = (invoice.paymentDetails as any).fromUpiId;
+      const toUpi = (invoice.paymentDetails as any).toUpiId;
 
-      payY += 5;
-      doc.setFont("helvetica", "normal");
-      doc.text("UPI ID:", 22, payY);
-      doc.setFont("helvetica", "bold");
-      doc.text(effectiveUpiId, 104, payY, { align: "right" });
+      if (fromUpi && toUpi) {
+        payY += 5;
+        doc.setFont("helvetica", "normal");
+        doc.text("Paid From:", 22, payY);
+        doc.setFont("helvetica", "bold");
+        doc.text(fromUpi, 104, payY, { align: "right" });
+
+        payY += 5;
+        doc.setFont("helvetica", "normal");
+        doc.text("Paid To:", 22, payY);
+        doc.setFont("helvetica", "bold");
+        doc.text(toUpi, 104, payY, { align: "right" });
+      } else {
+        const effectiveUpiId =
+          (invoice.paymentDetails.upiId && invoice.paymentDetails.upiId.trim()) ||
+          toUpi ||
+          fromUpi ||
+          (invoice.bankDetails?.upiId && invoice.bankDetails.upiId.trim()) ||
+          "nexace@okaxis";
+
+        payY += 5;
+        doc.setFont("helvetica", "normal");
+        doc.text("UPI ID:", 22, payY);
+        doc.setFont("helvetica", "bold");
+        doc.text(effectiveUpiId, 104, payY, { align: "right" });
+      }
 
       if (invoice.paymentDetails.transactionId) {
         payY += 5;

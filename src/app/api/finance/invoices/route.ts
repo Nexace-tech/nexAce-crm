@@ -14,12 +14,29 @@ export async function GET() {
 
     await connectToDatabase();
 
-    const invoices = await FinanceInvoice.find({ tenantId: tenantObjectId }).sort({ createdAt: -1 }).lean();
+    const invoices = await FinanceInvoice.find({ tenantId: tenantObjectId })
+      .populate("createdBy", "name email bankDetails upiId")
+      .sort({ createdAt: -1 })
+      .lean();
 
     // Fetch ITInvoices (Employee Invoices) as well
     const { ITInvoice } = await import("@/models/ITInvoice");
-    const itInvoices = await ITInvoice.find({ tenantId: tenantObjectId }).sort({ createdAt: -1 }).lean();
+    const itInvoices = await ITInvoice.find({ tenantId: tenantObjectId })
+      .populate("createdBy", "name email bankDetails upiId")
+      .sort({ createdAt: -1 })
+      .lean();
     
+    const mappedFinanceInvoices = invoices.map((inv: any) => ({
+      ...inv,
+      userUpiId:
+        inv.paymentDetails?.toUpiId ||
+        inv.paymentDetails?.upiId ||
+        (inv.bankDetails?.upiId) ||
+        (inv.createdBy as any)?.bankDetails?.upiId ||
+        (inv.createdBy as any)?.upiId ||
+        "",
+    }));
+
     const mappedEmployeeInvoices = itInvoices.map((inv: any) => ({
       _id: inv._id,
       invoiceNo: inv.invoiceNo,
@@ -32,11 +49,20 @@ export async function GET() {
       category: "Employee Invoice",
       venture: inv.billedToName || "Ace Consultancys",
       notes: inv.notes || "",
-      createdAt: inv.createdAt
+      createdAt: inv.createdAt,
+      userUpiId:
+        inv.paymentDetails?.toUpiId ||
+        inv.paymentDetails?.upiId ||
+        (inv.bankDetails?.upiId) ||
+        (inv.createdBy as any)?.bankDetails?.upiId ||
+        (inv.createdBy as any)?.upiId ||
+        "",
+      bankDetails: inv.bankDetails || (inv.createdBy as any)?.bankDetails,
+      paymentDetails: inv.paymentDetails,
     }));
 
     // Merge both arrays
-    const allInvoices = [...invoices, ...mappedEmployeeInvoices].sort((a: any, b: any) => {
+    const allInvoices = [...mappedFinanceInvoices, ...mappedEmployeeInvoices].sort((a: any, b: any) => {
       const dateA = new Date(a.createdAt || a.issuedDate).getTime();
       const dateB = new Date(b.createdAt || b.issuedDate).getTime();
       return dateB - dateA;

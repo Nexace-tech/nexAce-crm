@@ -50,6 +50,8 @@ export interface IITInvoice extends Document {
   paymentDetails?: {
     method: "Bank Transfer" | "UPI" | "Cash";
     upiId?: string;
+    fromUpiId?: string;
+    toUpiId?: string;
     transactionId?: string;
     screenshotUrl?: string;
     screenshotFileId?: string;
@@ -128,6 +130,8 @@ const ITInvoiceSchema = new Schema<IITInvoice>(
     paymentDetails: {
       method: { type: String, enum: ["Bank Transfer", "UPI", "Cash"], default: null },
       upiId: { type: String, default: "" },
+      fromUpiId: { type: String, default: "" },
+      toUpiId: { type: String, default: "" },
       transactionId: { type: String, default: "" },
       screenshotUrl: { type: String, default: "" },
       screenshotFileId: { type: String, default: "" },

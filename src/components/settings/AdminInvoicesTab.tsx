@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useAuth } from "@/hooks/useAuth";
 import { InvoiceDetailsView } from "@/components/finance/InvoiceDetailsView";
 import { downloadInvoicePdf } from "@/lib/invoice-pdf";
 
@@ -55,6 +56,7 @@ interface Invoice {
     paidAt?: string;
     paidBy?: string;
   };
+  userUpiId?: string;
 }
 
 type PaymentMethod = "Bank Transfer" | "UPI" | "Cash";
@@ -86,10 +88,17 @@ export function AdminInvoicesTab({ showToast, scope = "internal" }: AdminInvoice
   // Payment modal state
   const [paymentModal, setPaymentModal] = useState<PaymentModalState>({ open: false, invoiceId: "", invoiceNo: "" });
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("Bank Transfer");
+  const { user } = useAuth();
+  const userUpiId = (user?.bankDetails?.upiId || (user as any)?.upiId || "").trim();
   const [orgUpiId, setOrgUpiId] = useState<string>("nexace@okaxis");
-  const [upiSelection, setUpiSelection] = useState<string>("org"); // "org" | "custom" | <saved_id>
-  const [customUpiInput, setCustomUpiInput] = useState<string>("");
-  const [upiDropdownOpen, setUpiDropdownOpen] = useState(false);
+
+  // Paid From (Sender)
+  const [fromUpiId, setFromUpiId] = useState("");
+
+  // Paid To (Recipient / Payee)
+  const [toUpiId, setToUpiId] = useState<string>("");
+  const [targetPayeeUpiId, setTargetPayeeUpiId] = useState<string>("");
+
   const [upiTxnId, setUpiTxnId] = useState("");
   const [upiScreenshot, setUpiScreenshot] = useState<File | null>(null);
   const [upiScreenshotPreview, setUpiScreenshotPreview] = useState<string>("");
@@ -215,9 +224,24 @@ export function AdminInvoicesTab({ showToast, scope = "internal" }: AdminInvoice
   const handleStatusChange = async (invoiceId: string, newStatus: string, invoiceNo?: string) => {
     if (newStatus === "Paid") {
       setPaymentMethod("Bank Transfer");
-      setUpiSelection("org");
-      setCustomUpiInput("");
-      setUpiDropdownOpen(false);
+
+      // Default Paid From
+      setFromUpiId(orgUpiId || "nexace@okaxis");
+
+      // Default Paid To (Auto-pick User UPI ID)
+      const targetInv = invoices.find((i) => (i._id || i.id) === invoiceId);
+      const invUserUpi = (
+        targetInv?.userUpiId ||
+        (targetInv as any)?.bankDetails?.upiId ||
+        (targetInv as any)?.paymentDetails?.toUpiId ||
+        (targetInv as any)?.paymentDetails?.upiId ||
+        userUpiId ||
+        ""
+      ).trim();
+
+      setTargetPayeeUpiId(invUserUpi);
+      setToUpiId(invUserUpi || userUpiId || "");
+
       setUpiTxnId("");
       setUpiScreenshot(null);
       setUpiScreenshotPreview("");
@@ -267,31 +291,38 @@ export function AdminInvoicesTab({ showToast, scope = "internal" }: AdminInvoice
 
   /** Confirm payment — validates UPI fields, converts screenshot to base64, patches */
   const handleConfirmPayment = async () => {
-    const effectiveUpiId =
-      upiSelection === "org"
-        ? orgUpiId
-        : upiSelection === "custom"
-        ? customUpiInput.trim()
-        : upiSelection;
+    const effectiveFromUpi = fromUpiId.trim();
+    const effectiveToUpi = toUpiId.trim();
 
-    if (paymentMethod === "UPI" && !effectiveUpiId) {
-      showToast("Please select or enter a valid UPI ID", "error");
-      return;
-    }
-    if (paymentMethod === "UPI" && !upiTxnId.trim()) {
-      showToast("Please enter the UPI Transaction ID", "error");
-      return;
+    if (paymentMethod === "UPI") {
+      if (!effectiveFromUpi) {
+        showToast("Please enter or select the 'Paid From' UPI ID", "error");
+        return;
+      }
+      if (!effectiveToUpi) {
+        showToast("Please enter the 'Pay UPI ID' (Paid To)", "error");
+        return;
+      }
+      if (!upiTxnId.trim()) {
+        showToast("Please enter the UPI Transaction ID", "error");
+        return;
+      }
     }
 
-    // Save custom UPI ID to localStorage for future use
-    if (paymentMethod === "UPI" && upiSelection === "custom" && customUpiInput.trim()) {
-      const trimmed = customUpiInput.trim();
-      const updated = Array.from(new Set([trimmed, ...savedUpiIds])).slice(0, 10);
-      setSavedUpiIds(updated);
-      try {
-        localStorage.setItem("nexace_upi_ids", JSON.stringify(updated));
-      } catch (e) {
-        console.error("Failed to save UPI ID to localStorage:", e);
+    // Save custom UPI IDs to localStorage for future use
+    if (paymentMethod === "UPI") {
+      const toSave = [
+        ...(effectiveFromUpi && effectiveFromUpi !== orgUpiId && effectiveFromUpi !== userUpiId ? [effectiveFromUpi] : []),
+        ...(effectiveToUpi && effectiveToUpi !== orgUpiId && effectiveToUpi !== targetPayeeUpiId && effectiveToUpi !== userUpiId ? [effectiveToUpi] : []),
+      ];
+      if (toSave.length > 0) {
+        const updated = Array.from(new Set([...toSave, ...savedUpiIds])).slice(0, 10);
+        setSavedUpiIds(updated);
+        try {
+          localStorage.setItem("nexace_upi_ids", JSON.stringify(updated));
+        } catch (e) {
+          console.error("Failed to save UPI ID to localStorage:", e);
+        }
       }
     }
 
@@ -309,7 +340,9 @@ export function AdminInvoicesTab({ showToast, scope = "internal" }: AdminInvoice
         status: "Paid",
         paymentDetails: {
           method: paymentMethod,
-          upiId: paymentMethod === "UPI" ? effectiveUpiId : "",
+          upiId: paymentMethod === "UPI" ? (effectiveToUpi || effectiveFromUpi) : "",
+          fromUpiId: paymentMethod === "UPI" ? effectiveFromUpi : "",
+          toUpiId: paymentMethod === "UPI" ? effectiveToUpi : "",
           transactionId: paymentMethod === "UPI" ? upiTxnId.trim() : "",
           screenshotUrl,
           paidAt: new Date().toISOString(),
@@ -431,9 +464,19 @@ export function AdminInvoicesTab({ showToast, scope = "internal" }: AdminInvoice
         onPaymentConfirm={() => {
           const invId = viewInvoice._id || viewInvoice.id || "";
           setPaymentMethod("Bank Transfer");
-          setUpiSelection("org");
-          setCustomUpiInput("");
-          setUpiDropdownOpen(false);
+          setFromUpiId(orgUpiId || "nexace@okaxis");
+          const invUserUpi = (
+            viewInvoice?.userUpiId ||
+            (viewInvoice as any)?.bankDetails?.upiId ||
+            (viewInvoice as any)?.paymentDetails?.toUpiId ||
+            (viewInvoice as any)?.paymentDetails?.upiId ||
+            userUpiId ||
+            ""
+          ).trim();
+
+          setTargetPayeeUpiId(invUserUpi);
+          setToUpiId(invUserUpi || userUpiId || "");
+
           setUpiTxnId("");
           setUpiScreenshot(null);
           setUpiScreenshotPreview("");
@@ -776,9 +819,9 @@ export function AdminInvoicesTab({ showToast, scope = "internal" }: AdminInvoice
       {/* ── Payment Method Modal ── */}
       {paymentModal.open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-card border border-border rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+          <div className="bg-card border border-border rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-150">
             {/* Modal Header */}
-            <div className="px-6 py-4 border-b border-border bg-muted/30 flex items-center justify-between">
+            <div className="shrink-0 px-6 py-4 border-b border-border bg-muted/30 flex items-center justify-between">
               <div>
                 <h2 className="text-base font-bold text-foreground flex items-center gap-2">
                   <i className="fa-solid fa-circle-check text-emerald-500" />
@@ -789,6 +832,7 @@ export function AdminInvoicesTab({ showToast, scope = "internal" }: AdminInvoice
                 </p>
               </div>
               <button
+                type="button"
                 onClick={() => setPaymentModal({ open: false, invoiceId: "", invoiceNo: "" })}
                 className="w-8 h-8 rounded-lg hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
               >
@@ -796,7 +840,8 @@ export function AdminInvoicesTab({ showToast, scope = "internal" }: AdminInvoice
               </button>
             </div>
 
-            <div className="px-6 py-5 space-y-5">
+            {/* Modal Body with internal scrolling */}
+            <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
               {/* Payment Method Selection */}
               <div className="space-y-2">
                 <label className="text-xs font-bold text-foreground uppercase tracking-wider">
@@ -806,12 +851,19 @@ export function AdminInvoicesTab({ showToast, scope = "internal" }: AdminInvoice
                   {(["Bank Transfer", "UPI", "Cash"] as PaymentMethod[]).map((method) => (
                     <button
                       key={method}
-                      onClick={() => setPaymentMethod(method)}
+                      type="button"
+                      onClick={() => {
+                        setPaymentMethod(method);
+                        if (method === "UPI") {
+                          if (!fromUpiId) setFromUpiId(orgUpiId || "nexace@okaxis");
+                          if (!toUpiId) setToUpiId(targetPayeeUpiId || userUpiId || "");
+                        }
+                      }}
                       className={cn(
                         "flex flex-col items-center gap-2 p-3 rounded-xl border-2 text-xs font-semibold transition-all cursor-pointer",
                         paymentMethod === method
                           ? method === "UPI"
-                            ? "border-violet-500 bg-violet-500/10 text-violet-600 dark:text-violet-400 shadow-xs"
+                            ? "border-emerald-500 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 shadow-xs"
                             : method === "Cash"
                             ? "border-emerald-500 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 shadow-xs"
                             : "border-sky-500 bg-sky-500/10 text-sky-600 dark:text-sky-400 shadow-xs"
@@ -838,160 +890,218 @@ export function AdminInvoicesTab({ showToast, scope = "internal" }: AdminInvoice
                 </div>
               )}
 
-              {/* UPI — Dropdown (Org default / Saved / Custom) + Transaction ID + Screenshot */}
+              {/* UPI — Paid From & Paid To + Transaction ID + Screenshot */}
               {paymentMethod === "UPI" && (
-                <div className="space-y-3">
-                  {/* UPI ID selector */}
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-foreground flex items-center justify-between">
-                      <span>UPI ID <span className="text-rose-500">*</span></span>
-                      {upiSelection === "org" && (
-                        <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1">
-                          <i className="fa-solid fa-shield-halved text-[9px]" /> Organization Default
-                        </span>
-                      )}
-                    </label>
+                <div className="space-y-3.5">
+                  {/* ── 1. Paid From (Sender UPI) ── */}
+                  <div className="p-3.5 rounded-xl border border-sky-500/20 bg-sky-500/5 dark:bg-sky-950/20 space-y-2.5">
+                    <div className="flex flex-wrap items-center justify-between gap-1.5">
+                      <label className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                        <i className="fa-solid fa-arrow-up-right-from-square text-sky-500 text-xs" />
+                        <span>Paid From (Sender UPI) <span className="text-rose-500">*</span></span>
+                      </label>
+                      <span className="text-[10px] text-sky-600 dark:text-sky-400 font-bold bg-sky-500/10 px-2 py-0.5 rounded-full">
+                        Payer / Source
+                      </span>
+                    </div>
 
+                    {/* Sender UPI ID input */}
                     <div className="relative">
-                      <button
-                        type="button"
-                        onClick={() => setUpiDropdownOpen((prev) => !prev)}
-                        className="w-full h-9 px-3 text-xs bg-background border border-border rounded-lg text-foreground flex items-center justify-between focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer font-medium hover:border-border/80"
-                      >
-                        <span className="flex items-center gap-2 truncate">
-                          {upiSelection === "org" ? (
-                            <>
-                              <i className="fa-solid fa-shield-halved text-violet-500" />
-                              <span className="font-mono font-semibold">{orgUpiId || "nexace@okaxis"}</span>
-                              <span className="text-muted-foreground text-[10px]">(Org Default)</span>
-                            </>
-                          ) : upiSelection === "custom" ? (
-                            <>
-                              <i className="fa-solid fa-pen-to-square text-amber-500" />
-                              <span>Custom UPI ID {customUpiInput ? `(${customUpiInput})` : ""}</span>
-                            </>
-                          ) : (
-                            <>
-                              <i className="fa-solid fa-clock-rotate-left text-sky-500" />
-                              <span className="font-mono font-semibold">{upiSelection}</span>
-                              <span className="text-muted-foreground text-[10px]">(Saved)</span>
-                            </>
+                      <div className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none">
+                        <i className="fa-solid fa-building-columns text-xs text-sky-500" />
+                      </div>
+                      <Input
+                        className="h-9 font-mono text-xs pl-8 pr-8 bg-background border-border/80 focus:border-sky-500"
+                        placeholder="e.g. org@okaxis or sender@okhdfcbank"
+                        value={fromUpiId}
+                        onChange={(e) => setFromUpiId(e.target.value)}
+                      />
+                      {fromUpiId && (
+                        <button
+                          type="button"
+                          onClick={() => setFromUpiId("")}
+                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground text-xs cursor-pointer"
+                          title="Clear Sender UPI"
+                        >
+                          <i className="fa-solid fa-xmark" />
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Quick Pick Sender Chips */}
+                    <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                      <span className="text-[10px] text-muted-foreground font-medium">Quick Pick:</span>
+                      {orgUpiId && (
+                        <button
+                          type="button"
+                          onClick={() => setFromUpiId(orgUpiId)}
+                          className={cn(
+                            "px-2 py-0.5 rounded-md text-[11px] font-mono flex items-center gap-1 transition-all cursor-pointer border",
+                            fromUpiId.trim() === orgUpiId
+                              ? "border-sky-500 bg-sky-500/15 text-sky-700 dark:text-sky-300 font-bold shadow-2xs"
+                              : "border-border/60 bg-background/60 hover:bg-background text-muted-foreground"
                           )}
-                        </span>
-                        <i className={cn("fa-solid fa-chevron-down text-[10px] text-muted-foreground transition-transform", upiDropdownOpen && "rotate-180")} />
-                      </button>
+                        >
+                          <i className="fa-solid fa-shield-halved text-[10px] text-sky-500" />
+                          <span>Org Default ({orgUpiId})</span>
+                        </button>
+                      )}
 
-                      {upiDropdownOpen && (
-                        <div className="absolute top-full left-0 right-0 mt-1.5 z-50 bg-popover border border-border rounded-xl shadow-xl p-1 space-y-0.5 animate-in fade-in zoom-in-95 duration-150">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setUpiSelection("org");
-                              setUpiDropdownOpen(false);
-                            }}
-                            className={cn(
-                              "w-full px-3 py-2 text-xs rounded-lg flex items-center justify-between text-left cursor-pointer transition-colors",
-                              upiSelection === "org"
-                                ? "bg-violet-500/10 text-violet-600 dark:text-violet-400 font-semibold"
-                                : "hover:bg-muted text-foreground"
-                            )}
-                          >
-                            <div className="flex items-center gap-2">
-                              <i className="fa-solid fa-shield-halved text-violet-500" />
-                              <span className="font-mono">{orgUpiId || "nexace@okaxis"}</span>
-                            </div>
-                            <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold bg-emerald-500/10 px-1.5 py-0.5 rounded">
-                              Org Default
-                            </span>
-                          </button>
-
-                          {savedUpiIds
-                            .filter((id) => id !== orgUpiId)
-                            .map((id) => (
-                              <button
-                                key={id}
-                                type="button"
-                                onClick={() => {
-                                  setUpiSelection(id);
-                                  setUpiDropdownOpen(false);
-                                }}
-                                className={cn(
-                                  "w-full px-3 py-2 text-xs rounded-lg flex items-center justify-between text-left cursor-pointer transition-colors",
-                                  upiSelection === id
-                                    ? "bg-sky-500/10 text-sky-600 dark:text-sky-400 font-semibold"
-                                    : "hover:bg-muted text-foreground"
-                                )}
-                              >
-                                <div className="flex items-center gap-2">
-                                  <i className="fa-solid fa-clock-rotate-left text-sky-500" />
-                                  <span className="font-mono">{id}</span>
-                                </div>
-                                <span className="text-[10px] text-muted-foreground font-medium">Saved</span>
-                              </button>
-                            ))}
-
-                          <div className="border-t border-border/60 my-1" />
-
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setUpiSelection("custom");
-                              setUpiDropdownOpen(false);
-                            }}
-                            className={cn(
-                              "w-full px-3 py-2 text-xs rounded-lg flex items-center gap-2 text-left cursor-pointer transition-colors",
-                              upiSelection === "custom"
-                                ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 font-semibold"
-                                : "hover:bg-muted text-foreground"
-                            )}
-                          >
-                            <i className="fa-solid fa-pen-to-square text-amber-500" />
-                            <span>Custom UPI ID...</span>
-                          </button>
-                        </div>
+                      {userUpiId && userUpiId !== orgUpiId && (
+                        <button
+                          type="button"
+                          onClick={() => setFromUpiId(userUpiId)}
+                          className={cn(
+                            "px-2 py-0.5 rounded-md text-[11px] font-mono flex items-center gap-1 transition-all cursor-pointer border",
+                            fromUpiId.trim() === userUpiId
+                              ? "border-sky-500 bg-sky-500/15 text-sky-700 dark:text-sky-300 font-bold shadow-2xs"
+                              : "border-border/60 bg-background/60 hover:bg-background text-muted-foreground"
+                          )}
+                        >
+                          <i className="fa-solid fa-user text-[10px] text-sky-500" />
+                          <span>User Profile ({userUpiId})</span>
+                        </button>
                       )}
                     </div>
                   </div>
 
-                  {/* Custom UPI ID Input (only shown if user chooses Custom) */}
-                  {upiSelection === "custom" && (
-                    <div className="space-y-1.5 animate-in fade-in duration-200">
-                      <label className="text-xs font-bold text-foreground">
-                        Custom UPI ID <span className="text-rose-500">*</span>
+                  {/* ── 2. Pay UPI ID (Paid To / Payee UPI) ── */}
+                  <div className="p-3.5 rounded-xl border border-emerald-500/20 bg-emerald-500/5 dark:bg-emerald-950/20 space-y-2.5">
+                    <div className="flex flex-wrap items-center justify-between gap-1.5">
+                      <label className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                        <i className="fa-solid fa-arrow-down-left-and-up-right-to-ceiling text-emerald-500 text-xs" />
+                        <span>Pay UPI ID (Paid To) <span className="text-rose-500">*</span></span>
                       </label>
-                      <div className="relative">
-                        <Input
-                          autoFocus
-                          placeholder="e.g. yourname@okhdfcbank"
-                          value={customUpiInput}
-                          onChange={(e) => setCustomUpiInput(e.target.value)}
-                          className="h-9 text-xs font-mono pl-8"
-                        />
-                        <i className="fa-solid fa-pen-to-square text-xs text-muted-foreground absolute left-2.5 top-2.5" />
-                      </div>
+                      {(targetPayeeUpiId || userUpiId) ? (
+                        <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded-full flex items-center gap-1">
+                          <i className="fa-solid fa-wand-magic-sparkles text-[9px]" /> Auto-picked User UPI
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded-full">
+                          Payee / Destination
+                        </span>
+                      )}
                     </div>
-                  )}
+
+                    {/* Direct Pay UPI ID Input — Auto-picked and editable */}
+                    <div className="relative">
+                      <div className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none">
+                        <i className="fa-solid fa-qrcode text-xs text-emerald-500" />
+                      </div>
+                      <Input
+                        className="h-9 font-mono text-xs pl-8 pr-8 bg-background border-border/80 focus:border-emerald-500"
+                        placeholder="e.g. user@okaxis or 9876543210@paytm"
+                        value={toUpiId}
+                        onChange={(e) => setToUpiId(e.target.value)}
+                      />
+                      {toUpiId && (
+                        <button
+                          type="button"
+                          onClick={() => setToUpiId("")}
+                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground text-xs cursor-pointer"
+                          title="Clear Pay UPI ID"
+                        >
+                          <i className="fa-solid fa-xmark" />
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Quick Pick Chips */}
+                    {((targetPayeeUpiId || userUpiId) || savedUpiIds.some(id => id && id !== (targetPayeeUpiId || userUpiId) && id !== orgUpiId)) && (
+                      <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                        <span className="text-[10px] text-muted-foreground font-medium">Quick Pick:</span>
+                        {(targetPayeeUpiId || userUpiId) && (
+                          <button
+                            type="button"
+                            onClick={() => setToUpiId(targetPayeeUpiId || userUpiId)}
+                            className={cn(
+                              "px-2 py-0.5 rounded-md text-[11px] font-mono flex items-center gap-1 transition-all cursor-pointer border",
+                              toUpiId.trim() === (targetPayeeUpiId || userUpiId)
+                                ? "border-emerald-500 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 font-bold shadow-2xs"
+                                : "border-border/60 bg-background/60 hover:bg-background text-muted-foreground"
+                            )}
+                          >
+                            <i className="fa-solid fa-user-check text-[10px] text-emerald-500" />
+                            <span>User UPI ({targetPayeeUpiId || userUpiId})</span>
+                          </button>
+                        )}
+
+                      {savedUpiIds
+                        .filter((id) => id && id !== (targetPayeeUpiId || userUpiId) && id !== orgUpiId)
+                        .map((savedId) => (
+                          <div
+                            key={savedId}
+                            className={cn(
+                              "px-2 py-0.5 rounded-md text-[11px] font-mono flex items-center gap-1 border transition-all",
+                              toUpiId.trim() === savedId
+                                ? "border-sky-500 bg-sky-500/15 text-sky-700 dark:text-sky-300 font-bold"
+                                : "border-border/60 bg-background/60 text-muted-foreground"
+                            )}
+                          >
+                            <button
+                              type="button"
+                              onClick={() => setToUpiId(savedId)}
+                              className="cursor-pointer hover:text-foreground"
+                            >
+                              {savedId}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const filtered = savedUpiIds.filter((id) => id !== savedId);
+                                setSavedUpiIds(filtered);
+                                try {
+                                  localStorage.setItem("nexace_upi_ids", JSON.stringify(filtered));
+                                } catch {}
+                              }}
+                              className="text-muted-foreground hover:text-rose-500 text-[9px] ml-0.5 cursor-pointer"
+                              title="Remove"
+                            >
+                              <i className="fa-solid fa-xmark" />
+                            </button>
+                          </div>
+                        ))}
+                    </div>
+                  </div>
 
                   {/* UPI Transaction ID */}
                   <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-foreground">
-                      UPI Transaction ID <span className="text-rose-500">*</span>
+                    <label className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                      <i className="fa-solid fa-receipt text-xs text-emerald-500" />
+                      <span>UPI Transaction ID <span className="text-rose-500">*</span></span>
                     </label>
                     <div className="relative">
+                      <div className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none">
+                        <i className="fa-solid fa-hashtag text-xs" />
+                      </div>
                       <Input
-                        placeholder="e.g. 316748291034"
+                        placeholder="e.g. 316748291034 or TXN-948210"
                         value={upiTxnId}
                         onChange={(e) => setUpiTxnId(e.target.value)}
-                        className="h-9 text-xs font-mono pl-8"
+                        className="h-9 text-xs font-mono pl-8 pr-8 bg-background border-border/80 focus:border-emerald-500"
                       />
-                      <i className="fa-solid fa-receipt text-xs text-muted-foreground absolute left-2.5 top-2.5" />
+                      {upiTxnId && (
+                        <button
+                          type="button"
+                          onClick={() => setUpiTxnId("")}
+                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground text-xs cursor-pointer"
+                          title="Clear"
+                        >
+                          <i className="fa-solid fa-xmark" />
+                        </button>
+                      )}
                     </div>
                   </div>
 
-                  {/* Screenshot */}
+                  {/* Screenshot Upload / Preview */}
                   <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-foreground">
-                      Payment Screenshot <span className="text-muted-foreground font-normal">(optional)</span>
+                    <label className="text-xs font-bold text-foreground flex items-center justify-between">
+                      <span className="flex items-center gap-1.5">
+                        <i className="fa-solid fa-image text-xs text-muted-foreground" />
+                        <span>Payment Screenshot / Receipt</span>
+                      </span>
+                      <span className="text-[10px] text-muted-foreground font-normal">(optional)</span>
                     </label>
                     <input
                       ref={screenshotInputRef}
@@ -1001,26 +1111,42 @@ export function AdminInvoicesTab({ showToast, scope = "internal" }: AdminInvoice
                       onChange={handleScreenshotChange}
                     />
                     {upiScreenshotPreview ? (
-                      <div className="relative group">
+                      <div className="relative rounded-xl border border-border/80 overflow-hidden bg-muted/20 p-2.5 flex items-center gap-3">
                         <img
                           src={upiScreenshotPreview}
                           alt="Payment screenshot"
-                          className="w-full h-36 object-cover rounded-xl border border-border"
+                          className="w-14 h-14 object-cover rounded-lg border border-border shrink-0"
                         />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-semibold text-foreground truncate">
+                            {upiScreenshot?.name || "Screenshot Attached"}
+                          </p>
+                          <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1 mt-0.5">
+                            <i className="fa-solid fa-circle-check text-[10px]" /> Ready to confirm
+                          </p>
+                        </div>
                         <button
+                          type="button"
                           onClick={() => { setUpiScreenshot(null); setUpiScreenshotPreview(""); }}
-                          className="absolute top-2 right-2 w-7 h-7 bg-rose-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer shadow-lg"
+                          className="w-8 h-8 rounded-lg hover:bg-rose-500/10 text-muted-foreground hover:text-rose-500 flex items-center justify-center transition-colors cursor-pointer shrink-0"
+                          title="Remove screenshot"
                         >
-                          <i className="fa-solid fa-xmark text-xs" />
+                          <i className="fa-solid fa-trash-can text-xs" />
                         </button>
                       </div>
                     ) : (
                       <button
+                        type="button"
                         onClick={() => screenshotInputRef.current?.click()}
-                        className="w-full h-20 border-2 border-dashed border-border rounded-xl flex flex-col items-center justify-center gap-1.5 text-muted-foreground hover:border-primary/50 hover:text-primary transition-colors cursor-pointer"
+                        className="w-full h-16 border border-dashed border-border/80 hover:border-primary/60 bg-muted/20 hover:bg-muted/40 rounded-xl flex items-center justify-center gap-2.5 text-muted-foreground hover:text-foreground transition-all cursor-pointer"
                       >
-                        <i className="fa-solid fa-arrow-up-from-bracket text-base" />
-                        <span className="text-xs font-medium">Click to attach screenshot</span>
+                        <div className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+                          <i className="fa-solid fa-arrow-up-from-bracket text-xs" />
+                        </div>
+                        <div className="text-left">
+                          <p className="text-xs font-semibold">Attach payment proof</p>
+                          <p className="text-[10px] text-muted-foreground">PNG, JPG, or PDF up to 5MB</p>
+                        </div>
                       </button>
                     )}
                   </div>
@@ -1037,10 +1163,11 @@ export function AdminInvoicesTab({ showToast, scope = "internal" }: AdminInvoice
             </div>
 
             {/* Modal Footer */}
-            <div className="px-6 py-4 border-t border-border bg-muted/20 flex items-center justify-end gap-2">
+            <div className="shrink-0 px-6 py-4 border-t border-border bg-muted/20 flex items-center justify-end gap-2">
               <Button
                 variant="outline"
                 size="sm"
+                type="button"
                 onClick={() => setPaymentModal({ open: false, invoiceId: "", invoiceNo: "" })}
                 className="h-9 px-4 font-semibold cursor-pointer"
                 disabled={confirmingPayment}
@@ -1049,12 +1176,12 @@ export function AdminInvoicesTab({ showToast, scope = "internal" }: AdminInvoice
               </Button>
               <Button
                 size="sm"
+                type="button"
                 onClick={handleConfirmPayment}
                 disabled={
                   confirmingPayment ||
                   (paymentMethod === "UPI" &&
-                    (!(upiSelection === "org" ? orgUpiId : upiSelection === "custom" ? customUpiInput.trim() : upiSelection) ||
-                      !upiTxnId.trim()))
+                    (!fromUpiId.trim() || !toUpiId.trim() || !upiTxnId.trim()))
                 }
                 className="h-9 px-5 font-semibold bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer gap-2"
               >
