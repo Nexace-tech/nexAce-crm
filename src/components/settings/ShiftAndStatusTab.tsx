@@ -51,6 +51,7 @@ export function ShiftAndStatusTab({ isAdmin, showToast }: ShiftAndStatusTabProps
   const [assignShiftName, setAssignShiftName] = useState("");
   const [assignShiftTime, setAssignShiftTime] = useState("");
   const [assignType, setAssignType] = useState("");
+  const [assignSalary, setAssignSalary] = useState<string | number>("");
   const [assigning, setAssigning] = useState(false);
 
   const fetchData = async () => {
@@ -158,6 +159,7 @@ export function ShiftAndStatusTab({ isAdmin, showToast }: ShiftAndStatusTabProps
           newShiftName: assignShiftName,
           newShiftTime: assignShiftTime,
           newEmploymentType: assignType,
+          salary: assignSalary === "" ? 0 : Number(assignSalary) || 0,
         }),
       });
 
@@ -293,6 +295,7 @@ export function ShiftAndStatusTab({ isAdmin, showToast }: ShiftAndStatusTabProps
                 <th className="p-3">Employee</th>
                 <th className="p-3">Role</th>
                 <th className="p-3">Employment Type</th>
+                <th className="p-3">Base Salary</th>
                 <th className="p-3">Assigned Shift</th>
                 <th className="p-3">Shift Hours</th>
                 <th className="p-3 text-right">Action</th>
@@ -303,6 +306,7 @@ export function ShiftAndStatusTab({ isAdmin, showToast }: ShiftAndStatusTabProps
                 const empType = m.employmentType || "Permanent";
                 const sName = m.shiftName || "Standard Day Shift";
                 const sTime = m.shiftTime || "09:00 AM - 05:00 PM";
+                const userSal = m.salary;
 
                 return (
                   <tr key={m._id} className="hover:bg-accent/20 transition-colors">
@@ -329,6 +333,20 @@ export function ShiftAndStatusTab({ isAdmin, showToast }: ShiftAndStatusTabProps
                         );
                       })()}
                     </td>
+                    <td className="p-3">
+                      {userSal && Number(userSal) > 0 ? (
+                        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 font-mono font-bold text-[11px] text-emerald-600 dark:text-emerald-400">
+                          <i className="fa-solid fa-indian-rupee-sign text-[9px]" />
+                          <span>{Number(userSal).toLocaleString()}</span>
+                          <span className="text-[9px] font-normal text-muted-foreground">/mo</span>
+                        </div>
+                      ) : (
+                        <span className="text-[11px] text-muted-foreground/60 italic flex items-center gap-1">
+                          <i className="fa-solid fa-circle-minus text-[10px] text-muted-foreground/40" />
+                          Not configured
+                        </span>
+                      )}
+                    </td>
                     <td className="p-3 font-semibold text-foreground">{sName}</td>
                     <td className="p-3 text-muted-foreground font-mono text-[11px]">{sTime}</td>
                     <td className="p-3 text-right">
@@ -341,6 +359,7 @@ export function ShiftAndStatusTab({ isAdmin, showToast }: ShiftAndStatusTabProps
                             setAssignShiftName(sName);
                             setAssignShiftTime(sTime);
                             setAssignType(empType);
+                            setAssignSalary(userSal !== undefined && userSal !== null && Number(userSal) > 0 ? Number(userSal) : "");
                           }}
                           className="gap-1 text-[11px] cursor-pointer"
                         >
@@ -514,6 +533,60 @@ export function ShiftAndStatusTab({ isAdmin, showToast }: ShiftAndStatusTabProps
                   ))}
                 </select>
               </div>
+
+              <div>
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-muted-foreground">Monthly Base Salary (₹)</label>
+                  {assignSalary !== "" && Number(assignSalary) > 0 && (
+                    <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-mono font-bold">
+                      ₹{(Number(assignSalary) * 12).toLocaleString()}/yr
+                    </span>
+                  )}
+                </div>
+                <div className="relative mt-1">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-muted-foreground">
+                    <i className="fa-solid fa-indian-rupee-sign text-xs" />
+                  </div>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="500"
+                    placeholder="e.g. 45000"
+                    className="pl-8 text-xs font-mono"
+                    value={assignSalary}
+                    onChange={(e) => setAssignSalary(e.target.value)}
+                  />
+                  {assignSalary !== "" && Number(assignSalary) > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setAssignSalary("")}
+                      className="absolute inset-y-0 right-0 pr-3 flex items-center text-muted-foreground hover:text-foreground cursor-pointer"
+                      title="Clear salary"
+                    >
+                      <i className="fa-solid fa-xmark text-xs" />
+                    </button>
+                  )}
+                </div>
+                {/* Quick Presets */}
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {[15000, 25000, 35000, 50000, 75000, 100000].map((preset) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() => setAssignSalary(preset)}
+                      className={cn(
+                        "px-2 py-0.5 rounded text-[10px] font-mono font-medium border transition-colors cursor-pointer",
+                        Number(assignSalary) === preset
+                          ? "bg-primary text-primary-foreground border-primary"
+                          : "bg-muted/50 hover:bg-muted text-muted-foreground border-border"
+                      )}
+                    >
+                      ₹{(preset / 1000).toFixed(0)}k
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               <div className="flex justify-end gap-2 pt-2">
                 <Button type="button" variant="outline" size="sm" onClick={() => setSelectedUser(null)} className="text-xs">
                   Cancel

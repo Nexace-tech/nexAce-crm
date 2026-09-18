@@ -1108,6 +1108,12 @@ export function TeamShiftOverviewCard() {
                 <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-md bg-muted/60 border border-border/50 text-muted-foreground font-mono font-semibold">
                   <i className="fa-solid fa-clock text-[9px]" />{m.shiftTiming}
                 </span>
+                {(isAdmin || isOPS) && m.salary !== undefined && m.salary !== null && Number(m.salary) > 0 && (
+                  <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 font-mono font-bold">
+                    <i className="fa-solid fa-indian-rupee-sign text-[9px]" />
+                    {Number(m.salary).toLocaleString()}/mo
+                  </span>
+                )}
               </div>
             </div>
 

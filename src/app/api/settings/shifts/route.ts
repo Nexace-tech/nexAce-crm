@@ -66,12 +66,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Tenant not found" }, { status: 404 });
     }
 
-    // 1. If updating an individual user's shift / employment type
+    // 1. If updating an individual user's shift / employment type / salary
     if (updateUserId) {
+      const { salary } = body;
       const updateData: any = {};
       if (newShiftName) updateData.shiftName = newShiftName;
       if (newShiftTime) updateData.shiftTime = newShiftTime;
       if (newEmploymentType) updateData.employmentType = newEmploymentType;
+      if (salary !== undefined) {
+        updateData.salary = salary === "" ? 0 : Number(salary) || 0;
+      }
 
       await User.updateOne(
         { _id: new mongoose.Types.ObjectId(updateUserId), tenantId: new mongoose.Types.ObjectId(session.tenantId) },
