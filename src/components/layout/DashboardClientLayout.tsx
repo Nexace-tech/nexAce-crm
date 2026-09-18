@@ -132,6 +132,7 @@ const navSections: NavSection[] = [
           { id: "ops-external", name: "External Teams", href: "/dashboard/clients?tab=external" },
           { id: "ops-reports", name: "Reports & Data Export", href: "/dashboard/clients?tab=reports" },
           { id: "ops-shifts", name: "Shifts & Status", href: "/dashboard/clients?tab=shifts" },
+          { id: "ops-users", name: "User Accounts", href: "/dashboard/clients?tab=users" },
         ],
       },
     ],

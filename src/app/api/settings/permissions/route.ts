@@ -101,8 +101,9 @@ export const DEFAULT_FEATURE_PERMISSIONS: Record<string, Record<string, boolean>
     viewGoals: true, createGoals: true, manageGoals: true, sendKudos: true, submitSurvey: true, createPulseSurveys: true,
     // Analytics
     viewAnalyticsOverview: true, viewPerformanceMetrics: true, viewAuditLogs: true, exportAuditLogs: true,
-    // CRM & Clients
+    // OPS Portal
     viewClients: true, createClients: true, manageClients: true, deleteClients: true, manageContracts: true, manageHRWorkdesk: true, manageExternalTeams: true, viewReports: true, exportClientData: true,
+    manageUsers: false, changeUserRoles: false, resetUserPasswords: false,
     // BD & Leads
     viewBD: true, manageLeads: true, deleteLeads: true, manageProposals: true, sendProposals: true, manageExecutiveTargets: true, exportBD: true,
     // Finance & Invoices
@@ -113,10 +114,8 @@ export const DEFAULT_FEATURE_PERMISSIONS: Record<string, Record<string, boolean>
     submitReferral: true, viewOwnReferrals: true, viewAllReferrals: true, manageReferrals: true,
     // Notifications
     viewNotifications: true, deleteNotifications: true,
-    // Admin & Users
-    manageUsers: false, changeUserRoles: false, resetUserPasswords: false, viewBillingSubscription: false, manageBilling: false,
-    // Settings
-    viewWorkspaceSettings: true, editWorkspaceSettings: true, manageFileRestrictions: false, manageRolePermissions: false, viewIntegrations: true, manageIntegrations: false,
+    // Settings & Security
+    viewWorkspaceSettings: true, editWorkspaceSettings: true, manageFileRestrictions: false, viewBillingSubscription: false, manageBilling: false, manageRolePermissions: false, viewIntegrations: true, manageIntegrations: false,
   },
   Manager: {
     // Overview
@@ -141,8 +140,9 @@ export const DEFAULT_FEATURE_PERMISSIONS: Record<string, Record<string, boolean>
     viewGoals: true, createGoals: true, manageGoals: false, sendKudos: true, submitSurvey: true, createPulseSurveys: false,
     // Analytics
     viewAnalyticsOverview: true, viewPerformanceMetrics: true, viewAuditLogs: false, exportAuditLogs: false,
-    // CRM & Clients
+    // OPS Portal
     viewClients: false, createClients: false, manageClients: false, deleteClients: false, manageContracts: false, manageHRWorkdesk: false, manageExternalTeams: false, viewReports: false, exportClientData: false,
+    manageUsers: false, changeUserRoles: false, resetUserPasswords: false,
     // BD & Leads
     viewBD: true, manageLeads: true, deleteLeads: false, manageProposals: true, sendProposals: true, manageExecutiveTargets: false, exportBD: true,
     // Finance & Invoices
@@ -153,10 +153,8 @@ export const DEFAULT_FEATURE_PERMISSIONS: Record<string, Record<string, boolean>
     submitReferral: true, viewOwnReferrals: true, viewAllReferrals: false, manageReferrals: false,
     // Notifications
     viewNotifications: true, deleteNotifications: false,
-    // Admin & Users
-    manageUsers: false, changeUserRoles: false, resetUserPasswords: false, viewBillingSubscription: false, manageBilling: false,
-    // Settings
-    viewWorkspaceSettings: true, editWorkspaceSettings: false, manageFileRestrictions: false, manageRolePermissions: false, viewIntegrations: false, manageIntegrations: false,
+    // Settings & Security
+    viewWorkspaceSettings: true, editWorkspaceSettings: false, manageFileRestrictions: false, viewBillingSubscription: false, manageBilling: false, manageRolePermissions: false, viewIntegrations: false, manageIntegrations: false,
   },
   HR: {
     // Overview
@@ -181,8 +179,9 @@ export const DEFAULT_FEATURE_PERMISSIONS: Record<string, Record<string, boolean>
     viewGoals: true, createGoals: false, manageGoals: false, sendKudos: true, submitSurvey: true, createPulseSurveys: true,
     // Analytics
     viewAnalyticsOverview: true, viewPerformanceMetrics: true, viewAuditLogs: false, exportAuditLogs: false,
-    // CRM & Clients
+    // OPS Portal
     viewClients: false, createClients: false, manageClients: false, deleteClients: false, manageContracts: true, manageHRWorkdesk: true, manageExternalTeams: false, viewReports: false, exportClientData: false,
+    manageUsers: false, changeUserRoles: false, resetUserPasswords: false,
     // BD & Leads
     viewBD: false, manageLeads: false, deleteLeads: false, manageProposals: false, sendProposals: false, manageExecutiveTargets: false, exportBD: false,
     // Finance & Invoices
@@ -193,10 +192,8 @@ export const DEFAULT_FEATURE_PERMISSIONS: Record<string, Record<string, boolean>
     submitReferral: true, viewOwnReferrals: true, viewAllReferrals: true, manageReferrals: true,
     // Notifications
     viewNotifications: true, deleteNotifications: false,
-    // Admin & Users — HR cannot manage user accounts, roles, or billing
-    manageUsers: false, changeUserRoles: false, resetUserPasswords: false, viewBillingSubscription: false, manageBilling: false,
-    // Settings — HR can only access own profile & password settings
-    viewWorkspaceSettings: true, editWorkspaceSettings: false, manageFileRestrictions: false, manageRolePermissions: false, viewIntegrations: false, manageIntegrations: false,
+    // Settings & Security — HR can only access own profile & password settings
+    viewWorkspaceSettings: true, editWorkspaceSettings: false, manageFileRestrictions: false, viewBillingSubscription: false, manageBilling: false, manageRolePermissions: false, viewIntegrations: false, manageIntegrations: false,
   },
   Employee: {
     // Overview
@@ -221,8 +218,9 @@ export const DEFAULT_FEATURE_PERMISSIONS: Record<string, Record<string, boolean>
     viewGoals: true, createGoals: false, manageGoals: false, sendKudos: true, submitSurvey: true, createPulseSurveys: false,
     // Analytics
     viewAnalyticsOverview: false, viewPerformanceMetrics: false, viewAuditLogs: false, exportAuditLogs: false,
-    // CRM & Clients
+    // OPS Portal
     viewClients: false, createClients: false, manageClients: false, deleteClients: false, manageContracts: false, manageHRWorkdesk: false, manageExternalTeams: false, viewReports: false, exportClientData: false,
+    manageUsers: false, changeUserRoles: false, resetUserPasswords: false,
     // BD & Leads
     viewBD: false, manageLeads: false, deleteLeads: false, manageProposals: false, sendProposals: false, manageExecutiveTargets: false, exportBD: false,
     // Finance & Invoices
@@ -233,10 +231,8 @@ export const DEFAULT_FEATURE_PERMISSIONS: Record<string, Record<string, boolean>
     submitReferral: true, viewOwnReferrals: true, viewAllReferrals: false, manageReferrals: false,
     // Notifications
     viewNotifications: true, deleteNotifications: false,
-    // Admin & Users
-    manageUsers: false, changeUserRoles: false, resetUserPasswords: false, viewBillingSubscription: false, manageBilling: false,
-    // Settings
-    viewWorkspaceSettings: true, editWorkspaceSettings: false, manageFileRestrictions: false, manageRolePermissions: false, viewIntegrations: false, manageIntegrations: false,
+    // Settings & Security
+    viewWorkspaceSettings: true, editWorkspaceSettings: false, manageFileRestrictions: false, viewBillingSubscription: false, manageBilling: false, manageRolePermissions: false, viewIntegrations: false, manageIntegrations: false,
   },
 };
 

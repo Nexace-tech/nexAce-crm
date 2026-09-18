@@ -21,16 +21,16 @@ export const MODULES: ModuleMeta[] = [
   { key: "calendar", name: "Calendar & Timesheets", category: "Operations & Delivery", description: "Work log entry, shift scheduling, and time tracking", icon: "fa-solid fa-calendar-days" },
   { key: "projects", name: "Projects, Sprints & Drive", category: "Operations & Delivery", description: "Agile kanban board, drive file storage, and project wiki", icon: "fa-solid fa-folder-tree" },
   { key: "chat", name: "Chat & Messaging", category: "Core & Overview", description: "Realtime workspace channels and direct team chat", icon: "fa-solid fa-comments" },
-  { key: "clients", name: "OPS Portal", category: "Operations & Delivery", description: "Operations control, client retainers, HR allocations, external vendors & reports", icon: "fa-solid fa-list-check" },
+  { key: "clients", name: "OPS Portal", category: "Operations & Delivery", description: "Operations control, client retainers, user accounts, shifts, HR allocations & reports", icon: "fa-solid fa-list-check" },
   { key: "bd", name: "BD Portal", category: "Growth & Revenue", description: "Business development, leads qualification, proposals pipeline & client deals", icon: "fa-solid fa-briefcase" },
-  { key: "finance", name: "Finance Portal", category: "Growth & Revenue", description: "Invoices, expenses, budget tracking, and payroll overview", icon: "fa-solid fa-coins" },
+  { key: "finance", name: "Finance Portal", category: "Growth & Revenue", description: "Invoices, self-service invoice generator, expenses, budget tracking & payroll", icon: "fa-solid fa-coins" },
   { key: "referrals", name: "Candidate Referral Pipeline", category: "People & Culture", description: "Employee referral submissions and bonus tracking", icon: "fa-solid fa-link" },
   { key: "goals", name: "Goals, OKRs & Surveys", category: "People & Culture", description: "Strategic goal tracking, kudos, and team pulse surveys", icon: "fa-solid fa-bullseye" },
   { key: "hr", name: "HR Management Portal", category: "People & Culture", description: "Leave requests, appraisals, onboarding, and case tracking", icon: "fa-solid fa-user-tie" },
   { key: "it", name: "IT & Infrastructure Portal", category: "Platform & Security", description: "Manage access keys, SaaS subscriptions, hardware assets & vendor invoices", icon: "fa-solid fa-terminal" },
   { key: "analytics", name: "Analytics & Audit Logs", category: "Core & Overview", description: "Detailed activity timeline logs and workspace analytics", icon: "fa-solid fa-chart-line" },
   { key: "notifications", name: "Notification Center", category: "Core & Overview", description: "Real-time alerts, broadcast announcements, and notification history", icon: "fa-solid fa-bell" },
-  { key: "settings", name: "Settings & Administration", category: "Platform & Security", description: "User management, workspace branding, and security", icon: "fa-solid fa-gear" },
+  { key: "settings", name: "Settings & Security", category: "Platform & Security", description: "Workspace branding, SaaS subscriptions, security & role permissions", icon: "fa-solid fa-gear" },
 ];
 
 export type FeatureCategory =
@@ -51,7 +51,6 @@ export type FeatureCategory =
   | "IT & Infrastructure"
   | "Referrals"
   | "Notifications"
-  | "Admin & Users"
   | "Settings";
 
 export interface FeatureMeta {
@@ -100,6 +99,9 @@ export const FEATURE_ACTIONS: FeatureMeta[] = [
   { key: "manageExternalTeams", name: "Manage External Contractors", category: "OPS Portal", subGroup: "External Contractors", description: "Track third-party vendors, freelance contracts & hourly rates", icon: "fa-solid fa-users-gear" },
   { key: "viewReports", name: "Access Operations Reports", category: "OPS Portal", subGroup: "Reports & Data Export", description: "View aggregated project progress and workforce utilization reports", icon: "fa-solid fa-chart-pie" },
   { key: "exportClientData", name: "Export Client Data & Reports", category: "OPS Portal", subGroup: "Reports & Data Export", description: "Download CSV exports of client accounts and allocation matrices", icon: "fa-solid fa-file-export" },
+  { key: "manageUsers", name: "Manage User Accounts", category: "OPS Portal", subGroup: "User Account Administration", description: "Invite, edit roles, reset passwords, or suspend users from OPS Portal", icon: "fa-solid fa-user-gear" },
+  { key: "changeUserRoles", name: "Change User Roles", category: "OPS Portal", subGroup: "User Account Administration", description: "Promote or demote users to different permission roles", icon: "fa-solid fa-user-shield" },
+  { key: "resetUserPasswords", name: "Reset User Passwords", category: "OPS Portal", subGroup: "User Account Administration", description: "Force-reset passwords for any team member account", icon: "fa-solid fa-key" },
 
   // Projects
   { key: "viewProjects", name: "View Projects & Tasks", category: "Projects", subGroup: "Kanban Boards & Tasks", description: "Browse all workspace projects and task boards", icon: "fa-solid fa-folder-open" },
@@ -205,18 +207,13 @@ export const FEATURE_ACTIONS: FeatureMeta[] = [
   { key: "viewNotifications", name: "View Notification Center", category: "Notifications", subGroup: "Workspace Alerts", description: "Access full notification history stream and search alerts", icon: "fa-solid fa-bell" },
   { key: "deleteNotifications", name: "Clear Notification History", category: "Notifications", subGroup: "Workspace Alerts", description: "Delete individual notifications or clear entire notification logs", icon: "fa-solid fa-trash-can" },
 
-  // Admin & Users
-  { key: "manageUsers", name: "Manage User Accounts", category: "Admin & Users", subGroup: "User Account Administration", description: "Invite, edit roles, reset passwords, or suspend users", icon: "fa-solid fa-user-gear" },
-  { key: "changeUserRoles", name: "Change User Roles", category: "Admin & Users", subGroup: "User Account Administration", description: "Promote or demote users to different permission roles", icon: "fa-solid fa-user-shield" },
-  { key: "resetUserPasswords", name: "Reset User Passwords", category: "Admin & Users", subGroup: "User Account Administration", description: "Force-reset passwords for any team member account", icon: "fa-solid fa-key" },
-  { key: "viewBillingSubscription", name: "View Billing & Subscription", category: "Admin & Users", subGroup: "Billing & SaaS Subscription", description: "See the workspace subscription tier and seat usage", icon: "fa-solid fa-credit-card" },
-  { key: "manageBilling", name: "Change Subscription Plan", category: "Admin & Users", subGroup: "Billing & SaaS Subscription", description: "Upgrade or downgrade the SaaS subscription plan", icon: "fa-solid fa-file-invoice-dollar" },
-
   // Settings
   { key: "viewWorkspaceSettings", name: "View Workspace Settings", category: "Settings", subGroup: "Workspace Configuration", description: "Access workspace configuration and branding settings", icon: "fa-solid fa-sliders" },
   { key: "editWorkspaceSettings", name: "Edit Workspace Settings", category: "Settings", subGroup: "Workspace Configuration", description: "Modify company name, branding, and workspace configuration", icon: "fa-solid fa-screwdriver-wrench" },
   { key: "manageFileRestrictions", name: "Manage File Upload Policies", category: "Settings", subGroup: "Workspace Configuration", description: "Configure allowed file types for drive storage uploads", icon: "fa-solid fa-file-circle-exclamation" },
-  { key: "manageRolePermissions", name: "Manage Role Permissions", category: "Settings", subGroup: "RBAC Security", description: "Configure which modules and features each role can access", icon: "fa-solid fa-lock-open" },
+  { key: "viewBillingSubscription", name: "View SaaS Subscription & Plan", category: "Settings", subGroup: "Billing & SaaS Subscription", description: "See the workspace subscription tier, billing period, and seat usage", icon: "fa-solid fa-credit-card" },
+  { key: "manageBilling", name: "Manage Subscription Plan", category: "Settings", subGroup: "Billing & SaaS Subscription", description: "Upgrade or modify the SaaS subscription plan and payment terms", icon: "fa-solid fa-file-invoice-dollar" },
+  { key: "manageRolePermissions", name: "Manage Role & Feature Permissions", category: "Settings", subGroup: "RBAC Security", description: "Configure which modules and features each role can access", icon: "fa-solid fa-lock-open" },
   { key: "viewIntegrations", name: "View API Integrations", category: "Settings", subGroup: "API Integrations", description: "See connected third-party integrations and API keys", icon: "fa-solid fa-plug" },
   { key: "manageIntegrations", name: "Manage API Integrations", category: "Settings", subGroup: "API Integrations", description: "Connect, disconnect, or rotate keys for integrations", icon: "fa-solid fa-plug-circle-bolt" },
 ];
@@ -224,7 +221,7 @@ export const FEATURE_ACTIONS: FeatureMeta[] = [
 export const FEATURE_CATEGORIES: FeatureCategory[] = [
   "Overview", "Team", "Calendar & Time", "OPS Portal", "Projects", "Sprints", "Drive",
   "Chat", "HR & Leave", "Appraisals", "Goals & OKRs", "Analytics",
-  "BD & Leads", "Finance & Invoices", "IT & Infrastructure", "Referrals", "Notifications", "Admin & Users", "Settings",
+  "BD & Leads", "Finance & Invoices", "IT & Infrastructure", "Referrals", "Notifications", "Settings",
 ];
 
 export const CATEGORY_COLORS: Record<FeatureCategory, { text: string; bg: string; border: string; badge: string }> = {
@@ -245,7 +242,6 @@ export const CATEGORY_COLORS: Record<FeatureCategory, { text: string; bg: string
   "IT & Infrastructure": { text: "text-primary", bg: "bg-primary/10", border: "border-primary/20", badge: "bg-primary/15 text-primary" },
   "Referrals":         { text: "text-primary", bg: "bg-primary/10", border: "border-primary/20", badge: "bg-primary/15 text-primary" },
   "Notifications":     { text: "text-primary", bg: "bg-primary/10", border: "border-primary/20", badge: "bg-primary/15 text-primary" },
-  "Admin & Users":     { text: "text-primary", bg: "bg-primary/10", border: "border-primary/20", badge: "bg-primary/15 text-primary" },
   "Settings":          { text: "text-primary", bg: "bg-primary/10", border: "border-primary/20", badge: "bg-primary/15 text-primary" },
 };
 
@@ -267,7 +263,6 @@ export const CATEGORY_ICONS: Record<FeatureCategory, string> = {
   "IT & Infrastructure": "fa-solid fa-terminal",
   "Referrals":         "fa-solid fa-link",
   "Notifications":     "fa-solid fa-bell",
-  "Admin & Users":     "fa-solid fa-user-gear",
   "Settings":          "fa-solid fa-gear",
 };
 
@@ -289,7 +284,7 @@ const PRESET_TEMPLATES: RolePresetTemplate[] = [
     id: "full_access",
     name: "Full Admin Power (Sub-Admin)",
     badge: "Maximum Power",
-    description: "Grants access to all 16 modules and all CRUD actions across the CRM.",
+    description: "Grants access to all 15 modules and all CRUD actions across the CRM.",
     icon: "fa-solid fa-crown",
     modules: MODULES.map((m) => m.key),
     features: FEATURE_ACTIONS.map((f) => f.key),
