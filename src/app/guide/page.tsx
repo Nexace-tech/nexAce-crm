@@ -5,6 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import { GuidedTour } from "@/components/guided-tour/GuidedTour";
+import { OnboardingScreens } from "@/components/layout/OnboardingScreens";
 import styles from "./guide.module.css";
 
 interface StepItem {
@@ -1218,7 +1219,19 @@ export default function GuidePage() {
         </p>
 
         {/* Live Tour CTA Strip */}
-        <div className="flex items-center justify-center gap-3 mb-6">
+        <div className="flex flex-wrap items-center justify-center gap-3 mb-6">
+          <button
+            type="button"
+            onClick={() => {
+              if (typeof window !== "undefined") {
+                window.dispatchEvent(new CustomEvent("replay-onboarding"));
+              }
+            }}
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900 border border-[#00c5a0]/40 text-[#00c5a0] hover:bg-[#00c5a0]/15 font-bold text-xs sm:text-sm shadow-md transition-all cursor-pointer hover:scale-105"
+          >
+            <i className="fa-solid fa-mobile-screen text-sm" />
+            <span>View Welcome Onboarding</span>
+          </button>
           <button
             type="button"
             onClick={() => setTourOpen(true)}
@@ -1766,7 +1779,8 @@ export default function GuidePage() {
         </div>
       </footer>
 
-      {/* Interactive Guided Tour Modal */}
+      {/* Interactive Guided Tour & Onboarding Modals */}
+      <OnboardingScreens />
       {tourOpen && (
         <GuidedTour
           isOpen={tourOpen}

@@ -1,6 +1,4 @@
 import { Capacitor } from "@capacitor/core";
-import { Geolocation, Position } from "@capacitor/geolocation";
-import { Camera, CameraResultType, CameraSource } from "@capacitor/camera";
 import { Haptics, ImpactStyle, NotificationType } from "@capacitor/haptics";
 import { Network, ConnectionStatus } from "@capacitor/network";
 import { PushNotifications, Token, PushNotificationSchema, ActionPerformed } from "@capacitor/push-notifications";
@@ -65,21 +63,26 @@ export const NativeService = {
   },
 
   /**
-   * Capture photo via camera or pick from gallery for receipts / document vault
+   * Capture photo or pick file without requiring native Camera hardware permissions
    */
-  async capturePhoto(source: "camera" | "gallery" = "camera"): Promise<string> {
-    const photo = await Camera.getPhoto({
-      quality: 85,
-      allowEditing: false,
-      resultType: CameraResultType.DataUrl,
-      source: source === "camera" ? CameraSource.Camera : CameraSource.Photos,
+  async capturePhoto(_source: "camera" | "gallery" = "camera"): Promise<string> {
+    return new Promise((resolve, reject) => {
+      if (typeof document === "undefined") {
+        return reject(new Error("Document not available"));
+      }
+      const input = document.createElement("input");
+      input.type = "file";
+      input.accept = "image/*";
+      input.onchange = (e) => {
+        const file = (e.target as HTMLInputElement).files?.[0];
+        if (!file) return reject(new Error("No file selected"));
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = (err) => reject(err);
+        reader.readAsDataURL(file);
+      };
+      input.click();
     });
-
-    if (!photo.dataUrl) {
-      throw new Error("No photo data retrieved");
-    }
-
-    return photo.dataUrl;
   },
 
   /**

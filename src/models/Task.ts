@@ -77,7 +77,7 @@ const TaskSchema = new Schema<ITask>(
     comments: [CommentSchema],
     history: [HistorySchema],
     isDeleted: { type: Boolean, default: false, index: true },
-    deletedAt: { type: Date, default: null, index: true },
+    deletedAt: { type: Date, default: null },
     tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true, index: true },
   },
   { timestamps: true }

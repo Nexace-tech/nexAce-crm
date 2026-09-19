@@ -119,17 +119,20 @@ export function AdminDashboard({ user }: { user: any }) {
   // Live API State
   const [summaryData, setSummaryData] = useState<any>(null);
 
-  // Live Fetch Function with Cache Buster
-  const fetchDashboardData = useCallback(async () => {
+  // Live Fetch Function with Cache Buster and AbortController to prevent race conditions
+  const fetchDashboardData = useCallback(async (signal?: AbortSignal) => {
     setIsRefreshing(true);
     try {
-      const res = await fetch(`/api/dashboard/summary?t=${Date.now()}`);
+      const res = await fetch(`/api/dashboard/summary?t=${Date.now()}`, { signal });
       if (res.ok) {
         const data = await res.json();
         setSummaryData(data);
       }
-    } catch (err) {
-      console.error("Dashboard fetch error:", err);
+    } catch (err: any) {
+      if (err.name !== "AbortError") {
+        // Log softly only if not a normal navigation abort
+        console.warn("Dashboard summary sync paused or interrupted:", err?.message || err);
+      }
     } finally {
       setLoading(false);
       setIsRefreshing(false);
@@ -138,7 +141,8 @@ export function AdminDashboard({ user }: { user: any }) {
 
   // Sync on Mount, on Window Focus, on Visibility Change, and with Fast Polling
   useEffect(() => {
-    fetchDashboardData();
+    const controller = new AbortController();
+    fetchDashboardData(controller.signal);
 
     const handleFocus = () => { fetchDashboardData(); };
     const handleVisibility = () => {
@@ -150,9 +154,14 @@ export function AdminDashboard({ user }: { user: any }) {
     window.addEventListener("focus", handleFocus);
     document.addEventListener("visibilitychange", handleVisibility);
 
-    const timer = setInterval(fetchDashboardData, 8000);
+    const timer = setInterval(() => {
+      if (document.visibilityState === "visible") {
+        fetchDashboardData();
+      }
+    }, 12000);
 
     return () => {
+      controller.abort();
       window.removeEventListener("focus", handleFocus);
       document.removeEventListener("visibilitychange", handleVisibility);
       clearInterval(timer);
@@ -324,7 +333,7 @@ export function AdminDashboard({ user }: { user: any }) {
 
           {/* Refresh Data */}
           <button
-            onClick={fetchDashboardData}
+            onClick={() => fetchDashboardData()}
             title="Refresh Live Data"
             className="w-9 h-9 border border-slate-200 dark:border-[#232d3b] rounded-lg bg-white dark:bg-[#161c24] text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-[#1e2632] flex items-center justify-center cursor-pointer transition-colors shadow-xs"
           >

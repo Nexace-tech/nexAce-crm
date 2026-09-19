@@ -10,6 +10,7 @@ import { LogoutHeaderBtn } from "@/components/layout/LogoutHeaderBtn";
 import { CommandPalette } from "@/components/layout/CommandPalette";
 import { GuidedTour } from "@/components/guided-tour/GuidedTour";
 import { ProfileCompletionBanner } from "@/components/layout/ProfileCompletionBanner";
+import { OnboardingScreens } from "@/components/layout/OnboardingScreens";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import { MobileBottomNav } from "@/components/layout/MobileBottomNav";
 import { NativeService } from "@/lib/native/nativeService";
@@ -921,6 +922,7 @@ export function DashboardClientLayout({ session, menuItems, isPending = false, c
         </header>
 
         {/* Modals */}
+        <OnboardingScreens />
         <GuidedTour isOpen={tourOpen} onClose={() => setTourOpen(false)} role={role} />
         <CommandPalette open={commandPaletteOpen} onClose={() => setCommandPaletteOpen(false)} />
 
