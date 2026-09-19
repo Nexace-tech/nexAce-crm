@@ -31,7 +31,8 @@ export async function GET() {
         createdBy: userObjectId,
         tenantId: tenantObjectId,
       }));
-      channels = await Channel.insertMany(docs);
+      const inserted = await Channel.insertMany(docs);
+      channels = inserted.map((doc) => (doc.toObject ? doc.toObject() : doc)) as any;
     }
 
     return NextResponse.json({ channels });

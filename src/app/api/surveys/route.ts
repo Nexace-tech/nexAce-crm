@@ -37,7 +37,7 @@ export async function GET() {
           },
         ],
       });
-      surveys = [defaultSurvey];
+      surveys = [defaultSurvey.toObject() as any];
     }
 
     // Format surveys so employee responses are aggregated cleanly

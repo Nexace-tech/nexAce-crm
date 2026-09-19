@@ -55,7 +55,7 @@ export async function GET() {
         tenantId: tenantIdObj,
       });
 
-      meetings = [sampleMeeting];
+      meetings = [sampleMeeting.toObject() as any];
     }
 
     return NextResponse.json({ meetings });
