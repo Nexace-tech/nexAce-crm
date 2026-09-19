@@ -72,18 +72,29 @@ const ONBOARDING_SCREENS: OnboardingScreen[] = [
 
 interface OnboardingScreensProps {
   isAppLocked?: boolean;
+  isFullScreen?: boolean;
 }
 
-export function OnboardingScreens({ isAppLocked = false }: OnboardingScreensProps) {
+export function OnboardingScreens({ isAppLocked = false, isFullScreen = false }: OnboardingScreensProps) {
   const { user } = useAuthContext();
-  const [isOpen, setIsOpen] = useState(isAppLocked);
+  const [isOpen, setIsOpen] = useState(isAppLocked || isFullScreen);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [animating, setAnimating] = useState(false);
   const [direction, setDirection] = useState<"next" | "prev">("next");
+  const [isMobile, setIsMobile] = useState(true);
 
-  // If app is locked to onboarding, it is unconditionally open
   useEffect(() => {
-    if (isAppLocked) {
+    const checkViewport = () => {
+      setIsMobile(window.innerWidth < 768 || NativeService.isNative());
+    };
+    checkViewport();
+    window.addEventListener("resize", checkViewport);
+    return () => window.removeEventListener("resize", checkViewport);
+  }, []);
+
+  // If app is locked to onboarding or forced full screen, it is unconditionally open
+  useEffect(() => {
+    if (isAppLocked || isFullScreen) {
       setIsOpen(true);
       return;
     }
@@ -108,7 +119,7 @@ export function OnboardingScreens({ isAppLocked = false }: OnboardingScreensProp
     if (isMobileDevice) {
       setIsOpen(true);
     }
-  }, [user?._id, isAppLocked]);
+  }, [user?._id, isAppLocked, isFullScreen]);
 
   // Listen to custom event so user can replay onboarding anytime from Guide/Help menu
   useEffect(() => {
@@ -123,7 +134,7 @@ export function OnboardingScreens({ isAppLocked = false }: OnboardingScreensProp
   const handleFinish = useCallback(() => {
     NativeService.haptic("success");
     if (isAppLocked) {
-      // In locked app mode, looping back to first screen or staying on final screen smoothly
+      // In locked app mode, looping back to first screen smoothly
       setCurrentIndex(0);
       return;
     }
@@ -140,7 +151,7 @@ export function OnboardingScreens({ isAppLocked = false }: OnboardingScreensProp
       setDirection("next");
       setAnimating(true);
       setCurrentIndex((prev) => prev + 1);
-      setTimeout(() => setAnimating(false), 300);
+      setTimeout(() => setAnimating(false), 250);
     } else {
       handleFinish();
     }
@@ -153,7 +164,7 @@ export function OnboardingScreens({ isAppLocked = false }: OnboardingScreensProp
       setDirection("prev");
       setAnimating(true);
       setCurrentIndex((prev) => prev - 1);
-      setTimeout(() => setAnimating(false), 300);
+      setTimeout(() => setAnimating(false), 250);
     }
   };
 
@@ -172,139 +183,165 @@ export function OnboardingScreens({ isAppLocked = false }: OnboardingScreensProp
   if (!isOpen) return null;
 
   const currentScreen = ONBOARDING_SCREENS[currentIndex];
+  const useFullScreenMode = isAppLocked || isFullScreen || isMobile;
 
-  return (
+  // Content of the Onboarding screen
+  const screenContent = (
     <div
-      className="fixed inset-0 z-[999] flex items-center justify-center p-3 sm:p-5 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-300"
+      className={cn(
+        "relative w-full h-full flex flex-col justify-between overflow-hidden select-none",
+        useFullScreenMode
+          ? "fixed inset-0 z-[99999] min-h-[100dvh]"
+          : "max-w-[420px] h-[720px] max-h-[92vh] rounded-[36px] shadow-2xl border border-slate-200/50"
+      )}
+      style={{
+        background: "linear-gradient(180deg, #ffffff 0%, #f2fbf8 40%, #eefbf9 100%)",
+      }}
       role="dialog"
       aria-modal="true"
       aria-label="Welcome Onboarding Tour"
     >
-      {/* Background ambient lighting effects matching NexAce brand */}
-      <div className="absolute inset-0 pointer-events-none overflow-hidden">
-        <div className="absolute -top-32 -left-32 w-96 h-96 bg-[#00c5a0]/15 rounded-full blur-3xl" />
-        <div className="absolute -bottom-32 -right-32 w-96 h-96 bg-indigo-500/15 rounded-full blur-3xl" />
+      {/* Top Artwork Illustration Section */}
+      <div
+        className="relative w-full flex-1 max-h-[50vh] sm:max-h-[52vh] flex items-end justify-center overflow-hidden px-4"
+        style={{
+          paddingTop: "calc(env(safe-area-inset-top, 0px) + 0.5rem)",
+        }}
+      >
+        <img
+          key={currentScreen.imageSrc}
+          src={currentScreen.imageSrc}
+          alt={currentScreen.badge}
+          className={cn(
+            "w-full h-full max-h-[46vh] sm:max-h-[48vh] object-contain object-bottom pointer-events-none select-none transition-all duration-300",
+            animating ? "opacity-0 scale-95" : "opacity-100 scale-100"
+          )}
+        />
       </div>
 
-      {/* Main Device Frame Container with Clean Background Image */}
-      <div className="relative w-full max-w-[420px] sm:max-w-[440px] h-[680px] sm:h-[720px] max-h-[92vh] border border-slate-700/60 rounded-[36px] shadow-2xl shadow-black/95 flex flex-col overflow-hidden bg-white">
-        
-        {/* Pure Image Background Layer - No overlay */}
-        <div className="absolute inset-0 z-0">
-          <img
-            key={currentScreen.imageSrc}
-            src={currentScreen.imageSrc}
-            alt={currentScreen.badge}
-            className="w-full h-full object-cover object-top select-none pointer-events-none transition-opacity duration-300"
-          />
-        </div>
-
-        {/* Dynamic Slide Content Container - Aligned to bottom */}
-        <div className="relative z-10 flex-1 flex flex-col justify-end px-4 pb-6 pt-2">
-          {/* Centered Content Card constrained directly to the arch width */}
-          <div className="w-full max-w-[340px] mx-auto">
-            {/* Typography & Copy Section */}
-            <div className="space-y-2 text-left">
-              {/* Category Pill Tag */}
-              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[#00c5a0]/15 border border-[#00c5a0]/40 text-[#008080] text-[10px] font-bold shadow-sm backdrop-blur-sm">
-                <i className={cn(currentScreen.badgeIcon, "text-[9px]")} />
-                <span>{currentScreen.badge}</span>
-              </div>
-
-              {/* Smaller Headline */}
-              <h2 className="text-base sm:text-lg font-bold tracking-tight text-slate-900 leading-snug">
-                {currentScreen.titleLight}{" "}
-                <span className="text-[#008080]">{currentScreen.titleHighlight}</span>{" "}
-                {currentScreen.titleEnd}
-              </h2>
-
-              {/* Smaller Subtext description */}
-              <p className="text-[11px] sm:text-xs text-slate-700 font-medium leading-relaxed">
-                {currentScreen.description}
-              </p>
-
-              {/* Highlights bullet list */}
-              <div className="pt-1 space-y-1 text-left">
-                {currentScreen.features.map((feat, idx) => (
-                  <div key={idx} className="flex items-center gap-1.5 text-[11px] text-slate-800 font-medium">
-                    <i className="fa-solid fa-circle-check text-[#00a383] text-[10px] shrink-0" />
-                    <span className="truncate">{feat}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
+      {/* Bottom Content Area */}
+      <div
+        className="w-full max-w-[380px] mx-auto px-6 flex flex-col justify-end flex-shrink-0"
+        style={{
+          paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 1.75rem)",
+        }}
+      >
+        {/* Typography & Copy Section */}
+        <div
+          className={cn(
+            "space-y-2 text-left transition-all duration-300",
+            animating ? "opacity-0 translate-y-2" : "opacity-100 translate-y-0"
+          )}
+        >
+          {/* Category Pill Tag */}
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#00c5a0]/15 border border-[#00c5a0]/40 text-[#00796b] text-xs font-bold shadow-sm backdrop-blur-sm">
+            <i className={cn(currentScreen.badgeIcon, "text-[11px]")} />
+            <span>{currentScreen.badge}</span>
           </div>
 
-          {/* Navigation Controls & Pagination Dots - Always anchored at the bottom */}
-          <div className="w-full max-w-[340px] mx-auto pt-4 flex items-center justify-between gap-3">
-            {/* Indicator Dots */}
-            <div className="flex items-center gap-1.5">
-              {ONBOARDING_SCREENS.map((screen, idx) => (
-                <button
-                  key={screen.id}
-                  type="button"
-                  onClick={() => setCurrentIndex(idx)}
-                  className={cn(
-                    "h-1.5 rounded-full transition-all duration-300 cursor-pointer",
-                    idx === currentIndex
-                      ? "w-6 bg-[#00c5a0] shadow-sm shadow-[#00c5a0]/60"
-                      : "w-1.5 bg-slate-400/60 hover:bg-slate-500"
-                  )}
-                  aria-label={`Go to slide ${idx + 1}`}
-                />
-              ))}
-            </div>
+          {/* Headline */}
+          <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 leading-snug">
+            {currentScreen.titleLight}{" "}
+            <span className="text-[#008080] font-extrabold">{currentScreen.titleHighlight}</span>{" "}
+            {currentScreen.titleEnd}
+          </h2>
 
-            {/* Action Buttons: Prev / Next */}
-            <div className="flex items-center gap-1.5">
-              {currentIndex > 0 && (
-                <button
-                  type="button"
-                  onClick={handlePrev}
-                  className="w-8 h-8 rounded-xl border border-slate-300/80 bg-white/90 text-slate-700 hover:text-slate-950 hover:bg-white flex items-center justify-center cursor-pointer transition-all active:scale-95 shadow-sm"
-                  aria-label="Previous step"
-                >
-                  <i className="fa-solid fa-arrow-left text-[10px]" />
-                </button>
-              )}
+          {/* Subtext description */}
+          <p className="text-xs sm:text-sm text-slate-600 font-medium leading-relaxed">
+            {currentScreen.description}
+          </p>
 
-              <Button
-                color="primary"
-                onClick={handleNext}
+          {/* Highlights bullet list */}
+          <div className="pt-2 space-y-2 text-left">
+            {currentScreen.features.map((feat, idx) => (
+              <div key={idx} className="flex items-center gap-2 text-xs sm:text-sm text-slate-800 font-semibold">
+                <i className="fa-solid fa-circle-check text-[#00a383] text-sm shrink-0" />
+                <span className="truncate">{feat}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Navigation Controls: Indicator Dots on left & Action Button on right */}
+        <div className="pt-6 flex items-center justify-between gap-4">
+          {/* Indicator Dots */}
+          <div className="flex items-center gap-2">
+            {ONBOARDING_SCREENS.map((screen, idx) => (
+              <button
+                key={screen.id}
+                type="button"
+                onClick={() => setCurrentIndex(idx)}
                 className={cn(
-                  "font-bold text-[11px] gap-1.5 rounded-xl shadow-md transition-all cursor-pointer",
-                  currentIndex === ONBOARDING_SCREENS.length - 1
-                    ? "px-4 h-8 bg-[#00c5a0] hover:bg-[#00c5a0]/90 text-slate-950 shadow-[#00c5a0]/40"
-                    : "w-8 h-8 p-0 rounded-xl bg-slate-900 text-white hover:bg-slate-800"
+                  "h-2 rounded-full transition-all duration-300 cursor-pointer",
+                  idx === currentIndex
+                    ? "w-8 bg-[#00c5a0] shadow-sm shadow-[#00c5a0]/60"
+                    : "w-2 bg-slate-300 hover:bg-slate-400"
                 )}
-                aria-label={
-                  currentIndex === ONBOARDING_SCREENS.length - 1
-                    ? isAppLocked
-                      ? "Replay Tour"
-                      : "Get Started"
-                    : "Next step"
-                }
+                aria-label={`Go to slide ${idx + 1}`}
+              />
+            ))}
+          </div>
+
+          {/* Action Buttons: Prev (if > 0) + Next Arrow Button */}
+          <div className="flex items-center gap-2">
+            {currentIndex > 0 && (
+              <button
+                type="button"
+                onClick={handlePrev}
+                className="w-12 h-12 rounded-2xl border border-slate-300/80 bg-white/90 text-slate-700 hover:text-slate-950 flex items-center justify-center cursor-pointer transition-all active:scale-95 shadow-sm"
+                aria-label="Previous step"
               >
-                {currentIndex === ONBOARDING_SCREENS.length - 1 ? (
-                  isAppLocked ? (
-                    <>
-                      <span>Replay</span>
-                      <i className="fa-solid fa-rotate-right text-[10px]" />
-                    </>
-                  ) : (
-                    <>
-                      <span>Get Started</span>
-                      <i className="fa-solid fa-check text-[10px]" />
-                    </>
-                  )
+                <i className="fa-solid fa-arrow-left text-sm" />
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={handleNext}
+              className={cn(
+                "rounded-2xl transition-all cursor-pointer flex items-center justify-center active:scale-95 shadow-lg",
+                currentIndex === ONBOARDING_SCREENS.length - 1
+                  ? "px-5 h-12 bg-[#00c5a0] hover:bg-[#00c5a0]/90 text-slate-950 font-bold text-xs sm:text-sm gap-2 shadow-[#00c5a0]/40"
+                  : "w-14 h-12 bg-[#0f172a] hover:bg-[#1e293b] text-white"
+              )}
+              aria-label={
+                currentIndex === ONBOARDING_SCREENS.length - 1
+                  ? isAppLocked
+                    ? "Replay Tour"
+                    : "Get Started"
+                  : "Next step"
+              }
+            >
+              {currentIndex === ONBOARDING_SCREENS.length - 1 ? (
+                isAppLocked ? (
+                  <>
+                    <span>Replay</span>
+                    <i className="fa-solid fa-rotate-right text-xs" />
+                  </>
                 ) : (
-                  <i className="fa-solid fa-arrow-right text-[10px]" />
-                )}
-              </Button>
-            </div>
+                  <>
+                    <span>Get Started</span>
+                    <i className="fa-solid fa-arrow-right text-xs" />
+                  </>
+                )
+              ) : (
+                <i className="fa-solid fa-arrow-right text-base text-white" />
+              )}
+            </button>
           </div>
         </div>
       </div>
     </div>
   );
+
+  // If in desktop preview mode (not locked and not mobile), wrap in a centered modal dialog backdrop
+  if (!useFullScreenMode) {
+    return (
+      <div className="fixed inset-0 z-[999] flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-in fade-in duration-300">
+        {screenContent}
+      </div>
+    );
+  }
+
+  return screenContent;
 }

@@ -32,8 +32,8 @@ export function NativeAppGate({ children }: NativeAppGateProps) {
   // Inside the mobile apps, display only the Onboarding screens (locked in full-screen)
   if (isAppShell) {
     return (
-      <div className="fixed inset-0 z-[99999] bg-[#11161d] text-slate-100 flex items-center justify-center overflow-hidden">
-        <OnboardingScreens isAppLocked={true} />
+      <div className="fixed inset-0 z-[99999] w-full h-full bg-[#eefbf9] overflow-hidden">
+        <OnboardingScreens isAppLocked={true} isFullScreen={true} />
       </div>
     );
   }
