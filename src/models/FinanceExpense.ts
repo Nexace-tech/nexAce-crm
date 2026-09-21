@@ -19,7 +19,7 @@ export interface IFinanceExpense extends Document {
 
 const FinanceExpenseSchema = new Schema<IFinanceExpense>(
   {
-    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true, index: true },
+    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true },
     createdBy: { type: Schema.Types.ObjectId, ref: "User" },
     title: { type: String, required: true },
     category: { type: String, required: true, default: "Operations" },

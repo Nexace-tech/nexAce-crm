@@ -14,7 +14,7 @@ export interface IHRSandbox extends Document {
 
 const HRSandboxSchema = new Schema(
   {
-    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true, index: true },
+    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true },
     name: { type: String, required: true, trim: true },
     description: { type: String, default: "" },
     workflowType: {

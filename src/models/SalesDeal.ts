@@ -29,7 +29,7 @@ export interface ISalesDeal extends Document {
 
 const SalesDealSchema = new Schema<ISalesDeal>(
   {
-    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true, index: true },
+    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true },
     createdBy: { type: Schema.Types.ObjectId, ref: "User", required: true },
     clientAccount: { type: String, required: true, trim: true },
     dealName: { type: String, required: true, trim: true },

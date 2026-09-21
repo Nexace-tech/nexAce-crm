@@ -78,7 +78,7 @@ const TaskSchema = new Schema<ITask>(
     history: [HistorySchema],
     isDeleted: { type: Boolean, default: false, index: true },
     deletedAt: { type: Date, default: null },
-    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true, index: true },
+    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true },
   },
   { timestamps: true }
 );

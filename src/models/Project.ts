@@ -48,7 +48,7 @@ const ProjectSchema = new Schema<IProject>(
     members: [{ type: Schema.Types.ObjectId, ref: "User" }],
     clientId: { type: Schema.Types.ObjectId, ref: "Client" },
     clientAccount: { type: String, trim: true },
-    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true, index: true },
+    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true },
     isDeleted: { type: Boolean, default: false, index: true },
     deletedAt: { type: Date, default: null },
     deletedBy: { type: Schema.Types.ObjectId, ref: "User" },

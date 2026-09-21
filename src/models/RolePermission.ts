@@ -12,7 +12,7 @@ export interface IRolePermission extends Document {
 
 const RolePermissionSchema: Schema = new Schema(
   {
-    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true, index: true },
+    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true },
     role: {
       type: String,
       required: true,

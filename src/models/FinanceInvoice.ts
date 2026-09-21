@@ -25,7 +25,7 @@ export interface IFinanceInvoice extends Document {
 
 const FinanceInvoiceSchema = new Schema<IFinanceInvoice>(
   {
-    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true, index: true },
+    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true },
     createdBy: { type: Schema.Types.ObjectId, ref: "User" },
     invoiceNo: { type: String, required: true },
     client: { type: String, required: true },

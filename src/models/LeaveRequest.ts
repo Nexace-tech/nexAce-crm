@@ -34,7 +34,7 @@ const LeaveRequestSchema = new Schema<ILeaveRequest>(
     },
     approvedBy: { type: Schema.Types.ObjectId, ref: "User" },
     approverName: { type: String, trim: true },
-    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true, index: true },
+    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true },
   },
   { timestamps: true }
 );

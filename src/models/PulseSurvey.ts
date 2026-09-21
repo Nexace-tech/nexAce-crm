@@ -37,7 +37,7 @@ const PulseSurveySchema = new Schema<IPulseSurvey>(
         submittedAt: { type: Date, default: Date.now },
       },
     ],
-    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true, index: true },
+    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true },
     createdBy: { type: Schema.Types.ObjectId, ref: "User", required: true },
   },
   { timestamps: true }

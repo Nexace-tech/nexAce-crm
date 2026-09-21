@@ -89,7 +89,7 @@ const ProposalAttachmentSchema = new Schema<IProposalAttachment>(
 
 const ProposalSchema = new Schema<IProposal>(
   {
-    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true, index: true },
+    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true },
     proposalCode: { type: String, required: true, trim: true },
     subject: { type: String, required: true, trim: true },
     projectName: { type: String, trim: true },

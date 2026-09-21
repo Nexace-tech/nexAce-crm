@@ -101,7 +101,7 @@ const TimesheetEntrySchema = new Schema<ITimesheetEntry>({
 
 const ITInvoiceSchema = new Schema<IITInvoice>(
   {
-    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true, index: true },
+    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true },
     subscriptionId: { type: Schema.Types.ObjectId, ref: "ITSubscription", default: null, index: true },
     invoiceNo: { type: String, required: true, trim: true },
     invoiceDate: { type: String, required: true, default: () => new Date().toISOString().slice(0, 10) },

@@ -24,7 +24,7 @@ const DriveFileSchema = new Schema<IDriveFile>(
     isRecycled: { type: Boolean, default: false },
     deletedAt: { type: Date },
     uploadedBy: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
-    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true, index: true },
+    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true },
   },
   { timestamps: true }
 );

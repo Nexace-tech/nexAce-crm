@@ -16,7 +16,7 @@ export interface IHRDocument extends Document {
 
 const HRDocumentSchema = new Schema(
   {
-    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true, index: true },
+    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true },
     title: { type: String, required: true, trim: true },
     category: {
       type: String,

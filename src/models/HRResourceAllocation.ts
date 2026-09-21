@@ -20,7 +20,7 @@ export interface IHRResourceAllocation extends Document {
 
 const HRResourceAllocationSchema = new Schema<IHRResourceAllocation>(
   {
-    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true, index: true },
+    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true },
     createdBy: { type: Schema.Types.ObjectId, ref: "User", required: true },
     userId: { type: Schema.Types.ObjectId, ref: "User" },
     employeeName: { type: String, required: true, trim: true },

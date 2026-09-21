@@ -16,7 +16,7 @@ const WikiSchema = new Schema<IWiki>(
     category: { type: String, default: "Operations", trim: true },
     content: { type: String, required: true },
     createdBy: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
-    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true, index: true },
+    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true },
   },
   { timestamps: true }
 );

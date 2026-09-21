@@ -30,7 +30,7 @@ const TimeEntrySchema = new Schema<ITimeEntry>(
       default: "Draft",
     },
     approvedBy: { type: Schema.Types.ObjectId, ref: "User" },
-    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true, index: true },
+    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true },
   },
   { timestamps: true }
 );

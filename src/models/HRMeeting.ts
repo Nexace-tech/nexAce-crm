@@ -16,7 +16,7 @@ export interface IHRMeeting extends Document {
 
 const HRMeetingSchema = new Schema<IHRMeeting>(
   {
-    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true, index: true },
+    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true },
     createdBy: { type: Schema.Types.ObjectId, ref: "User", required: true },
     title: { type: String, required: true, trim: true },
     name: { type: String, required: true, trim: true },

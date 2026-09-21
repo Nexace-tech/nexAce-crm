@@ -20,7 +20,7 @@ const KudosSchema = new Schema<IKudos>(
     toUserName: { type: String, required: true, trim: true },
     message: { type: String, required: true, trim: true },
     companyValue: { type: String, required: true, trim: true },
-    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true, index: true },
+    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true },
   },
   { timestamps: true }
 );

@@ -26,7 +26,7 @@ const EventSchema = new Schema<IEvent>(
     endDate: { type: Date, required: true },
     department: { type: String },
     userId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
-    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true, index: true },
+    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true },
   },
   { timestamps: true }
 );

@@ -94,7 +94,7 @@ const CompanyDetailsSchema = new Schema<ICompanyDetails>(
 
 const ClientContractSchema = new Schema<IClientContract>(
   {
-    tenantId:  { type: Schema.Types.ObjectId, ref: "Tenant", required: true, index: true },
+    tenantId:  { type: Schema.Types.ObjectId, ref: "Tenant", required: true },
     createdBy: { type: Schema.Types.ObjectId, ref: "User" },
 
     // Sender & Receiver

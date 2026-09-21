@@ -43,7 +43,7 @@ const OneOnOneMeetingSchema = new Schema<IOneOnOneMeeting>(
         carriedOver: { type: Boolean, default: false },
       },
     ],
-    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true, index: true },
+    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true },
   },
   { timestamps: true }
 );

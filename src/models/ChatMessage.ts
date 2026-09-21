@@ -64,7 +64,7 @@ const ChatMessageSchema = new Schema<IChatMessage>(
         users: [{ type: String }],
       },
     ],
-    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true, index: true },
+    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true },
   },
   { timestamps: true }
 );

@@ -17,7 +17,7 @@ export interface IITSubscription extends Document {
 
 const ITSubscriptionSchema = new Schema<IITSubscription>(
   {
-    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true, index: true },
+    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true },
     tool: { type: String, required: true, trim: true },
     category: { type: String, trim: true, default: "" },
     plan: { type: String, trim: true, default: "" },

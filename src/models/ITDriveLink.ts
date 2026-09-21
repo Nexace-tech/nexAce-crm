@@ -21,7 +21,7 @@ export interface IITDriveLink extends Document {
 
 const ITDriveLinkSchema = new Schema<IITDriveLink>(
   {
-    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true, index: true },
+    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true },
     name: { type: String, required: true, trim: true },
     category: { type: String, trim: true, default: "" },
     venture: { type: String, trim: true, default: "" },

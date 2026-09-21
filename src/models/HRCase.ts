@@ -54,7 +54,7 @@ const HRCaseSchema = new Schema<IHRCase>(
         createdAt: { type: Date, default: Date.now },
       },
     ],
-    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true, index: true },
+    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true },
   },
   { timestamps: true }
 );

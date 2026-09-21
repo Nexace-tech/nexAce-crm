@@ -41,7 +41,7 @@ const KRARatingSchema = new Schema({
 
 const HRAppraisalSchema = new Schema(
   {
-    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true, index: true },
+    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true },
     userId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
     userName: { type: String, required: true },
     managerId: { type: Schema.Types.ObjectId, ref: "User" },

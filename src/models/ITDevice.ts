@@ -24,7 +24,7 @@ export interface IITDevice extends Document {
 
 const ITDeviceSchema = new Schema<IITDevice>(
   {
-    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true, index: true },
+    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true },
     assetTag: { type: String, required: true, trim: true },
     type: { type: String, trim: true, default: "Laptop" },
     brand: { type: String, trim: true, default: "" },

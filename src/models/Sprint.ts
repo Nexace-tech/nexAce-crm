@@ -22,7 +22,7 @@ const SprintSchema = new Schema<ISprint>(
       enum: ["Planned", "Active", "Completed"],
       default: "Planned",
     },
-    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true, index: true },
+    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true },
   },
   { timestamps: true }
 );

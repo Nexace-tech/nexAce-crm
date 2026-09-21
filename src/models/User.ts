@@ -52,7 +52,7 @@ const UserSchema: Schema = new Schema({
   email: { type: String, required: true, lowercase: true, trim: true },
   passwordHash: { type: String, required: true },
   role: { type: String, default: "Employee", trim: true },
-  tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true, index: true },
+  tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true },
   department: { type: String },
   departments: [{ type: String }],
   managerId: { type: Schema.Types.ObjectId, ref: "User" },

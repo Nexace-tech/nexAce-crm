@@ -58,7 +58,7 @@ const ChecklistItemSchema = new Schema({
 
 const HROnboardingSchema = new Schema(
   {
-    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true, index: true },
+    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true },
     userId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
     userName: { type: String, required: true },
     userEmail: { type: String, required: true },

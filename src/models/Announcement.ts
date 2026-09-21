@@ -24,7 +24,7 @@ const AnnouncementSchema = new Schema<IAnnouncement>(
     authorName: { type: String, required: true, trim: true },
     authorId: { type: Schema.Types.ObjectId, ref: "User", required: true },
     pinned: { type: Boolean, default: false },
-    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true, index: true },
+    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true },
   },
   { timestamps: true }
 );

@@ -106,7 +106,7 @@ const ClientSchema = new Schema<IClient>(
         authorName: { type: String, required: true },
       },
     ],
-    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true, index: true },
+    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true },
     uploadedBy: { type: Schema.Types.ObjectId, ref: "User", index: true },
   },
   { timestamps: true }

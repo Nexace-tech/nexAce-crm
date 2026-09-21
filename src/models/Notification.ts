@@ -25,7 +25,7 @@ const NotificationSchema = new Schema<INotification>(
     },
     linkUrl: { type: String, trim: true },
     read: { type: Boolean, default: false },
-    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true, index: true },
+    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true },
     // adminOnly: when true, only Admin/OPS roles can see this notification
     adminOnly: { type: Boolean, default: false },
   },

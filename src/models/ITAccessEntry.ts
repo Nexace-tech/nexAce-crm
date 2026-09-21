@@ -16,7 +16,7 @@ export interface IITAccessEntry extends Document {
 
 const ITAccessEntrySchema = new Schema<IITAccessEntry>(
   {
-    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true, index: true },
+    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true },
     tool: { type: String, required: true, trim: true },
     category: { type: String, trim: true, default: "" },
     assignee: { type: String, required: true, trim: true },

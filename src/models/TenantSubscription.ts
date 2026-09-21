@@ -23,7 +23,7 @@ export interface ITenantSubscription extends Document {
 
 const TenantSubscriptionSchema = new Schema<ITenantSubscription>(
   {
-    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true, index: true },
+    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true },
     planName: { type: String, required: true, default: "Standard Enterprise" },
     maxSeats: { type: Number, default: 50, min: 1 },
     activeSeats: { type: Number, default: 1, min: 1 },

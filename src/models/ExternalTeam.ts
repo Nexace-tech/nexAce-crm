@@ -20,7 +20,7 @@ export interface IExternalTeam extends Document {
 
 const ExternalTeamSchema = new Schema<IExternalTeam>(
   {
-    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true, index: true },
+    tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true },
     name: { type: String, required: true, trim: true },
     email: { type: String, required: true, trim: true, lowercase: true },
     companyName: { type: String, required: true, trim: true, default: "Independent Contractor" },
