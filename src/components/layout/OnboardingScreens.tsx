@@ -1,10 +1,8 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useAuthContext } from "@/context/AuthContext";
-import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-
 import { NativeService } from "@/lib/native/nativeService";
 
 interface OnboardingScreen {
@@ -70,6 +68,9 @@ const ONBOARDING_SCREENS: OnboardingScreen[] = [
   },
 ];
 
+const LAST_INDEX = ONBOARDING_SCREENS.length - 1;
+const ANIM_DURATION_MS = 250;
+
 interface OnboardingScreensProps {
   isAppLocked?: boolean;
   isFullScreen?: boolean;
@@ -83,16 +84,18 @@ export function OnboardingScreens({ isAppLocked = false, isFullScreen = false }:
   const [direction, setDirection] = useState<"next" | "prev">("next");
   const [isMobile, setIsMobile] = useState(true);
 
+  // Stable ref to abort pending animation timers on unmount
+  const animTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Unified viewport + native detection
   useEffect(() => {
-    const checkViewport = () => {
-      setIsMobile(window.innerWidth < 768 || NativeService.isNative());
-    };
+    const checkViewport = () => setIsMobile(window.innerWidth < 768 || NativeService.isNative());
     checkViewport();
     window.addEventListener("resize", checkViewport);
     return () => window.removeEventListener("resize", checkViewport);
   }, []);
 
-  // If app is locked to onboarding or forced full screen, it is unconditionally open
+  // Open logic: locked/fullscreen always open; otherwise show for mobile/native/PWA
   useEffect(() => {
     if (isAppLocked || isFullScreen) {
       setIsOpen(true);
@@ -100,28 +103,31 @@ export function OnboardingScreens({ isAppLocked = false, isFullScreen = false }:
     }
     if (!user?._id) return;
     const key = `nexace_onboarding_completed_${user._id}`;
-    const completed = localStorage.getItem(key);
-    if (completed) return;
+    if (localStorage.getItem(key)) return;
 
-    // Detect native app (Capacitor iOS/Android) or standalone PWA or mobile app viewport
     const isNativeApp = NativeService.isNative();
-    const isStandaloneApp = typeof window !== "undefined" && (
+    const isStandaloneApp =
       window.matchMedia("(display-mode: standalone)").matches ||
-      (window.navigator as any).standalone === true
-    );
-    const isMobileDevice = typeof window !== "undefined" && (
+      (window.navigator as any).standalone === true;
+
+    if (
       isNativeApp ||
       isStandaloneApp ||
       window.innerWidth <= 768 ||
       /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
-    );
-
-    if (isMobileDevice) {
+    ) {
       setIsOpen(true);
     }
   }, [user?._id, isAppLocked, isFullScreen]);
 
-  // Listen to custom event so user can replay onboarding anytime from Guide/Help menu
+  // Cleanup animation timer on unmount
+  useEffect(() => {
+    return () => {
+      if (animTimerRef.current) clearTimeout(animTimerRef.current);
+    };
+  }, []);
+
+  // Listen for replay event from Guide/Help menu
   useEffect(() => {
     const handleReplay = () => {
       setCurrentIndex(0);
@@ -134,7 +140,6 @@ export function OnboardingScreens({ isAppLocked = false, isFullScreen = false }:
   const handleFinish = useCallback(() => {
     NativeService.haptic("success");
     if (isAppLocked) {
-      // In locked app mode, looping back to first screen smoothly
       setCurrentIndex(0);
       return;
     }
@@ -142,48 +147,59 @@ export function OnboardingScreens({ isAppLocked = false, isFullScreen = false }:
     if (user?._id) {
       localStorage.setItem(`nexace_onboarding_completed_${user._id}`, "true");
     }
-  }, [user?._id, isAppLocked]);
+  }, [user, isAppLocked]);
 
-  const handleNext = () => {
+  /** Trigger a slide transition with animation guard and timer cleanup */
+  const triggerTransition = useCallback(
+    (dir: "next" | "prev", nextIndex: number) => {
+      setDirection(dir);
+      setAnimating(true);
+      setCurrentIndex(nextIndex);
+      if (animTimerRef.current) clearTimeout(animTimerRef.current);
+      animTimerRef.current = setTimeout(() => setAnimating(false), ANIM_DURATION_MS);
+    },
+    []
+  );
+
+  const handleNext = useCallback(() => {
     if (animating) return;
     NativeService.haptic("light");
-    if (currentIndex < ONBOARDING_SCREENS.length - 1) {
-      setDirection("next");
-      setAnimating(true);
-      setCurrentIndex((prev) => prev + 1);
-      setTimeout(() => setAnimating(false), 250);
+    if (currentIndex < LAST_INDEX) {
+      triggerTransition("next", currentIndex + 1);
     } else {
       handleFinish();
     }
-  };
+  }, [animating, currentIndex, triggerTransition, handleFinish]);
 
-  const handlePrev = () => {
-    if (animating) return;
+  const handlePrev = useCallback(() => {
+    if (animating || currentIndex === 0) return;
     NativeService.haptic("light");
-    if (currentIndex > 0) {
-      setDirection("prev");
-      setAnimating(true);
-      setCurrentIndex((prev) => prev - 1);
-      setTimeout(() => setAnimating(false), 250);
-    }
-  };
+    triggerTransition("prev", currentIndex - 1);
+  }, [animating, currentIndex, triggerTransition]);
 
-  // Keyboard arrow keys navigation
+  // Keyboard navigation — stable handlers via useCallback avoid stale closures
   useEffect(() => {
     if (!isOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "ArrowRight") handleNext();
-      if (e.key === "ArrowLeft") handlePrev();
-      if (e.key === "Escape") handleFinish();
+      else if (e.key === "ArrowLeft") handlePrev();
+      else if (e.key === "Escape") handleFinish();
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, currentIndex, animating]);
+  }, [isOpen, handleNext, handlePrev, handleFinish]);
+
+  // Derived state — memoized to avoid recomputation on unrelated renders
+  const useFullScreenMode = useMemo(
+    () => isAppLocked || isFullScreen || isMobile,
+    [isAppLocked, isFullScreen, isMobile]
+  );
+
+  const currentScreen = useMemo(() => ONBOARDING_SCREENS[currentIndex], [currentIndex]);
+
+  const isLastScreen = currentIndex === LAST_INDEX;
 
   if (!isOpen) return null;
-
-  const currentScreen = ONBOARDING_SCREENS[currentIndex];
-  const useFullScreenMode = isAppLocked || isFullScreen || isMobile;
 
   // Content of the Onboarding screen
   const screenContent = (
@@ -204,9 +220,7 @@ export function OnboardingScreens({ isAppLocked = false, isFullScreen = false }:
       {/* Top Artwork Illustration Section */}
       <div
         className="relative w-full flex-1 max-h-[50vh] sm:max-h-[52vh] flex items-end justify-center overflow-hidden px-4"
-        style={{
-          paddingTop: "calc(env(safe-area-inset-top, 0px) + 0.5rem)",
-        }}
+        style={{ paddingTop: "calc(env(safe-area-inset-top, 0px) + 0.5rem)" }}
       >
         <img
           key={currentScreen.imageSrc}
@@ -222,9 +236,7 @@ export function OnboardingScreens({ isAppLocked = false, isFullScreen = false }:
       {/* Bottom Content Area */}
       <div
         className="w-full max-w-[380px] mx-auto px-6 flex flex-col justify-end flex-shrink-0"
-        style={{
-          paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 1.75rem)",
-        }}
+        style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 1.75rem)" }}
       >
         {/* Typography & Copy Section */}
         <div
@@ -300,19 +312,13 @@ export function OnboardingScreens({ isAppLocked = false, isFullScreen = false }:
               onClick={handleNext}
               className={cn(
                 "rounded-2xl transition-all cursor-pointer flex items-center justify-center active:scale-95 shadow-lg",
-                currentIndex === ONBOARDING_SCREENS.length - 1
+                isLastScreen
                   ? "px-5 h-12 bg-[#00c5a0] hover:bg-[#00c5a0]/90 text-slate-950 font-bold text-xs sm:text-sm gap-2 shadow-[#00c5a0]/40"
                   : "w-14 h-12 bg-[#0f172a] hover:bg-[#1e293b] text-white"
               )}
-              aria-label={
-                currentIndex === ONBOARDING_SCREENS.length - 1
-                  ? isAppLocked
-                    ? "Replay Tour"
-                    : "Get Started"
-                  : "Next step"
-              }
+              aria-label={isLastScreen ? (isAppLocked ? "Replay Tour" : "Get Started") : "Next step"}
             >
-              {currentIndex === ONBOARDING_SCREENS.length - 1 ? (
+              {isLastScreen ? (
                 isAppLocked ? (
                   <>
                     <span>Replay</span>
@@ -334,7 +340,7 @@ export function OnboardingScreens({ isAppLocked = false, isFullScreen = false }:
     </div>
   );
 
-  // If in desktop preview mode (not locked and not mobile), wrap in a centered modal dialog backdrop
+  // Desktop preview mode: wrap in centered modal backdrop
   if (!useFullScreenMode) {
     return (
       <div className="fixed inset-0 z-[999] flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-in fade-in duration-300">

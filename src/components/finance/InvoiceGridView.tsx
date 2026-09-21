@@ -129,8 +129,8 @@ export default function InvoiceGridView({ invoices, loading = false, scope = "in
     };
   }, [invoices]);
 
-  const filtered = useMemo(() => {
-    let list = invoices.filter(inv => {
+const filtered = useMemo(() => {
+    const list = invoices.filter(inv => {
       const q = search.toLowerCase();
       const matchSearch = !q || inv.invoiceNo.toLowerCase().includes(q) || inv.client.toLowerCase().includes(q) || (inv.category || "").toLowerCase().includes(q);
       const matchStatus = statusFilter === "All" || inv.status === statusFilter;
