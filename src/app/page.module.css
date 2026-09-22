@@ -764,13 +764,139 @@
   .stepsGrid    { grid-template-columns: repeat(2, 1fr); }
 }
 
+/* ── Tablet (768px) ── */
+@media (max-width: 768px) {
+  .featuresSection  { padding: 3.5rem 1.25rem; }
+  .onboardingSection { padding: 3.5rem 1.25rem 4rem; }
+  .stepsGrid        { grid-template-columns: repeat(2, 1fr); gap: 1.25rem; }
+  .footer           { padding: 1.25rem 1.5rem; }
+}
+
+/* ── Mobile (640px and below) ── */
 @media (max-width: 640px) {
-  .header       { padding: 0 1.25rem; }
+  /* ── iOS/Android safe areas ── */
+  .container {
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+
+  /* ── Header ── */
+  .header {
+    padding: 0 1rem;
+    padding-left: max(1rem, env(safe-area-inset-left));
+    padding-right: max(1rem, env(safe-area-inset-right));
+    height: 56px;
+  }
+  .nav          { gap: 0.5rem; }
   .nav .navLink { display: none; }
-  .hero         { padding: 4rem 1.5rem 3rem; }
-  .title        { font-size: 2.2rem; }
-  .stats        { gap: 0.6rem; }
-  .grid         { grid-template-columns: 1fr; }
-  .stepsGrid    { grid-template-columns: 1fr; }
-  .footer       { flex-direction: column; align-items: center; text-align: center; }
+
+  /* Hide user badge text on very small screens to prevent overflow */
+  .userBadge    {
+    padding: 0.3rem 0.65rem;
+    font-size: 0.78rem;
+    max-width: 100px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* Keep "Enter Dashboard" btn but shrink it */
+  .btnPrimary {
+    padding: 0.45rem 0.85rem;
+    font-size: 0.8rem;
+    border-radius: 8px;
+  }
+
+  /* ── Ambient Orbs — shrink to prevent overflow ── */
+  .orb1 { width: 280px; height: 280px; top: -60px; left: -60px; }
+  .orb2 { width: 220px; height: 220px; right: -50px; }
+  .orb3 { width: 180px; height: 180px; }
+
+  /* ── Hero ── */
+  .hero {
+    padding: 3rem 1.25rem 2.5rem;
+    padding-bottom: max(2.5rem, env(safe-area-inset-bottom));
+  }
+
+  /* ── Badge ── */
+  .badge {
+    font-size: 0.72rem;
+    padding: 0.3rem 0.85rem;
+    text-align: center;
+    white-space: normal;
+    line-height: 1.4;
+    max-width: 90%;
+  }
+
+  /* ── Title ── */
+  .title { font-size: clamp(1.9rem, 8vw, 2.4rem); line-height: 1.15; }
+
+  /* ── Subtitle ── */
+  .subtitle { font-size: 0.97rem; }
+
+  /* ── CTA Buttons — full-width stack ── */
+  .ctaGroup {
+    flex-direction: column;
+    gap: 0.75rem;
+    width: 100%;
+  }
+  .btnHero,
+  .btnGhost {
+    width: 100%;
+    justify-content: center;
+    padding: 0.9rem 1.5rem;
+    font-size: 0.97rem;
+    border-radius: 14px;
+  }
+
+  /* ── Stats Pills ── */
+  .stats { gap: 0.5rem; }
+  .statPill {
+    padding: 0.45rem 0.85rem;
+    font-size: 0.8rem;
+  }
+
+  /* ── Feature Cards ── */
+  .featuresSection { padding: 2.5rem 1.25rem 3rem; }
+  .grid            { grid-template-columns: 1fr; gap: 1rem; }
+  .card            { padding: 1.5rem 1.25rem 1.25rem; }
+
+  /* ── Onboarding Steps ── */
+  .onboardingSection { padding: 2.5rem 1.25rem 3rem; }
+  .stepsGrid         { grid-template-columns: 1fr; gap: 1rem; }
+  .stepCard          { padding: 1.75rem 1rem 1.25rem; }
+
+  /* Section label / title / subtitle */
+  .sectionTitle      { font-size: clamp(1.5rem, 6vw, 2rem); }
+  .sectionSubtitle   { font-size: 0.92rem; }
+  .onboardingTitle   { font-size: clamp(1.5rem, 6vw, 2rem); }
+  .onboardingSubtitle { font-size: 0.92rem; }
+
+  /* ── Help note ── */
+  .helpNote {
+    flex-direction: column;
+    text-align: center;
+    gap: 0.5rem;
+    padding: 0.9rem 1.1rem;
+    font-size: 0.85rem;
+  }
+
+  /* ── Footer ── */
+  .footer {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    padding: 1.25rem 1rem;
+    padding-bottom: max(1.25rem, env(safe-area-inset-bottom));
+    gap: 0.75rem;
+  }
+  .footerLinks { gap: 1rem; flex-wrap: wrap; justify-content: center; }
+}
+
+/* ── Extra small (360px and below) ── */
+@media (max-width: 360px) {
+  .title        { font-size: 1.75rem; }
+  .btnHero,
+  .btnGhost     { font-size: 0.9rem; padding: 0.8rem 1.25rem; }
+  .statPill     { font-size: 0.75rem; padding: 0.4rem 0.7rem; }
 }
