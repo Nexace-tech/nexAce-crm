@@ -9,9 +9,11 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   viewportFit: "cover",
+  // Match the onboarding background on native so first paint is never black
+  colorScheme: "light dark",
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
-    { media: "(prefers-color-scheme: dark)", color: "#11161d" },
+    { media: "(prefers-color-scheme: light)", color: "#eefbf9" },
+    { media: "(prefers-color-scheme: dark)", color: "#eefbf9" },
   ],
 };
 

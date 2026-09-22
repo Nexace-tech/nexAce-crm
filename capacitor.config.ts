@@ -7,6 +7,8 @@ const config: CapacitorConfig = {
   server: {
     // In mobile native app mode, point to the live cloud backend or local network IP
     url: process.env.CAPACITOR_SERVER_URL || "https://nex-ace-crm.vercel.app",
+    // Open directly at /onboarding — skip the CRM landing page on app launch
+    appStartPath: "/onboarding",
     cleartext: true,
     errorPath: "offline.html",
   },
