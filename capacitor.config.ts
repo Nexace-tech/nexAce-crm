@@ -19,12 +19,10 @@ const config: CapacitorConfig = {
   },
   plugins: {
     SplashScreen: {
-      launchShowDuration: 2000,
-      // Match the splash image background so there's no color flash on hide
+      launchShowDuration: 1500,
+      // Match the onboarding/splash background so there's no dark flash
       backgroundColor: "#eefbf9",
       showSpinner: false,
-      splashFullScreen: true,
-      splashImmersive: true,
     },
     PushNotifications: {
       presentationOptions: ["badge", "sound", "alert"],
