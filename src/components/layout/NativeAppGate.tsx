@@ -122,7 +122,13 @@ export function NativeAppGate({ children }: NativeAppGateProps) {
 
   // ── Login ────────────────────────────────────────────────────────────────
   if (appState === "login") {
-    const handleLoginSuccess = () => setAppState("authenticated");
+    const handleLoginSuccess = () => {
+      // Show the loading splash while the page reloads to /dashboard.
+      // On reload the session cookie is active → NativeAppGate will fast-track
+      // to "authenticated" without ever revealing the web /login page.
+      setAppState("loading");
+      window.location.replace("/dashboard");
+    };
 
     return (
       <div
