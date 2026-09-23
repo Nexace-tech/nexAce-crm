@@ -69,12 +69,16 @@ export function NotificationBell() {
 
   // Real-time live toast alert state
   const [latestToast, setLatestToast] = useState<NotifItem | null>(null);
+  const [toastProgress, setToastProgress] = useState(100);
   const prevIdsRef = useRef<Set<string>>(new Set());
   const isFirstFetchRef = useRef(true);
 
   // Login catch-up toast state
   const [catchUpCount, setCatchUpCount] = useState(0);
   const [showCatchUp, setShowCatchUp] = useState(false);
+
+  // Desktop notification permission state
+  const [notifPermission, setNotifPermission] = useState<NotificationPermission | "unsupported">("unsupported");
 
   // Broadcast Modal State
   const [showBroadcastModal, setShowBroadcastModal] = useState(false);
@@ -165,12 +169,22 @@ export function NotificationBell() {
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
 
-  const requestDesktopPermission = () => {
-    if (typeof window !== "undefined" && "Notification" in window && window.Notification.permission === "default") {
-      try {
-        window.Notification.requestPermission().catch(() => {});
-      } catch { /* ignore */ }
+  // Sync permission state on mount and when panel opens
+  useEffect(() => {
+    if (typeof window === "undefined" || !("Notification" in window)) {
+      setNotifPermission("unsupported");
+      return;
     }
+    setNotifPermission(window.Notification.permission);
+  }, [open]);
+
+  const handleRequestPermission = async () => {
+    // Native Capacitor app uses its own push flow — skip browser API entirely
+    if (typeof window === "undefined" || !("Notification" in window)) return;
+    try {
+      const result = await window.Notification.requestPermission();
+      setNotifPermission(result);
+    } catch { /* ignore */ }
   };
 
   const playChimeSound = () => {
@@ -234,12 +248,16 @@ export function NotificationBell() {
   }, [user]); // re-run when user session resolves so polling starts correctly
 
 
-  // Auto-dismiss live toast after 6 seconds
+  // Auto-dismiss live toast after 6 seconds + animate progress bar
   useEffect(() => {
-    if (latestToast) {
-      const timer = setTimeout(() => setLatestToast(null), 6000);
-      return () => clearTimeout(timer);
-    }
+    if (!latestToast) return;
+    setToastProgress(100);
+    const DURATION = 6000;
+    const TICK = 60;
+    const step = (TICK / DURATION) * 100;
+    const interval = setInterval(() => setToastProgress((p) => Math.max(0, p - step)), TICK);
+    const timer = setTimeout(() => { setLatestToast(null); setToastProgress(100); }, DURATION);
+    return () => { clearTimeout(timer); clearInterval(interval); };
   }, [latestToast]);
 
   const recordCatchUpDismissal = (targetNotifs?: NotifItem[], targetCount?: number) => {
@@ -412,10 +430,7 @@ export function NotificationBell() {
       <Button
         variant="ghost"
         size="icon"
-        onClick={() => {
-          setOpen(!open);
-          requestDesktopPermission();
-        }}
+        onClick={() => setOpen(!open)}
         className="relative text-muted-foreground hover:text-foreground h-9 w-9 rounded-full cursor-pointer transition-colors"
         title="Real-time Workspace Notifications"
       >
@@ -424,6 +439,10 @@ export function NotificationBell() {
           <span className="absolute -top-0.5 -right-0.5 bg-destructive text-destructive-foreground text-[10px] font-bold h-4 min-w-[16px] px-1 rounded-full flex items-center justify-center shadow-xs animate-pulse">
             {unreadCount > 9 ? "9+" : unreadCount}
           </span>
+        )}
+        {/* Subtle warning indicator when desktop notifications not enabled */}
+        {unreadCount === 0 && notifPermission === "default" && (
+          <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-amber-400 rounded-full border border-background" title="Enable desktop alerts" />
         )}
       </Button>
 
@@ -453,27 +472,37 @@ export function NotificationBell() {
 
       {/* ── Live Real-time Toast Banner ── */}
       {latestToast && (
-        <div className="fixed top-4 right-4 left-4 sm:left-auto sm:right-5 sm:top-5 z-[200] sm:max-w-sm bg-card border-2 border-primary/50 text-foreground p-4 rounded-xl shadow-2xl animate-in fade-in slide-in-from-top-4 flex items-start gap-3 bg-gradient-to-r from-card via-card to-primary/5">
-          <div className={cn("p-2.5 rounded-lg shrink-0", getTypeCfg(latestToast.type).bg)}>
-            <i className={cn(getTypeCfg(latestToast.type).icon, getTypeCfg(latestToast.type).color, "text-base")} />
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center justify-between gap-2">
-              <p className="font-bold text-xs text-foreground truncate">{latestToast.title}</p>
-              <button onClick={() => setLatestToast(null)} className="text-muted-foreground hover:text-foreground p-0.5 cursor-pointer shrink-0">
-                <i className="fa-solid fa-xmark text-xs" />
-              </button>
+        <div className="fixed top-4 right-4 left-4 sm:left-auto sm:right-5 sm:top-5 z-[200] sm:max-w-sm bg-card border border-primary/30 text-foreground rounded-2xl shadow-2xl animate-in fade-in slide-in-from-top-3 overflow-hidden">
+          {/* Progress bar */}
+          <div
+            className="h-0.5 bg-primary transition-all duration-[60ms] ease-linear"
+            style={{ width: `${toastProgress}%` }}
+          />
+          <div className="p-4 flex items-start gap-3 bg-gradient-to-r from-card via-card to-primary/5">
+            <div className={cn("w-9 h-9 rounded-xl flex items-center justify-center shrink-0", getTypeCfg(latestToast.type).bg)}>
+              <i className={cn(getTypeCfg(latestToast.type).icon, getTypeCfg(latestToast.type).color, "text-sm")} />
             </div>
-            <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{latestToast.message}</p>
-            {latestToast.linkUrl && (
-              <a
-                href={latestToast.linkUrl}
-                onClick={() => setLatestToast(null)}
-                className="inline-flex items-center gap-1 text-[11px] font-bold text-primary hover:underline mt-2"
-              >
-                View Details <i className="fa-solid fa-arrow-right text-[10px]" />
-              </a>
-            )}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{getTypeCfg(latestToast.type).label}</p>
+                  <p className="font-bold text-xs text-foreground mt-0.5 truncate">{latestToast.title}</p>
+                </div>
+                <button onClick={() => setLatestToast(null)} className="text-muted-foreground hover:text-foreground p-0.5 cursor-pointer shrink-0 mt-0.5">
+                  <i className="fa-solid fa-xmark text-xs" />
+                </button>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1 line-clamp-2 leading-relaxed">{latestToast.message}</p>
+              {latestToast.linkUrl && (
+                <a
+                  href={latestToast.linkUrl}
+                  onClick={() => setLatestToast(null)}
+                  className="inline-flex items-center gap-1 text-[11px] font-bold text-primary hover:underline mt-2"
+                >
+                  View Details <i className="fa-solid fa-arrow-right text-[10px]" />
+                </a>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -549,6 +578,42 @@ export function NotificationBell() {
               </button>
             )}
           </div>
+
+          {/* ── Desktop Permission Banner (web only, permission not yet granted) ── */}
+          {notifPermission === "default" && (
+            <div className="mx-3 my-2 p-3 rounded-xl bg-amber-500/8 border border-amber-500/20 flex items-start gap-2.5 animate-in fade-in slide-in-from-top-2">
+              <div className="w-7 h-7 rounded-lg bg-amber-500/15 flex items-center justify-center shrink-0 mt-0.5">
+                <i className="fa-solid fa-bell text-amber-500 text-xs" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-bold text-foreground">Enable Desktop Alerts</p>
+                <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">Get instant pop-ups for tasks, chats &amp; announcements even when this tab is in the background.</p>
+                <button
+                  onClick={handleRequestPermission}
+                  className="mt-2 inline-flex items-center gap-1.5 text-[11px] font-bold text-amber-600 dark:text-amber-400 hover:underline cursor-pointer"
+                >
+                  <i className="fa-solid fa-check text-[10px]" /> Allow Notifications
+                </button>
+              </div>
+              <button
+                onClick={() => setNotifPermission("denied")}
+                className="text-muted-foreground hover:text-foreground p-0.5 cursor-pointer shrink-0"
+                title="Dismiss"
+              >
+                <i className="fa-solid fa-xmark text-xs" />
+              </button>
+            </div>
+          )}
+
+          {/* ── Denied State Banner ── */}
+          {notifPermission === "denied" && (
+            <div className="mx-3 my-2 p-3 rounded-xl bg-muted/40 border border-border flex items-center gap-2.5">
+              <i className="fa-solid fa-bell-slash text-muted-foreground text-sm shrink-0" />
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                Desktop alerts are blocked. To enable, click the <strong>🔒 lock icon</strong> in your browser address bar → Notifications → Allow.
+              </p>
+            </div>
+          )}
 
           {/* Filter Sub-Bar */}
           <div className="flex items-center gap-1 px-2 py-2 border-b border-border/50 bg-card overflow-x-auto scrollbar-none">

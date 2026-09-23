@@ -31,7 +31,7 @@ export default function Home() {
       <header className={styles.header}>
         <div className={styles.logoSection}>
           <span className={styles.logoIcon}>
-            <i className="fa-solid fa-gem" />
+            <i className="fa-solid fa-layer-group" />
           </span>
           <span className={styles.logoText}>NexAce <span className={styles.logoCRM}>CRM</span></span>
         </div>
@@ -253,7 +253,7 @@ export default function Home() {
       {/* ── Footer ── */}
       <footer className={styles.footer}>
         <div className={styles.footerLogo}>
-          <i className="fa-solid fa-gem" /> NexAce CRM
+          <i className="fa-solid fa-layer-group" /> NexAce CRM
         </div>
         <span className={styles.footerCopy}>
           © {new Date().getFullYear()} NexAce CRM · All rights reserved

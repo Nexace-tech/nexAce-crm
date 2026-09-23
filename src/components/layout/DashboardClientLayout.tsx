@@ -757,7 +757,7 @@ export function DashboardClientLayout({ session, menuItems, isPending = false, c
         <div className="flex items-center justify-between px-5 h-16 border-b border-slate-200 dark:border-[#232d3b] shrink-0">
           <Link href="/dashboard" onClick={() => setMobileOpen(false)}
             className="flex items-center gap-2.5 no-underline">
-            <div className="w-8.5 h-8.5 rounded-xl bg-gradient-to-br from-[#00c5a0] to-[#0ea5e9] flex items-center justify-center shadow-md shadow-[#00c5a0]/20">
+            <div className="w-8.5 h-8.5 rounded-xl bg-gradient-to-br from-[#00c5a0] to-[#008080] flex items-center justify-center shadow-md shadow-[#00c5a0]/20">
               <i className="fa-solid fa-layer-group text-slate-950 text-sm font-black" />
             </div>
             <span className="font-extrabold text-lg text-slate-900 dark:text-white tracking-tight">

@@ -1155,7 +1155,7 @@ export default function GuidePage() {
           </button>
           <Link href="/" className={styles.logoLink}>
             <span className={styles.logoIcon}>
-              <i className="fa-solid fa-gem" />
+              <i className="fa-solid fa-layer-group" />
             </span>
             <span className={styles.logoText}>
               NexAce <span className={styles.logoCRM}>CRM</span>
@@ -1766,7 +1766,7 @@ export default function GuidePage() {
       {/* Footer */}
       <footer className={styles.footer}>
         <div className={styles.footerLogo}>
-          <i className="fa-solid fa-gem" /> NexAce CRM
+          <i className="fa-solid fa-layer-group" /> NexAce CRM
         </div>
         <span className={styles.footerCopy}>
           © {new Date().getFullYear()} NexAce CRM · All rights reserved

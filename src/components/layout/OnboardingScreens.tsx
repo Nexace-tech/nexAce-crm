@@ -74,9 +74,11 @@ const ANIM_DURATION_MS = 250;
 interface OnboardingScreensProps {
   isAppLocked?: boolean;
   isFullScreen?: boolean;
+  /** Called when the user taps "Get Started" on the final slide (native app mode) */
+  onDone?: () => void;
 }
 
-export function OnboardingScreens({ isAppLocked = false, isFullScreen = false }: OnboardingScreensProps) {
+export function OnboardingScreens({ isAppLocked = false, isFullScreen = false, onDone }: OnboardingScreensProps) {
   const { user } = useAuthContext();
   const [isOpen, setIsOpen] = useState(isAppLocked || isFullScreen);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -140,14 +142,20 @@ export function OnboardingScreens({ isAppLocked = false, isFullScreen = false }:
   const handleFinish = useCallback(() => {
     NativeService.haptic("success");
     if (isAppLocked) {
-      setCurrentIndex(0);
+      // Native app: hand off to the parent (NativeAppGate) to show login
+      if (onDone) {
+        onDone();
+      } else {
+        // Fallback: replay the tour if no callback provided
+        setCurrentIndex(0);
+      }
       return;
     }
     setIsOpen(false);
     if (user?._id) {
       localStorage.setItem(`nexace_onboarding_completed_${user._id}`, "true");
     }
-  }, [user, isAppLocked]);
+  }, [user, isAppLocked, onDone]);
 
   /** Trigger a slide transition with animation guard and timer cleanup */
   const triggerTransition = useCallback(
@@ -316,20 +324,13 @@ export function OnboardingScreens({ isAppLocked = false, isFullScreen = false }:
                   ? "px-5 h-12 bg-[#00c5a0] hover:bg-[#00c5a0]/90 text-slate-950 font-bold text-xs sm:text-sm gap-2 shadow-[#00c5a0]/40"
                   : "w-14 h-12 bg-[#0f172a] hover:bg-[#1e293b] text-white"
               )}
-              aria-label={isLastScreen ? (isAppLocked ? "Replay Tour" : "Get Started") : "Next step"}
+              aria-label={isLastScreen ? "Get Started" : "Next step"}
             >
               {isLastScreen ? (
-                isAppLocked ? (
-                  <>
-                    <span>Replay</span>
-                    <i className="fa-solid fa-rotate-right text-xs" />
-                  </>
-                ) : (
-                  <>
-                    <span>Get Started</span>
-                    <i className="fa-solid fa-arrow-right text-xs" />
-                  </>
-                )
+                <>
+                  <span>Get Started</span>
+                  <i className="fa-solid fa-arrow-right text-xs" />
+                </>
               ) : (
                 <i className="fa-solid fa-arrow-right text-base text-white" />
               )}
