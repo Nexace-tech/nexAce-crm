@@ -108,12 +108,21 @@ export function OnboardingScreens({ isAppLocked = false, isFullScreen = false, o
     if (localStorage.getItem(key)) return;
 
     const isNativeApp = NativeService.isNative();
+
+    // On native apps, NativeAppGate manages the onboarding flow before the user
+    // reaches the dashboard. If we're here (authenticated, no isAppLocked), it
+    // means the user already completed onboarding. Mark it done and bail out to
+    // prevent the tour from re-appearing on top of the dashboard.
+    if (isNativeApp) {
+      localStorage.setItem(key, "true");
+      return;
+    }
+
     const isStandaloneApp =
       window.matchMedia("(display-mode: standalone)").matches ||
       (window.navigator as any).standalone === true;
 
     if (
-      isNativeApp ||
       isStandaloneApp ||
       window.innerWidth <= 768 ||
       /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
