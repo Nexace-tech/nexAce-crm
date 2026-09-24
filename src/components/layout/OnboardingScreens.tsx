@@ -227,8 +227,8 @@ export function OnboardingScreens({ isAppLocked = false, isFullScreen = false, o
           ? "fixed inset-0 z-[99999] min-h-[100dvh]"
           : "max-w-[420px] h-[720px] max-h-[92vh] rounded-[36px] shadow-2xl border border-slate-200/50"
       )}
-      style={{
-        background: "linear-gradient(180deg, #ffffff 0%, #f2fbf8 40%, #eefbf9 100%)",
+style={{
+        background: "linear-gradient(160deg, #f0fdf9 0%, #e6faf4 50%, #d8f5ed 100%)",
       }}
       role="dialog"
       aria-modal="true"

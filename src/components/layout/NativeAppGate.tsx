@@ -28,7 +28,7 @@ type NativeAppState = "splash" | "onboarding" | "ready";
 const ONBOARDING_DONE_KEY = "nexace_native_onboarding_done";
 const MIN_SPLASH_MS = 600;
 
-/** Branded full-screen launch splash — fades out in-place over content */
+/** Branded full-screen launch splash — instant hide when content is ready */
 function SplashOverlay({ visible }: { visible: boolean }) {
   return (
     <div
@@ -42,7 +42,10 @@ function SplashOverlay({ visible }: { visible: boolean }) {
         justifyContent: "center",
         background: "linear-gradient(160deg, #f0fdf9 0%, #e6faf4 50%, #d8f5ed 100%)",
         opacity: visible ? 1 : 0,
-        transition: "opacity 0.35s ease",
+        // Instant hide — no fade. Content is already mounted underneath,
+        // so a transition would create a blank gap during the fade.
+        transition: "opacity 0ms ease",
+        visibility: visible ? "visible" : "hidden",
         // Once invisible, let touch events pass through to the content below
         pointerEvents: visible ? "auto" : "none",
       }}
