@@ -3,107 +3,184 @@
 import React, { useEffect, useState } from "react";
 import { Capacitor } from "@capacitor/core";
 import { OnboardingScreens } from "@/components/layout/OnboardingScreens";
-import { NativeLoginScreen } from "@/components/layout/NativeLoginScreen";
 
 interface NativeAppGateProps {
   children: React.ReactNode;
 }
 
-type NativeAppState = "loading" | "onboarding" | "login" | "authenticated";
+/**
+ * "splash"    — Branded launch screen shown while we check localStorage +
+ *               session in parallel (min 600 ms so branding registers).
+ * "onboarding"— First-ever launch: 3-slide onboarding tour.
+ * "ready"     — Renders normal Next.js children.
+ *               • Authenticated users land on /dashboard (server redirect).
+ *               • Unauthenticated users are sent to /login by the app router.
+ */
+type NativeAppState = "splash" | "onboarding" | "ready";
 
 const ONBOARDING_DONE_KEY = "nexace_native_onboarding_done";
+const MIN_SPLASH_MS = 600;
 
-/**
- * Gatekeeper for Mobile Apps (Android / iOS via Capacitor).
- *
- * Full native app flow:
- *   1. First launch  → Onboarding (3-slide tour)
- *   2. "Get Started" → Login screen (embedded, full-screen)
- *   3. Successful login → AuthContext session is created on server;
- *      we detect the session via /api/auth/me and render children (App Router)
- *      which Next.js handles normally — /dashboard is rendered inside the webview.
- *
- * On subsequent launches (onboarding already done) the gate goes straight to login.
- * If the user already has a valid session it goes straight to authenticated (children).
- *
- * Web browsers bypass this gate entirely and get the full CRM web app.
- *
- * "loading" state: shows a solid splash screen while we check an existing session
- * to avoid the black-screen → onboarding → login flash.
- */
+/** Branded full-screen launch splash */
+function SplashScreen({ visible }: { visible: boolean }) {
+  return (
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 99999,
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        background: "linear-gradient(160deg, #f0fdf9 0%, #e6faf4 50%, #d8f5ed 100%)",
+        opacity: visible ? 1 : 0,
+        transition: "opacity 0.35s ease",
+        pointerEvents: visible ? "auto" : "none",
+      }}
+    >
+      {/* Logo mark */}
+      <div
+        style={{
+          width: 80,
+          height: 80,
+          borderRadius: 24,
+          background: "linear-gradient(135deg, #00c5a0 0%, #008080 100%)",
+          boxShadow: "0 12px 40px rgba(0, 197, 160, 0.4)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          marginBottom: 20,
+        }}
+      >
+        <i className="fa-solid fa-layer-group" style={{ color: "#fff", fontSize: 32 }} />
+      </div>
+
+      {/* Brand name */}
+      <div
+        style={{
+          fontSize: 28,
+          fontWeight: 800,
+          letterSpacing: "-0.5px",
+          color: "#0f172a",
+          fontFamily: "Inter, system-ui, sans-serif",
+          lineHeight: 1,
+          marginBottom: 8,
+        }}
+      >
+        NexAce{" "}
+        <span style={{ color: "#00c5a0" }}>CRM</span>
+      </div>
+
+      {/* Tagline */}
+      <div
+        style={{
+          fontSize: 13,
+          color: "#64748b",
+          fontFamily: "Inter, system-ui, sans-serif",
+          fontWeight: 500,
+          letterSpacing: "0.3px",
+          marginBottom: 56,
+        }}
+      >
+        The Unified Workspace
+      </div>
+
+      {/* Subtle pulse loader at bottom */}
+      <div
+        style={{
+          position: "absolute",
+          bottom: "calc(env(safe-area-inset-bottom, 0px) + 48px)",
+          display: "flex",
+          gap: 6,
+        }}
+      >
+        {[0, 1, 2].map((i) => (
+          <div
+            key={i}
+            style={{
+              width: 6,
+              height: 6,
+              borderRadius: "50%",
+              background: "#00c5a0",
+              opacity: 0.7,
+              animation: `nexace-splash-dot 1.2s ease-in-out ${i * 0.2}s infinite`,
+            }}
+          />
+        ))}
+      </div>
+
+      {/* Keyframes injected inline — no extra CSS file needed */}
+      <style>{`
+        @keyframes nexace-splash-dot {
+          0%, 80%, 100% { transform: scale(0.6); opacity: 0.35; }
+          40%            { transform: scale(1);   opacity: 1;    }
+        }
+      `}</style>
+    </div>
+  );
+}
+
 export function NativeAppGate({ children }: NativeAppGateProps) {
-  // Synchronous native check — no flash on first render
   const [isNative] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
     return Capacitor.isNativePlatform();
   });
 
-  // Start in "loading" so we can show a splash while checking the session.
-  // This prevents the black → onboarding → login visual flicker.
-  const [appState, setAppState] = useState<NativeAppState>("loading");
+  const [appState, setAppState] = useState<NativeAppState>("splash");
+  // Controls the CSS fade-out of the splash before unmounting
+  const [splashVisible, setSplashVisible] = useState(true);
 
-  // On mount: resolve the correct initial state.
-  // Order of priority: existing session → authenticated; onboarding done → login; else → onboarding.
   useEffect(() => {
     if (!isNative) {
-      setAppState("authenticated"); // web: skip gate entirely
+      // Web browser — skip gate entirely, no splash needed
+      setSplashVisible(false);
+      setAppState("ready");
       return;
     }
 
     const onboardingDone = localStorage.getItem(ONBOARDING_DONE_KEY) === "true";
 
     if (!onboardingDone) {
-      // First-ever launch — show onboarding without a network round-trip.
-      setAppState("onboarding");
-      return;
+      // First-ever launch — no session check needed, just wait the min time
+      const timer = setTimeout(() => {
+        setSplashVisible(false);
+        setTimeout(() => setAppState("onboarding"), 350); // after fade-out
+      }, MIN_SPLASH_MS);
+      return () => clearTimeout(timer);
     }
 
-    // Onboarding already done — check for an existing server session before
-    // showing the login screen. This handles returning authenticated users.
-    fetch("/api/auth/me", { cache: "no-store" })
+    // Returning user — check session while splash shows, honour minimum display time
+    const sessionCheck = fetch("/api/auth/me", { cache: "no-store" })
       .then((res) => (res.ok ? res.json() : { user: null }))
-      .then((data) => {
-        setAppState(data?.user ? "authenticated" : "login");
-      })
-      .catch(() => setAppState("login"));
+      .catch(() => ({ user: null }));
+
+    const minDelay = new Promise<void>((resolve) =>
+      setTimeout(resolve, MIN_SPLASH_MS)
+    );
+
+    Promise.all([sessionCheck, minDelay]).then(() => {
+      // Both done — fade out splash then render children
+      setSplashVisible(false);
+      setTimeout(() => setAppState("ready"), 350); // after fade-out
+    });
   }, [isNative]);
 
-  // On web browser: render the full CRM web app normally.
+  // ── Web: bypass completely ──────────────────────────────────────────────
   if (!isNative) {
     return <>{children}</>;
   }
 
-  // ── Loading splash — matches onboarding bg to avoid any black flash ──────
-  if (appState === "loading") {
-    return (
-      <div
-        className="fixed inset-0 z-[99999] w-full h-full flex items-center justify-center"
-        style={{ background: "#eefbf9" }}
-      >
-        {/* Minimal centered logo mark while session resolves */}
-        <div
-          style={{
-            width: 64,
-            height: 64,
-            borderRadius: 20,
-            background: "linear-gradient(135deg, #00c5a0 0%, #008080 100%)",
-            boxShadow: "0 8px 24px rgba(0,197,160,0.35)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          <i className="fa-solid fa-layer-group" style={{ color: "#fff", fontSize: 24 }} />
-        </div>
-      </div>
-    );
+  // ── Splash ───────────────────────────────────────────────────────────────
+  if (appState === "splash") {
+    return <SplashScreen visible={splashVisible} />;
   }
 
-  // ── Onboarding ──────────────────────────────────────────────────────────
+  // ── Onboarding ───────────────────────────────────────────────────────────
   if (appState === "onboarding") {
     const handleOnboardingDone = () => {
       localStorage.setItem(ONBOARDING_DONE_KEY, "true");
-      setAppState("login");
+      setAppState("ready");
     };
 
     return (
@@ -120,23 +197,6 @@ export function NativeAppGate({ children }: NativeAppGateProps) {
     );
   }
 
-  // ── Login ────────────────────────────────────────────────────────────────
-  if (appState === "login") {
-    const handleLoginSuccess = () => setAppState("authenticated");
-
-    return (
-      <div
-        className="fixed inset-0 z-[99999] w-full h-full overflow-hidden"
-        style={{ background: "linear-gradient(160deg, #ffffff 0%, #f2fbf8 50%, #eafaf6 100%)" }}
-      >
-        <NativeLoginScreen
-          onReplayOnboarding={() => setAppState("onboarding")}
-          onLoginSuccess={handleLoginSuccess}
-        />
-      </div>
-    );
-  }
-
-  // ── Authenticated — render normal App Router children ───────────────────
+  // ── Ready — standard Next.js app router takes over ───────────────────────
   return <>{children}</>;
 }
