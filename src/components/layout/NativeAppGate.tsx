@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { Capacitor } from "@capacitor/core";
+import { SplashScreen } from "@capacitor/splash-screen";
 import { OnboardingScreens } from "@/components/layout/OnboardingScreens";
 
 interface NativeAppGateProps {
@@ -146,14 +147,18 @@ export function NativeAppGate({ children }: NativeAppGateProps) {
       return;
     }
 
+    // Hide the native OS splash screen smoothly now that web SplashOverlay is mounted
+    SplashScreen.hide({ fadeOutDuration: 250 }).catch(() => {});
+
     const onboardingDone = localStorage.getItem(ONBOARDING_DONE_KEY) === "true";
 
     if (!onboardingDone) {
-      // First-ever launch — after min splash time, mount onboarding IMMEDIATELY
-      // then start fade-out. Content is already underneath while overlay fades.
+      // First-ever launch — after min splash time, mount onboarding IMMEDIATELY.
+      // The onboarding background (#eefbf9) matches the splash, so an instant
+      // swap is visually seamless — no fade needed, no blank gap.
       const timer = setTimeout(() => {
         setAppState("onboarding");          // mount onboarding under the overlay
-        setSplashVisible(false);            // begin 350ms CSS fade-out over it
+        setSplashVisible(false);            // instant swap — same bg color
       }, MIN_SPLASH_MS);
       return () => clearTimeout(timer);
     }

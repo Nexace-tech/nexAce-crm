@@ -8,19 +8,54 @@
     <style>
       body {
         margin: 0;
-        background: #11161d;
+        background: linear-gradient(160deg, #f0fdf9 0%, #e6faf4 50%, #d8f5ed 100%);
         display: flex;
+        flex-direction: column;
         align-items: center;
         justify-content: center;
         min-height: 100vh;
-        font-family: system-ui, sans-serif;
+        font-family: Inter, system-ui, -apple-system, sans-serif;
+        color: #0f172a;
+      }
+      .logo-box {
+        width: 80px;
+        height: 80px;
+        border-radius: 24px;
+        background: linear-gradient(135deg, #00c5a0 0%, #008080 100%);
+        box-shadow: 0 12px 40px rgba(0, 197, 160, 0.4);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 20px;
+      }
+      .brand-title {
+        font-size: 28px;
+        font-weight: 800;
+        letter-spacing: -0.5px;
+        margin-bottom: 8px;
+      }
+      .brand-title span {
         color: #00c5a0;
+      }
+      .brand-tagline {
+        font-size: 13px;
+        color: #64748b;
+        font-weight: 500;
+        letter-spacing: 0.3px;
       }
     </style>
   </head>
   <body>
     <!-- Capacitor webDir placeholder. The native app loads via server.url at runtime. -->
-    <p>Loading NexAce CRM&hellip;</p>
+    <div class="logo-box">
+      <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+        <polyline points="2 17 12 22 22 17"></polyline>
+        <polyline points="2 12 12 17 22 12"></polyline>
+      </svg>
+    </div>
+    <div class="brand-title">NexAce <span>CRM</span></div>
+    <div class="brand-tagline">The Unified Workspace</div>
     <script>
       window.location.replace("https://nex-ace-crm.vercel.app");
     </script>
