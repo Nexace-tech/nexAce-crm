@@ -15,14 +15,20 @@ interface NativeAppGateProps {
  * "ready"     — Renders normal Next.js children.
  *               • Authenticated users land on /dashboard (server redirect).
  *               • Unauthenticated users are sent to /login by the app router.
+ *
+ * BLANK SCREEN FIX:
+ *   The splash overlay sits on top of children at all times.
+ *   When the min timer + session check complete we fade the splash OUT
+ *   while the real content underneath is already mounted and rendering.
+ *   This eliminates the gap between splash fade-out and content mount.
  */
 type NativeAppState = "splash" | "onboarding" | "ready";
 
 const ONBOARDING_DONE_KEY = "nexace_native_onboarding_done";
 const MIN_SPLASH_MS = 600;
 
-/** Branded full-screen launch splash */
-function SplashScreen({ visible }: { visible: boolean }) {
+/** Branded full-screen launch splash — fades out in-place over content */
+function SplashOverlay({ visible }: { visible: boolean }) {
   return (
     <div
       style={{
@@ -36,6 +42,7 @@ function SplashScreen({ visible }: { visible: boolean }) {
         background: "linear-gradient(160deg, #f0fdf9 0%, #e6faf4 50%, #d8f5ed 100%)",
         opacity: visible ? 1 : 0,
         transition: "opacity 0.35s ease",
+        // Once invisible, let touch events pass through to the content below
         pointerEvents: visible ? "auto" : "none",
       }}
     >
@@ -68,8 +75,7 @@ function SplashScreen({ visible }: { visible: boolean }) {
           marginBottom: 8,
         }}
       >
-        NexAce{" "}
-        <span style={{ color: "#00c5a0" }}>CRM</span>
+        NexAce <span style={{ color: "#00c5a0" }}>CRM</span>
       </div>
 
       {/* Tagline */}
@@ -86,7 +92,7 @@ function SplashScreen({ visible }: { visible: boolean }) {
         The Unified Workspace
       </div>
 
-      {/* Subtle pulse loader at bottom */}
+      {/* 3-dot pulse loader */}
       <div
         style={{
           position: "absolute",
@@ -110,7 +116,7 @@ function SplashScreen({ visible }: { visible: boolean }) {
         ))}
       </div>
 
-      {/* Keyframes injected inline — no extra CSS file needed */}
+      {/* Inline keyframes — no extra CSS file needed */}
       <style>{`
         @keyframes nexace-splash-dot {
           0%, 80%, 100% { transform: scale(0.6); opacity: 0.35; }
@@ -122,18 +128,19 @@ function SplashScreen({ visible }: { visible: boolean }) {
 }
 
 export function NativeAppGate({ children }: NativeAppGateProps) {
+  // Resolved synchronously — no re-render, no flash
   const [isNative] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
     return Capacitor.isNativePlatform();
   });
 
   const [appState, setAppState] = useState<NativeAppState>("splash");
-  // Controls the CSS fade-out of the splash before unmounting
+  // Controls the CSS opacity of the overlay — false = fading out
   const [splashVisible, setSplashVisible] = useState(true);
 
   useEffect(() => {
     if (!isNative) {
-      // Web browser — skip gate entirely, no splash needed
+      // Web browser — no splash at all, go straight to children
       setSplashVisible(false);
       setAppState("ready");
       return;
@@ -142,15 +149,16 @@ export function NativeAppGate({ children }: NativeAppGateProps) {
     const onboardingDone = localStorage.getItem(ONBOARDING_DONE_KEY) === "true";
 
     if (!onboardingDone) {
-      // First-ever launch — no session check needed, just wait the min time
+      // First-ever launch — after min splash time, mount onboarding IMMEDIATELY
+      // then start fade-out. Content is already underneath while overlay fades.
       const timer = setTimeout(() => {
-        setSplashVisible(false);
-        setTimeout(() => setAppState("onboarding"), 350); // after fade-out
+        setAppState("onboarding");          // mount onboarding under the overlay
+        setSplashVisible(false);            // begin 350ms CSS fade-out over it
       }, MIN_SPLASH_MS);
       return () => clearTimeout(timer);
     }
 
-    // Returning user — check session while splash shows, honour minimum display time
+    // Returning user — session check runs in parallel with min timer
     const sessionCheck = fetch("/api/auth/me", { cache: "no-store" })
       .then((res) => (res.ok ? res.json() : { user: null }))
       .catch(() => ({ user: null }));
@@ -159,44 +167,55 @@ export function NativeAppGate({ children }: NativeAppGateProps) {
       setTimeout(resolve, MIN_SPLASH_MS)
     );
 
+    // When both complete, fade splash — content is already rendered underneath
     Promise.all([sessionCheck, minDelay]).then(() => {
-      // Both done — fade out splash then render children
-      setSplashVisible(false);
-      setTimeout(() => setAppState("ready"), 350); // after fade-out
+      setSplashVisible(false);             // begin 350ms CSS fade-out
+      // No need to delay setAppState — children are already mounted under the overlay
+      setAppState("ready");
     });
   }, [isNative]);
 
-  // ── Web: bypass completely ──────────────────────────────────────────────
+  // ── Web browser: skip gate entirely ────────────────────────────────────────
   if (!isNative) {
     return <>{children}</>;
   }
 
-  // ── Splash ───────────────────────────────────────────────────────────────
-  if (appState === "splash") {
-    return <SplashScreen visible={splashVisible} />;
-  }
+  // ── Native: always render the correct content layer first,
+  //    then place the SplashOverlay on top — it fades out revealing the content.
+  // ──────────────────────────────────────────────────────────────────────────
 
-  // ── Onboarding ───────────────────────────────────────────────────────────
   if (appState === "onboarding") {
-    const handleOnboardingDone = () => {
-      localStorage.setItem(ONBOARDING_DONE_KEY, "true");
-      setAppState("ready");
-    };
-
     return (
-      <div
-        className="fixed inset-0 z-[99999] w-full h-full overflow-hidden"
-        style={{ background: "#eefbf9" }}
-      >
-        <OnboardingScreens
-          isAppLocked={true}
-          isFullScreen={true}
-          onDone={handleOnboardingDone}
-        />
-      </div>
+      <>
+        <div
+          className="fixed inset-0 z-[9999] w-full h-full overflow-hidden"
+          style={{ background: "#eefbf9" }}
+        >
+          <OnboardingScreens
+            isAppLocked={true}
+            isFullScreen={true}
+            onDone={() => {
+              localStorage.setItem(ONBOARDING_DONE_KEY, "true");
+              setAppState("ready");
+            }}
+          />
+        </div>
+        {/* Splash sits above onboarding and fades out — no blank gap */}
+        <SplashOverlay visible={splashVisible} />
+      </>
     );
   }
 
-  // ── Ready — standard Next.js app router takes over ───────────────────────
-  return <>{children}</>;
+  if (appState === "ready") {
+    return (
+      <>
+        {children}
+        {/* Splash sits above children and fades out — no blank gap */}
+        <SplashOverlay visible={splashVisible} />
+      </>
+    );
+  }
+
+  // appState === "splash" — only the overlay, content not yet determined
+  return <SplashOverlay visible={splashVisible} />;
 }
