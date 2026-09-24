@@ -56,23 +56,15 @@ export async function createSession(
 ) {
   const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
   const session = await encrypt({ userId, tenantId, userName, tenantName, role, expiresAt });
-  const maxAgeSeconds = 7 * 24 * 60 * 60; // 7 days in seconds
+  const cookieStore = await cookies();
 
-  // sameSite "none" is required for the Capacitor native WebView:
-  // requests originate from capacitor://localhost → nexace.in (cross-origin),
-  // and "lax" / "strict" cause browsers to strip the cookie on cross-site requests.
-  // maxAge is required so the WebView treats the cookie as persistent on disk
-  // rather than a session cookie that gets purged when the app process is closed.
-  cookieStore.set({
-    name: "session",
-    value: session,
+  cookieStore.set("session", session, {
     httpOnly: true,
-    secure: true, // required when sameSite is "none"
+    secure: process.env.NODE_ENV === "production",
     expires: expiresAt,
-    maxAge: maxAgeSeconds,
-    sameSite: "none",
+    sameSite: "lax",
     path: "/",
-  } as any);
+  });
 }
 
 /**
@@ -115,12 +107,8 @@ export async function getSession(skipDbValidation = false): Promise<SessionPaylo
     // Return session with DB-authoritative role (not JWT-self-asserted)
     return { ...payload, role: user.role };
   } catch {
-    // DB is unreachable (cold start, transient error) — fall back to the
-    // cryptographically verified JWT payload rather than wiping the session.
-    // The dashboard layout performs its own DB check and will redirect to /login
-    // if the DB comes back and the user is genuinely gone/suspended.
-    console.warn("[getSession] DB validation failed — using JWT payload as fallback");
-    return payload;
+    // If DB is unreachable, don't trust the JWT
+    return null;
   }
 }
 
@@ -134,19 +122,15 @@ export async function updateSession() {
   }
 
   const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-  const maxAgeSeconds = 7 * 24 * 60 * 60;
   // Re-mint the JWT so both the cookie AND the token expiry are refreshed
   const newToken = await encrypt({ ...payload, expiresAt: expires });
-  cookieStore.set({
-    name: "session",
-    value: newToken,
+  cookieStore.set("session", newToken, {
     httpOnly: true,
-    secure: true,
+    secure: process.env.NODE_ENV === "production",
     expires: expires,
-    maxAge: maxAgeSeconds,
-    sameSite: "none",
+    sameSite: "lax",
     path: "/",
-  } as any);
+  });
 }
 
 export async function deleteSession() {

@@ -26,7 +26,6 @@ export default async function DashboardLayout({ children }: DashboardLayoutProps
 
   let dbUser = null;
   let permDoc = null;
-  let dbError = false;
 
   try {
     const roleKey = isSubAdminRole(session.role) ? "OPS" : session.role;
@@ -40,26 +39,13 @@ export default async function DashboardLayout({ children }: DashboardLayoutProps
         $or: roleOrClauses,
       }),
     ]);
-  } catch (err) {
-    console.error("[DashboardLayout] DB query error:", err);
-    dbError = true;
+  } catch {
+    dbUser = null;
   }
 
-  // Only delete session and redirect if DB connected cleanly and confirmed user does NOT exist
-  if (!dbUser && !dbError) {
+  if (!dbUser) {
     await deleteSession();
     redirect("/login");
-  }
-
-  // If DB had a transient connection error, don't kill the session! Fall back to session JWT claims
-  if (!dbUser && dbError) {
-    dbUser = {
-      _id: session.userId,
-      role: session.role,
-      name: session.userName,
-      tenantId: { _id: session.tenantId, name: session.tenantName },
-      status: "Active",
-    } as any;
   }
 
   const role = dbUser.role || session.role;

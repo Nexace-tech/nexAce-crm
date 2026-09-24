@@ -16,7 +16,6 @@ export async function GET() {
     await connectToDatabase();
     
     let user = null;
-    let dbError = false;
     try {
       user = await User.findByIdAndUpdate(
         session.userId,
@@ -28,34 +27,17 @@ export async function GET() {
         .lean();
     } catch (err) {
       console.error("Error finding user in /api/auth/me:", err);
-      dbError = true;
+      user = null;
     }
 
-    // Only delete session if the DB query succeeded cleanly and confirmed the user does NOT exist
-    if (!user && !dbError) {
+    // Security: do NOT fabricate a user from unverified JWT claims. If the user
+    // cannot be found in the DB (deleted, cross-tenant, or transient error),
+    // force re-authentication rather than trusting the token's self-asserted
+    // role/status.
+    if (!user) {
       const { deleteSession } = await import("@/lib/session");
       await deleteSession();
       return NextResponse.json({ user: null }, { status: 401 });
-    }
-
-    // Transient DB error / cold start: do NOT delete the session or log out the user.
-    // Return verified claims from the JWT session payload.
-    if (!user && dbError) {
-      return NextResponse.json(
-        {
-          user: {
-            _id: session.userId,
-            name: session.userName,
-            role: session.role,
-            tenantId: { _id: session.tenantId, name: session.tenantName },
-          },
-        },
-        {
-          headers: {
-            "Cache-Control": "no-store, max-age=0, must-revalidate",
-          },
-        }
-      );
     }
 
     return NextResponse.json(

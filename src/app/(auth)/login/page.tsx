@@ -85,7 +85,7 @@ function LoginForm() {
                 id="email"
                 name="email"
                 type="email"
-                autoComplete="username"
+                autoComplete="off"
                 key={state?.enteredEmail ?? urlEmail}
                 defaultValue={state?.enteredEmail ?? urlEmail}
                 placeholder="e.g. admin@nexace.com"
@@ -110,7 +110,7 @@ function LoginForm() {
                   id="password"
                   name="password"
                   type={showPassword ? "text" : "password"}
-                  autoComplete="current-password"
+                  autoComplete="off"
                   key={state?.enteredPassword ?? "password-input"}
                   defaultValue={state?.enteredPassword ?? ""}
                   placeholder="••••••••"
