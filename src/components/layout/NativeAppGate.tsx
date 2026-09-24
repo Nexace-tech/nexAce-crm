@@ -197,7 +197,7 @@ export function NativeAppGate({ children }: NativeAppGateProps) {
       <>
         <div
           className="fixed inset-0 z-[9999] w-full h-full overflow-hidden"
-          style={{ background: "#eefbf9" }}
+          style={{ background: "linear-gradient(160deg, #f0fdf9 0%, #e6faf4 50%, #d8f5ed 100%)" }}
         >
           <OnboardingScreens
             isAppLocked={true}
