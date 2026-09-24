@@ -1,21 +1,92 @@
 "use client";
 
-import React, { useActionState, useState, Suspense } from "react";
+import React, { useActionState, useState, useEffect, Suspense } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import { loginAction } from "@/app/actions/auth";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 
+/**
+ * Detect native Capacitor environment without importing the full SDK
+ * at module-load time (which would fail during SSR).
+ */
+function isNativePlatform(): boolean {
+  if (typeof window === "undefined") return false;
+  return (
+    (window as any)?.Capacitor?.isNativePlatform?.() === true ||
+    window.location.protocol === "capacitor:"
+  );
+}
+
 function LoginForm() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const urlEmail = searchParams.get("email") || "";
   const isRedirected = searchParams.get("redirected") === "true";
   const isPendingApproval = searchParams.get("pending") === "true";
 
-  const [state, formAction, isPending] = useActionState(loginAction, undefined);
+  // Web: server action state
+  const [state, formAction, isServerPending] = useActionState(loginAction, undefined);
+
+  // Native: local state
+  const [isNative, setIsNative] = useState(false);
+  const [nativeError, setNativeError] = useState<string | null>(null);
+  const [isNativePending, setIsNativePending] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+
+  // Detect native after hydration (window is available)
+  useEffect(() => {
+    setIsNative(isNativePlatform());
+  }, []);
+
+  const isPending = isNative ? isNativePending : isServerPending;
+
+  /**
+   * Native login: POST JSON to /api/auth/login (cookie lands in a direct
+   * response — NOT inside a redirect chain). This ensures Android WebView's
+   * CookieManager has time to flush the cookie to disk before the app is
+   * backgrounded, fixing the "re-login on first reopen" bug.
+   */
+  async function handleNativeSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setNativeError(null);
+    setIsNativePending(true);
+
+    const form = e.currentTarget;
+    const email = (form.elements.namedItem("email") as HTMLInputElement).value.trim();
+    const password = (form.elements.namedItem("password") as HTMLInputElement).value;
+
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        // credentials: "include" ensures the Set-Cookie from the response
+        // is accepted and stored in the WebView's cookie jar.
+        credentials: "include",
+        body: JSON.stringify({ email, password }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        setNativeError(data.error || "Invalid email or password.");
+        setIsNativePending(false);
+        return;
+      }
+
+      // Small delay to allow Android WebView CookieManager to flush cookie
+      // to disk before we navigate — prevents race condition on first login.
+      await new Promise((r) => setTimeout(r, 150));
+
+      // Client-side navigation: no redirect chain, cookie is already set
+      router.replace("/dashboard");
+    } catch {
+      setNativeError("Network error. Please check your connection and try again.");
+      setIsNativePending(false);
+    }
+  }
 
   return (
     <div className="min-h-screen w-full flex items-center justify-center p-4 bg-background relative overflow-hidden">
@@ -39,7 +110,15 @@ function LoginForm() {
         </CardHeader>
 
         <CardContent>
-          <form action={formAction} className="space-y-4">
+          {/* 
+            Native: use onSubmit → fetch /api/auth/login (no redirect chain).
+            Web:    use form action → Server Action (existing behaviour).
+          */}
+          <form
+            action={isNative ? undefined : formAction}
+            onSubmit={isNative ? handleNativeSubmit : undefined}
+            className="space-y-4"
+          >
             {isPendingApproval && (
               <div className="p-3.5 text-xs bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/30 rounded-lg font-medium space-y-1">
                 <div className="flex items-center gap-1.5 font-bold text-sm">
@@ -58,7 +137,15 @@ function LoginForm() {
               </div>
             )}
 
-            {state?.step === "reset" && (
+            {/* Native error banner */}
+            {isNative && nativeError && (
+              <div className="p-3 text-xs bg-destructive/10 text-destructive border border-destructive/20 rounded-md font-medium">
+                {nativeError}
+              </div>
+            )}
+
+            {/* Web Server Action banners */}
+            {!isNative && state?.step === "reset" && (
               <div className="p-3.5 text-xs bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/30 rounded-lg font-medium space-y-1">
                 <div className="flex items-center gap-1.5 font-bold text-sm">
                   <i className="fa-solid fa-circle-exclamation text-amber-500" /> Password Reset Required
@@ -71,7 +158,7 @@ function LoginForm() {
               </div>
             )}
 
-            {state?.message && state?.step !== "reset" && (
+            {!isNative && state?.message && state?.step !== "reset" && (
               <div className="p-3 text-xs bg-destructive/10 text-destructive border border-destructive/20 rounded-md font-medium">
                 {state.message}
               </div>
