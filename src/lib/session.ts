@@ -58,11 +58,14 @@ export async function createSession(
   const session = await encrypt({ userId, tenantId, userName, tenantName, role, expiresAt });
   const cookieStore = await cookies();
 
+  // sameSite "none" is required for the Capacitor native WebView:
+  // requests originate from capacitor://localhost → nexace.in (cross-origin),
+  // and "lax" / "strict" cause browsers to strip the cookie on cross-site requests.
   cookieStore.set("session", session, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure: true, // required when sameSite is "none"
     expires: expiresAt,
-    sameSite: "lax",
+    sameSite: "none",
     path: "/",
   });
 }
@@ -107,8 +110,12 @@ export async function getSession(skipDbValidation = false): Promise<SessionPaylo
     // Return session with DB-authoritative role (not JWT-self-asserted)
     return { ...payload, role: user.role };
   } catch {
-    // If DB is unreachable, don't trust the JWT
-    return null;
+    // DB is unreachable (cold start, transient error) — fall back to the
+    // cryptographically verified JWT payload rather than wiping the session.
+    // The dashboard layout performs its own DB check and will redirect to /login
+    // if the DB comes back and the user is genuinely gone/suspended.
+    console.warn("[getSession] DB validation failed — using JWT payload as fallback");
+    return payload;
   }
 }
 
@@ -126,9 +133,9 @@ export async function updateSession() {
   const newToken = await encrypt({ ...payload, expiresAt: expires });
   cookieStore.set("session", newToken, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure: true,
     expires: expires,
-    sameSite: "lax",
+    sameSite: "none",
     path: "/",
   });
 }
