@@ -4,5 +4,5 @@
     <string name="title_activity_main">NexAce CRM</string>
     <string name="package_name">com.nexace.crm</string>
     <string name="custom_url_scheme">com.nexace.crm</string>
-    <string name="asset_statements">[{\\\"include\\\": \\\"https://nex-ace-crm.vercel.app/.well-known/assetlinks.json\\\"}]</string>
+    <string name="asset_statements">[{\\\"include\\\": \\\"https://nexace.in/.well-known/assetlinks.json\\\"}]</string>
 </resources>
