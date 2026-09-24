@@ -1,0 +1,15 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls",
+      "delegate_permission/common.get_login_creds"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.nexace.crm",
+      "sha256_cert_fingerprints": [
+        "4D:8E:C9:0D:5D:78:18:F8:A0:7F:88:93:0D:AB:0E:D9:3C:BA:10:CF:EF:B2:28:C4:CA:C8:41:7A:21:63:C3:92"
+      ]
+    }
+  }
+]
