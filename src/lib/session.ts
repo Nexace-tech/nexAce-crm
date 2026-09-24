@@ -56,18 +56,23 @@ export async function createSession(
 ) {
   const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
   const session = await encrypt({ userId, tenantId, userName, tenantName, role, expiresAt });
-  const cookieStore = await cookies();
+  const maxAgeSeconds = 7 * 24 * 60 * 60; // 7 days in seconds
 
   // sameSite "none" is required for the Capacitor native WebView:
   // requests originate from capacitor://localhost → nexace.in (cross-origin),
   // and "lax" / "strict" cause browsers to strip the cookie on cross-site requests.
-  cookieStore.set("session", session, {
+  // maxAge is required so the WebView treats the cookie as persistent on disk
+  // rather than a session cookie that gets purged when the app process is closed.
+  cookieStore.set({
+    name: "session",
+    value: session,
     httpOnly: true,
     secure: true, // required when sameSite is "none"
     expires: expiresAt,
+    maxAge: maxAgeSeconds,
     sameSite: "none",
     path: "/",
-  });
+  } as any);
 }
 
 /**
@@ -129,15 +134,19 @@ export async function updateSession() {
   }
 
   const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+  const maxAgeSeconds = 7 * 24 * 60 * 60;
   // Re-mint the JWT so both the cookie AND the token expiry are refreshed
   const newToken = await encrypt({ ...payload, expiresAt: expires });
-  cookieStore.set("session", newToken, {
+  cookieStore.set({
+    name: "session",
+    value: newToken,
     httpOnly: true,
     secure: true,
     expires: expires,
+    maxAge: maxAgeSeconds,
     sameSite: "none",
     path: "/",
-  });
+  } as any);
 }
 
 export async function deleteSession() {
