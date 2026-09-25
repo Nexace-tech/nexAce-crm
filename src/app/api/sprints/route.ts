@@ -11,7 +11,8 @@ import mongoose from "mongoose";
  */
 export async function GET() {
   try {
-    const session = await getSession();
+    // ✅ Performance: skip redundant DB re-validation — this route connects to DB itself
+    const session = await getSession(true);
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -33,41 +34,49 @@ export async function GET() {
       tenantId: tenantObjectId,
     }).sort({ startDate: -1 }).lean();
 
-    // Populate burndown stats and linked tasks for each sprint
-    const sprintsWithStats = await Promise.all(
-      rawSprints.map(async (sprintDoc) => {
-        const taskQuery: Record<string, unknown> = {
-          tenantId: tenantObjectId,
-          sprintId: sprintDoc._id,
-        };
+    // ✅ Performance: single batched Task query instead of N per-sprint queries (N+1 fix)
+    const allSprintIds = rawSprints.map((s) => s._id);
+    const taskBaseQuery: Record<string, unknown> = {
+      tenantId: tenantObjectId,
+      sprintId: { $in: allSprintIds },
+    };
+    if (!isElevatedSprintUser) {
+      taskBaseQuery.assignee = userObjectId;
+    }
 
-        // Employees without sprint management permissions only see their assigned tasks
-        if (!isElevatedSprintUser) {
-          taskQuery.assignee = userObjectId;
-        }
+    const allLinkedTasks = await Task.find(taskBaseQuery)
+      .populate("assignee", "name photoUrl role department")
+      .lean();
 
-        const linkedTasks = await Task.find(taskQuery)
-          .populate("assignee", "name photoUrl role department")
-          .lean();
+    // Group tasks by sprintId string for O(1) lookup
+    const tasksBySprintId = new Map<string, typeof allLinkedTasks>();
+    for (const task of allLinkedTasks) {
+      const key = String(task.sprintId);
+      if (!tasksBySprintId.has(key)) tasksBySprintId.set(key, []);
+      tasksBySprintId.get(key)!.push(task);
+    }
 
-        const totalTasks = linkedTasks.length;
-        const completedTasks = linkedTasks.filter((t) => t.status === "Done").length;
-        const inProgressTasks = linkedTasks.filter((t) => t.status === "In Progress" || t.status === "Review").length;
-        const todoTasks = linkedTasks.filter((t) => t.status === "To Do").length;
+    // Populate burndown stats and linked tasks for each sprint — all in-memory now
+    const sprintsWithStats = rawSprints.map((sprintDoc) => {
+      const linkedTasks = tasksBySprintId.get(String(sprintDoc._id)) ?? [];
 
-        const burndownProgress = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+      const totalTasks = linkedTasks.length;
+      const completedTasks = linkedTasks.filter((t) => t.status === "Done").length;
+      const inProgressTasks = linkedTasks.filter((t) => t.status === "In Progress" || t.status === "Review").length;
+      const todoTasks = linkedTasks.filter((t) => t.status === "To Do").length;
 
-        return {
-          ...sprintDoc,
-          totalTasks,
-          completedTasks,
-          inProgressTasks,
-          todoTasks,
-          burndownProgress,
-          linkedTasks,
-        };
-      })
-    );
+      const burndownProgress = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+
+      return {
+        ...sprintDoc,
+        totalTasks,
+        completedTasks,
+        inProgressTasks,
+        todoTasks,
+        burndownProgress,
+        linkedTasks,
+      };
+    });
 
     // If user is not elevated, strictly show sprints that have tasks assigned to them
     let visibleSprints = sprintsWithStats;

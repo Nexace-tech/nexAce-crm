@@ -14,7 +14,8 @@ import mongoose from "mongoose";
  */
 export async function GET(request: Request) {
   try {
-    const session = await getSession();
+    // ✅ Performance: skip redundant DB re-validation — this route connects to DB itself
+    const session = await getSession(true);
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

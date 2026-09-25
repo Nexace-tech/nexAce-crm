@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import Link from "next/link";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -92,14 +92,31 @@ export function EmployeeDashboard({ user }: { user: any }) {
   useEffect(() => {
     async function fetchEmployeeData() {
       try {
-        await fetchAttendanceStatus();
-        const [taskRes, tsRes, sprintRes, leaveRes, annRes] = await Promise.all([
+        // ✅ Performance: run all fetches in parallel — no waterfall
+        const [attRes, taskRes, tsRes, sprintRes, leaveRes, annRes] = await Promise.all([
+          fetch("/api/attendance"),
           fetch("/api/tasks"),
           fetch("/api/timesheets"),
           fetch("/api/sprints"),
           fetch("/api/hr/leaves"),
           fetch("/api/chat/announcements"),
         ]);
+
+        // Process attendance
+        if (attRes.ok) {
+          const data = await attRes.json();
+          if (data.attendance && data.attendance.clockIn && !data.attendance.clockOut) {
+            setClockedIn(true);
+            setClockInIso(data.attendance.clockIn);
+            const displayClockIn = data.attendance.originalClockIn || data.attendance.clockIn;
+            const clockInDate = new Date(displayClockIn);
+            setClockTime(clockInDate.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: true }));
+          } else {
+            setClockedIn(false);
+            setClockInIso(null);
+            setClockTime(null);
+          }
+        }
 
         if (taskRes.ok) {
           const tData = await taskRes.json();
@@ -440,7 +457,11 @@ export function EmployeeDashboard({ user }: { user: any }) {
     }
   };
 
-  const totalLoggedHours = timesheets.reduce((acc, t) => acc + (t.hours || 0), 0);
+  // ✅ Performance: memoized — only recalculates when timesheets changes
+  const totalLoggedHours = useMemo(
+    () => timesheets.reduce((acc, t) => acc + (t.hours || 0), 0),
+    [timesheets]
+  );
 
   return (
     <div className="space-y-8 animate-in fade-in">

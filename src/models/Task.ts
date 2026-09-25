@@ -88,6 +88,8 @@ TaskSchema.index({ tenantId: 1, projectId: 1, status: 1 });
 TaskSchema.index({ tenantId: 1, sprintId: 1 });
 TaskSchema.index({ tenantId: 1, assignee: 1 });
 TaskSchema.index({ tenantId: 1, isDeleted: 1 });
+// ✅ Compound index: covers batched sprint task query (tenantId + sprintId[] + optional assignee)
+TaskSchema.index({ tenantId: 1, sprintId: 1, assignee: 1 });
 
 // TTL index: auto-purge soft-deleted tasks after 30 days (2,592,000 seconds)
 TaskSchema.index({ deletedAt: 1 }, { expireAfterSeconds: 2592000 });

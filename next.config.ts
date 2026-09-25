@@ -1,6 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  reactStrictMode: true,
+  compress: true,
   devIndicators: false,
   allowedDevOrigins: ["127.0.0.1", "localhost"],
   experimental: {
@@ -8,6 +10,8 @@ const nextConfig: NextConfig = {
       "framer-motion",
       "@iconify/react",
       "next-themes",
+      "recharts",
+      "date-fns",
       "@radix-ui/react-avatar",
       "@radix-ui/react-dialog",
       "@radix-ui/react-dropdown-menu",
@@ -15,6 +19,10 @@ const nextConfig: NextConfig = {
       "@radix-ui/react-slot",
       "@radix-ui/react-tabs",
       "@radix-ui/react-tooltip",
+      "@radix-ui/react-collapsible",
+      "@radix-ui/react-select",
+      "@radix-ui/react-checkbox",
+      "@radix-ui/react-switch",
     ],
   },
   images: {

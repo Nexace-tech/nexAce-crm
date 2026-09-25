@@ -46,6 +46,11 @@ export async function connectToDatabase() {
       // ✅ Fix: give Atlas enough time to wake up from idle (cold-start)
       serverSelectionTimeoutMS: 10000,
       connectTimeoutMS: 10000,
+      // ✅ Performance: maintain a pool of ready connections
+      maxPoolSize: 10,          // max simultaneous connections
+      minPoolSize: 2,           // keep at least 2 warm to avoid cold reconnect
+      socketTimeoutMS: 30000,   // close idle sockets sooner
+      heartbeatFrequencyMS: 10000, // detect Atlas idle drop faster
     };
 
     cached.promise = mongoose.connect(MONGODB_URI!, opts).then((mongooseInstance) => {
