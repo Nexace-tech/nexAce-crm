@@ -796,7 +796,7 @@ export function DashboardClientLayout({ session, menuItems, isPending = false, c
               <ThemeToggle />
             </div>
             <div className="flex-1 flex items-center justify-center h-8 bg-white dark:bg-[#161c24] border border-slate-200 dark:border-[#232d3b] rounded-lg shadow-2xs">
-              <NotificationBell />
+              <NotificationBell onOpen={() => setMobileOpen(false)} />
             </div>
             <button
               onClick={() => { setMobileOpen(false); setTourOpen(true); }}
@@ -914,6 +914,11 @@ export function DashboardClientLayout({ session, menuItems, isPending = false, c
                   </Avatar>
                 </Link>
               </div>
+            </div>
+
+            {/* Mobile Notification Bell */}
+            <div className="lg:hidden relative flex items-center justify-center">
+              <NotificationBell />
             </div>
 
             {/* ── Logout Button (Kept outside clean on all screen sizes) ── */}

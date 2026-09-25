@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,6 +9,10 @@ import { Badge } from "@/components/ui/badge";
 import { cn, getNotificationTargetUrl } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
 import { NativeService } from "@/lib/native/nativeService";
+
+export interface NotificationBellProps {
+  onOpen?: () => void;
+}
 
 interface NotifItem {
   _id: string;
@@ -59,13 +64,18 @@ function getDateGroup(dateStr: string): string {
 
 const GROUP_ORDER = ["Today", "Yesterday", "This Week", "Earlier"];
 
-export function NotificationBell() {
+export function NotificationBell({ onOpen }: NotificationBellProps = {}) {
   const router = useRouter();
   const { user } = useAuth();
   const [open, setOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const [notifications, setNotifications] = useState<NotifItem[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [filterType, setFilterType] = useState<FilterType>("all");
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // Real-time live toast alert state
   const [latestToast, setLatestToast] = useState<NotifItem | null>(null);
@@ -430,7 +440,10 @@ export function NotificationBell() {
       <Button
         variant="ghost"
         size="icon"
-        onClick={() => setOpen(!open)}
+        onClick={() => {
+          if (!open) onOpen?.();
+          setOpen(!open);
+        }}
         className="relative text-muted-foreground hover:text-foreground h-9 w-9 rounded-full cursor-pointer transition-colors"
         title="Real-time Workspace Notifications"
       >
@@ -507,246 +520,256 @@ export function NotificationBell() {
         </div>
       )}
 
-      {/* ── Notifications Dropdown Panel ── */}
-      {open && (
+      {/* ── Notifications Dropdown Panel (Portal-rendered so it's never trapped inside sidebar transforms) ── */}
+      {open && mounted && createPortal(
         <>
           {/* Backdrop for outside click */}
           <div
-            className="fixed inset-0 z-[190] bg-black/40 backdrop-blur-xs"
+            className="fixed inset-0 z-[9998] bg-black/60 backdrop-blur-xs transition-opacity"
             onClick={() => setOpen(false)}
           />
 
-          <div className="fixed inset-x-3 top-16 max-w-sm sm:max-w-md mx-auto md:absolute md:top-full md:right-0 md:inset-x-auto md:w-[26rem] mt-2 bg-card border border-border rounded-2xl shadow-2xl z-[200] overflow-hidden animate-in fade-in zoom-in-95 max-h-[85vh] flex flex-col">
-          {/* Header */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/30">
-            <div className="flex items-center gap-2">
-              <i className="fa-solid fa-bolt text-amber-500 text-xs animate-pulse" />
-              <span className="font-semibold text-sm text-foreground">Notifications</span>
-              {unreadCount > 0 && (
-                <span className="text-[11px] bg-primary/10 text-primary px-2 py-0.5 rounded-full font-bold">
-                  {unreadCount} new
+          <div className="fixed z-[9999] inset-x-3 top-14 sm:top-16 max-w-sm sm:max-w-md mx-auto md:inset-x-auto md:right-6 md:top-16 md:w-[26rem] bg-white dark:bg-[#161c24] border border-slate-200 dark:border-[#232d3b] rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 max-h-[82vh] sm:max-h-[85vh] flex flex-col">
+            {/* Header */}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 dark:border-[#232d3b] bg-slate-50/90 dark:bg-[#1a222d] shrink-0">
+              <div className="flex items-center gap-2 min-w-0">
+                <i className="fa-solid fa-bolt text-amber-500 text-xs shrink-0 animate-pulse" />
+                <span className="font-bold text-sm text-slate-900 dark:text-white truncate">Notifications</span>
+                {unreadCount > 0 && (
+                  <span className="text-[10px] bg-[#00c5a0]/15 text-[#00c5a0] px-2 py-0.5 rounded-full font-bold shrink-0">
+                    {unreadCount} new
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-1 shrink-0">
+                {/* Sound Toggle */}
+                <button
+                  onClick={() => setSoundEnabled(!soundEnabled)}
+                  className={cn(
+                    "p-1.5 rounded-lg text-xs transition-colors cursor-pointer",
+                    soundEnabled ? "text-[#00c5a0] hover:bg-[#00c5a0]/10" : "text-slate-400 hover:bg-slate-100 dark:hover:bg-[#232d3b]"
+                  )}
+                  title={soundEnabled ? "Sound enabled (Click to mute)" : "Sound muted (Click to enable)"}
+                >
+                  <i className={cn("fa-solid", soundEnabled ? "fa-volume-high" : "fa-volume-xmark")} />
+                </button>
+
+                {isAdminOrManager && (
+                  <button
+                    onClick={() => { setOpen(false); setShowBroadcastModal(true); }}
+                    className="text-xs text-amber-500 hover:text-amber-600 font-semibold flex items-center gap-1 cursor-pointer bg-amber-500/10 px-2 py-1 rounded-lg transition-colors"
+                    title="Broadcast to team"
+                  >
+                    <i className="fa-solid fa-bullhorn text-[11px]" />
+                    <span className="hidden sm:inline">Broadcast</span>
+                  </button>
+                )}
+                {unreadCount > 0 && (
+                  <button
+                    onClick={handleMarkAllRead}
+                    className="text-xs text-[#00c5a0] hover:underline font-medium flex items-center gap-1 cursor-pointer px-1.5 py-1"
+                    title="Mark all as read"
+                  >
+                    <i className="fa-solid fa-check-double text-xs" />
+                    <span className="hidden sm:inline">Mark All</span>
+                  </button>
+                )}
+                <button
+                  onClick={() => setOpen(false)}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-[#232d3b] transition-colors cursor-pointer ml-0.5"
+                  title="Close"
+                >
+                  <i className="fa-solid fa-xmark text-sm" />
+                </button>
+              </div>
+            </div>
+
+            {/* Quick Search Bar */}
+            <div className="px-3.5 py-2 border-b border-slate-200 dark:border-[#232d3b] bg-slate-50/50 dark:bg-[#11161d]/50 flex items-center gap-2 shrink-0">
+              <i className="fa-solid fa-magnifying-glass text-xs text-slate-400 shrink-0" />
+              <input
+                type="text"
+                placeholder="Search notifications..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full bg-transparent text-xs text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none"
+              />
+              {searchQuery && (
+                <button onClick={() => setSearchQuery("")} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xs shrink-0 cursor-pointer">
+                  <i className="fa-solid fa-xmark" />
+                </button>
+              )}
+            </div>
+
+            {/* ── Desktop Permission Banner (web only, permission not yet granted) ── */}
+            {notifPermission === "default" && (
+              <div className="mx-3 my-2 p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-start gap-2.5 shrink-0 animate-in fade-in slide-in-from-top-2">
+                <div className="w-7 h-7 rounded-lg bg-amber-500/15 flex items-center justify-center shrink-0 mt-0.5">
+                  <i className="fa-solid fa-bell text-amber-500 text-xs" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-bold text-slate-900 dark:text-white">Enable Desktop Alerts</p>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed">Get instant pop-ups for tasks, chats &amp; announcements even when this tab is in the background.</p>
+                  <button
+                    onClick={handleRequestPermission}
+                    className="mt-2 inline-flex items-center gap-1.5 text-[11px] font-bold text-amber-600 dark:text-amber-400 hover:underline cursor-pointer"
+                  >
+                    <i className="fa-solid fa-check text-[10px]" /> Allow Notifications
+                  </button>
+                </div>
+                <button
+                  onClick={() => setNotifPermission("denied")}
+                  className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-0.5 cursor-pointer shrink-0"
+                  title="Dismiss"
+                >
+                  <i className="fa-solid fa-xmark text-xs" />
+                </button>
+              </div>
+            )}
+
+            {/* ── Denied State Banner ── */}
+            {notifPermission === "denied" && (
+              <div className="mx-3 my-2 p-3 rounded-xl bg-slate-100 dark:bg-[#1a222d] border border-slate-200 dark:border-[#232d3b] flex items-center gap-2.5 shrink-0">
+                <i className="fa-solid fa-bell-slash text-slate-400 text-sm shrink-0" />
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                  Desktop alerts are blocked. To enable, click the <strong>🔒 lock icon</strong> in your browser address bar → Notifications → Allow.
+                </p>
+              </div>
+            )}
+
+            {/* Filter Sub-Bar */}
+            <div className="flex items-center gap-1.5 px-3 py-2 border-b border-slate-200 dark:border-[#232d3b] bg-white dark:bg-[#161c24] overflow-x-auto scrollbar-none shrink-0">
+              {FILTER_PILLS.map(({ key, label, icon }) => (
+                <button
+                  key={key}
+                  onClick={() => setFilterType(key)}
+                  className={cn(
+                    "px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 shrink-0",
+                    filterType === key
+                      ? "bg-[#00c5a0] text-slate-950 shadow-xs"
+                      : "text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-[#232d3b] hover:text-slate-900 dark:hover:text-white"
+                  )}
+                >
+                  <i className={cn(icon, "text-[10px]")} />
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {/* Notification List — grouped by date */}
+            <div className="flex-1 max-h-[48vh] sm:max-h-[22rem] overflow-y-auto divide-y divide-slate-100 dark:divide-[#232d3b]/50">
+              {orderedGroups.length === 0 ? (
+                <div className="py-12 px-4 text-center text-slate-400 space-y-2">
+                  <i className="fa-solid fa-bell-slash text-3xl mx-auto block opacity-30 text-slate-400" />
+                  <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">No notifications found</p>
+                  <p className="text-xs text-slate-400">You&apos;re all caught up!</p>
+                </div>
+              ) : (
+                orderedGroups.map((group) => (
+                  <div key={group}>
+                    {/* Date Group Header */}
+                    <div className="px-4 py-1.5 bg-slate-50 dark:bg-[#1a222d] border-y border-slate-200/60 dark:border-[#232d3b]/60 sticky top-0 z-10">
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">{group}</span>
+                    </div>
+
+                    {/* Notifications in group */}
+                    <div className="divide-y divide-slate-100 dark:divide-[#232d3b]/40">
+                      {grouped[group].map((n) => {
+                        const cfg = getTypeCfg(n.type);
+                        return (
+                          <div
+                            key={n._id}
+                            onClick={() => handleMarkSingleRead(n)}
+                            className={cn(
+                              "p-3.5 transition-colors cursor-pointer hover:bg-slate-50 dark:hover:bg-[#1e2632] group relative flex items-start gap-3",
+                              !n.read ? "bg-[#00c5a0]/5 dark:bg-[#00c5a0]/8" : "opacity-80"
+                            )}
+                          >
+                            {/* Type icon */}
+                            <div className={cn("p-2 rounded-lg shrink-0 mt-0.5", cfg.bg)}>
+                              <i className={cn(cfg.icon, cfg.color, "text-sm")} />
+                            </div>
+
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-start justify-between mb-0.5 gap-2">
+                                <span className={cn("text-xs font-semibold line-clamp-1 pr-1", !n.read ? "text-slate-900 dark:text-white font-bold" : "text-slate-600 dark:text-slate-400")}>
+                                  {n.title}
+                                </span>
+                                <span className="text-[10px] text-slate-400 shrink-0 font-mono">
+                                  {new Date(n.createdAt).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true })}
+                                </span>
+                              </div>
+                              <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed line-clamp-2 break-words">{n.message}</p>
+                              {/* Unread dot */}
+                              {!n.read && (
+                                <span className="inline-block mt-1 w-1.5 h-1.5 rounded-full bg-[#00c5a0]" />
+                              )}
+                            </div>
+
+                            {/* Delete on hover */}
+                            <button
+                              onClick={(e) => handleDeleteNotification(e, n._id)}
+                              className="opacity-0 group-hover:opacity-100 transition-opacity p-1 text-slate-400 hover:text-rose-500 shrink-0 cursor-pointer"
+                              title="Delete"
+                            >
+                              <i className="fa-solid fa-trash text-xs" />
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-between px-4 py-2.5 border-t border-slate-200 dark:border-[#232d3b] bg-slate-50/80 dark:bg-[#1a222d] text-xs shrink-0">
+              {notifications.length > 0 ? (
+                <button
+                  onClick={handleClearAll}
+                  className="text-rose-500 hover:text-rose-600 hover:underline font-semibold text-[11px] flex items-center gap-1 cursor-pointer"
+                >
+                  <i className="fa-solid fa-trash-can text-[10px]" /> Clear All
+                </button>
+              ) : (
+                <span className="text-[10px] text-slate-400 font-mono flex items-center gap-1">
+                  <i className="fa-solid fa-circle text-[6px] text-emerald-500 animate-pulse" />
+                  Live Sync
                 </span>
               )}
-            </div>
-            <div className="flex items-center gap-2">
-              {/* Sound Toggle */}
-              <button
-                onClick={() => setSoundEnabled(!soundEnabled)}
-                className={cn(
-                  "p-1.5 rounded-md text-xs transition-colors cursor-pointer",
-                  soundEnabled ? "text-primary hover:bg-primary/10" : "text-muted-foreground hover:bg-muted"
-                )}
-                title={soundEnabled ? "Sound enabled (Click to mute)" : "Sound muted (Click to enable)"}
-              >
-                <i className={cn("fa-solid", soundEnabled ? "fa-volume-high" : "fa-volume-xmark")} />
-              </button>
 
-              {isAdminOrManager && (
-                <button
-                  onClick={() => { setOpen(false); setShowBroadcastModal(true); }}
-                  className="text-xs text-amber-500 hover:text-amber-600 font-semibold flex items-center gap-1 cursor-pointer bg-amber-500/10 px-2 py-1 rounded-md transition-colors"
-                  title="Broadcast to team"
-                >
-                  <i className="fa-solid fa-bullhorn text-[11px]" /> Broadcast
-                </button>
-              )}
-              {unreadCount > 0 && (
-                <button
-                  onClick={handleMarkAllRead}
-                  className="text-xs text-primary hover:underline font-medium flex items-center gap-1 cursor-pointer"
-                  title="Mark all as read"
-                >
-                  <i className="fa-solid fa-check-double text-xs" /> Mark All Read
-                </button>
-              )}
+              <button
+                onClick={() => {
+                  setOpen(false);
+                  router.push("/dashboard/notifications");
+                }}
+                className="text-[#00c5a0] hover:text-[#00b08e] hover:underline font-bold text-[11px] flex items-center gap-1 cursor-pointer"
+              >
+                <span>View Full History</span>
+                <i className="fa-solid fa-arrow-right text-[10px]" />
+              </button>
             </div>
           </div>
-
-          {/* Quick Search Bar */}
-          <div className="px-3 py-1.5 border-b border-border/40 bg-muted/10 flex items-center gap-2">
-            <i className="fa-solid fa-magnifying-glass text-xs text-muted-foreground" />
-            <input
-              type="text"
-              placeholder="Search notifications..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-transparent text-xs text-foreground placeholder:text-muted-foreground focus:outline-none"
-            />
-            {searchQuery && (
-              <button onClick={() => setSearchQuery("")} className="text-muted-foreground hover:text-foreground text-xs">
-                <i className="fa-solid fa-xmark" />
-              </button>
-            )}
-          </div>
-
-          {/* ── Desktop Permission Banner (web only, permission not yet granted) ── */}
-          {notifPermission === "default" && (
-            <div className="mx-3 my-2 p-3 rounded-xl bg-amber-500/8 border border-amber-500/20 flex items-start gap-2.5 animate-in fade-in slide-in-from-top-2">
-              <div className="w-7 h-7 rounded-lg bg-amber-500/15 flex items-center justify-center shrink-0 mt-0.5">
-                <i className="fa-solid fa-bell text-amber-500 text-xs" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-bold text-foreground">Enable Desktop Alerts</p>
-                <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">Get instant pop-ups for tasks, chats &amp; announcements even when this tab is in the background.</p>
-                <button
-                  onClick={handleRequestPermission}
-                  className="mt-2 inline-flex items-center gap-1.5 text-[11px] font-bold text-amber-600 dark:text-amber-400 hover:underline cursor-pointer"
-                >
-                  <i className="fa-solid fa-check text-[10px]" /> Allow Notifications
-                </button>
-              </div>
-              <button
-                onClick={() => setNotifPermission("denied")}
-                className="text-muted-foreground hover:text-foreground p-0.5 cursor-pointer shrink-0"
-                title="Dismiss"
-              >
-                <i className="fa-solid fa-xmark text-xs" />
-              </button>
-            </div>
-          )}
-
-          {/* ── Denied State Banner ── */}
-          {notifPermission === "denied" && (
-            <div className="mx-3 my-2 p-3 rounded-xl bg-muted/40 border border-border flex items-center gap-2.5">
-              <i className="fa-solid fa-bell-slash text-muted-foreground text-sm shrink-0" />
-              <p className="text-[11px] text-muted-foreground leading-relaxed">
-                Desktop alerts are blocked. To enable, click the <strong>🔒 lock icon</strong> in your browser address bar → Notifications → Allow.
-              </p>
-            </div>
-          )}
-
-          {/* Filter Sub-Bar */}
-          <div className="flex items-center gap-1 px-2 py-2 border-b border-border/50 bg-card overflow-x-auto scrollbar-none">
-            {FILTER_PILLS.map(({ key, label, icon }) => (
-              <button
-                key={key}
-                onClick={() => setFilterType(key)}
-                className={cn(
-                  "px-2 py-1 rounded-md text-[11px] font-medium transition-colors cursor-pointer whitespace-nowrap flex items-center gap-1",
-                  filterType === key
-                    ? "bg-primary text-primary-foreground font-semibold"
-                    : "text-muted-foreground hover:bg-accent hover:text-foreground"
-                )}
-              >
-                <i className={cn(icon, "text-[10px]")} />
-                {label}
-              </button>
-            ))}
-          </div>
-
-          {/* Notification List — grouped by date */}
-          <div className="max-h-[22rem] overflow-y-auto">
-            {orderedGroups.length === 0 ? (
-              <div className="py-10 text-center text-muted-foreground space-y-2">
-                <i className="fa-solid fa-bell-slash text-3xl mx-auto block opacity-30" />
-                <p className="text-sm font-medium">No notifications found.</p>
-                <p className="text-xs text-muted-foreground/70">You&apos;re all caught up!</p>
-              </div>
-            ) : (
-              orderedGroups.map((group) => (
-                <div key={group}>
-                  {/* Date Group Header */}
-                  <div className="px-4 py-1.5 bg-muted/40 border-y border-border/40 sticky top-0">
-                    <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">{group}</span>
-                  </div>
-
-                  {/* Notifications in group */}
-                  <div className="divide-y divide-border/30">
-                    {grouped[group].map((n) => {
-                      const cfg = getTypeCfg(n.type);
-                      return (
-                        <div
-                          key={n._id}
-                          onClick={() => handleMarkSingleRead(n)}
-                          className={cn(
-                            "p-3.5 transition-colors cursor-pointer hover:bg-accent/50 group relative flex items-start gap-3",
-                            !n.read ? "bg-primary/5" : "opacity-75"
-                          )}
-                        >
-                          {/* Type icon */}
-                          <div className={cn("p-2 rounded-lg shrink-0 mt-0.5", cfg.bg)}>
-                            <i className={cn(cfg.icon, cfg.color, "text-sm")} />
-                          </div>
-
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-start justify-between mb-0.5 gap-2">
-                              <span className={cn("text-xs font-semibold line-clamp-1 pr-1", !n.read ? "text-foreground font-bold" : "text-muted-foreground")}>
-                                {n.title}
-                              </span>
-                              <span className="text-[10px] text-muted-foreground shrink-0 font-mono">
-                                {new Date(n.createdAt).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true })}
-                              </span>
-                            </div>
-                            <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2">{n.message}</p>
-                            {/* Unread dot */}
-                            {!n.read && (
-                              <span className="inline-block mt-1 w-1.5 h-1.5 rounded-full bg-primary" />
-                            )}
-                          </div>
-
-                          {/* Delete on hover */}
-                          <button
-                            onClick={(e) => handleDeleteNotification(e, n._id)}
-                            className="opacity-0 group-hover:opacity-100 transition-opacity p-1 text-muted-foreground hover:text-destructive shrink-0 cursor-pointer"
-                            title="Delete"
-                          >
-                            <i className="fa-solid fa-trash text-xs" />
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-
-          {/* Footer */}
-          <div className="flex items-center justify-between px-4 py-2.5 border-t border-border bg-muted/40 text-xs">
-            {notifications.length > 0 ? (
-              <button
-                onClick={handleClearAll}
-                className="text-destructive hover:underline font-medium text-[11px] flex items-center gap-1 cursor-pointer"
-              >
-                <i className="fa-solid fa-trash-can text-[10px]" /> Clear All
-              </button>
-            ) : (
-              <span className="text-[10px] text-muted-foreground/60 font-mono flex items-center gap-1">
-                <i className="fa-solid fa-circle text-[6px] text-emerald-500 animate-pulse" />
-                Live Sync
-              </span>
-            )}
-
-            <button
-              onClick={() => {
-                setOpen(false);
-                router.push("/dashboard/notifications");
-              }}
-              className="text-primary hover:underline font-bold text-[11px] flex items-center gap-1 cursor-pointer"
-            >
-              <span>View Full History</span>
-              <i className="fa-solid fa-arrow-right text-[10px]" />
-            </button>
-          </div>
-        </div>
-        </>
+        </>,
+        document.body
       )}
 
-      {/* ── Broadcast Modal (Admin / Manager / OPS only) ── */}
-      {showBroadcastModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in">
+      {/* ── Broadcast Modal (Admin / Manager / OPS only) — also Portal-rendered ── */}
+      {showBroadcastModal && mounted && createPortal(
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in">
           <div
-            className="w-full max-w-md bg-card border border-border rounded-xl p-6 shadow-2xl space-y-4 animate-in zoom-in-95"
+            className="w-full max-w-md bg-white dark:bg-[#161c24] border border-slate-200 dark:border-[#232d3b] rounded-2xl p-6 shadow-2xl space-y-4 animate-in zoom-in-95"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between border-b border-border pb-3">
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-[#232d3b] pb-3">
               <div className="flex items-center gap-2">
                 <i className="fa-solid fa-bullhorn text-amber-500 text-lg" />
-                <h3 className="text-base font-bold text-foreground">Real-time Team Broadcast</h3>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">Real-time Team Broadcast</h3>
               </div>
               <button
                 onClick={() => setShowBroadcastModal(false)}
-                className="text-muted-foreground hover:text-foreground p-1 text-sm cursor-pointer"
+                className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 p-1 text-sm cursor-pointer"
               >
                 <i className="fa-solid fa-xmark" />
               </button>
@@ -754,7 +777,7 @@ export function NotificationBell() {
 
             <form onSubmit={handleSendBroadcast} className="space-y-3">
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-foreground">Announcement Title</label>
+                <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Announcement Title</label>
                 <Input
                   value={broadcastTitle}
                   onChange={(e) => setBroadcastTitle(e.target.value)}
@@ -764,19 +787,19 @@ export function NotificationBell() {
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-foreground">Message Details</label>
+                <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Message Details</label>
                 <textarea
                   value={broadcastMessage}
                   onChange={(e) => setBroadcastMessage(e.target.value)}
                   rows={3}
                   placeholder="Enter the broadcast message that will pop up on all team members screens..."
-                  className="w-full px-3 py-2 text-sm bg-background border border-border rounded-md text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary resize-y"
+                  className="w-full px-3 py-2 text-sm bg-white dark:bg-[#11161d] border border-slate-200 dark:border-[#232d3b] rounded-lg text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#00c5a0] resize-y"
                   required
                 />
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-foreground">Optional Action Link URL</label>
+                <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Optional Action Link URL</label>
                 <Input
                   value={broadcastLink}
                   onChange={(e) => setBroadcastLink(e.target.value)}
@@ -795,7 +818,8 @@ export function NotificationBell() {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
