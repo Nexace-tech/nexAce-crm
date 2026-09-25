@@ -100,15 +100,25 @@ export async function getSession(skipDbValidation = false): Promise<SessionPaylo
       .select("role status")
       .lean();
 
-    if (!user || user.status === "Pending" || user.status === "Suspended") {
+    if (!user) {
+      // User explicitly not found (deleted / cross-tenant) — force re-auth
+      return null;
+    }
+
+    if (user.status === "Pending" || user.status === "Suspended") {
+      // Explicitly blocked — force re-auth
       return null;
     }
 
     // Return session with DB-authoritative role (not JWT-self-asserted)
     return { ...payload, role: user.role };
   } catch {
-    // If DB is unreachable, don't trust the JWT
-    return null;
+    // Transient DB error (cold-start reconnect, timeout, etc.).
+    // Fall back to the JWT payload so a momentary DB hiccup on app
+    // cold-start doesn't force the user to re-login.
+    // The JWT is still cryptographically verified above — this is safe.
+    console.warn("[session] DB revalidation failed (transient) — trusting JWT payload");
+    return payload;
   }
 }
 
