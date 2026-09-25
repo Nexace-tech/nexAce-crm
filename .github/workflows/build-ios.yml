@@ -100,8 +100,34 @@ jobs:
       - name: Package IPA
         run: |
           cd ios/App/build/Build/Products/Release-iphoneos
+          mkdir -p App.app/Frameworks
+
+          echo "=== Available frameworks in Release-iphoneos ==="
+          ls -la
+
+          # Copy top-level frameworks (Capacitor.framework, Cordova.framework, etc.)
+          for fw in *.framework; do
+            if [ -d "$fw" ]; then
+              echo "Embedding framework: $fw"
+              cp -R "$fw" App.app/Frameworks/
+            fi
+          done
+
+          # Copy package frameworks if present
+          if [ -d "PackageFrameworks" ]; then
+            for fw in PackageFrameworks/*.framework; do
+              if [ -d "$fw" ]; then
+                echo "Embedding package framework: $fw"
+                cp -R "$fw" App.app/Frameworks/
+              fi
+            done
+          fi
+
+          echo "=== Final contents of App.app/Frameworks ==="
+          ls -la App.app/Frameworks/
+
           mkdir -p Payload
-          cp -r App.app Payload/
+          cp -R App.app Payload/
           zip -r NexAce-CRM-unsigned.ipa Payload
 
       - name: Upload iOS IPA Artifact
