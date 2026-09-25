@@ -204,14 +204,15 @@ export function HRDashboard({ user }: { user: any }) {
 
           {/* Pending Leave Approvals */}
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-4">
-              <div>
+            <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4">
+              <div className="min-w-0 flex-1">
                 <CardTitle className="text-lg font-semibold flex items-center gap-2">
-                  <i className="fa-solid fa-calendar-xmark text-amber-500" /> Pending Leave Approvals
+                  <i className="fa-solid fa-calendar-xmark text-amber-500 shrink-0" />
+                  <span className="truncate">Pending Leave Approvals</span>
                 </CardTitle>
-                <CardDescription>Review and manage employee time-off requests</CardDescription>
+                <CardDescription className="text-xs mt-0.5">Review and manage employee time-off requests</CardDescription>
               </div>
-              <Button asChild variant="ghost" size="sm">
+              <Button asChild variant="ghost" size="sm" className="self-start sm:self-auto shrink-0">
                 <Link href="/dashboard/hr" className="gap-1 text-primary text-xs">
                   View All <i className="fa-solid fa-arrow-up-right-from-square text-xs" />
                 </Link>
@@ -248,14 +249,15 @@ export function HRDashboard({ user }: { user: any }) {
 
           {/* Open HR Help Desk Cases */}
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-4">
-              <div>
+            <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4">
+              <div className="min-w-0 flex-1">
                 <CardTitle className="text-lg font-semibold flex items-center gap-2">
-                  <i className="fa-solid fa-circle-question text-sky-500" /> HR Help Desk Cases
+                  <i className="fa-solid fa-circle-question text-sky-500 shrink-0" />
+                  <span className="truncate">HR Help Desk Cases</span>
                 </CardTitle>
-                <CardDescription>Employee queries, escalations and policy requests</CardDescription>
+                <CardDescription className="text-xs mt-0.5">Employee queries, escalations and policy requests</CardDescription>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap self-start sm:self-auto shrink-0">
                 <Button asChild size="sm" color="primary" className="gap-1.5 text-xs font-semibold cursor-pointer">
                   <Link href="/dashboard/hr">
                     <i className="fa-solid fa-ticket text-xs" /> Raise Ticket
@@ -297,14 +299,15 @@ export function HRDashboard({ user }: { user: any }) {
 
           {/* Active Onboarding Checklists */}
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-4">
-              <div>
+            <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4">
+              <div className="min-w-0 flex-1">
                 <CardTitle className="text-lg font-semibold flex items-center gap-2">
-                  <i className="fa-solid fa-list-check text-emerald-500" /> Active Onboarding Checklists
+                  <i className="fa-solid fa-list-check text-emerald-500 shrink-0" />
+                  <span className="truncate">Active Onboarding Checklists</span>
                 </CardTitle>
-                <CardDescription>Track onboarding & offboarding progress per employee</CardDescription>
+                <CardDescription className="text-xs mt-0.5">Track onboarding & offboarding progress per employee</CardDescription>
               </div>
-              <Button asChild variant="ghost" size="sm">
+              <Button asChild variant="ghost" size="sm" className="self-start sm:self-auto shrink-0">
                 <Link href="/dashboard/hr" className="gap-1 text-primary text-xs">
                   Manage <i className="fa-solid fa-arrow-up-right-from-square text-xs" />
                 </Link>

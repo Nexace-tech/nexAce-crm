@@ -150,14 +150,15 @@ export function ManagerDashboard({ user }: { user: any }) {
         {/* Left Column (2 span): Projects & Sprint Deliverables */}
         <div className="lg:col-span-2 space-y-6">
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-4">
-              <div>
+            <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4">
+              <div className="min-w-0 flex-1">
                 <CardTitle className="text-lg font-semibold flex items-center gap-2">
-                  <i className="fa-solid fa-wrench text-blue-500 text-lg" /> Team Projects & Sprints
+                  <i className="fa-solid fa-wrench text-blue-500 text-lg shrink-0" />
+                  <span className="truncate">Team Projects & Sprints</span>
                 </CardTitle>
                 <CardDescription>Track status of active deliverables</CardDescription>
               </div>
-              <Button asChild variant="ghost" size="sm">
+              <Button asChild variant="ghost" size="sm" className="self-start sm:self-auto shrink-0">
                 <Link href="/dashboard/projects" className="gap-1 text-primary">
                   Manage Projects <i className="fa-solid fa-arrow-up-right-from-square text-xs" />
                 </Link>
@@ -198,15 +199,15 @@ export function ManagerDashboard({ user }: { user: any }) {
 
             return (
               <Card className="border border-border/80 shadow-xs overflow-hidden">
-                <CardHeader className="flex flex-row items-center justify-between pb-3 bg-gradient-to-r from-blue-500/5 via-blue-500/10 to-transparent">
-                  <div>
+                <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 bg-gradient-to-r from-blue-500/5 via-blue-500/10 to-transparent">
+                  <div className="min-w-0 flex-1">
                     <CardTitle className="text-base font-bold flex items-center gap-2 text-foreground">
-                      <i className="fa-solid fa-rocket text-blue-500 text-base" />
-                      {activeSprint ? "Active Agile Sprint" : "Upcoming Sprint"}
+                      <i className="fa-solid fa-rocket text-blue-500 text-base shrink-0" />
+                      <span className="truncate">{activeSprint ? "Active Agile Sprint" : "Upcoming Sprint"}</span>
                     </CardTitle>
-                    <CardDescription>Department sprint cycle, progress & milestones</CardDescription>
+                    <CardDescription className="text-xs mt-0.5">Department sprint cycle, progress & milestones</CardDescription>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap self-start sm:self-auto shrink-0">
                     {activeSprint ? (
                       <Badge color="primary" className="font-semibold gap-1">
                         <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Active

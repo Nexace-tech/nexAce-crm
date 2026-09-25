@@ -656,21 +656,24 @@ export function EmployeeDashboard({ user }: { user: any }) {
         {/* Left Column (2 span): Shift Schedule & Assigned Deliverables */}
         <div className="lg:col-span-2 space-y-6">
           <Card className="border border-border">
-            <CardHeader className="flex flex-row items-center justify-between pb-4">
-              <div>
-                <CardTitle className="text-lg font-bold flex items-center gap-2">
-                  <i className="fa-solid fa-clock-rotate-left text-primary text-lg" /> Today's Shift & Attendance
+            <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4">
+              <div className="min-w-0 flex-1">
+                <CardTitle className="text-base sm:text-lg font-bold flex items-center gap-2">
+                  <i className="fa-solid fa-clock-rotate-left text-primary text-base sm:text-lg shrink-0" />
+                  <span className="truncate">Today&apos;s Shift &amp; Attendance</span>
                 </CardTitle>
-                <CardDescription>Your assigned shift schedule & real-time punch status</CardDescription>
+                <CardDescription className="text-xs sm:text-sm mt-0.5">
+                  Your assigned shift schedule &amp; real-time punch status
+                </CardDescription>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={handleExportShiftLogsReport}
                   disabled={exportingReport === "shifts"}
-                  className="h-9 text-xs gap-1.5 font-semibold text-emerald-600 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10 cursor-pointer shadow-xs"
+                  className="h-9 px-2.5 sm:px-3 text-xs gap-1.5 font-semibold text-emerald-600 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10 cursor-pointer shadow-xs shrink-0"
                   title="Download My Shift Attendance Logs CSV"
                 >
                   <i className={cn("fa-solid text-xs", exportingReport === "shifts" ? "fa-spinner fa-spin" : "fa-file-csv")} />
@@ -684,7 +687,7 @@ export function EmployeeDashboard({ user }: { user: any }) {
                   size="sm"
                   onClick={handleToggleClock}
                   disabled={clocking}
-                  className="gap-2 font-semibold shadow-md cursor-pointer h-9"
+                  className="gap-2 font-semibold shadow-md cursor-pointer h-9 px-3.5 shrink-0 text-xs sm:text-sm"
                 >
                   {clocking ? (
                     <>
@@ -704,52 +707,63 @@ export function EmployeeDashboard({ user }: { user: any }) {
             </CardHeader>
 
             <CardContent className="space-y-4">
-              <div className="p-4 bg-muted/40 rounded-xl border border-border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold text-foreground text-base">{user?.shiftName || "Standard Day Shift"}</span>
-                    <Badge color={clockedIn ? "success" : "secondary"}>
+              <div className="p-3.5 sm:p-4 bg-muted/40 rounded-xl border border-border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
+                <div className="space-y-1.5 w-full sm:w-auto">
+                  <div className="flex items-center justify-between sm:justify-start gap-2 flex-wrap">
+                    <span className="font-bold text-foreground text-sm sm:text-base leading-snug">
+                      {user?.shiftName || "Standard Day Shift"}
+                    </span>
+                    <Badge color={clockedIn ? "success" : "secondary"} className="shrink-0 text-xs px-2.5 py-0.5 font-semibold">
                       {clockedIn ? "🟢 Shift Active" : "⚪ Off Shift"}
                     </Badge>
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    Timing: <strong className="font-mono text-foreground">{user?.shiftTime || "09:00 AM - 05:00 PM"}</strong> | Target: 8.0 Hours
-                  </p>
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground pt-0.5">
+                    <span>
+                      Timing: <strong className="font-mono text-foreground whitespace-nowrap">{user?.shiftTime || "09:00 AM - 05:00 PM"}</strong>
+                    </span>
+                    <span className="text-muted-foreground/40 hidden xs:inline">•</span>
+                    <span className="whitespace-nowrap">
+                      Target: <strong className="font-mono text-foreground">8.0 Hours</strong>
+                    </span>
+                  </div>
                 </div>
 
                 {clockedIn && (
-                  <div className="text-right sm:text-right flex flex-row sm:flex-col items-center sm:items-end justify-between w-full sm:w-auto pt-2 sm:pt-0 border-t sm:border-0 border-border">
+                  <div className="text-left sm:text-right flex flex-row sm:flex-col items-center sm:items-end justify-between w-full sm:w-auto pt-2.5 sm:pt-0 border-t sm:border-0 border-border/70">
                     <div>
                       <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Active Duration</p>
-                      <p className="font-mono font-extrabold text-lg text-emerald-500 tracking-tight flex items-center gap-1.5">
+                      <p className="font-mono font-extrabold text-base sm:text-lg text-emerald-500 tracking-tight flex items-center gap-1.5">
                         <i className="fa-solid fa-stopwatch text-sm animate-pulse" /> {elapsedTime}
                       </p>
                     </div>
                     {clockTime && (
-                      <p className="text-[11px] text-muted-foreground font-medium mt-0.5">
-                        Started at <strong className="font-mono text-foreground">{clockTime}</strong>
-                      </p>
+                      <div className="text-right">
+                        <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider sm:hidden">Clocked In</p>
+                        <p className="text-[11px] text-muted-foreground font-medium mt-0.5">
+                          Started at <strong className="font-mono text-foreground">{clockTime}</strong>
+                        </p>
+                      </div>
                     )}
                   </div>
                 )}
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center text-xs">
-                <div className="p-3 rounded-lg bg-card border border-border space-y-0.5">
-                  <span className="text-muted-foreground">Shift Type</span>
-                  <p className="font-semibold text-foreground">{user?.employmentType || "Regular Full-Time"}</p>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3 text-center text-xs">
+                <div className="p-2.5 sm:p-3 rounded-lg bg-card border border-border space-y-0.5 min-w-0">
+                  <span className="text-muted-foreground text-[11px] sm:text-xs">Shift Type</span>
+                  <p className="font-semibold text-foreground text-xs sm:text-sm truncate">{user?.employmentType || "Regular Full-Time"}</p>
                 </div>
-                <div className="p-3 rounded-lg bg-card border border-border space-y-0.5">
-                  <span className="text-muted-foreground">Lunch Break</span>
-                  <p className="font-semibold text-foreground">01:00 PM - 02:00 PM</p>
+                <div className="p-2.5 sm:p-3 rounded-lg bg-card border border-border space-y-0.5 min-w-0">
+                  <span className="text-muted-foreground text-[11px] sm:text-xs">Lunch Break</span>
+                  <p className="font-semibold text-foreground text-xs sm:text-sm truncate">01:00 PM - 02:00 PM</p>
                 </div>
-                <div className="p-3 rounded-lg bg-card border border-border space-y-0.5">
-                  <span className="text-muted-foreground">Workplace</span>
-                  <p className="font-semibold text-emerald-500">{user?.workplace || user?.location || "Hybrid / Office"}</p>
+                <div className="p-2.5 sm:p-3 rounded-lg bg-card border border-border space-y-0.5 min-w-0">
+                  <span className="text-muted-foreground text-[11px] sm:text-xs">Workplace</span>
+                  <p className="font-semibold text-emerald-500 text-xs sm:text-sm truncate">{user?.workplace || user?.location || "Hybrid / Office"}</p>
                 </div>
-                <div className="p-3 rounded-lg bg-card border border-border space-y-0.5">
-                  <span className="text-muted-foreground">Department</span>
-                  <p className="font-semibold text-primary">{user?.department || "Engineering"}</p>
+                <div className="p-2.5 sm:p-3 rounded-lg bg-card border border-border space-y-0.5 min-w-0">
+                  <span className="text-muted-foreground text-[11px] sm:text-xs">Department</span>
+                  <p className="font-semibold text-primary text-xs sm:text-sm truncate">{user?.department || "Engineering"}</p>
                 </div>
               </div>
             </CardContent>
@@ -765,27 +779,27 @@ export function EmployeeDashboard({ user }: { user: any }) {
 
             return (
               <Card className="border border-border/80 shadow-xs overflow-hidden">
-                <CardHeader className="flex flex-row items-center justify-between pb-3 bg-gradient-to-r from-primary/5 via-primary/10 to-transparent">
-                  <div>
+                <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 bg-gradient-to-r from-primary/5 via-primary/10 to-transparent">
+                  <div className="min-w-0 flex-1">
                     <CardTitle className="text-base font-bold flex items-center gap-2 text-foreground">
-                      <i className="fa-solid fa-rocket text-primary text-base" />
-                      {activeSprint ? "Active Agile Sprint" : "Upcoming Sprint Cycle"}
+                      <i className="fa-solid fa-rocket text-primary text-base shrink-0" />
+                      <span className="truncate">{activeSprint ? "Active Agile Sprint" : "Upcoming Sprint Cycle"}</span>
                     </CardTitle>
-                    <CardDescription>
+                    <CardDescription className="text-xs sm:text-sm mt-0.5">
                       {activeSprint ? "Current sprint objective, burndown velocity & milestones" : "Next scheduled sprint iteration for your team"}
                     </CardDescription>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 self-start sm:self-auto shrink-0 flex-wrap">
                     {activeSprint ? (
-                      <Badge color="primary" className="font-semibold gap-1">
+                      <Badge color="primary" className="font-semibold gap-1 text-xs">
                         <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Active Sprint
                       </Badge>
                     ) : (
-                      <Badge color="warning" variant="soft" className="font-semibold">
+                      <Badge color="warning" variant="soft" className="font-semibold text-xs">
                         Planned
                       </Badge>
                     )}
-                    <Button asChild variant="outline" size="sm" className="h-7 text-xs">
+                    <Button asChild variant="outline" size="sm" className="h-7 text-xs shrink-0">
                       <Link href="/dashboard/calendar?tab=sprints" className="gap-1 text-primary">
                         Sprint Board <i className="fa-solid fa-arrow-up-right-from-square text-[10px]" />
                       </Link>
@@ -793,7 +807,7 @@ export function EmployeeDashboard({ user }: { user: any }) {
                   </div>
                 </CardHeader>
 
-                <CardContent className="p-5 space-y-4">
+                <CardContent className="p-4 sm:p-5 space-y-4">
                   {currentSprint ? (
                     <div className="space-y-4">
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border/60 pb-3">
@@ -803,7 +817,7 @@ export function EmployeeDashboard({ user }: { user: any }) {
                             <strong>Goal:</strong> {currentSprint.goal || "Complete sprint deliverables and key milestones"}
                           </p>
                         </div>
-                        <div className="text-right sm:text-right text-xs text-muted-foreground shrink-0 font-mono">
+                        <div className="text-left sm:text-right text-xs text-muted-foreground shrink-0 font-mono">
                           <span>{new Date(currentSprint.startDate).toLocaleDateString()} – {new Date(currentSprint.endDate).toLocaleDateString()}</span>
                         </div>
                       </div>
@@ -825,16 +839,16 @@ export function EmployeeDashboard({ user }: { user: any }) {
                       </div>
 
                       {/* Task Breakdown Stats */}
-                      <div className="grid grid-cols-3 gap-2.5 text-center text-xs pt-1">
-                        <div className="p-2.5 rounded-lg bg-muted/40 border border-border/60 space-y-0.5">
+                      <div className="grid grid-cols-3 gap-2 sm:gap-2.5 text-center text-xs pt-1">
+                        <div className="p-2 sm:p-2.5 rounded-lg bg-muted/40 border border-border/60 space-y-0.5">
                           <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">To Do</span>
                           <p className="font-bold text-sm text-foreground">{currentSprint.todoTasks || 0}</p>
                         </div>
-                        <div className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20 space-y-0.5">
+                        <div className="p-2 sm:p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20 space-y-0.5">
                           <span className="text-[10px] font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wider">In Progress</span>
                           <p className="font-bold text-sm text-amber-600 dark:text-amber-400">{currentSprint.inProgressTasks || 0}</p>
                         </div>
-                        <div className="p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 space-y-0.5">
+                        <div className="p-2 sm:p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 space-y-0.5">
                           <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Done</span>
                           <p className="font-bold text-sm text-emerald-600 dark:text-emerald-400">{currentSprint.completedTasks || 0}</p>
                         </div>
@@ -854,28 +868,29 @@ export function EmployeeDashboard({ user }: { user: any }) {
 
           {/* Assigned Tasks & Deliverables */}
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-4">
-              <div>
-                <CardTitle className="text-lg font-semibold flex items-center gap-2">
-                  <i className="fa-solid fa-list-check text-emerald-500 text-lg" /> My Assigned Tasks
+            <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4">
+              <div className="min-w-0 flex-1">
+                <CardTitle className="text-base sm:text-lg font-semibold flex items-center gap-2">
+                  <i className="fa-solid fa-list-check text-emerald-500 text-base sm:text-lg shrink-0" />
+                  <span className="truncate">My Assigned Tasks</span>
                 </CardTitle>
-                <CardDescription>Deliverables assigned to you</CardDescription>
+                <CardDescription className="text-xs sm:text-sm mt-0.5">Deliverables assigned to you</CardDescription>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 self-start sm:self-auto shrink-0 flex-wrap">
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={handleExportTasksReport}
                   disabled={exportingReport === "tasks"}
-                  className="h-8 text-xs gap-1.5 font-semibold text-amber-600 dark:text-amber-400 border-amber-500/30 hover:bg-amber-500/10 cursor-pointer shadow-xs"
+                  className="h-8 text-xs gap-1.5 font-semibold text-amber-600 dark:text-amber-400 border-amber-500/30 hover:bg-amber-500/10 cursor-pointer shadow-xs shrink-0"
                   title="Download Project Tasks Detailed CSV Report"
                 >
                   <i className={cn("fa-solid text-xs", exportingReport === "tasks" ? "fa-spinner fa-spin" : "fa-file-csv")} />
                   Export Tasks
                 </Button>
-                <Button asChild variant="ghost" size="sm">
+                <Button asChild variant="ghost" size="sm" className="h-8 text-xs shrink-0">
                   <Link href="/dashboard/projects" className="gap-1 text-primary">
-                    View All Tasks <i className="fa-solid fa-arrow-up-right-from-square text-xs" />
+                    View All Tasks <i className="fa-solid fa-arrow-up-right-from-square text-[10px]" />
                   </Link>
                 </Button>
               </div>
@@ -888,14 +903,15 @@ export function EmployeeDashboard({ user }: { user: any }) {
               ) : (
                 tasks.slice(0, 5).map((t) => (
                   <Link key={t._id} href="/dashboard/projects" className="block group">
-                    <div className="flex items-center justify-between p-3.5 rounded-lg border border-border bg-card hover:bg-accent/40 transition-colors cursor-pointer group-hover:border-primary/50">
-                      <div className="space-y-0.5">
-                        <p className="font-semibold text-sm text-foreground group-hover:text-primary transition-colors">{t.title}</p>
-                        <p className="text-xs text-muted-foreground">
-                          Priority: {t.priority} {t.dueDate ? `| Due: ${new Date(t.dueDate).toLocaleDateString()}` : ""}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between p-3.5 rounded-lg border border-border bg-card hover:bg-accent/40 transition-colors cursor-pointer group-hover:border-primary/50 gap-2">
+                      <div className="space-y-0.5 min-w-0 flex-1">
+                        <p className="font-semibold text-sm text-foreground group-hover:text-primary transition-colors truncate">{t.title}</p>
+                        <p className="text-xs text-muted-foreground flex flex-wrap gap-x-2">
+                          <span>Priority: <strong>{t.priority}</strong></span>
+                          {t.dueDate && <span>| Due: {new Date(t.dueDate).toLocaleDateString()}</span>}
                         </p>
                       </div>
-                      <Badge color={t.priority === "High" || t.priority === "Urgent" ? "destructive" : t.status === "Done" ? "success" : "primary"}>
+                      <Badge color={t.priority === "High" || t.priority === "Urgent" ? "destructive" : t.status === "Done" ? "success" : "primary"} className="self-start sm:self-auto shrink-0 text-xs">
                         {t.status}
                       </Badge>
                     </div>
@@ -909,14 +925,15 @@ export function EmployeeDashboard({ user }: { user: any }) {
         {/* Right Column (1 span): Announcements & Team Leave Requests */}
         <div className="space-y-6">
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-3">
-              <div>
+            <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-3">
+              <div className="min-w-0 flex-1">
                 <CardTitle className="text-base font-bold flex items-center gap-2">
-                  <i className="fa-solid fa-bullhorn text-amber-500 text-base" /> Workspace Announcements
+                  <i className="fa-solid fa-bullhorn text-amber-500 text-base shrink-0" />
+                  <span className="truncate">Workspace Announcements</span>
                 </CardTitle>
-                <CardDescription>Company notices and team updates</CardDescription>
+                <CardDescription className="text-xs mt-0.5">Company notices and team updates</CardDescription>
               </div>
-              <Button asChild variant="outline" size="sm" className="h-7 text-xs">
+              <Button asChild variant="outline" size="sm" className="h-7 text-xs self-start sm:self-auto shrink-0">
                 <Link href="/dashboard/chat" className="gap-1 text-primary">
                   View Board <i className="fa-solid fa-arrow-up-right-from-square text-[10px]" />
                 </Link>
@@ -935,12 +952,12 @@ export function EmployeeDashboard({ user }: { user: any }) {
                 announcements.slice(0, 3).map((a) => (
                   <Link key={a._id} href="/dashboard/chat" className="block group">
                     <div className="p-3 bg-muted/40 rounded-lg border border-border space-y-1 hover:bg-accent/40 transition-colors group-hover:border-primary/50 cursor-pointer">
-                      <div className="flex items-center justify-between">
-                        <span className="font-semibold text-xs text-foreground flex items-center gap-1 group-hover:text-primary transition-colors">
-                          {a.pinned && <i className="fa-solid fa-thumbtack text-amber-500 text-[10px]" />}
-                          {a.title}
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-semibold text-xs text-foreground flex items-center gap-1 group-hover:text-primary transition-colors truncate min-w-0 flex-1">
+                          {a.pinned && <i className="fa-solid fa-thumbtack text-amber-500 text-[10px] shrink-0" />}
+                          <span className="truncate">{a.title}</span>
                         </span>
-                        <span className="text-[10px] text-muted-foreground">
+                        <span className="text-[10px] text-muted-foreground shrink-0 font-mono">
                           {a.createdAt ? new Date(a.createdAt).toLocaleDateString() : ""}
                         </span>
                       </div>
@@ -957,14 +974,15 @@ export function EmployeeDashboard({ user }: { user: any }) {
           {/* My Leave Requests — visible when viewTeamLeave permission is granted */}
           {can("viewTeamLeave") && (
             <Card className="border border-border">
-              <CardHeader className="flex flex-row items-center justify-between pb-3">
-                <div>
+              <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-3">
+                <div className="min-w-0 flex-1">
                   <CardTitle className="text-base font-bold flex items-center gap-2">
-                    <i className="fa-solid fa-calendar-week text-sky-500 text-base" /> My Leave Requests
+                    <i className="fa-solid fa-calendar-week text-sky-500 text-base shrink-0" />
+                    <span className="truncate">My Leave Requests</span>
                   </CardTitle>
-                  <CardDescription>Your submitted leave history &amp; statuses</CardDescription>
+                  <CardDescription className="text-xs mt-0.5">Your submitted leave history &amp; statuses</CardDescription>
                 </div>
-                <Button asChild variant="outline" size="sm" className="h-7 text-xs">
+                <Button asChild variant="outline" size="sm" className="h-7 text-xs self-start sm:self-auto shrink-0">
                   <Link href="/dashboard/hr" className="gap-1 text-primary">
                     View All <i className="fa-solid fa-arrow-up-right-from-square text-[10px]" />
                   </Link>

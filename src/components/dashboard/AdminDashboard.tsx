@@ -378,12 +378,12 @@ export function AdminDashboard({ user }: { user: any }) {
             </div>
           </div>
 
-          <div className="flex items-center justify-between mb-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 mb-3">
             <div>
               <span className="font-extrabold text-2xl text-slate-900 dark:text-white">{revSummaryLabel}</span>
               <span className="text-slate-500 dark:text-slate-400 text-xs ml-2">Revenue with Sales (USD)</span>
             </div>
-            <div className="flex gap-2.5 items-center">
+            <div className="flex gap-2.5 items-center flex-wrap">
               <span className="flex items-center gap-1.5 text-xs text-slate-700 dark:text-slate-200 bg-slate-50 dark:bg-[#11161d] border border-slate-200 dark:border-[#232d3b] rounded-md px-2.5 py-1 font-medium">
                 <span className="w-2 h-2 rounded-full bg-[#00c5a0] inline-block" /> Revenue
               </span>

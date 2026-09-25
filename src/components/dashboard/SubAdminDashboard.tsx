@@ -760,20 +760,20 @@ export function SubAdminDashboard({ user }: { user: any }) {
 
           {/* Timesheet Approval Queue */}
           <Card className="border-amber-500/20">
-            <CardHeader className="flex flex-row items-center justify-between pb-4">
-              <div>
-                <CardTitle className="text-base font-semibold flex items-center gap-2">
-                  <i className="fa-solid fa-clock text-amber-500" />
-                  Timesheet Approval Queue
+            <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4">
+              <div className="min-w-0 flex-1">
+                <CardTitle className="text-base font-semibold flex items-center gap-2 flex-wrap">
+                  <i className="fa-solid fa-clock text-amber-500 shrink-0" />
+                  <span>Timesheet Approval Queue</span>
                   {pendingTimesheets > 0 && (
                     <span className="inline-flex items-center justify-center h-5 min-w-5 px-1.5 text-[10px] font-bold bg-amber-500 text-white rounded-full animate-pulse">
                       {pendingTimesheets}
                     </span>
                   )}
                 </CardTitle>
-                <CardDescription>Pending entries awaiting review</CardDescription>
+                <CardDescription className="text-xs mt-0.5">Pending entries awaiting review</CardDescription>
               </div>
-              <Button asChild variant="outline" size="sm" className="border-amber-500/30 text-amber-600 hover:bg-amber-500/10">
+              <Button asChild variant="outline" size="sm" className="border-amber-500/30 text-amber-600 hover:bg-amber-500/10 self-start sm:self-auto shrink-0">
                 <Link href="/dashboard/calendar">
                   <i className="fa-solid fa-calendar-days text-xs mr-2" />Review
                 </Link>
@@ -821,16 +821,17 @@ export function SubAdminDashboard({ user }: { user: any }) {
 
           {/* Today's Schedule */}
           <Card>
-            <CardHeader className="pb-3 flex flex-row items-center justify-between">
-              <div>
+            <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-3">
+              <div className="min-w-0 flex-1">
                 <CardTitle className="text-base font-semibold flex items-center gap-2">
-                  <i className="fa-solid fa-calendar-day text-amber-500" /> Today&apos;s Schedule
+                  <i className="fa-solid fa-calendar-day text-amber-500 shrink-0" />
+                  <span className="truncate">Today&apos;s Schedule</span>
                 </CardTitle>
-                <CardDescription>
+                <CardDescription className="text-xs mt-0.5 truncate">
                   {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
                 </CardDescription>
               </div>
-              <Button asChild variant="ghost" size="sm">
+              <Button asChild variant="ghost" size="sm" className="self-start sm:self-auto shrink-0">
                 <Link href="/dashboard/calendar" className="text-primary text-xs">
                   <i className="fa-solid fa-arrow-up-right-from-square text-xs" />
                 </Link>
@@ -870,20 +871,20 @@ export function SubAdminDashboard({ user }: { user: any }) {
 
           {/* Live Notifications */}
           <Card>
-            <CardHeader className="pb-3 flex flex-row items-center justify-between">
-              <div>
-                <CardTitle className="text-base font-semibold flex items-center gap-2">
-                  <i className="fa-solid fa-bell text-amber-500" />
-                  Notifications
+            <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-3">
+              <div className="min-w-0 flex-1">
+                <CardTitle className="text-base font-semibold flex items-center gap-2 flex-wrap">
+                  <i className="fa-solid fa-bell text-amber-500 shrink-0" />
+                  <span>Notifications</span>
                   {unreadNotifs > 0 && (
                     <span className="inline-flex items-center justify-center h-4.5 min-w-5 px-1.5 text-[10px] font-bold bg-rose-500 text-white rounded-full">
                       {unreadNotifs}
                     </span>
                   )}
                 </CardTitle>
-                <CardDescription>Real-time workspace alerts</CardDescription>
+                <CardDescription className="text-xs mt-0.5">Real-time workspace alerts</CardDescription>
               </div>
-              <Button asChild variant="ghost" size="sm">
+              <Button asChild variant="ghost" size="sm" className="self-start sm:self-auto shrink-0">
                 <Link href="/dashboard/notifications" className="text-primary text-xs">
                   <i className="fa-solid fa-arrow-up-right-from-square text-xs" />
                 </Link>
@@ -979,14 +980,15 @@ export function SubAdminDashboard({ user }: { user: any }) {
 
         {/* Resource Allocation */}
         <Card>
-          <CardHeader className="pb-4 flex flex-row items-center justify-between">
-            <div>
+          <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4">
+            <div className="min-w-0 flex-1">
               <CardTitle className="text-base font-semibold flex items-center gap-2">
-                <i className="fa-solid fa-gauge-high text-orange-500" /> Resource Allocation
+                <i className="fa-solid fa-gauge-high text-orange-500 shrink-0" />
+                <span className="truncate">Resource Allocation</span>
               </CardTitle>
-              <CardDescription>Team availability at a glance</CardDescription>
+              <CardDescription className="text-xs mt-0.5">Team availability at a glance</CardDescription>
             </div>
-            <Button asChild variant="ghost" size="sm">
+            <Button asChild variant="ghost" size="sm" className="self-start sm:self-auto shrink-0">
               <Link href="/dashboard/team" className="text-primary text-xs gap-1">
                 Team <i className="fa-solid fa-arrow-up-right-from-square text-xs" />
               </Link>
@@ -1054,14 +1056,15 @@ export function SubAdminDashboard({ user }: { user: any }) {
 
         {/* Team Snapshot */}
         <Card>
-          <CardHeader className="pb-4 flex flex-row items-center justify-between">
-            <div>
+          <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4">
+            <div className="min-w-0 flex-1">
               <CardTitle className="text-base font-semibold flex items-center gap-2">
-                <i className="fa-solid fa-id-badge text-sky-500" /> Team Snapshot
+                <i className="fa-solid fa-id-badge text-sky-500 shrink-0" />
+                <span className="truncate">Team Snapshot</span>
               </CardTitle>
-              <CardDescription>Member statuses &amp; shifts</CardDescription>
+              <CardDescription className="text-xs mt-0.5">Member statuses &amp; shifts</CardDescription>
             </div>
-            <Button asChild variant="ghost" size="sm">
+            <Button asChild variant="ghost" size="sm" className="self-start sm:self-auto shrink-0">
               <Link href="/dashboard/team" className="text-primary text-xs gap-1">
                 Directory <i className="fa-solid fa-arrow-up-right-from-square text-xs" />
               </Link>

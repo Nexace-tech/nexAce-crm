@@ -455,10 +455,10 @@ export function TeamShiftOverviewCard() {
     <Card className="border border-border shadow-sm">
       <CardHeader className="pb-0">
         <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
-          <div>
-            <CardTitle className="text-base font-bold flex items-center gap-2 text-foreground">
+          <div className="min-w-0 flex-1">
+            <CardTitle className="text-base font-bold flex items-center gap-2 text-foreground flex-wrap">
               <i className="fa-solid fa-clock text-primary text-sm shrink-0" />
-              Team Shift Overview
+              <span>Team Shift Overview</span>
               <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary font-semibold border border-primary/20 flex items-center gap-1.5" title="Indian Standard Time (IST)">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                 {formatTime(now)} <span className="opacity-70 text-[9px]">IST</span>
