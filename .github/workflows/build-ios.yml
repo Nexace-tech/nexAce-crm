@@ -80,6 +80,14 @@ jobs:
           grep -E "error:|fatal:|The following build commands failed" build.log -A 2 -B 1 || true
           echo "==================== LAST 100 LINES OF LOG ===================="
           tail -n 100 build.log || true
+          echo "### ❌ Xcode Build Failed" >> $GITHUB_STEP_SUMMARY
+          echo '```text' >> $GITHUB_STEP_SUMMARY
+          grep -E "error:|fatal:|The following build commands failed" build.log -A 2 -B 1 >> $GITHUB_STEP_SUMMARY || tail -n 50 build.log >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          grep -E "error:" build.log | head -n 25 | while IFS= read -r line; do
+            clean_line=$(echo "$line" | tr -d '\r\n')
+            echo "::error title=XcodeBuildError::$clean_line"
+          done
 
       - name: Upload Build Log Artifact
         if: always()
