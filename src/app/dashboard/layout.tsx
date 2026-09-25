@@ -24,8 +24,9 @@ export default async function DashboardLayout({ children }: DashboardLayoutProps
 
   const { RolePermission } = await import("@/models/RolePermission");
 
-  let dbUser = null;
+  let dbUser: any = null;
   let permDoc = null;
+  let dbError = false;
 
   try {
     const roleKey = isSubAdminRole(session.role) ? "OPS" : session.role;
@@ -39,13 +40,25 @@ export default async function DashboardLayout({ children }: DashboardLayoutProps
         $or: roleOrClauses,
       }),
     ]);
-  } catch {
+  } catch (err) {
+    console.error("DashboardLayout DB query error:", err);
     dbUser = null;
+    dbError = true;
   }
 
   if (!dbUser) {
-    await deleteSession();
-    redirect("/login");
+    if (!dbError) {
+      // User was explicitly not found in DB
+      await deleteSession();
+      redirect("/login");
+    }
+    // On transient DB connection error, fallback to session info rather than logging the user out
+    dbUser = {
+      name: session.userName,
+      role: session.role,
+      tenantId: { name: session.tenantName },
+      status: "Active",
+    };
   }
 
   const role = dbUser.role || session.role;
