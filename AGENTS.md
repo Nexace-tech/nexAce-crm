@@ -2,6 +2,13 @@
 
 - **FontAwesome Icons Only**: ALWAYS use FontAwesome 6 icon classes (`<i className="fa-solid fa-..." />`) by default for all UI components, buttons, tabs, tables, cards, and navigation items. Do NOT use Lucide icons or raw SVG/emoji icon substitutes unless explicitly requested.
 
+# Mobile Responsiveness Rule
+
+- **Mobile First & Fully Responsive**: ALL UI components, modals, popups, dropdowns, tables, cards, headers, and views MUST be 100% mobile-responsive across all screen sizes (mobile, tablet, desktop).
+  - Floating dialogs, popups, and dropdown menus must adapt seamlessly to mobile viewports (use safe insets like `inset-x-3.5`, max-width containment, and React Portals where necessary to escape parent `transform` or `overflow` traps).
+  - Horizontal tab bars, filter pills, and chips must support smooth touch scrolling, active option auto-centering, and never be awkwardly truncated.
+  - Ensure all tap targets are touch-friendly (minimum 36-44px), text wraps or truncates safely (`break-words`, `truncate`), and prevent horizontal page overflow.
+
 <!-- BEGIN:nextjs-agent-rules -->
 
 # This is NOT the Next.js you know

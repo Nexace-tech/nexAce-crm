@@ -98,6 +98,26 @@ export function NotificationBell({ onOpen }: NotificationBellProps = {}) {
   const [sendingBroadcast, setSendingBroadcast] = useState(false);
 
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const pillsRef = useRef<HTMLDivElement>(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(true);
+
+  const checkScroll = () => {
+    if (pillsRef.current) {
+      const { scrollLeft, scrollWidth, clientWidth } = pillsRef.current;
+      setCanScrollLeft(scrollLeft > 4);
+      setCanScrollRight(scrollLeft < scrollWidth - clientWidth - 4);
+    }
+  };
+
+  const scrollPills = (direction: "left" | "right") => {
+    if (pillsRef.current) {
+      const offset = direction === "left" ? -140 : 140;
+      pillsRef.current.scrollBy({ left: offset, behavior: "smooth" });
+      setTimeout(checkScroll, 300);
+    }
+  };
 
   const fetchNotifications = async () => {
     try {
@@ -307,13 +327,26 @@ export function NotificationBell({ onOpen }: NotificationBellProps = {}) {
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setOpen(false);
+      const target = e.target as Node;
+      if (
+        dropdownRef.current?.contains(target) ||
+        panelRef.current?.contains(target)
+      ) {
+        return;
       }
+      setOpen(false);
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  useEffect(() => {
+    if (open) {
+      // Delay slightly for modal mount/paint
+      const timer = setTimeout(checkScroll, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [open]);
 
   const handleMarkAllRead = async () => {
     try {
@@ -529,7 +562,10 @@ export function NotificationBell({ onOpen }: NotificationBellProps = {}) {
             onClick={() => setOpen(false)}
           />
 
-          <div className="fixed z-[9999] inset-x-3 top-14 sm:top-16 max-w-sm sm:max-w-md mx-auto md:inset-x-auto md:right-6 md:top-16 md:w-[26rem] bg-white dark:bg-[#161c24] border border-slate-200 dark:border-[#232d3b] rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 max-h-[82vh] sm:max-h-[85vh] flex flex-col">
+          <div
+            ref={panelRef}
+            className="fixed z-[9999] inset-x-3 top-14 sm:top-16 max-w-sm sm:max-w-md mx-auto md:inset-x-auto md:right-6 md:top-16 md:w-[26rem] bg-white dark:bg-[#161c24] border border-slate-200 dark:border-[#232d3b] rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 max-h-[82vh] sm:max-h-[85vh] flex flex-col"
+          >
             {/* Header */}
             <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 dark:border-[#232d3b] bg-slate-50/90 dark:bg-[#1a222d] shrink-0">
               <div className="flex items-center gap-2 min-w-0">
@@ -637,23 +673,67 @@ export function NotificationBell({ onOpen }: NotificationBellProps = {}) {
               </div>
             )}
 
-            {/* Filter Sub-Bar */}
-            <div className="flex items-center gap-1.5 px-3 py-2 border-b border-slate-200 dark:border-[#232d3b] bg-white dark:bg-[#161c24] overflow-x-auto scrollbar-none shrink-0">
-              {FILTER_PILLS.map(({ key, label, icon }) => (
+            {/* Filter Sub-Bar with Scroll Indicator & Auto-Centering */}
+            <div className="relative border-b border-slate-200 dark:border-[#232d3b] bg-white dark:bg-[#161c24] shrink-0">
+              {/* Left Scroll Button / Gradient Cue */}
+              {canScrollLeft && (
                 <button
-                  key={key}
-                  onClick={() => setFilterType(key)}
-                  className={cn(
-                    "px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 shrink-0",
-                    filterType === key
-                      ? "bg-[#00c5a0] text-slate-950 shadow-xs"
-                      : "text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-[#232d3b] hover:text-slate-900 dark:hover:text-white"
-                  )}
+                  type="button"
+                  onClick={() => scrollPills("left")}
+                  aria-label="Scroll left"
+                  className="absolute left-0 top-0 bottom-0 z-10 w-7 flex items-center justify-center bg-gradient-to-r from-white via-white/90 to-transparent dark:from-[#161c24] dark:via-[#161c24]/90 dark:to-transparent text-slate-500 hover:text-slate-900 dark:hover:text-white cursor-pointer transition-opacity"
                 >
-                  <i className={cn(icon, "text-[10px]")} />
-                  {label}
+                  <i className="fa-solid fa-chevron-left text-[11px]" />
                 </button>
-              ))}
+              )}
+
+              {/* Scrollable Pills List */}
+              <div
+                ref={pillsRef}
+                onScroll={checkScroll}
+                className="flex items-center gap-1.5 px-3 py-2 overflow-x-auto scroll-smooth no-scrollbar scrollbar-none overscroll-x-contain"
+                style={{ WebkitOverflowScrolling: "touch" }}
+              >
+                {FILTER_PILLS.map(({ key, label, icon }) => {
+                  const isActive = filterType === key;
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={(e) => {
+                        setFilterType(key);
+                        e.currentTarget.scrollIntoView({
+                          behavior: "smooth",
+                          inline: "center",
+                          block: "nearest",
+                        });
+                        setTimeout(checkScroll, 300);
+                      }}
+                      className={cn(
+                        "px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 shrink-0 active:scale-95 select-none",
+                        isActive
+                          ? "bg-[#00c5a0] text-slate-950 shadow-xs"
+                          : "text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-[#232d3b] hover:text-slate-900 dark:hover:text-white"
+                      )}
+                    >
+                      <i className={cn(icon, "text-[10px]")} />
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Right Scroll Button / Gradient Cue */}
+              {canScrollRight && (
+                <button
+                  type="button"
+                  onClick={() => scrollPills("right")}
+                  aria-label="Scroll right"
+                  className="absolute right-0 top-0 bottom-0 z-10 w-7 flex items-center justify-center bg-gradient-to-l from-white via-white/90 to-transparent dark:from-[#161c24] dark:via-[#161c24]/90 dark:to-transparent text-slate-500 hover:text-slate-900 dark:hover:text-white cursor-pointer transition-opacity"
+                >
+                  <i className="fa-solid fa-chevron-right text-[11px]" />
+                </button>
+              )}
             </div>
 
             {/* Notification List — grouped by date */}
