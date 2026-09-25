@@ -23,17 +23,14 @@ jobs:
       - name: Install Dependencies
         run: npm ci
 
-      - name: Pin Capacitor Swift PM to 8.0.2 in Plugins
-        run: |
-          find node_modules/@capacitor -name "Package.swift" -exec sed -i '' 's/from: "8.0.0"/exact: "8.0.2"/g' {} +
-
       - name: Sync Capacitor iOS
         run: npx cap sync ios
 
-      - name: Enforce exact 8.0.2 in CapApp-SPM and Plugins
+      - name: Pin Capacitor Swift PM to 7.6.9 in Plugins and CapApp-SPM
         run: |
-          sed -i '' 's/exact: "[^"]*"/exact: "8.0.2"/g' ios/App/CapApp-SPM/Package.swift || true
-          find node_modules/@capacitor -name "Package.swift" -exec sed -i '' 's/from: "[^"]*"/exact: "8.0.2"/g' {} +
+          find node_modules/@capacitor -name "Package.swift" -exec sed -i '' 's/from: "[^"]*"/exact: "7.6.9"/g' {} +
+          sed -i '' 's/exact: "[^"]*"/exact: "7.6.9"/g' ios/App/CapApp-SPM/Package.swift || true
+          cat ios/App/CapApp-SPM/Package.swift
 
       - name: Configure Manual Signing for CI
         run: |
