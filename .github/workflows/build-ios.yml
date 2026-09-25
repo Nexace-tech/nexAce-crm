@@ -56,8 +56,7 @@ jobs:
             CODE_SIGN_IDENTITY="" \
             CODE_SIGN_STYLE=Manual \
             DEVELOPMENT_TEAM="" \
-            PROVISIONING_PROFILE_SPECIFIER="" \
-            OTHER_SWIFT_FLAGS="\$(inherited) -enable-experimental-feature NonescapableTypes"
+            PROVISIONING_PROFILE_SPECIFIER=""
 
       - name: Package IPA
         run: |
