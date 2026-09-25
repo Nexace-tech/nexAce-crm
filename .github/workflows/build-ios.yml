@@ -31,6 +31,17 @@ jobs:
           sed -i '' 's/CODE_SIGN_STYLE = Automatic;/CODE_SIGN_STYLE = Manual;/g' ios/App/App.xcodeproj/project.pbxproj || true
           sed -i '' 's/CODE_SIGN_IDENTITY = "iPhone Developer";/CODE_SIGN_IDENTITY = "";/g' ios/App/App.xcodeproj/project.pbxproj || true
 
+      - name: Select Xcode 16
+        run: |
+          for app in /Applications/Xcode_16*.app; do
+            if [ -d "$app" ]; then
+              echo "Found Xcode 16 at $app"
+              sudo xcode-select -s "$app"
+              break
+            fi
+          done
+          xcodebuild -version
+
       - name: Build iOS App (Device Binary)
         run: |
           cd ios/App
@@ -45,7 +56,8 @@ jobs:
             CODE_SIGN_IDENTITY="" \
             CODE_SIGN_STYLE=Manual \
             DEVELOPMENT_TEAM="" \
-            PROVISIONING_PROFILE_SPECIFIER=""
+            PROVISIONING_PROFILE_SPECIFIER="" \
+            OTHER_SWIFT_FLAGS="\$(inherited) -enable-experimental-feature NonescapableTypes"
 
       - name: Package IPA
         run: |
