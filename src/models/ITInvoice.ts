@@ -71,6 +71,9 @@ export interface IITInvoice extends Document {
     totalEntries: number;
     records: ITimesheetEntry[];
   };
+  signatureUrl?: string;
+  approvedBy?: string;    // Name of user who approved (stamped at Paid time)
+  approvedAt?: string;    // ISO timestamp of approval
   createdBy: mongoose.Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
@@ -150,6 +153,9 @@ const ITInvoiceSchema = new Schema<IITInvoice>(
       totalEntries: { type: Number, default: 0 },
       records: { type: [TimesheetEntrySchema], default: [] },
     },
+    signatureUrl: { type: String, default: "" },
+    approvedBy: { type: String, default: "" },
+    approvedAt: { type: String, default: "" },
     createdBy: { type: Schema.Types.ObjectId, ref: "User", required: true },
   },
   { timestamps: true }

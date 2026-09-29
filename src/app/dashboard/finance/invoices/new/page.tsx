@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { usePermissions } from "@/hooks/usePermissions";
+import { removeSignatureBackground } from "@/lib/signature";
 
 interface InternalEmployee {
   _id: string;
@@ -58,12 +59,143 @@ const SERVICE_CATEGORIES = [
 const CURRENCIES = ["USD", "INR", "EUR", "GBP", "AED", "PKR", "CAD", "AUD"];
 const VENTURES = ["Ace Consultancys", "NexAce Tech"];
 
+const CURSIVE_FONTS = [
+  { name: "Signature Brush", font: "'Brush Script MT', 'Segoe Script', cursive" },
+  { name: "Elegant Script", font: "'Dancing Script', 'Lucida Handwriting', cursive" },
+  { name: "Formal Cursive", font: "'Great Vibes', 'Apple Chancery', cursive" },
+  { name: "Classic Handwritten", font: "'Comic Sans MS', cursive, sans-serif" },
+];
+
 function NewInvoiceContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialType = searchParams.get("type"); // "external" or "internal"
 
   const { can, isAdmin, isOPS } = usePermissions();
+
+  // ── Digital Signature State ──
+  const [profileSignature, setProfileSignature] = useState<string>("");
+  const [useProfileSig, setUseProfileSig] = useState<boolean>(true);
+  const [includeSignature, setIncludeSignature] = useState<boolean>(true);
+  const [showSignaturePad, setShowSignaturePad] = useState<boolean>(false);
+  const [saveSigToProfile, setSaveSigToProfile] = useState<boolean>(false);
+  const [signatureMode, setSignatureMode] = useState<"draw" | "type" | "upload">("draw");
+  const [signatureUrl, setSignatureUrl] = useState<string>("");
+  const [typedName, setTypedName] = useState("");
+  const [typedFont, setTypedFont] = useState(CURSIVE_FONTS[0].font);
+  const [autoRemoveBg, setAutoRemoveBg] = useState(true);
+  const [isProcessingSig, setIsProcessingSig] = useState(false);
+  const sigCanvasRef = React.useRef<HTMLCanvasElement | null>(null);
+  const [isDrawing, setIsDrawing] = useState(false);
+
+  // Fetch user profile signature
+  useEffect(() => {
+    fetch("/api/users/signature")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.signatureUrl) {
+          setProfileSignature(data.signatureUrl);
+          setSignatureUrl(data.signatureUrl);
+          setUseProfileSig(true);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const effectiveSignature = useProfileSig && profileSignature ? profileSignature : signatureUrl;
+
+  const startDrawing = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+    const canvas = sigCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    setIsDrawing(true);
+    const rect = canvas.getBoundingClientRect();
+    const x = "touches" in e ? e.touches[0].clientX - rect.left : e.clientX - rect.left;
+    const y = "touches" in e ? e.touches[0].clientY - rect.top : e.clientY - rect.top;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+  };
+
+  const draw = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+    if (!isDrawing) return;
+    const canvas = sigCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    const rect = canvas.getBoundingClientRect();
+    const x = "touches" in e ? e.touches[0].clientX - rect.left : e.clientX - rect.left;
+    const y = "touches" in e ? e.touches[0].clientY - rect.top : e.clientY - rect.top;
+    ctx.lineWidth = 2.5;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.strokeStyle = "#000000";
+    ctx.lineTo(x, y);
+    ctx.stroke();
+  };
+
+  const stopDrawing = () => {
+    if (!isDrawing) return;
+    setIsDrawing(false);
+    const canvas = sigCanvasRef.current;
+    if (!canvas) return;
+    setSignatureUrl(canvas.toDataURL("image/png"));
+    setUseProfileSig(false);
+  };
+
+  const clearDrawing = () => {
+    const canvas = sigCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    setSignatureUrl("");
+  };
+
+  const generateTypedSignature = () => {
+    if (!typedName.trim()) return;
+    const canvas = document.createElement("canvas");
+    canvas.width = 450;
+    canvas.height = 140;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = "#000000";
+    ctx.font = `44px ${typedFont}`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(typedName.trim(), canvas.width / 2, canvas.height / 2);
+    const dataUrl = canvas.toDataURL("image/png");
+    setSignatureUrl(dataUrl);
+    setUseProfileSig(false);
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      const raw = ev.target?.result as string;
+      if (!raw) return;
+      if (autoRemoveBg) {
+        setIsProcessingSig(true);
+        try {
+          const cleaned = await removeSignatureBackground(raw);
+          setSignatureUrl(cleaned);
+          setUseProfileSig(false);
+        } catch {
+          setSignatureUrl(raw);
+          setUseProfileSig(false);
+        } finally {
+          setIsProcessingSig(false);
+        }
+      } else {
+        setSignatureUrl(raw);
+        setUseProfileSig(false);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
 
   // ── Candidate Data ──
   const [employees, setEmployees] = useState<InternalEmployee[]>([]);
@@ -372,6 +504,8 @@ function NewInvoiceContent() {
                 },
               ];
 
+      const effectiveSignature = useProfileSig && profileSignature ? profileSignature : signatureUrl;
+
       const invoicePayload = {
         invoiceNo: activeInvoiceNo,
         client: clientFormatted,
@@ -382,6 +516,7 @@ function NewInvoiceContent() {
         dueDate,
         category: category || (recipientMode === "internal" ? "Employee Payroll" : "External Services"),
         venture,
+        signatureUrl: includeSignature ? effectiveSignature : "",
         notes:
           notes ||
           `${recipientInfo.badge} Invoice for period ${billingPeriod}. Recipient: ${recipientInfo.name}${recipientInfo.company ? ` (${recipientInfo.company})` : ""}.`,
@@ -1133,6 +1268,327 @@ function NewInvoiceContent() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Card: Authorized Digital Signature */}
+          <Card className="border-border/80 shadow-xs">
+            <CardHeader className="pb-3 border-b border-border/60">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <CardTitle className="text-sm font-bold flex items-center gap-2">
+                  <i className="fa-solid fa-file-signature text-primary text-xs" />
+                  Authorized Signature
+                </CardTitle>
+                <div className="flex items-center gap-2">
+                  {effectiveSignature && !showSignaturePad && (
+                    <label className="flex items-center gap-2 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={includeSignature}
+                        onChange={(e) => setIncludeSignature(e.target.checked)}
+                        className="rounded border-border text-primary focus:ring-primary w-3.5 h-3.5 cursor-pointer accent-primary"
+                      />
+                      <span className="text-xs font-semibold text-foreground">
+                        Affix signature to invoice
+                      </span>
+                    </label>
+                  )}
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="pt-4 space-y-4">
+              {effectiveSignature && !showSignaturePad ? (
+                <div className={cn("space-y-3 transition-opacity", !includeSignature && "opacity-50")}>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-xl bg-background border border-border">
+                    <div className="flex items-center gap-4">
+                      <div className="p-2 sm:p-3 rounded-lg bg-white border border-border/80 shadow-xs relative overflow-hidden inline-flex items-center justify-center min-w-[140px] max-w-[220px]">
+                        <div className="absolute inset-0 opacity-[0.08]" style={{ backgroundImage: "repeating-linear-gradient(transparent, transparent 20px, #64748b 20px, #64748b 21px)" }} />
+                        <img src={effectiveSignature} alt="Digital signature" className="relative max-h-12 max-w-[190px] object-contain" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-xs font-bold text-foreground">
+                            {useProfileSig && profileSignature ? "Profile Signature Active" : "Custom Signature"}
+                          </span>
+                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-semibold border border-emerald-500/20">
+                            Ready
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-muted-foreground">
+                          {includeSignature
+                            ? "This signature will be embedded in the invoice record and printed PDF."
+                            : "Signature is detached. Check 'Affix signature' to attach."}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setShowSignaturePad(true)}
+                        className="text-xs gap-1.5 cursor-pointer"
+                      >
+                        <i className="fa-solid fa-pen-nib text-[11px]" /> Change
+                      </Button>
+                      {(!useProfileSig || !profileSignature) && profileSignature && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setSignatureUrl(profileSignature);
+                            setUseProfileSig(true);
+                          }}
+                          className="text-xs gap-1.5 cursor-pointer text-muted-foreground hover:text-foreground"
+                        >
+                          <i className="fa-solid fa-rotate-left text-[11px]" /> Reset to Profile
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {/* Mode switcher */}
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <div className="inline-flex p-1 bg-muted/60 rounded-xl gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setSignatureMode("draw")}
+                        className={cn(
+                          "px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer",
+                          signatureMode === "draw"
+                            ? "bg-background text-foreground shadow-xs"
+                            : "text-muted-foreground hover:text-foreground"
+                        )}
+                      >
+                        <i className="fa-solid fa-pen-nib text-[10px]" /> Draw
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSignatureMode("type")}
+                        className={cn(
+                          "px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer",
+                          signatureMode === "type"
+                            ? "bg-background text-foreground shadow-xs"
+                            : "text-muted-foreground hover:text-foreground"
+                        )}
+                      >
+                        <i className="fa-solid fa-font text-[10px]" /> Type
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSignatureMode("upload")}
+                        className={cn(
+                          "px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer",
+                          signatureMode === "upload"
+                            ? "bg-background text-foreground shadow-xs"
+                            : "text-muted-foreground hover:text-foreground"
+                        )}
+                      >
+                        <i className="fa-solid fa-upload text-[10px]" /> Upload
+                      </button>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] font-semibold text-muted-foreground flex items-center gap-1.5 bg-muted/40 px-2.5 py-1 rounded-lg border border-border">
+                        <span className="w-2.5 h-2.5 rounded-full bg-black border border-slate-300 inline-block shadow-xs" />
+                        Solid Black Ink
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Draw mode */}
+                  {signatureMode === "draw" && (
+                    <div className="space-y-2">
+                      <div className="border border-border/80 rounded-xl bg-white relative overflow-hidden shadow-inner">
+                        <div
+                          className="absolute inset-0 opacity-[0.06] pointer-events-none"
+                          style={{
+                            backgroundImage: "repeating-linear-gradient(transparent, transparent 24px, #64748b 24px, #64748b 25px)"
+                          }}
+                        />
+                        <canvas
+                          ref={sigCanvasRef}
+                          width={600}
+                          height={160}
+                          className="w-full h-[140px] cursor-crosshair touch-none relative"
+                          onMouseDown={startDrawing}
+                          onMouseMove={draw}
+                          onMouseUp={stopDrawing}
+                          onMouseLeave={stopDrawing}
+                          onTouchStart={startDrawing}
+                          onTouchMove={draw}
+                          onTouchEnd={stopDrawing}
+                        />
+                        <span className="absolute bottom-2 right-3 text-[10px] text-slate-400 font-medium select-none pointer-events-none">
+                          Draw with mouse or fingertip
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <p className="text-[11px] text-muted-foreground">
+                          Sign smoothly inside the box in crisp solid black ink.
+                        </p>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={clearDrawing}
+                          className="text-xs h-7 gap-1 text-muted-foreground hover:text-foreground cursor-pointer"
+                        >
+                          <i className="fa-solid fa-rotate-left text-[10px]" /> Clear Canvas
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Type mode */}
+                  {signatureMode === "type" && (
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                          <label className="text-xs font-semibold text-muted-foreground">Full Name</label>
+                          <Input
+                            value={typedName}
+                            onChange={(e) => setTypedName(e.target.value)}
+                            placeholder="e.g. Johnathan Doe"
+                            className="h-9 text-xs"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-xs font-semibold text-muted-foreground">Handwriting Font</label>
+                          <select
+                            value={typedFont}
+                            onChange={(e) => setTypedFont(e.target.value)}
+                            className="w-full h-9 rounded-md border border-input bg-background px-3 text-xs text-foreground focus:ring-1 focus:ring-primary focus:outline-none"
+                          >
+                            {CURSIVE_FONTS.map((f) => (
+                              <option key={f.name} value={f.font}>
+                                {f.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+
+                      <div className="p-4 rounded-xl bg-white border border-border/80 flex items-center justify-center min-h-[100px] shadow-xs">
+                        <p
+                          style={{ fontFamily: typedFont }}
+                          className="text-3xl text-black text-center select-none truncate px-4"
+                        >
+                          {typedName || "Your Signature"}
+                        </p>
+                      </div>
+
+                      <div className="flex justify-end">
+                        <Button
+                          type="button"
+                          size="sm"
+                          disabled={!typedName.trim()}
+                          onClick={generateTypedSignature}
+                          className="text-xs gap-1.5 cursor-pointer"
+                        >
+                          <i className="fa-solid fa-check text-[11px]" /> Use This Signature
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Upload mode */}
+                  {signatureMode === "upload" && (
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between p-3 rounded-lg bg-muted/30 border border-border">
+                        <div className="flex items-center gap-2">
+                          <i className="fa-solid fa-wand-magic-sparkles text-primary text-xs" />
+                          <div>
+                            <p className="text-xs font-bold text-foreground">Auto Background Removal</p>
+                            <p className="text-[11px] text-muted-foreground">
+                              Crops paper background and sharpens ink strokes to pure black
+                            </p>
+                          </div>
+                        </div>
+                        <label className="relative inline-flex items-center cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={autoRemoveBg}
+                            onChange={(e) => setAutoRemoveBg(e.target.checked)}
+                            className="sr-only peer"
+                          />
+                          <div className="w-9 h-5 bg-muted peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary" />
+                        </label>
+                      </div>
+
+                      <div className="border-2 border-dashed border-border/80 rounded-xl p-5 text-center bg-muted/10 hover:bg-muted/20 transition-colors relative">
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleFileUpload}
+                          className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                          disabled={isProcessingSig}
+                        />
+                        {isProcessingSig ? (
+                          <div className="flex flex-col items-center gap-2 py-3">
+                            <i className="fa-solid fa-spinner fa-spin text-primary text-xl" />
+                            <p className="text-xs font-medium text-foreground">Cleaning paper background &amp; sharpening ink...</p>
+                          </div>
+                        ) : (
+                          <div className="flex flex-col items-center gap-2 py-2">
+                            <div className="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center">
+                              <i className="fa-solid fa-cloud-arrow-up text-base" />
+                            </div>
+                            <p className="text-xs font-semibold text-foreground">
+                              Click or drag signature photo here
+                            </p>
+                            <p className="text-[10px] text-muted-foreground">
+                              PNG, JPG, or photo from white paper supported
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {signatureUrl && (
+                    <div className="flex items-center justify-between pt-2 border-t border-border">
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs font-semibold text-muted-foreground">Preview:</span>
+                        <div className="p-1.5 rounded bg-white border border-border max-w-[140px] inline-flex items-center justify-center">
+                          <img src={signatureUrl} alt="Signature preview" className="max-h-8 object-contain" />
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {profileSignature && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setShowSignaturePad(false);
+                              setUseProfileSig(true);
+                            }}
+                            className="text-xs cursor-pointer"
+                          >
+                            Cancel
+                          </Button>
+                        )}
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={() => {
+                            setShowSignaturePad(false);
+                            setIncludeSignature(true);
+                          }}
+                          className="text-xs gap-1.5 cursor-pointer"
+                        >
+                          <i className="fa-solid fa-check text-[11px]" /> Affix to Invoice
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </div>
 
         {/* Right Column: Live Invoice Preview Card */}
@@ -1214,6 +1670,23 @@ function NewInvoiceContent() {
                   Pending
                 </span>
               </div>
+
+              {/* Authorized Signature in Live Preview */}
+              {includeSignature && effectiveSignature && (
+                <div className="p-3 bg-muted/40 rounded-xl border border-border/70 flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider block">
+                      Authorized Signatory
+                    </span>
+                    <span className="text-[11px] font-semibold text-foreground">
+                      Digital Signature Affixed
+                    </span>
+                  </div>
+                  <div className="inline-flex items-center justify-center">
+                    <img src={effectiveSignature} alt="Authorized Signatory" className="max-h-8 max-w-[120px] object-contain mix-blend-multiply dark:mix-blend-screen" />
+                  </div>
+                </div>
+              )}
 
               {/* Action */}
               <Button

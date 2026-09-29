@@ -53,6 +53,7 @@ export interface ITenant extends Document {
   allowedExtensions?: string[];
   customShifts?: IShiftConfig[];
   employmentTypes?: string[];
+  signatureUrl?: string;
   createdAt: Date;
 }
 
@@ -111,6 +112,7 @@ const TenantSchema: Schema = new Schema({
     type: [String],
     default: ["Permanent", "Freelancer", "Part-Time", "Contractor", "Intern"]
   },
+  signatureUrl: { type: String, default: "" },
   createdAt: { type: Date, default: Date.now }
 }, { strict: false });
 

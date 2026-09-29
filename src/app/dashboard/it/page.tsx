@@ -110,6 +110,9 @@ interface Invoice {
     upiId?: string;
     screenshotUrl?: string;
   };
+  signatureUrl?: string;
+  approvedBy?: string;
+  approvedAt?: string;
   createdAt?: string | Date;
   updatedAt?: string | Date;
 }
@@ -3878,9 +3881,16 @@ function InvoicesTab({ invoices, loading, onAdd, onEdit, onDelete, autoOpenAdd, 
                         <i className="fa-regular fa-clock text-[10px] text-primary" /> Invoice Timeline
                       </span>
                       {isPaid ? (
-                        <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/25">
-                          <i className="fa-solid fa-circle-check text-[9px]" /> Paid & Settled
-                        </span>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/25">
+                            <i className="fa-solid fa-circle-check text-[9px]" /> Paid &amp; Settled
+                          </span>
+                          {previewItem.approvedBy && (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/25">
+                              <i className="fa-solid fa-signature text-[9px]" /> Approved by {previewItem.approvedBy}
+                            </span>
+                          )}
+                        </div>
                       ) : previewItem.status === "Overdue" ? (
                         <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-rose-500/10 text-rose-500 border border-rose-500/25">
                           <i className="fa-solid fa-triangle-exclamation text-[9px]" /> Overdue
@@ -3953,6 +3963,31 @@ function InvoicesTab({ invoices, loading, onAdd, onEdit, onDelete, autoOpenAdd, 
               );
             })()}
 
+            {/* Authorized Signatory Strip */}
+            {(previewItem.signatureUrl || previewItem.approvedBy) && (
+              <div className="flex items-center justify-between p-3.5 rounded-xl bg-card border border-border/80">
+                <div>
+                  <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Authorized Signatory</p>
+                  {previewItem.approvedBy && (
+                    <p className="text-xs font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5 mt-0.5">
+                      <i className="fa-solid fa-circle-check text-[10px]" />
+                      Approved by {previewItem.approvedBy}
+                    </p>
+                  )}
+                  <p className="text-[10px] text-muted-foreground">{previewItem.businessName || "NexAce IT Team"}</p>
+                </div>
+                {previewItem.signatureUrl && (
+                  <div className="bg-white/80 dark:bg-white/10 p-1.5 rounded-lg border border-border/60">
+                    <img
+                      src={previewItem.signatureUrl}
+                      alt="Authorized Signature"
+                      className="h-9 max-w-[140px] object-contain mix-blend-multiply dark:mix-blend-screen"
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Footer Buttons */}
             <div className="flex items-center justify-between gap-3 border-t border-border dark:border-slate-800 pt-4">
               <button
@@ -3979,6 +4014,10 @@ function InvoicesTab({ invoices, loading, onAdd, onEdit, onDelete, autoOpenAdd, 
                       status: previewItem.status,
                       notes: previewItem.notes,
                       paymentDetails: previewItem.paymentDetails,
+                      signatureUrl: previewItem.signatureUrl,
+                      employeeSignatureUrl: (previewItem.invoiceNo?.startsWith("INV-SAL") || previewItem.customerNo?.startsWith("EMP-")) ? previewItem.signatureUrl : undefined,
+                      approvedBy: previewItem.approvedBy,
+                      approvedAt: previewItem.approvedAt,
                     });
                   } catch (e) {
                     console.error("Failed to download PDF", e);

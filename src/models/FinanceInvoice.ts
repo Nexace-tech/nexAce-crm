@@ -19,6 +19,9 @@ export interface IFinanceInvoice extends Document {
     amount: number;
   }>;
   notes?: string;
+  signatureUrl?: string;
+  approvedBy?: string;
+  approvedAt?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -49,6 +52,9 @@ const FinanceInvoiceSchema = new Schema<IFinanceInvoice>(
       },
     ],
     notes: { type: String },
+    signatureUrl: { type: String, default: "" },
+    approvedBy: { type: String, default: "" },
+    approvedAt: { type: String, default: "" },
   },
   { timestamps: true }
 );

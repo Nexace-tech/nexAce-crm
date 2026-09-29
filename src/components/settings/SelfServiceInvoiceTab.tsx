@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,6 +9,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
 import { InvoiceDetailsView } from "@/components/finance/InvoiceDetailsView";
 import { downloadInvoicePdf } from "@/lib/invoice-pdf";
+import { removeSignatureBackground } from "@/lib/signature";
 
 interface InvoiceItem {
   description: string;
@@ -54,6 +55,9 @@ interface Invoice {
     screenshotFileName?: string;
     paidAt?: string;
   };
+  signatureUrl?: string;
+  approvedBy?: string;
+  approvedAt?: string;
 }
 
 function formatHoursMinutes(val: number): string {
@@ -77,6 +81,8 @@ function toLocalDateString(d: Date): string {
 }
 
 export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps) {
+  const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
   const targetInvoiceNo = searchParams.get("invoiceNo");
   const targetInvoiceId = searchParams.get("invoiceId");
@@ -86,6 +92,20 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
   const [activeSubTab, setActiveSubTab] = useState<"history" | "generate">(() => {
     return urlTab === "generate" ? "generate" : "history";
   });
+
+  const changeSubTab = (tab: "history" | "generate") => {
+    setActiveSubTab(tab);
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const queryTab = tab === "generate" ? "generate" : "invoices";
+      if (params.get("tab") !== queryTab || params.has("invoiceNo") || params.has("invoiceId")) {
+        params.set("tab", queryTab);
+        params.delete("invoiceNo");
+        params.delete("invoiceId");
+        router.replace(`${pathname || window.location.pathname}?${params.toString()}`, { scroll: false });
+      }
+    }
+  };
 
   useEffect(() => {
     if (urlTab === "generate") {
@@ -140,6 +160,11 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
     branch?: string;
   }>({});
 
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   useEffect(() => {
     fetch("/api/settings/company")
       .then((res) => (res.ok ? res.json() : null))
@@ -151,6 +176,542 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
       })
       .catch(() => {});
   }, []);
+
+  // ── Digital Signature State for Invoice Generation ──
+  const profileSignature = (user as any)?.signatureUrl || "";
+  const [includeSignature, setIncludeSignature] = useState(true);
+  const [customSignature, setCustomSignature] = useState<string>("");
+  const [showSignaturePad, setShowSignaturePad] = useState(false);
+  const [saveSigToProfile, setSaveSigToProfile] = useState(true);
+
+  // Signature Pad Mode & Tools
+  const [sigPadMode, setSigPadMode] = useState<"draw" | "type" | "upload">("draw");
+  // Draw
+  const [isDrawingSig, setIsDrawingSig] = useState(false);
+  const [sigLineWidth, setSigLineWidth] = useState(2.5);
+  const [sigBg, setSigBg] = useState<"lined" | "grid" | "blank">("lined");
+  const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
+  const lastPosRef = React.useRef<{ x: number; y: number } | null>(null);
+  // Type
+  const [typedSig, setTypedSig] = useState(user?.name || "");
+  const [sigFont, setSigFont] = useState("'Dancing Script', cursive");
+  const [sigFontSize, setSigFontSize] = useState(60);
+  // Upload
+  const uploadInputRef = React.useRef<HTMLInputElement | null>(null);
+  const [uploadedPreview, setUploadedPreview] = useState("");
+  const [rawUploaded, setRawUploaded] = useState("");
+  const [autoRemoveBg, setAutoRemoveBg] = useState(true);
+  const [processingUpload, setProcessingUpload] = useState(false);
+
+  const effectiveSignature = customSignature || profileSignature;
+
+  // Sync typed signature with user name when profile loads
+  useEffect(() => {
+    if (user?.name && !typedSig) {
+      setTypedSig(user.name);
+    }
+  }, [user]);
+
+  const handleApplySignature = async () => {
+    let finalUrl = "";
+    if (sigPadMode === "draw") {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      finalUrl = canvas.toDataURL("image/png");
+    } else if (sigPadMode === "type") {
+      if (!typedSig.trim()) { showToast("Please type your name first.", "error"); return; }
+      const offCanvas = document.createElement("canvas");
+      offCanvas.width = 800; offCanvas.height = 200;
+      const ctx = offCanvas.getContext("2d")!;
+      ctx.font = `${sigFontSize}px ${sigFont}`;
+      ctx.fillStyle = "#000000";
+      ctx.textBaseline = "middle";
+      ctx.textAlign = "center";
+      ctx.fillText(typedSig, offCanvas.width / 2, offCanvas.height / 2);
+      finalUrl = offCanvas.toDataURL("image/png");
+    } else if (sigPadMode === "upload") {
+      const chosen = autoRemoveBg && uploadedPreview ? uploadedPreview : (rawUploaded || uploadedPreview);
+      if (!chosen) { showToast("Please upload a signature image first.", "error"); return; }
+      finalUrl = chosen;
+    }
+
+    if (!finalUrl) {
+      showToast("Please provide a signature.", "error");
+      return;
+    }
+
+    setCustomSignature(finalUrl);
+    setIncludeSignature(true);
+    setShowSignaturePad(false);
+
+    if (saveSigToProfile && user) {
+      try {
+        await fetch(`/api/team/${user._id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ signatureUrl: finalUrl }),
+        });
+        showToast("Signature applied to invoice & saved to your profile!", "success");
+      } catch {
+        showToast("Signature applied to invoice!", "success");
+      }
+    } else {
+      showToast("Signature applied to invoice!", "success");
+    }
+  };
+
+  const renderSignatureSection = () => (
+    <div className="p-4 bg-muted/20 dark:bg-slate-900/40 rounded-xl border border-border space-y-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-border/70">
+        <div className="flex items-center gap-2">
+          <div className="w-7 h-7 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+            <i className="fa-solid fa-file-signature text-xs" />
+          </div>
+          <div>
+            <h4 className="text-xs font-bold text-foreground flex items-center gap-1.5">
+              Authorized Digital Signature
+            </h4>
+            <p className="text-[11px] text-muted-foreground">
+              Will be affixed above the Authorized Signatory line on this invoice &amp; exported PDF.
+            </p>
+          </div>
+        </div>
+
+        {effectiveSignature && !showSignaturePad && (
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={includeSignature}
+              onChange={(e) => setIncludeSignature(e.target.checked)}
+              className="rounded border-border text-primary focus:ring-primary w-3.5 h-3.5 cursor-pointer accent-primary"
+            />
+            <span className="text-xs font-semibold text-foreground">
+              Affix signature to invoice
+            </span>
+          </label>
+        )}
+      </div>
+
+      {effectiveSignature && !showSignaturePad ? (
+        <div className={cn("space-y-3 transition-opacity", !includeSignature && "opacity-50")}>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-xl bg-background border border-border">
+            <div className="flex items-center gap-4">
+              {/* White paper card for preview */}
+              <div className="p-2 sm:p-3 rounded-lg bg-white border border-border/80 shadow-xs relative overflow-hidden inline-flex items-center justify-center min-w-[140px] max-w-[220px]">
+                <div className="absolute inset-0 opacity-[0.08]" style={{ backgroundImage: "repeating-linear-gradient(transparent, transparent 20px, #64748b 20px, #64748b 21px)" }} />
+                <img src={effectiveSignature} alt="Digital signature" className="relative max-h-12 max-w-[190px] object-contain" />
+              </div>
+              <div className="space-y-1">
+                <div className="flex items-center gap-1.5">
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                    <i className="fa-solid fa-circle-check text-[9px]" /> Verified Black Ink
+                  </span>
+                  <span className="text-[11px] text-muted-foreground">
+                    {customSignature ? "Custom Signature for this invoice" : "Auto-loaded from Profile"}
+                  </span>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  Ready to be stamped on invoice documents, remittances, and PDFs.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 self-end sm:self-center">
+              {customSignature && profileSignature && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setCustomSignature("")}
+                  className="h-8 text-xs text-muted-foreground hover:text-foreground cursor-pointer gap-1"
+                >
+                  <i className="fa-solid fa-rotate-left text-xs" /> Reset to Profile
+                </Button>
+              )}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setShowSignaturePad(true)}
+                className="h-8 text-xs font-semibold cursor-pointer gap-1.5"
+              >
+                <i className="fa-solid fa-pen-nib text-xs text-primary" /> Change Signature
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-4 p-4 rounded-xl bg-background border border-border">
+          {/* Mode switch */}
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex gap-0 rounded-xl overflow-hidden border border-border bg-muted/40 w-fit text-xs font-semibold">
+              {(["draw", "type", "upload"] as const).map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => setSigPadMode(m)}
+                  className={cn(
+                    "flex items-center gap-1.5 px-3.5 py-1.5 transition-all cursor-pointer border-r border-border last:border-r-0",
+                    sigPadMode === m ? "bg-primary text-primary-foreground font-bold shadow-xs" : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+                  )}
+                >
+                  <i className={cn("fa-solid text-[10px]", m === "draw" ? "fa-pen-nib" : m === "type" ? "fa-font" : "fa-image")} />
+                  {m === "draw" ? "Draw" : m === "type" ? "Type" : "Upload (Auto-Remove BG)"}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-semibold bg-muted/70 text-foreground border border-border/60">
+                <span className="w-2 h-2 rounded-full bg-black ring-1 ring-border" /> Black Ink
+              </span>
+            </div>
+          </div>
+
+          {/* ── Draw Mode ── */}
+          {sigPadMode === "draw" && (
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[11px] text-muted-foreground font-semibold">Size:</span>
+                    {[1.2, 2.5, 4].map((w) => (
+                      <button
+                        key={w}
+                        type="button"
+                        onClick={() => setSigLineWidth(w)}
+                        className={cn("w-6 h-6 rounded-md border flex items-center justify-center cursor-pointer", sigLineWidth === w ? "border-primary bg-primary/10" : "border-border bg-background")}
+                      >
+                        <div style={{ width: Math.min(w * 3, 14), height: Math.min(w, 3), backgroundColor: "#000000", borderRadius: 99 }} />
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[11px] text-muted-foreground font-semibold">Paper:</span>
+                    {(["lined", "grid", "blank"] as const).map((bg) => (
+                      <button
+                        key={bg}
+                        type="button"
+                        onClick={() => setSigBg(bg)}
+                        className={cn("px-2 py-0.5 text-[10px] font-semibold rounded border capitalize cursor-pointer", sigBg === bg ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground bg-background")}
+                      >
+                        {bg}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const canvas = canvasRef.current;
+                    if (!canvas) return;
+                    const ctx = canvas.getContext("2d");
+                    if (!ctx) return;
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                  }}
+                  className="text-xs text-rose-500 hover:text-rose-600 font-semibold cursor-pointer flex items-center gap-1"
+                >
+                  <i className="fa-solid fa-trash-can text-[10px]" /> Clear
+                </button>
+              </div>
+
+              <div
+                className="relative rounded-xl overflow-hidden border-2 border-border/70 touch-none select-none"
+                style={{
+                  background:
+                    sigBg === "lined"
+                      ? "repeating-linear-gradient(white, white 27px, #e2e8f0 27px, #e2e8f0 28px)"
+                      : sigBg === "grid"
+                      ? "repeating-linear-gradient(white, white 27px, #e2e8f0 27px, #e2e8f0 28px), repeating-linear-gradient(90deg, white, white 27px, #e2e8f0 27px, #e2e8f0 28px)"
+                      : "white",
+                }}
+              >
+                <canvas
+                  ref={canvasRef}
+                  width={800}
+                  height={180}
+                  className="w-full h-[150px] cursor-crosshair block"
+                  style={{ touchAction: "none", background: "transparent" }}
+                  onMouseDown={(e) => {
+                    const canvas = canvasRef.current; if (!canvas) return;
+                    setIsDrawingSig(true);
+                    const rect = canvas.getBoundingClientRect();
+                    const x = (e.clientX - rect.left) * (canvas.width / rect.width);
+                    const y = (e.clientY - rect.top) * (canvas.height / rect.height);
+                    lastPosRef.current = { x, y };
+                    const ctx = canvas.getContext("2d"); if (!ctx) return;
+                    ctx.beginPath();
+                    ctx.moveTo(x, y);
+                    ctx.strokeStyle = "#000000";
+                    ctx.lineWidth = sigLineWidth;
+                    ctx.lineCap = "round";
+                    ctx.lineJoin = "round";
+                  }}
+                  onMouseMove={(e) => {
+                    if (!isDrawingSig || !lastPosRef.current) return;
+                    const canvas = canvasRef.current; if (!canvas) return;
+                    const ctx = canvas.getContext("2d"); if (!ctx) return;
+                    const rect = canvas.getBoundingClientRect();
+                    const x = (e.clientX - rect.left) * (canvas.width / rect.width);
+                    const y = (e.clientY - rect.top) * (canvas.height / rect.height);
+                    ctx.lineTo(x, y);
+                    ctx.stroke();
+                    lastPosRef.current = { x, y };
+                  }}
+                  onMouseUp={() => { setIsDrawingSig(false); lastPosRef.current = null; }}
+                  onMouseLeave={() => { setIsDrawingSig(false); lastPosRef.current = null; }}
+                  onTouchStart={(e) => {
+                    e.preventDefault();
+                    const canvas = canvasRef.current; if (!canvas) return;
+                    setIsDrawingSig(true);
+                    const t = e.touches[0]; const rect = canvas.getBoundingClientRect();
+                    const x = (t.clientX - rect.left) * (canvas.width / rect.width);
+                    const y = (t.clientY - rect.top) * (canvas.height / rect.height);
+                    lastPosRef.current = { x, y };
+                    const ctx = canvas.getContext("2d"); if (!ctx) return;
+                    ctx.beginPath();
+                    ctx.moveTo(x, y);
+                    ctx.strokeStyle = "#000000";
+                    ctx.lineWidth = sigLineWidth;
+                    ctx.lineCap = "round";
+                    ctx.lineJoin = "round";
+                  }}
+                  onTouchMove={(e) => {
+                    e.preventDefault();
+                    if (!isDrawingSig || !lastPosRef.current) return;
+                    const canvas = canvasRef.current; if (!canvas) return;
+                    const ctx = canvas.getContext("2d"); if (!ctx) return;
+                    const t = e.touches[0]; const rect = canvas.getBoundingClientRect();
+                    const x = (t.clientX - rect.left) * (canvas.width / rect.width);
+                    const y = (t.clientY - rect.top) * (canvas.height / rect.height);
+                    ctx.lineTo(x, y);
+                    ctx.stroke();
+                    lastPosRef.current = { x, y };
+                  }}
+                  onTouchEnd={(e) => { e.preventDefault(); setIsDrawingSig(false); lastPosRef.current = null; }}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* ── Type Mode ── */}
+          {sigPadMode === "type" && (
+            <div className="space-y-3">
+              <Input
+                type="text"
+                placeholder="Type your full name..."
+                value={typedSig}
+                onChange={(e) => setTypedSig(e.target.value)}
+                className="h-9 text-sm bg-background font-medium"
+              />
+
+              <div className="flex flex-wrap items-center gap-2">
+                {[
+                  { label: "Dancing Script", value: "'Dancing Script', cursive" },
+                  { label: "Pacifico", value: "'Pacifico', cursive" },
+                  { label: "Caveat", value: "'Caveat', cursive" },
+                  { label: "Sacramento", value: "'Sacramento', cursive" },
+                  { label: "Great Vibes", value: "'Great Vibes', cursive" },
+                ].map((f) => (
+                  <button
+                    key={f.value}
+                    type="button"
+                    onClick={() => setSigFont(f.value)}
+                    style={{ fontFamily: f.value }}
+                    className={cn(
+                      "px-3 py-1 text-sm rounded-lg border cursor-pointer transition-all",
+                      sigFont === f.value ? "border-primary bg-primary/10 text-primary font-bold shadow-xs" : "border-border text-foreground hover:bg-muted"
+                    )}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Live preview */}
+              <div
+                className="p-4 rounded-xl border flex items-center justify-center min-h-[110px]"
+                style={{ background: "repeating-linear-gradient(white, white 27px, #e2e8f0 27px, #e2e8f0 28px)" }}
+              >
+                {typedSig ? (
+                  <span style={{ fontFamily: sigFont, fontSize: `${sigFontSize}px`, color: "#000000", lineHeight: 1.2 }}>
+                    {typedSig}
+                  </span>
+                ) : (
+                  <span className="text-xs text-muted-foreground/60 italic">Preview will appear here</span>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* ── Upload Mode with Auto-Remove BG ── */}
+          {sigPadMode === "upload" && (
+            <div className="space-y-3">
+              <input
+                ref={uploadInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/svg+xml,image/webp"
+                className="hidden"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  if (file.size > 4 * 1024 * 1024) { showToast("Signature image must be under 4MB.", "error"); return; }
+                  setProcessingUpload(true);
+                  const reader = new FileReader();
+                  reader.onload = async (ev) => {
+                    const raw = ev.target?.result as string;
+                    setRawUploaded(raw);
+                    try {
+                      const processed = await removeSignatureBackground(raw);
+                      setUploadedPreview(processed);
+                      setAutoRemoveBg(true);
+                    } catch {
+                      setUploadedPreview(raw);
+                    } finally {
+                      setProcessingUpload(false);
+                    }
+                  };
+                  reader.readAsDataURL(file);
+                }}
+              />
+
+              {processingUpload ? (
+                <div className="p-8 rounded-xl flex flex-col items-center justify-center min-h-[130px] border border-border bg-muted/20 gap-2">
+                  <i className="fa-solid fa-spinner fa-spin text-primary text-xl" />
+                  <span className="text-xs font-semibold text-foreground">Auto-removing paper background &amp; sharpening black ink…</span>
+                </div>
+              ) : (uploadedPreview || rawUploaded) ? (
+                <div className="space-y-3">
+                  <div
+                    className="p-4 rounded-xl flex items-center justify-center min-h-[120px] border-2 border-primary/25 shadow-inner relative overflow-hidden"
+                    style={{
+                      backgroundColor: "#ffffff",
+                      backgroundImage: autoRemoveBg
+                        ? "linear-gradient(45deg, #f1f5f9 25%, transparent 25%), linear-gradient(-45deg, #f1f5f9 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #f1f5f9 75%), linear-gradient(-45deg, transparent 75%, #f1f5f9 75%)"
+                        : "none",
+                      backgroundSize: "16px 16px",
+                      backgroundPosition: "0 0, 0 8px, 8px -8px, -8px 0px",
+                    }}
+                  >
+                    <img
+                      src={autoRemoveBg ? uploadedPreview : (rawUploaded || uploadedPreview)}
+                      alt="Uploaded signature"
+                      className="max-h-20 max-w-full object-contain"
+                    />
+                  </div>
+
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                    <label className="flex items-center gap-2 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={autoRemoveBg}
+                        onChange={(e) => setAutoRemoveBg(e.target.checked)}
+                        className="w-3.5 h-3.5 rounded border-border text-primary focus:ring-primary accent-primary cursor-pointer"
+                      />
+                      <span className="text-xs font-medium text-foreground flex items-center gap-1.5">
+                        <i className="fa-solid fa-wand-magic-sparkles text-emerald-500 text-xs" />
+                        Auto-remove background &amp; sharpen black ink
+                      </span>
+                    </label>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setUploadedPreview("");
+                        setRawUploaded("");
+                        if (uploadInputRef.current) uploadInputRef.current.value = "";
+                      }}
+                      className="text-xs text-muted-foreground hover:text-foreground font-semibold cursor-pointer flex items-center gap-1"
+                    >
+                      <i className="fa-solid fa-arrows-rotate text-xs" /> Choose another
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div
+                  onClick={() => uploadInputRef.current?.click()}
+                  onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                  onDrop={async (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const file = e.dataTransfer.files?.[0];
+                    if (!file) return;
+                    if (file.size > 4 * 1024 * 1024) { showToast("Signature image must be under 4MB.", "error"); return; }
+                    setProcessingUpload(true);
+                    const reader = new FileReader();
+                    reader.onload = async (ev) => {
+                      const raw = ev.target?.result as string;
+                      setRawUploaded(raw);
+                      try {
+                        const processed = await removeSignatureBackground(raw);
+                        setUploadedPreview(processed);
+                        setAutoRemoveBg(true);
+                      } catch {
+                        setUploadedPreview(raw);
+                      } finally {
+                        setProcessingUpload(false);
+                      }
+                    };
+                    reader.readAsDataURL(file);
+                  }}
+                  className="border-2 border-dashed border-border/80 hover:border-primary/50 rounded-xl p-8 flex flex-col items-center justify-center text-center cursor-pointer transition-all group bg-background"
+                >
+                  <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center mb-2 text-primary group-hover:scale-105 transition-transform">
+                    <i className="fa-solid fa-cloud-arrow-up text-base" />
+                  </div>
+                  <p className="text-xs font-bold text-foreground group-hover:text-primary transition-colors">
+                    Click or drag &amp; drop handwritten signature
+                  </p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    PNG, JPG, SVG, WebP · Background is automatically removed
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Action buttons */}
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-border">
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={saveSigToProfile}
+                onChange={(e) => setSaveSigToProfile(e.target.checked)}
+                className="w-3.5 h-3.5 rounded border-border text-primary focus:ring-primary accent-primary cursor-pointer"
+              />
+              <span className="text-[11px] text-muted-foreground">
+                Save this signature to my profile for future invoices
+              </span>
+            </label>
+
+            <div className="flex items-center gap-2">
+              {effectiveSignature && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowSignaturePad(false)}
+                  className="h-8 text-xs cursor-pointer"
+                >
+                  Cancel
+                </Button>
+              )}
+              <Button
+                type="button"
+                size="sm"
+                onClick={handleApplySignature}
+                className="h-8 text-xs font-bold cursor-pointer gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90 shadow-xs"
+              >
+                <i className="fa-solid fa-check text-xs" /> Apply Signature
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 
   const now = new Date();
   const initialStart = toLocalDateString(new Date(now.getFullYear(), now.getMonth(), 1));
@@ -779,6 +1340,7 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
           currency: invoiceFormData.currency,
           status: "Pending",
           notes: combinedNotes,
+          signatureUrl: (includeSignature && effectiveSignature) ? effectiveSignature : "",
           // Structured shift clock & timesheet data for full admin visibility
           shiftAttendance: (attachShiftLogs && shiftData.daysWorked > 0) ? {
             totalHours: shiftData.totalHours,
@@ -798,7 +1360,7 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
       if (res.ok) {
         showToast(`Invoice ${invoiceNo} generated and submitted to Finance for approval!`, "success");
         fetchMyInvoiceHistory(); // Refresh history log immediately!
-        setActiveSubTab("history");
+        changeSubTab("history");
       } else {
         const err = await res.json();
         showToast(err.error || "Failed to generate invoice.", "error");
@@ -908,6 +1470,9 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
           bankDetails: isDraft ? companyBankDetails : (invoiceToPrint.bankDetails || companyBankDetails),
           paymentDetails: isDraft ? undefined : invoiceToPrint.paymentDetails,
           logoUrl: companyLogoUrl,
+          signatureUrl: isDraft ? ((includeSignature && effectiveSignature) ? effectiveSignature : undefined) : invoiceToPrint?.signatureUrl,
+          approvedBy: isDraft ? undefined : invoiceToPrint?.approvedBy,
+          approvedAt: isDraft ? undefined : invoiceToPrint?.approvedAt,
         },
         `Invoice_${invNo}.pdf`
       );
@@ -1043,6 +1608,7 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
           status: "Pending",
           notes: combinedNotes,
           bankDetails: employeeBankDetails,
+          signatureUrl: (includeSignature && effectiveSignature) ? effectiveSignature : "",
           shiftAttendance: (attachShiftLogs && shiftData.daysWorked > 0) ? {
             totalHours: shiftData.totalHours,
             daysWorked: shiftData.daysWorked,
@@ -1060,7 +1626,7 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
       if (res.ok) {
         showToast(`Permanent Salary Invoice ${invoiceNo} submitted to Finance for approval!`, "success");
         fetchMyInvoiceHistory();
-        setActiveSubTab("history");
+        changeSubTab("history");
       } else {
         const err = await res.json();
         showToast(err.error || "Failed to generate salary invoice.", "error");
@@ -1166,6 +1732,7 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
           notes: finalNotesToPrint,
           bankDetails: employeeBankDetails,
           logoUrl: companyLogoUrl,
+          signatureUrl: (includeSignature && effectiveSignature) ? effectiveSignature : undefined,
         },
         `Salary_Invoice_${monthLabel.replace(/\s+/g, "_")}.pdf`
       );
@@ -1253,7 +1820,10 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
     return (
       <InvoiceDetailsView
         invoice={viewInvoice}
-        onClose={() => setViewInvoice(null)}
+        onClose={() => {
+          setViewInvoice(null);
+          changeSubTab("history");
+        }}
       />
     );
   }
@@ -1264,7 +1834,7 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
       <div className="flex border-b border-border space-x-1 overflow-x-auto no-scrollbar pb-px">
         <button
           type="button"
-          onClick={() => setActiveSubTab("history")}
+          onClick={() => changeSubTab("history")}
           className={cn(
             "px-4 py-2.5 text-sm font-semibold border-b-2 transition-all flex items-center gap-2 cursor-pointer shrink-0",
             activeSubTab === "history"
@@ -1284,7 +1854,7 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
 
         <button
           type="button"
-          onClick={() => setActiveSubTab("generate")}
+          onClick={() => changeSubTab("generate")}
           className={cn(
             "px-4 py-2.5 text-sm font-semibold border-b-2 transition-all flex items-center gap-2 cursor-pointer shrink-0",
             activeSubTab === "generate"
@@ -1326,7 +1896,7 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
                   type="button"
                   variant="outline"
                   size="sm"
-                  onClick={() => setActiveSubTab("history")}
+                  onClick={() => changeSubTab("history")}
                   className="gap-1.5 text-xs font-semibold cursor-pointer border-border hover:bg-muted"
                 >
                   <i className="fa-solid fa-file-invoice text-xs text-primary" /> View My Invoices
@@ -1933,13 +2503,17 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
                   />
                 </div>
 
+                {/* Digital Signature for Permanent Staff */}
+                {renderSignatureSection()}
+
                 {/* Submit Actions for Permanent Salary */}
                 <div className="flex items-center justify-end gap-3 pt-3 border-t border-border">
                   <Button
                     type="button"
                     variant="outline"
+                    suppressHydrationWarning
                     onClick={handlePermanentPrintPDF}
-                    disabled={baseSalary <= 0}
+                    disabled={mounted ? baseSalary <= 0 : false}
                     className="cursor-pointer gap-2 font-semibold h-10 px-4 border-rose-500/30 hover:border-rose-500 text-rose-500 bg-rose-500/5 hover:bg-rose-500/10 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <i className="fa-solid fa-file-pdf text-sm" /> Export Salary PDF Draft
@@ -1948,7 +2522,8 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
                     type="submit"
                     color="primary"
                     size="sm"
-                    disabled={invoiceSubmitting || baseSalary <= 0}
+                    suppressHydrationWarning
+                    disabled={mounted ? (invoiceSubmitting || baseSalary <= 0) : false}
                     className="cursor-pointer gap-2 font-semibold h-10 px-5 bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {invoiceSubmitting ? (
@@ -2618,6 +3193,9 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
                 />
               </div>
 
+              {/* Digital Signature for Contractor */}
+              {renderSignatureSection()}
+
               <div className="flex items-center justify-end gap-3 pt-3 border-t border-border">
                 <Button
                   type="button"
@@ -2663,7 +3241,7 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
               <Button
                 type="button"
                 size="sm"
-                onClick={() => setActiveSubTab("generate")}
+                onClick={() => changeSubTab("generate")}
                 className="gap-2 font-semibold cursor-pointer border-emerald-500/40 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 self-start sm:self-auto"
                 variant="outline"
               >

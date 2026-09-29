@@ -102,6 +102,49 @@ export async function PATCH(
       updateBody.paidDate = body.paidDate;
     }
 
+    // ── Stamp approver details & signature on approval ───────────────────────
+    // When an invoice is approved / marked Paid, always record approvedBy & approvedAt,
+    // and freeze the approver's signature (or org signature) onto the document.
+    if (body.status === "Paid") {
+      updateBody.approvedBy = session.userName || "Admin";
+      updateBody.approvedAt = new Date().toISOString();
+
+      try {
+        let effectiveSig = "";
+        // 1. Organization signature from Tenant (Primary company signature as requested by user)
+        const tenantForSig = await Tenant.findById(tenantObjectId).select("signatureUrl").lean();
+        if ((tenantForSig as any)?.signatureUrl?.trim()) {
+          effectiveSig = (tenantForSig as any).signatureUrl.trim();
+        }
+
+        // 2. Fallback: Approver's user profile signature
+        if (!effectiveSig) {
+          const approverUser = await User.findById(userObjectId).select("signatureUrl name").lean();
+          if ((approverUser as any)?.signatureUrl?.trim()) {
+            effectiveSig = (approverUser as any).signatureUrl.trim();
+          }
+        }
+
+        // 3. Fallback: Check if any Admin in this tenant has a signature
+        if (!effectiveSig) {
+          const adminWithSig = await User.findOne({
+            tenantId: tenantObjectId,
+            role: { $in: ["Admin", "Owner"] },
+            signatureUrl: { $exists: true, $ne: "" },
+          }).select("signatureUrl").lean();
+          if (adminWithSig && (adminWithSig as any).signatureUrl) {
+            effectiveSig = (adminWithSig as any).signatureUrl.trim();
+          }
+        }
+
+        if (effectiveSig) {
+          updateBody.signatureUrl = effectiveSig;
+        }
+      } catch (sigErr) {
+        console.error("Could not fetch signature for approval stamp:", sigErr);
+      }
+    }
+
     const updated = await ITInvoice.findOneAndUpdate(
       { _id: id, tenantId: tenantObjectId },
       { $set: { ...updateBody, updatedAt: new Date() } },
@@ -112,37 +155,39 @@ export async function PATCH(
       return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
     }
 
-    // Check if status changed & notify user ONLY IF recipient belongs to "Our Team" (Internal Workspace User)
+    // Fire-and-forget: send notification + email AFTER returning the response
+    // so the API doesn't block on PDF generation or SMTP handshake.
     if (body.status && (previousInvoice as any).status !== body.status) {
-      const internalUser = await User.findOne({
-        tenantId: tenantObjectId,
-        $or: [
-          ...(updated.billedToEmail ? [{ email: updated.billedToEmail.toLowerCase() }] : []),
-          ...(updated.createdBy ? [{ _id: updated.createdBy }] : []),
-        ],
-      }).lean();
+      (async () => {
+        try {
+          const internalUser = await User.findOne({
+            tenantId: tenantObjectId,
+            $or: [
+              ...(updated.billedToEmail ? [{ email: updated.billedToEmail.toLowerCase() }] : []),
+              ...(updated.createdBy ? [{ _id: updated.createdBy }] : []),
+            ],
+          }).lean();
 
-      if (internalUser) {
-        const isPaid = updated.status === "Paid";
-        const payMethod = updated.paymentDetails?.method || "";
-        const hasReceipt = isPaid && updated.paymentDetails?.screenshotUrl;
+          if (!internalUser) return;
 
-        // In-app notification
-        await Notification.create({
-          tenantId: tenantObjectId,
-          recipientId: internalUser._id,
-          title: `Invoice Status Updated: ${updated.invoiceNo}`,
-          message: isPaid
-            ? `Your invoice (${updated.invoiceNo}) has been approved & marked Paid via ${payMethod} by ${session.userName || "Admin"}.${hasReceipt ? " Payment receipt is attached." : ""}`
-            : `Your invoice (${updated.invoiceNo}) status was updated to "${updated.status}" by ${session.userName || "Admin"}.`,
-          type: "system",
-          linkUrl: `/dashboard/settings?tab=invoice&invoiceNo=${encodeURIComponent(updated.invoiceNo)}`,
-          read: false,
-        });
+          const isPaid = updated.status === "Paid";
+          const payMethod = updated.paymentDetails?.method || "";
+          const hasReceipt = isPaid && updated.paymentDetails?.screenshotUrl;
 
-        if (internalUser.email) {
-          try {
-            // Generate invoice PDF attachment
+          // In-app notification
+          await Notification.create({
+            tenantId: tenantObjectId,
+            recipientId: internalUser._id,
+            title: `Invoice Status Updated: ${updated.invoiceNo}`,
+            message: isPaid
+              ? `Your invoice (${updated.invoiceNo}) has been approved & marked Paid via ${payMethod} by ${session.userName || "Admin"}.${hasReceipt ? " Payment receipt is attached." : ""}`
+              : `Your invoice (${updated.invoiceNo}) status was updated to "${updated.status}" by ${session.userName || "Admin"}.`,
+            type: "system",
+            linkUrl: `/dashboard/settings?tab=invoice&invoiceNo=${encodeURIComponent(updated.invoiceNo)}`,
+            read: false,
+          });
+
+          if (internalUser.email) {
             const attachments: EmailAttachment[] = [];
             try {
               const tenantDoc = await Tenant.findById(tenantObjectId).select("bankDetails").lean();
@@ -167,8 +212,10 @@ export async function PATCH(
                 notes: updated.notes,
                 bankDetails: (updated as any).bankDetails || (tenantDoc as any)?.bankDetails,
                 paymentDetails: updated.paymentDetails,
+                signatureUrl: (updated as any).signatureUrl || "",
+                approvedBy: (updated as any).approvedBy || "",
+                approvedAt: (updated as any).approvedAt || "",
               });
-
               attachments.push({
                 filename: `Invoice_${updated.invoiceNo}.pdf`,
                 content: pdfBuffer,
@@ -210,11 +257,11 @@ export async function PATCH(
               `,
               attachments,
             });
-          } catch (mailErr) {
-            console.error("Failed to dispatch invoice status update email:", mailErr);
           }
+        } catch (bgErr) {
+          console.error("Background notification/email for invoice update failed:", bgErr);
         }
-      }
+      })();
     }
 
     await ActivityLog.create({

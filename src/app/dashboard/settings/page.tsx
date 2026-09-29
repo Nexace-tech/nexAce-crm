@@ -15,6 +15,7 @@ import { cn, generateSecurePassword } from "@/lib/utils";
 import { useTabPersistence } from "@/hooks/useTabPersistence";
 import { RoleDataControlTab } from "@/components/settings/RoleDataControlTab";
 import { AccessRestricted } from "@/components/ui/AccessRestricted";
+import { removeSignatureBackground } from "@/lib/signature";
 
 function SettingsPageContent() {
   const router = useRouter();
@@ -42,7 +43,7 @@ function SettingsPageContent() {
 
     // Invoices and Generate My Invoice moved to Finance Portal
     if (tabParam === "self-invoices" || tabParam === "invoice") {
-      router.replace("/dashboard/finance?tab=generate");
+      router.replace("/dashboard/finance?tab=invoices");
       return;
     }
 
@@ -97,6 +98,32 @@ function SettingsPageContent() {
   const [accountNo, setAccountNo] = useState("");
   const [ifscCode, setIfscCode] = useState("");
   const [upiId, setUpiId] = useState("");
+
+  // Signature state
+  const [signatureUrl, setSignatureUrl] = useState("");
+  const [signatureSavedAt, setSignatureSavedAt] = useState<string | null>(null);
+  const [showSignaturePad, setShowSignaturePad] = useState(false);
+  const [savingSignature, setSavingSignature] = useState(false);
+  const [sigMode, setSigMode] = useState<"draw" | "type" | "upload">("draw");
+  // Draw mode
+  const [isDrawing, setIsDrawing] = useState(false);
+  const [sigColor] = useState("#000000");
+  const [sigLineWidth, setSigLineWidth] = useState(2.5);
+  const [sigBg, setSigBg] = useState<"blank" | "lined" | "grid">("lined");
+  const signatureCanvasRef = React.useRef<HTMLCanvasElement | null>(null);
+  const signatureLastPos = React.useRef<{ x: number; y: number } | null>(null);
+  // Type mode
+  const [typedSignature, setTypedSignature] = useState("");
+  const [signatureFont, setSignatureFont] = useState("'Dancing Script', cursive");
+  const [sigFontSize, setSigFontSize] = useState(72);
+  const [sigFontColor] = useState("#000000");
+  const typeCanvasRef = React.useRef<HTMLCanvasElement | null>(null);
+  // Upload mode
+  const signatureUploadRef = React.useRef<HTMLInputElement | null>(null);
+  const [uploadedSigPreview, setUploadedSigPreview] = useState("");
+  const [rawUploadedSig, setRawUploadedSig] = useState("");
+  const [autoRemoveBg, setAutoRemoveBg] = useState(true);
+  const [processingSigImage, setProcessingSigImage] = useState(false);
 
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -163,6 +190,26 @@ function SettingsPageContent() {
   const [companyFacebook, setCompanyFacebook] = useState("");
   const [companyYoutube, setCompanyYoutube] = useState("");
 
+  // ── Organization Signature (Admin/OPS only) ──
+  const [companySignatureUrl, setCompanySignatureUrl] = useState("");
+  const [companySignatureSavedAt, setCompanySignatureSavedAt] = useState<string | null>(null);
+  const [showOrgSignaturePad, setShowOrgSignaturePad] = useState(false);
+  const [savingOrgSignature, setSavingOrgSignature] = useState(false);
+  const [orgSigMode, setOrgSigMode] = useState<"draw" | "type" | "upload">("draw");
+  const [orgIsDrawing, setOrgIsDrawing] = useState(false);
+  const [orgSigLineWidth, setOrgSigLineWidth] = useState(2.5);
+  const [orgSigBg, setOrgSigBg] = useState<"blank" | "lined" | "grid">("lined");
+  const orgSignatureCanvasRef = React.useRef<HTMLCanvasElement | null>(null);
+  const orgSignatureLastPos = React.useRef<{ x: number; y: number } | null>(null);
+  const [orgTypedSignature, setOrgTypedSignature] = useState("");
+  const [orgSignatureFont, setOrgSignatureFont] = useState("'Dancing Script', cursive");
+  const [orgSigFontSize, setOrgSigFontSize] = useState(72);
+  const orgSignatureUploadRef = React.useRef<HTMLInputElement | null>(null);
+  const [orgUploadedSigPreview, setOrgUploadedSigPreview] = useState("");
+  const [orgRawUploadedSig, setOrgRawUploadedSig] = useState("");
+  const [orgAutoRemoveBg, setOrgAutoRemoveBg] = useState(true);
+  const [orgProcessingSigImage, setOrgProcessingSigImage] = useState(false);
+
   const [totalCompanyUsers, setTotalCompanyUsers] = useState<number | null>(null);
   const [updatingCompany, setUpdatingCompany] = useState(false);
   const [uploadingCompanyLogo, setUploadingCompanyLogo] = useState(false);
@@ -191,6 +238,11 @@ function SettingsPageContent() {
       setResumeFileName(user.resumeFileName || "");
       setResumeFileSize(user.resumeFileSize || 0);
       setResumeUpdatedAt(user.resumeUpdatedAt || null);
+      // Only load user-level signature for non-admin/non-OPS users
+      if (user.role?.toLowerCase() !== "admin" && user.role?.toLowerCase() !== "ops") {
+        setSignatureUrl((user as any).signatureUrl || "");
+        setSignatureSavedAt((user as any).signatureUrl ? ((user as any).updatedAt ? new Date((user as any).updatedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "Saved") : null);
+      }
     }
   }, [user]);
 
@@ -264,6 +316,8 @@ function SettingsPageContent() {
           setCompanyFacebook(c.socialLinks?.facebook || "");
           setCompanyYoutube(c.socialLinks?.youtube || "");
           setTotalCompanyUsers(c.totalUsers ?? null);
+          setCompanySignatureUrl(c.signatureUrl || "");
+          setCompanySignatureSavedAt(c.signatureUrl ? new Date(c.updatedAt || Date.now()).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : null);
         }
       }
     } catch (e) {
@@ -375,6 +429,7 @@ function SettingsPageContent() {
             facebook: companyFacebook,
             youtube: companyYoutube,
           },
+          signatureUrl: companySignatureUrl,
         }),
       });
       const data = await res.json();
@@ -644,12 +699,18 @@ function SettingsPageContent() {
 
   const executeUpdateProfile = async (profileData: any) => {
     if (!user) return;
+    // Capture final canvas signature if pad is open
+    let finalSig = signatureUrl;
+    if (showSignaturePad && signatureCanvasRef.current) {
+      finalSig = signatureCanvasRef.current.toDataURL("image/png");
+      setSignatureUrl(finalSig);
+    }
     setUpdatingProfile(true);
     try {
       const response = await fetch(`/api/team/${user._id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(profileData),
+        body: JSON.stringify({ ...profileData, signatureUrl: finalSig }),
       });
 
       const data = await response.json();
@@ -676,12 +737,18 @@ function SettingsPageContent() {
       return;
     }
     const skillsArray = skills.split(",").map((s) => s.trim()).filter((s) => s.length > 0);
+    let finalSig = signatureUrl;
+    if (showSignaturePad && signatureCanvasRef.current) {
+      finalSig = signatureCanvasRef.current.toDataURL("image/png");
+      setSignatureUrl(finalSig);
+    }
     const profileData = {
       name,
       email,          // new email — sent to backend after verification
       phone,
       bio,
       skills: skillsArray,
+      signatureUrl: finalSig,
       socialLinks: { linkedin, twitter, github, website, instagram, facebook },
       bankDetails: {
         bankName: bankName.trim(),
@@ -724,12 +791,18 @@ function SettingsPageContent() {
     e.preventDefault();
     if (!user) return;
     const skillsArray = skills.split(",").map((s) => s.trim()).filter((s) => s.length > 0);
+    let finalSig = signatureUrl;
+    if (showSignaturePad && signatureCanvasRef.current) {
+      finalSig = signatureCanvasRef.current.toDataURL("image/png");
+      setSignatureUrl(finalSig);
+    }
     const profileData = {
       name,
       email,
       phone,
       bio,
       skills: skillsArray,
+      signatureUrl: finalSig,
       socialLinks: { linkedin, twitter, github, website, instagram, facebook },
       bankDetails: {
         bankName: bankName.trim(),
@@ -1515,6 +1588,406 @@ function SettingsPageContent() {
                   </div>
                 </div>
 
+                {/* 6. ORGANIZATION DIGITAL SIGNATURE */}
+                <div className="space-y-4 pt-2">
+                  <div className="flex items-center gap-2 pb-2 border-b border-border/70">
+                    <div className="w-6 h-6 rounded-md bg-violet-500/10 flex items-center justify-center text-violet-500 text-xs">
+                      <i className="fa-solid fa-signature" />
+                    </div>
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-foreground">
+                      6. Official Organization Signature
+                    </h4>
+                    <span className="text-[11px] text-muted-foreground hidden sm:inline ml-auto">
+                      Auto-applied to invoices &amp; official documents
+                    </span>
+                  </div>
+
+                  {/* Load handwriting Google Fonts */}
+                  <link rel="preconnect" href="https://fonts.googleapis.com" />
+                  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&family=Pacifico&family=Caveat:wght@700&family=Sacramento&family=Great+Vibes&display=swap" />
+
+                  <div className="rounded-2xl overflow-hidden border border-border/80 shadow-sm">
+                    <div className="bg-gradient-to-r from-violet-500/8 via-primary/4 to-transparent px-5 py-4 flex items-center justify-between flex-wrap gap-3 border-b border-border/60">
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-xl bg-violet-500/15 border border-violet-500/20 flex items-center justify-center text-violet-500 shrink-0">
+                          <i className="fa-solid fa-file-signature text-base" />
+                        </div>
+                        <div>
+                          <h4 className="text-sm font-bold text-foreground flex items-center gap-2">
+                            Organization Signature
+                            {companySignatureUrl && !showOrgSignaturePad && (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-600 bg-emerald-500/10 border border-emerald-500/25 rounded-full px-2 py-0.5">
+                                <i className="fa-solid fa-shield-check text-[9px]" /> Active
+                              </span>
+                            )}
+                          </h4>
+                          <p className="text-[11px] text-muted-foreground mt-0.5">
+                            {companySignatureUrl && companySignatureSavedAt ? `Last updated ${companySignatureSavedAt} · Used on all invoices & documents` : "Draw, type, or upload the authorized signatory's signature"}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        {companySignatureUrl && !showOrgSignaturePad && (
+                          <a href={companySignatureUrl} download="org-signature.png"
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-border bg-background hover:bg-muted text-foreground transition-all cursor-pointer shadow-xs">
+                            <i className="fa-solid fa-arrow-down-to-line text-xs text-primary" /> Download
+                          </a>
+                        )}
+                        <Button type="button" size="sm"
+                          variant={showOrgSignaturePad ? "outline" : "default"}
+                          onClick={() => {
+                            setShowOrgSignaturePad((v) => !v);
+                            if (!showOrgSignaturePad && companySignatureUrl && orgSigMode === "draw") {
+                              setTimeout(() => {
+                                const canvas = orgSignatureCanvasRef.current;
+                                if (!canvas) return;
+                                const ctx = canvas.getContext("2d");
+                                if (!ctx) return;
+                                const img = new Image();
+                                img.onload = () => { ctx.clearRect(0, 0, canvas.width, canvas.height); ctx.drawImage(img, 0, 0); };
+                                img.src = companySignatureUrl;
+                              }, 60);
+                            }
+                          }}
+                          className="gap-2 text-xs h-8 font-semibold cursor-pointer">
+                          <i className={`fa-solid ${showOrgSignaturePad ? "fa-xmark" : (companySignatureUrl ? "fa-pen-to-square" : "fa-pen-nib")} text-xs`} />
+                          {showOrgSignaturePad ? "Cancel" : companySignatureUrl ? "Edit" : "Add Signature"}
+                        </Button>
+                        {companySignatureUrl && (
+                          <Button type="button" size="sm" variant="outline"
+                            onClick={async () => {
+                              setCompanySignatureUrl(""); setCompanySignatureSavedAt(null);
+                              setShowOrgSignaturePad(false); setOrgUploadedSigPreview(""); setOrgRawUploadedSig(""); setOrgTypedSignature("");
+                              await fetch("/api/settings/company", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: companyName, signatureUrl: "" }) });
+                              showToast("Organization signature removed.", "success");
+                            }}
+                            className="gap-1.5 text-xs h-8 text-rose-500 border-rose-500/30 hover:bg-rose-500/10 cursor-pointer">
+                            <i className="fa-solid fa-trash-can text-xs" />
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Saved org signature preview */}
+                    {companySignatureUrl && !showOrgSignaturePad && (
+                      <div className="px-5 py-4 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-violet-500/3 via-background to-background">
+                        <div className="inline-flex flex-col items-start gap-2">
+                          <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">Organization Signature</span>
+                          <div className="p-4 sm:p-5 rounded-xl bg-white text-zinc-950 border border-border/60 shadow-sm relative overflow-hidden">
+                            <div className="absolute inset-0 opacity-[0.06]" style={{ backgroundImage: "repeating-linear-gradient(transparent, transparent 27px, #64748b 27px, #64748b 28px)", backgroundPosition: "0 12px" }} />
+                            <img src={companySignatureUrl} alt="Organization signature" className="relative max-h-24 max-w-[280px] sm:max-w-sm object-contain" />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Empty state */}
+                    {!companySignatureUrl && !showOrgSignaturePad && (
+                      <div className="px-5 py-6 flex flex-col items-center justify-center text-center gap-2">
+                        <div className="w-14 h-14 rounded-2xl bg-muted/50 flex items-center justify-center text-muted-foreground/40 mb-1">
+                          <i className="fa-solid fa-file-signature text-2xl" />
+                        </div>
+                        <p className="text-sm font-semibold text-foreground">No organization signature yet</p>
+                        <p className="text-xs text-muted-foreground max-w-xs">Add the authorized signatory's signature to auto-apply it to all invoices and official documents.</p>
+                        <Button type="button" size="sm" onClick={() => setShowOrgSignaturePad(true)} className="gap-2 text-xs mt-2 cursor-pointer">
+                          <i className="fa-solid fa-plus text-xs" /> Add Signature
+                        </Button>
+                      </div>
+                    )}
+
+                    {/* ═══ Org Signature Editor ═══ */}
+                    {showOrgSignaturePad && (
+                      <div className="p-4 sm:p-5 space-y-5">
+                        {/* Mode tabs */}
+                        <div className="flex gap-0 rounded-xl overflow-hidden border border-border bg-muted/30 w-fit text-xs font-semibold">
+                          {(["draw", "type", "upload"] as const).map((m) => (
+                            <button key={m} type="button" onClick={() => setOrgSigMode(m)}
+                              className={cn(
+                                "flex items-center gap-1.5 px-4 py-2 transition-all cursor-pointer border-r border-border last:border-r-0",
+                                orgSigMode === m ? "bg-primary text-primary-foreground shadow-inner" : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+                              )}>
+                              <i className={`fa-solid ${ m === "draw" ? "fa-pen-nib" : m === "type" ? "fa-font" : "fa-image" } text-[11px]`} />
+                              {m === "draw" ? "Draw" : m === "type" ? "Type" : "Upload"}
+                            </button>
+                          ))}
+                        </div>
+
+                        {/* ── DRAW MODE ── */}
+                        {orgSigMode === "draw" && (
+                          <div className="space-y-4">
+                            <div className="flex flex-wrap items-center gap-4">
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold bg-muted/70 text-foreground border border-border/60">
+                                <span className="w-2.5 h-2.5 rounded-full bg-black ring-1 ring-border" /> Black Ink
+                              </span>
+                              <div className="flex items-center gap-2">
+                                <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Size</label>
+                                <div className="flex items-center gap-1.5">
+                                  {[1.2, 2.5, 4, 6].map((w) => (
+                                    <button key={w} type="button" onClick={() => setOrgSigLineWidth(w)}
+                                      className={cn("w-7 h-7 rounded-lg border flex items-center justify-center transition-all cursor-pointer", orgSigLineWidth === w ? "border-primary bg-primary/10" : "border-border hover:border-primary/50 bg-background")}>
+                                      <div style={{ width: Math.min(w * 3, 18), height: Math.min(w, 4), backgroundColor: "#000000", borderRadius: 99 }} />
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Paper</label>
+                                <div className="flex gap-1">
+                                  {(["blank", "lined", "grid"] as const).map((bg) => (
+                                    <button key={bg} type="button" onClick={() => setOrgSigBg(bg)}
+                                      className={cn("px-2.5 py-1 text-[10px] font-semibold rounded-md border transition-all cursor-pointer capitalize", orgSigBg === bg ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:border-primary/50 bg-background")}>
+                                      {bg}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+                            <div className="relative rounded-xl overflow-hidden border-2 border-border/60 shadow-inner touch-none select-none"
+                              style={{
+                                background: orgSigBg === "lined"
+                                  ? "repeating-linear-gradient(white, white 27px, #e2e8f0 27px, #e2e8f0 28px)"
+                                  : orgSigBg === "grid"
+                                  ? "repeating-linear-gradient(white, white 27px, #e2e8f0 27px, #e2e8f0 28px), repeating-linear-gradient(90deg, white, white 27px, #e2e8f0 27px, #e2e8f0 28px)"
+                                  : "white",
+                              }}>
+                              <canvas ref={orgSignatureCanvasRef} width={800} height={200}
+                                className="w-full h-[170px] sm:h-[200px] cursor-crosshair block"
+                                style={{ touchAction: "none", background: "transparent" }}
+                                onMouseDown={(e) => {
+                                  const canvas = orgSignatureCanvasRef.current; if (!canvas) return;
+                                  setOrgIsDrawing(true);
+                                  const rect = canvas.getBoundingClientRect();
+                                  const x = (e.clientX - rect.left) * (canvas.width / rect.width);
+                                  const y = (e.clientY - rect.top) * (canvas.height / rect.height);
+                                  orgSignatureLastPos.current = { x, y };
+                                  const ctx = canvas.getContext("2d"); if (!ctx) return;
+                                  ctx.beginPath(); ctx.moveTo(x, y);
+                                  ctx.strokeStyle = "#000000"; ctx.lineWidth = orgSigLineWidth;
+                                  ctx.lineCap = "round"; ctx.lineJoin = "round";
+                                }}
+                                onMouseMove={(e) => {
+                                  if (!orgIsDrawing || !orgSignatureLastPos.current) return;
+                                  const canvas = orgSignatureCanvasRef.current; if (!canvas) return;
+                                  const ctx = canvas.getContext("2d"); if (!ctx) return;
+                                  const rect = canvas.getBoundingClientRect();
+                                  const x = (e.clientX - rect.left) * (canvas.width / rect.width);
+                                  const y = (e.clientY - rect.top) * (canvas.height / rect.height);
+                                  ctx.lineTo(x, y); ctx.stroke();
+                                  orgSignatureLastPos.current = { x, y };
+                                }}
+                                onMouseUp={() => { setOrgIsDrawing(false); orgSignatureLastPos.current = null; }}
+                                onMouseLeave={() => { setOrgIsDrawing(false); orgSignatureLastPos.current = null; }}
+                                onTouchStart={(e) => {
+                                  e.preventDefault();
+                                  const canvas = orgSignatureCanvasRef.current; if (!canvas) return;
+                                  setOrgIsDrawing(true);
+                                  const t = e.touches[0]; const rect = canvas.getBoundingClientRect();
+                                  const x = (t.clientX - rect.left) * (canvas.width / rect.width);
+                                  const y = (t.clientY - rect.top) * (canvas.height / rect.height);
+                                  orgSignatureLastPos.current = { x, y };
+                                  const ctx = canvas.getContext("2d"); if (!ctx) return;
+                                  ctx.beginPath(); ctx.moveTo(x, y);
+                                  ctx.strokeStyle = "#000000"; ctx.lineWidth = orgSigLineWidth;
+                                  ctx.lineCap = "round"; ctx.lineJoin = "round";
+                                }}
+                                onTouchMove={(e) => {
+                                  e.preventDefault();
+                                  if (!orgIsDrawing || !orgSignatureLastPos.current) return;
+                                  const canvas = orgSignatureCanvasRef.current; if (!canvas) return;
+                                  const ctx = canvas.getContext("2d"); if (!ctx) return;
+                                  const t = e.touches[0]; const rect = canvas.getBoundingClientRect();
+                                  const x = (t.clientX - rect.left) * (canvas.width / rect.width);
+                                  const y = (t.clientY - rect.top) * (canvas.height / rect.height);
+                                  ctx.lineTo(x, y); ctx.stroke();
+                                  orgSignatureLastPos.current = { x, y };
+                                }}
+                                onTouchEnd={(e) => { e.preventDefault(); setOrgIsDrawing(false); orgSignatureLastPos.current = null; }}
+                              />
+                              <div className="absolute bottom-[26%] left-5 right-5 border-t border-dashed border-slate-300 dark:border-slate-700 pointer-events-none" />
+                              <span className="absolute bottom-2 left-5 text-[10px] text-slate-400 pointer-events-none select-none font-medium">Sign above this line</span>
+                              <button type="button"
+                                onClick={() => { const c = orgSignatureCanvasRef.current; if (c) c.getContext("2d")?.clearRect(0, 0, c.width, c.height); }}
+                                className="absolute top-2 right-2 w-7 h-7 rounded-lg bg-background/80 backdrop-blur border border-border/60 flex items-center justify-center text-muted-foreground hover:text-rose-500 hover:border-rose-300 transition-all cursor-pointer" title="Clear canvas">
+                                <i className="fa-solid fa-eraser text-[10px]" />
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* ── TYPE MODE ── */}
+                        {orgSigMode === "type" && (
+                          <div className="space-y-4">
+                            <div className="relative">
+                              <i className="fa-solid fa-font absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground/50 text-xs" />
+                              <input type="text" value={orgTypedSignature} onChange={(e) => setOrgTypedSignature(e.target.value)}
+                                placeholder="Type the signatory's full name…" maxLength={60}
+                                className="w-full pl-8 pr-4 py-2.5 text-sm bg-background border border-border rounded-xl text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary transition-all" />
+                            </div>
+                            <div className="flex flex-wrap items-center gap-4">
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold bg-muted/70 text-foreground border border-border/60">
+                                <span className="w-2.5 h-2.5 rounded-full bg-black ring-1 ring-border" /> Black Ink
+                              </span>
+                              <div className="flex items-center gap-2">
+                                <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Size</label>
+                                <input type="range" min={40} max={100} value={orgSigFontSize} onChange={(e) => setOrgSigFontSize(Number(e.target.value))} className="w-24 accent-primary cursor-pointer" />
+                                <span className="text-[11px] text-muted-foreground w-8">{orgSigFontSize}px</span>
+                              </div>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              {([
+                                { label: "Dancing Script", value: "'Dancing Script', cursive" },
+                                { label: "Pacifico", value: "'Pacifico', cursive" },
+                                { label: "Caveat", value: "'Caveat', cursive" },
+                                { label: "Sacramento", value: "'Sacramento', cursive" },
+                                { label: "Great Vibes", value: "'Great Vibes', cursive" },
+                              ]).map((f) => (
+                                <button key={f.value} type="button" onClick={() => setOrgSignatureFont(f.value)}
+                                  style={{ fontFamily: f.value }}
+                                  className={cn("px-3 py-1.5 text-base rounded-xl border transition-all cursor-pointer",
+                                    orgSignatureFont === f.value ? "border-primary bg-primary/10 text-primary shadow-sm" : "border-border text-foreground hover:border-primary/50 bg-background hover:bg-muted/30")}>
+                                  {f.label}
+                                </button>
+                              ))}
+                            </div>
+                            <div className="relative rounded-xl border-2 border-dashed flex items-center justify-center min-h-[130px] overflow-hidden transition-all"
+                              style={{ borderColor: orgTypedSignature ? "rgb(var(--primary) / 0.3)" : "rgb(var(--border) / 0.5)", background: "repeating-linear-gradient(white, white 29px, #e2e8f0 29px, #e2e8f0 30px)" }}>
+                              {orgTypedSignature ? (
+                                <span style={{ fontFamily: orgSignatureFont, fontSize: `${orgSigFontSize}px`, color: "#000000", lineHeight: 1.15, padding: "8px 20px", display: "block" }}>
+                                  {orgTypedSignature}
+                                </span>
+                              ) : (
+                                <div className="flex flex-col items-center gap-1 text-muted-foreground/40">
+                                  <i className="fa-solid fa-i-cursor text-2xl" />
+                                  <span className="text-xs">Live preview appears here</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* ── UPLOAD MODE ── */}
+                        {orgSigMode === "upload" && (
+                          <div className="space-y-3">
+                            <p className="text-xs text-muted-foreground">Upload a scan of the authorized signatory's handwritten signature. Background will be automatically removed.</p>
+                            <input ref={orgSignatureUploadRef} type="file" accept="image/png,image/jpeg,image/svg+xml,image/webp" className="hidden"
+                              onChange={async (e) => {
+                                const file = e.target.files?.[0];
+                                if (!file) return;
+                                if (file.size > 4 * 1024 * 1024) { showToast("Signature image must be under 4MB.", "error"); return; }
+                                setOrgProcessingSigImage(true);
+                                const reader = new FileReader();
+                                reader.onload = async (ev) => {
+                                  const raw = ev.target?.result as string;
+                                  setOrgRawUploadedSig(raw);
+                                  try {
+                                    const processed = await removeSignatureBackground(raw);
+                                    setOrgUploadedSigPreview(processed); setOrgAutoRemoveBg(true);
+                                  } catch {
+                                    setOrgUploadedSigPreview(raw);
+                                  } finally { setOrgProcessingSigImage(false); }
+                                };
+                                reader.readAsDataURL(file);
+                              }} />
+                            {orgProcessingSigImage ? (
+                              <div className="p-8 rounded-xl flex flex-col items-center justify-center min-h-[140px] border border-border bg-muted/20 gap-2.5">
+                                <i className="fa-solid fa-spinner fa-spin text-primary text-xl" />
+                                <span className="text-xs font-semibold text-foreground">Auto-removing background &amp; enhancing ink…</span>
+                              </div>
+                            ) : (orgUploadedSigPreview || orgRawUploadedSig) ? (
+                              <div className="space-y-3">
+                                <div className="p-5 rounded-xl flex items-center justify-center min-h-[140px] border-2 border-primary/25 shadow-inner relative overflow-hidden"
+                                  style={{ backgroundColor: "#ffffff", backgroundImage: orgAutoRemoveBg ? "linear-gradient(45deg, #f1f5f9 25%, transparent 25%), linear-gradient(-45deg, #f1f5f9 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #f1f5f9 75%), linear-gradient(-45deg, transparent 75%, #f1f5f9 75%)" : "none", backgroundSize: "16px 16px", backgroundPosition: "0 0, 0 8px, 8px -8px, -8px 0px" }}>
+                                  <img src={orgAutoRemoveBg ? orgUploadedSigPreview : (orgRawUploadedSig || orgUploadedSigPreview)} alt="Org signature upload" className="max-h-24 max-w-full object-contain drop-shadow-sm" />
+                                </div>
+                                <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+                                  <label className="flex items-center gap-2 cursor-pointer select-none">
+                                    <input type="checkbox" checked={orgAutoRemoveBg} onChange={(e) => setOrgAutoRemoveBg(e.target.checked)} className="w-4 h-4 rounded border-border text-primary focus:ring-primary accent-primary cursor-pointer" />
+                                    <span className="text-xs font-medium text-foreground flex items-center gap-1.5">
+                                      <i className="fa-solid fa-wand-magic-sparkles text-emerald-500 text-xs" /> Auto-remove background &amp; sharpen
+                                    </span>
+                                  </label>
+                                  <button type="button" onClick={() => { setOrgUploadedSigPreview(""); setOrgRawUploadedSig(""); if (orgSignatureUploadRef.current) orgSignatureUploadRef.current.value = ""; }}
+                                    className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground cursor-pointer transition-colors">
+                                    <i className="fa-solid fa-arrows-rotate text-xs" /> Choose a different image
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <div onClick={() => orgSignatureUploadRef.current?.click()}
+                                className="border-2 border-dashed border-border/70 hover:border-primary/50 rounded-2xl p-10 flex flex-col items-center justify-center text-center cursor-pointer transition-all group">
+                                <div className="w-14 h-14 rounded-2xl bg-primary/8 flex items-center justify-center mb-3 text-primary group-hover:scale-105 transition-transform">
+                                  <i className="fa-solid fa-image text-xl" />
+                                </div>
+                                <p className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors">Click or drag &amp; drop your signature</p>
+                                <p className="text-xs text-muted-foreground mt-1.5">PNG, JPG, SVG, WebP · max 4 MB · Auto background removal</p>
+                                <div className="mt-4 px-4 py-1.5 rounded-lg bg-primary/8 border border-primary/20 text-xs text-primary font-semibold">
+                                  <i className="fa-solid fa-cloud-arrow-up text-xs mr-1.5" /> Browse Files
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Footer save button */}
+                        <div className="flex items-center justify-between gap-3 pt-3 border-t border-border/50">
+                          <p className="text-[11px] text-muted-foreground flex items-center gap-1.5">
+                            <i className="fa-solid fa-lock text-[10px] text-emerald-500" />
+                            Stored securely · auto-applied to all invoices &amp; contracts
+                          </p>
+                          <Button type="button" size="sm" disabled={savingOrgSignature}
+                            onClick={async () => {
+                              let dataUrl = "";
+                              if (orgSigMode === "draw") {
+                                const canvas = orgSignatureCanvasRef.current;
+                                if (!canvas) return;
+                                dataUrl = canvas.toDataURL("image/png");
+                              } else if (orgSigMode === "type") {
+                                if (!orgTypedSignature.trim()) { showToast("Please type the signatory's name first.", "error"); return; }
+                                const offCanvas = document.createElement("canvas");
+                                offCanvas.width = 800; offCanvas.height = 200;
+                                const ctx = offCanvas.getContext("2d")!;
+                                ctx.clearRect(0, 0, offCanvas.width, offCanvas.height);
+                                ctx.font = `${orgSigFontSize}px ${orgSignatureFont}`;
+                                ctx.fillStyle = "#000000";
+                                ctx.textBaseline = "middle"; ctx.textAlign = "center";
+                                ctx.fillText(orgTypedSignature, offCanvas.width / 2, offCanvas.height / 2);
+                                dataUrl = offCanvas.toDataURL("image/png");
+                              } else if (orgSigMode === "upload") {
+                                const chosen = (orgAutoRemoveBg && orgUploadedSigPreview) ? orgUploadedSigPreview : (orgRawUploadedSig || orgUploadedSigPreview);
+                                if (!chosen) { showToast("Please upload a signature image first.", "error"); return; }
+                                dataUrl = chosen;
+                              }
+                              setSavingOrgSignature(true);
+                              try {
+                                const res = await fetch("/api/settings/company", {
+                                  method: "PUT",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({ name: companyName, signatureUrl: dataUrl }),
+                                });
+                                if (res.ok) {
+                                  setCompanySignatureUrl(dataUrl);
+                                  setCompanySignatureSavedAt(new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }));
+                                  setShowOrgSignaturePad(false);
+                                  setOrgUploadedSigPreview("");
+                                  showToast("Organization signature saved successfully!", "success");
+                                } else {
+                                  const d = await res.json();
+                                  showToast(d.error || "Failed to save signature", "error");
+                                }
+                              } catch { showToast("Error saving signature.", "error"); }
+                              finally { setSavingOrgSignature(false); }
+                            }}
+                            className="gap-2 h-9 px-5 text-xs bg-primary hover:bg-primary/90 text-primary-foreground font-bold cursor-pointer shadow-md">
+                            <i className={`fa-solid ${savingOrgSignature ? "fa-spinner fa-spin" : "fa-floppy-disk"} text-xs`} />
+                            {savingOrgSignature ? "Saving…" : "Save Signature"}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
                 {/* FOOTER ACTIONS BAR */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-6 border-t border-border/80">
                   <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -1727,6 +2200,550 @@ function SettingsPageContent() {
                 />
               </div>
 
+
+              {/* ═══ Digital Signature Section (non-admins only — admins use org signature) ═══ */}
+              {!isAdmin && !isOPS && (
+              <>
+              {/* Load handwriting Google Fonts for the Type mode */}
+              <link rel="preconnect" href="https://fonts.googleapis.com" />
+              <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&family=Pacifico&family=Caveat:wght@700&family=Sacramento&family=Great+Vibes&display=swap" />
+
+              <div className="pt-4 border-t border-border">
+                {/* Premium header card */}
+                <div className="rounded-2xl overflow-hidden border border-border/80 shadow-sm">
+                  <div className="bg-gradient-to-r from-primary/8 via-primary/4 to-transparent px-5 py-4 flex items-center justify-between flex-wrap gap-3 border-b border-border/60">
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-primary/15 border border-primary/20 flex items-center justify-center text-primary shrink-0">
+                        <i className="fa-solid fa-signature text-base" />
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-bold text-foreground flex items-center gap-2">
+                          Digital Signature
+                          {signatureUrl && !showSignaturePad && (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-600 bg-emerald-500/10 border border-emerald-500/25 rounded-full px-2 py-0.5">
+                              <i className="fa-solid fa-shield-check text-[9px]" /> Verified
+                            </span>
+                          )}
+                        </h4>
+                        <p className="text-[11px] text-muted-foreground mt-0.5">
+                          {signatureUrl && signatureSavedAt ? `Last saved ${signatureSavedAt} · Used on invoices & documents` : "Draw, type, or upload — used on invoices & official documents"}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      {/* Download saved signature */}
+                      {signatureUrl && !showSignaturePad && (
+                        <a
+                          href={signatureUrl}
+                          download="my-signature.png"
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-border bg-background hover:bg-muted text-foreground transition-all cursor-pointer shadow-xs"
+                        >
+                          <i className="fa-solid fa-arrow-down-to-line text-xs text-primary" /> Download
+                        </a>
+                      )}
+                      <Button
+                        type="button" size="sm"
+                        variant={showSignaturePad ? "outline" : "default"}
+                        onClick={() => {
+                          setShowSignaturePad((v) => !v);
+                          if (!showSignaturePad && signatureUrl && sigMode === "draw") {
+                            setTimeout(() => {
+                              const canvas = signatureCanvasRef.current;
+                              if (!canvas) return;
+                              const ctx = canvas.getContext("2d");
+                              if (!ctx) return;
+                              const img = new Image();
+                              img.onload = () => { ctx.clearRect(0, 0, canvas.width, canvas.height); ctx.drawImage(img, 0, 0); };
+                              img.src = signatureUrl;
+                            }, 60);
+                          }
+                        }}
+                        className="gap-2 text-xs h-8 font-semibold cursor-pointer"
+                      >
+                        <i className={`fa-solid ${showSignaturePad ? "fa-xmark" : (signatureUrl ? "fa-pen-to-square" : "fa-pen-nib")} text-xs`} />
+                        {showSignaturePad ? "Cancel" : signatureUrl ? "Edit" : "Create Signature"}
+                      </Button>
+                      {signatureUrl && (
+                        <Button type="button" size="sm" variant="outline"
+                          onClick={async () => {
+                            setSignatureUrl(""); setSignatureSavedAt(null);
+                            setShowSignaturePad(false); setUploadedSigPreview(""); setRawUploadedSig(""); setTypedSignature("");
+                            if (!user) return;
+                            await fetch(`/api/team/${user._id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ signatureUrl: "" }) });
+                            showToast("Signature removed.", "success");
+                          }}
+                          className="gap-1.5 text-xs h-8 text-rose-500 border-rose-500/30 hover:bg-rose-500/10 cursor-pointer"
+                        >
+                          <i className="fa-solid fa-trash-can text-xs" />
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Saved signature preview */}
+                  {signatureUrl && !showSignaturePad && (
+                    <div className="px-5 py-4 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-primary/3 via-background to-background">
+                      <div className="inline-flex flex-col items-start gap-2">
+                        <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">Your Signature</span>
+                        <div className="p-4 sm:p-5 rounded-xl bg-white text-zinc-950 border border-border/60 shadow-sm relative overflow-hidden">
+                          {/* subtle lined background */}
+                          <div className="absolute inset-0 opacity-[0.06]" style={{ backgroundImage: "repeating-linear-gradient(transparent, transparent 27px, #64748b 27px, #64748b 28px)", backgroundPosition: "0 12px" }} />
+                          <img src={signatureUrl} alt="Digital signature" className="relative max-h-24 max-w-[280px] sm:max-w-sm object-contain" />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Empty state */}
+                  {!signatureUrl && !showSignaturePad && (
+                    <div className="px-5 py-6 flex flex-col items-center justify-center text-center gap-2">
+                      <div className="w-14 h-14 rounded-2xl bg-muted/50 flex items-center justify-center text-muted-foreground/40 mb-1">
+                        <i className="fa-solid fa-pen-nib text-2xl" />
+                      </div>
+                      <p className="text-sm font-semibold text-foreground">No signature yet</p>
+                      <p className="text-xs text-muted-foreground max-w-xs">Create your digital signature to auto-populate invoices, contracts, and official documents.</p>
+                      <Button type="button" size="sm" onClick={() => setShowSignaturePad(true)} className="gap-2 text-xs mt-2 cursor-pointer">
+                        <i className="fa-solid fa-plus text-xs" /> Create Signature
+                      </Button>
+                    </div>
+                  )}
+
+                  {/* ═══ Editor panel ═══ */}
+                  {showSignaturePad && (
+                    <div className="p-4 sm:p-5 space-y-5">
+
+                      {/* Mode tab strip */}
+                      <div className="flex gap-0 rounded-xl overflow-hidden border border-border bg-muted/30 w-fit text-xs font-semibold">
+                        {(["draw", "type", "upload"] as const).map((m, idx) => (
+                          <button key={m} type="button" onClick={() => setSigMode(m)}
+                            className={cn(
+                              "flex items-center gap-1.5 px-4 py-2 transition-all cursor-pointer border-r border-border last:border-r-0",
+                              sigMode === m
+                                ? "bg-primary text-primary-foreground shadow-inner"
+                                : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+                            )}
+                          >
+                            <i className={`fa-solid ${ m === "draw" ? "fa-pen-nib" : m === "type" ? "fa-font" : "fa-image" } text-[11px]`} />
+                            {m === "draw" ? "Draw" : m === "type" ? "Type" : "Upload"}
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* ── DRAW MODE ── */}
+                      {sigMode === "draw" && (
+                        <div className="space-y-4">
+                          {/* Toolbar row */}
+                          <div className="flex flex-wrap items-center gap-4">
+                            {/* Ink badge - standard black */}
+                            <div className="flex items-center gap-2">
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold bg-muted/70 text-foreground border border-border/60">
+                                <span className="w-2.5 h-2.5 rounded-full bg-black ring-1 ring-border" />
+                                Black Ink
+                              </span>
+                            </div>
+
+                            {/* Stroke width */}
+                            <div className="flex items-center gap-2">
+                              <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Size</label>
+                              <div className="flex items-center gap-1.5">
+                                {[1.2, 2.5, 4, 6].map((w) => (
+                                  <button key={w} type="button" onClick={() => setSigLineWidth(w)}
+                                    className={cn("w-7 h-7 rounded-lg border flex items-center justify-center transition-all cursor-pointer", sigLineWidth === w ? "border-primary bg-primary/10" : "border-border hover:border-primary/50 bg-background")}
+                                    title={`${w}px`}
+                                  >
+                                    <div style={{ width: Math.min(w * 3, 18), height: Math.min(w, 4), backgroundColor: "#000000", borderRadius: 99 }} />
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+
+                            {/* Background */}
+                            <div className="flex items-center gap-2">
+                              <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Paper</label>
+                              <div className="flex gap-1">
+                                {(["blank", "lined", "grid"] as const).map((bg) => (
+                                  <button key={bg} type="button" onClick={() => setSigBg(bg)}
+                                    className={cn("px-2.5 py-1 text-[10px] font-semibold rounded-md border transition-all cursor-pointer capitalize", sigBg === bg ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:border-primary/50 bg-background")}
+                                  >
+                                    {bg}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Canvas */}
+                          <div className="relative rounded-xl overflow-hidden border-2 border-border/60 shadow-inner touch-none select-none"
+                            style={{
+                              background:
+                                sigBg === "lined"
+                                  ? "repeating-linear-gradient(white, white 27px, #e2e8f0 27px, #e2e8f0 28px)"
+                                  : sigBg === "grid"
+                                  ? "repeating-linear-gradient(white, white 27px, #e2e8f0 27px, #e2e8f0 28px), repeating-linear-gradient(90deg, white, white 27px, #e2e8f0 27px, #e2e8f0 28px)"
+                                  : "white",
+                            }}
+                          >
+                            <canvas
+                              ref={signatureCanvasRef}
+                              width={800} height={200}
+                              className="w-full h-[170px] sm:h-[200px] cursor-crosshair block"
+                              style={{ touchAction: "none", background: "transparent" }}
+                              onMouseDown={(e) => {
+                                const canvas = signatureCanvasRef.current; if (!canvas) return;
+                                setIsDrawing(true);
+                                const rect = canvas.getBoundingClientRect();
+                                const x = (e.clientX - rect.left) * (canvas.width / rect.width);
+                                const y = (e.clientY - rect.top) * (canvas.height / rect.height);
+                                signatureLastPos.current = { x, y };
+                                // Start a fresh open path for this stroke
+                                const ctx = canvas.getContext("2d"); if (!ctx) return;
+                                ctx.beginPath();
+                                ctx.moveTo(x, y);
+                                ctx.strokeStyle = sigColor;
+                                ctx.lineWidth = sigLineWidth;
+                                ctx.lineCap = "round";
+                                ctx.lineJoin = "round";
+                              }}
+                              onMouseMove={(e) => {
+                                if (!isDrawing || !signatureLastPos.current) return;
+                                const canvas = signatureCanvasRef.current; if (!canvas) return;
+                                const ctx = canvas.getContext("2d"); if (!ctx) return;
+                                const rect = canvas.getBoundingClientRect();
+                                const x = (e.clientX - rect.left) * (canvas.width / rect.width);
+                                const y = (e.clientY - rect.top) * (canvas.height / rect.height);
+                                ctx.lineTo(x, y);
+                                ctx.stroke();
+                                signatureLastPos.current = { x, y };
+                              }}
+                              onMouseUp={() => { setIsDrawing(false); signatureLastPos.current = null; }}
+                              onMouseLeave={() => { setIsDrawing(false); signatureLastPos.current = null; }}
+                              onTouchStart={(e) => {
+                                e.preventDefault();
+                                const canvas = signatureCanvasRef.current; if (!canvas) return;
+                                setIsDrawing(true);
+                                const t = e.touches[0]; const rect = canvas.getBoundingClientRect();
+                                const x = (t.clientX - rect.left) * (canvas.width / rect.width);
+                                const y = (t.clientY - rect.top) * (canvas.height / rect.height);
+                                signatureLastPos.current = { x, y };
+                                // Start a fresh open path for this touch stroke
+                                const ctx = canvas.getContext("2d"); if (!ctx) return;
+                                ctx.beginPath();
+                                ctx.moveTo(x, y);
+                                ctx.strokeStyle = sigColor;
+                                ctx.lineWidth = sigLineWidth;
+                                ctx.lineCap = "round";
+                                ctx.lineJoin = "round";
+                              }}
+                              onTouchMove={(e) => {
+                                e.preventDefault();
+                                if (!isDrawing || !signatureLastPos.current) return;
+                                const canvas = signatureCanvasRef.current; if (!canvas) return;
+                                const ctx = canvas.getContext("2d"); if (!ctx) return;
+                                const t = e.touches[0]; const rect = canvas.getBoundingClientRect();
+                                const x = (t.clientX - rect.left) * (canvas.width / rect.width);
+                                const y = (t.clientY - rect.top) * (canvas.height / rect.height);
+                                ctx.lineTo(x, y);
+                                ctx.stroke();
+                                signatureLastPos.current = { x, y };
+                              }}
+                              onTouchEnd={(e) => { e.preventDefault(); setIsDrawing(false); signatureLastPos.current = null; }}
+                            />
+                            {/* Baseline */}
+                            <div className="absolute bottom-[26%] left-5 right-5 border-t border-dashed border-slate-300 dark:border-slate-700 pointer-events-none" />
+                            <span className="absolute bottom-2 left-5 text-[10px] text-slate-400 pointer-events-none select-none font-medium">Sign above this line</span>
+                            {/* Clear button overlay */}
+                            <button type="button"
+                              onClick={() => { const c = signatureCanvasRef.current; if (c) c.getContext("2d")?.clearRect(0, 0, c.width, c.height); }}
+                              className="absolute top-2 right-2 w-7 h-7 rounded-lg bg-background/80 backdrop-blur border border-border/60 flex items-center justify-center text-muted-foreground hover:text-rose-500 hover:border-rose-300 transition-all cursor-pointer"
+                              title="Clear canvas"
+                            >
+                              <i className="fa-solid fa-eraser text-[10px]" />
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* ── TYPE MODE ── */}
+                      {sigMode === "type" && (
+                        <div className="space-y-4">
+                          {/* Input row */}
+                          <div className="relative">
+                            <i className="fa-solid fa-font absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground/50 text-xs" />
+                            <input
+                              type="text"
+                              value={typedSignature}
+                              onChange={(e) => setTypedSignature(e.target.value)}
+                              placeholder="Type your full name…"
+                              maxLength={60}
+                              className="w-full pl-8 pr-4 py-2.5 text-sm bg-background border border-border rounded-xl text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary transition-all"
+                            />
+                          </div>
+
+                          {/* Controls row */}
+                          <div className="flex flex-wrap items-center gap-4">
+                            {/* Ink badge */}
+                            <div className="flex items-center gap-2">
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold bg-muted/70 text-foreground border border-border/60">
+                                <span className="w-2.5 h-2.5 rounded-full bg-black ring-1 ring-border" />
+                                Black Ink
+                              </span>
+                            </div>
+
+                            {/* Font size */}
+                            <div className="flex items-center gap-2">
+                              <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Size</label>
+                              <input type="range" min={40} max={100} value={sigFontSize} onChange={(e) => setSigFontSize(Number(e.target.value))}
+                                className="w-24 accent-primary cursor-pointer"
+                              />
+                              <span className="text-[11px] text-muted-foreground w-8">{sigFontSize}px</span>
+                            </div>
+                          </div>
+
+                          {/* Font picker */}
+                          <div className="flex flex-wrap gap-2">
+                            {([
+                              { label: "Dancing Script", value: "'Dancing Script', cursive" },
+                              { label: "Pacifico", value: "'Pacifico', cursive" },
+                              { label: "Caveat", value: "'Caveat', cursive" },
+                              { label: "Sacramento", value: "'Sacramento', cursive" },
+                              { label: "Great Vibes", value: "'Great Vibes', cursive" },
+                            ]).map((f) => (
+                              <button
+                                key={f.value} type="button" onClick={() => setSignatureFont(f.value)}
+                                style={{ fontFamily: f.value }}
+                                className={cn(
+                                  "px-3 py-1.5 text-base rounded-xl border transition-all cursor-pointer",
+                                  signatureFont === f.value
+                                    ? "border-primary bg-primary/10 text-primary shadow-sm"
+                                    : "border-border text-foreground hover:border-primary/50 bg-background hover:bg-muted/30"
+                                )}
+                              >
+                                {f.label}
+                              </button>
+                            ))}
+                          </div>
+
+                          {/* Live preview */}
+                          <div
+                            className="relative rounded-xl border-2 border-dashed flex items-center justify-center min-h-[130px] overflow-hidden transition-all"
+                            style={{
+                              borderColor: typedSignature ? "rgb(var(--primary) / 0.3)" : "rgb(var(--border) / 0.5)",
+                              background: "repeating-linear-gradient(white, white 29px, #e2e8f0 29px, #e2e8f0 30px)",
+                            }}
+                          >
+                            {typedSignature ? (
+                              <span
+                                style={{ fontFamily: signatureFont, fontSize: `${sigFontSize}px`, color: sigFontColor, lineHeight: 1.15, padding: "8px 20px", display: "block" }}
+                              >
+                                {typedSignature}
+                              </span>
+                            ) : (
+                              <div className="flex flex-col items-center gap-1 text-muted-foreground/40">
+                                <i className="fa-solid fa-i-cursor text-2xl" />
+                                <span className="text-xs">Live preview appears here</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* ── UPLOAD MODE ── */}
+                      {sigMode === "upload" && (
+                        <div className="space-y-3">
+                          <p className="text-xs text-muted-foreground">Upload a photo or scan of your handwritten signature. Background will be automatically removed and strokes sharpened to solid black ink.</p>
+                          <input
+                            ref={signatureUploadRef} type="file"
+                            accept="image/png,image/jpeg,image/svg+xml,image/webp"
+                            className="hidden"
+                            onChange={async (e) => {
+                              const file = e.target.files?.[0];
+                              if (!file) return;
+                              if (file.size > 4 * 1024 * 1024) { showToast("Signature image must be under 4MB.", "error"); return; }
+                              setProcessingSigImage(true);
+                              const reader = new FileReader();
+                              reader.onload = async (ev) => {
+                                const raw = ev.target?.result as string;
+                                setRawUploadedSig(raw);
+                                try {
+                                  const processed = await removeSignatureBackground(raw);
+                                  setUploadedSigPreview(processed);
+                                  setAutoRemoveBg(true);
+                                } catch {
+                                  setUploadedSigPreview(raw);
+                                } finally {
+                                  setProcessingSigImage(false);
+                                }
+                              };
+                              reader.readAsDataURL(file);
+                            }}
+                          />
+
+                          {processingSigImage ? (
+                            <div className="p-8 rounded-xl flex flex-col items-center justify-center min-h-[140px] border border-border bg-muted/20 gap-2.5">
+                              <i className="fa-solid fa-spinner fa-spin text-primary text-xl" />
+                              <span className="text-xs font-semibold text-foreground">Auto-removing background & enhancing ink…</span>
+                              <span className="text-[11px] text-muted-foreground">Detecting paper lighting and converting to crisp black ink</span>
+                            </div>
+                          ) : (uploadedSigPreview || rawUploadedSig) ? (
+                            <div className="space-y-3">
+                              {/* Signature preview on paper/transparent checkerboard */}
+                              <div
+                                className="p-5 rounded-xl flex items-center justify-center min-h-[140px] border-2 border-primary/25 shadow-inner relative overflow-hidden"
+                                style={{
+                                  backgroundColor: "#ffffff",
+                                  backgroundImage: autoRemoveBg
+                                    ? "linear-gradient(45deg, #f1f5f9 25%, transparent 25%), linear-gradient(-45deg, #f1f5f9 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #f1f5f9 75%), linear-gradient(-45deg, transparent 75%, #f1f5f9 75%)"
+                                    : "none",
+                                  backgroundSize: "16px 16px",
+                                  backgroundPosition: "0 0, 0 8px, 8px -8px, -8px 0px"
+                                }}
+                              >
+                                <img
+                                  src={autoRemoveBg ? uploadedSigPreview : (rawUploadedSig || uploadedSigPreview)}
+                                  alt="Uploaded signature"
+                                  className="max-h-24 max-w-full object-contain drop-shadow-sm"
+                                />
+                              </div>
+
+                              <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+                                {/* Auto-remove toggle */}
+                                <label className="flex items-center gap-2 cursor-pointer select-none">
+                                  <input
+                                    type="checkbox"
+                                    checked={autoRemoveBg}
+                                    onChange={(e) => setAutoRemoveBg(e.target.checked)}
+                                    className="w-4 h-4 rounded border-border text-primary focus:ring-primary accent-primary cursor-pointer"
+                                  />
+                                  <span className="text-xs font-medium text-foreground flex items-center gap-1.5">
+                                    <i className="fa-solid fa-wand-magic-sparkles text-emerald-500 text-xs" />
+                                    Auto-remove background & sharpen black ink
+                                  </span>
+                                </label>
+
+                                <button type="button"
+                                  onClick={() => {
+                                    setUploadedSigPreview("");
+                                    setRawUploadedSig("");
+                                    if (signatureUploadRef.current) signatureUploadRef.current.value = "";
+                                  }}
+                                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground cursor-pointer transition-colors"
+                                >
+                                  <i className="fa-solid fa-arrows-rotate text-xs" /> Choose a different image
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div
+                              onClick={() => signatureUploadRef.current?.click()}
+                              onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                              onDrop={async (e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                const file = e.dataTransfer.files?.[0];
+                                if (!file) return;
+                                if (file.size > 4 * 1024 * 1024) { showToast("Signature image must be under 4MB.", "error"); return; }
+                                setProcessingSigImage(true);
+                                const reader = new FileReader();
+                                reader.onload = async (ev) => {
+                                  const raw = ev.target?.result as string;
+                                  setRawUploadedSig(raw);
+                                  try {
+                                    const processed = await removeSignatureBackground(raw);
+                                    setUploadedSigPreview(processed);
+                                    setAutoRemoveBg(true);
+                                  } catch {
+                                    setUploadedSigPreview(raw);
+                                  } finally {
+                                    setProcessingSigImage(false);
+                                  }
+                                };
+                                reader.readAsDataURL(file);
+                              }}
+                              className="border-2 border-dashed border-border/70 hover:border-primary/50 rounded-2xl p-10 flex flex-col items-center justify-center text-center cursor-pointer transition-all group"
+                            >
+                              <div className="w-14 h-14 rounded-2xl bg-primary/8 flex items-center justify-center mb-3 text-primary group-hover:scale-105 transition-transform">
+                                <i className="fa-solid fa-image text-xl" />
+                              </div>
+                              <p className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors">Click or drag & drop your signature</p>
+                              <p className="text-xs text-muted-foreground mt-1.5">PNG, JPG, SVG, WebP · max 4 MB · Auto background removal</p>
+                              <div className="mt-4 px-4 py-1.5 rounded-lg bg-primary/8 border border-primary/20 text-xs text-primary font-semibold">
+                                <i className="fa-solid fa-cloud-arrow-up text-xs mr-1.5" /> Browse Files
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* ── Footer: Save button ── */}
+                      <div className="flex items-center justify-between gap-3 pt-3 border-t border-border/50">
+                        <p className="text-[11px] text-muted-foreground flex items-center gap-1.5">
+                          <i className="fa-solid fa-lock text-[10px] text-emerald-500" />
+                          Stored securely · appears on invoices & contracts
+                        </p>
+                        <Button
+                          type="button" size="sm"
+                          disabled={savingSignature}
+                          onClick={async () => {
+                            if (!user) return;
+                            let dataUrl = "";
+
+                            if (sigMode === "draw") {
+                              const canvas = signatureCanvasRef.current;
+                              if (!canvas) return;
+                              dataUrl = canvas.toDataURL("image/png");
+                            } else if (sigMode === "type") {
+                              if (!typedSignature.trim()) { showToast("Please type your name first.", "error"); return; }
+                              const offCanvas = document.createElement("canvas");
+                              offCanvas.width = 800; offCanvas.height = 200;
+                              const ctx = offCanvas.getContext("2d")!;
+                              ctx.clearRect(0, 0, offCanvas.width, offCanvas.height);
+                              ctx.font = `${sigFontSize}px ${signatureFont}`;
+                              ctx.fillStyle = sigFontColor || "#000000";
+                              ctx.textBaseline = "middle";
+                              ctx.textAlign = "center";
+                              ctx.fillText(typedSignature, offCanvas.width / 2, offCanvas.height / 2);
+                              dataUrl = offCanvas.toDataURL("image/png");
+                            } else if (sigMode === "upload") {
+                              const chosenSig = (autoRemoveBg && uploadedSigPreview) ? uploadedSigPreview : (rawUploadedSig || uploadedSigPreview);
+                              if (!chosenSig) { showToast("Please upload a signature image first.", "error"); return; }
+                              dataUrl = chosenSig;
+                            }
+
+                            setSavingSignature(true);
+                            try {
+                              const res = await fetch(`/api/team/${user._id}`, {
+                                method: "PUT",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ signatureUrl: dataUrl }),
+                              });
+                              if (res.ok) {
+                                setSignatureUrl(dataUrl);
+                                setSignatureSavedAt(new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }));
+                                setShowSignaturePad(false);
+                                setUploadedSigPreview("");
+                                await refreshUser();
+                                showToast("Signature saved successfully!", "success");
+                              } else {
+                                const d = await res.json();
+                                showToast(d.error || "Failed to save signature", "error");
+                              }
+                            } catch { showToast("Error saving signature.", "error"); }
+                            finally { setSavingSignature(false); }
+                          }}
+                          className="gap-2 h-9 px-5 text-xs bg-primary hover:bg-primary/90 text-primary-foreground font-bold cursor-pointer shadow-md"
+                        >
+                          <i className={`fa-solid ${savingSignature ? "fa-spinner fa-spin" : "fa-floppy-disk"} text-xs`} />
+                          {savingSignature ? "Saving…" : "Save Signature"}
+                        </Button>
+                      </div>
+
+                    </div>
+                  )}
+                </div>
+              </div>
+              </>
+              )}
 
               {/* Resume / CV Upload Section — Employees & non-admin roles only */}
               {!isAdmin && !isOPS && (

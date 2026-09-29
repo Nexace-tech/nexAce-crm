@@ -84,6 +84,7 @@ export async function PUT(request: Request) {
       postalCode,
       bankDetails,
       socialLinks,
+      signatureUrl,
     } = body;
 
     if (!name || !name.trim()) {
@@ -141,6 +142,8 @@ export async function PUT(request: Request) {
         youtube: socialLinks.youtube?.trim() || "",
       };
     }
+
+    if (signatureUrl !== undefined) updatePayload.signatureUrl = signatureUrl;
 
     const updatedTenant = await Tenant.findByIdAndUpdate(
       tenantIdObj,

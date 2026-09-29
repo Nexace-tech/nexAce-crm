@@ -57,6 +57,9 @@ interface Invoice {
     paidBy?: string;
   };
   userUpiId?: string;
+  signatureUrl?: string;
+  approvedBy?: string;
+  approvedAt?: string;
 }
 
 type PaymentMethod = "Bank Transfer" | "UPI" | "Cash";
@@ -105,12 +108,22 @@ export function AdminInvoicesTab({ showToast, scope = "internal" }: AdminInvoice
   const [upiScreenshotPreview, setUpiScreenshotPreview] = useState<string>("");
   const [confirmingPayment, setConfirmingPayment] = useState(false);
   const screenshotInputRef = useRef<HTMLInputElement>(null);
+  const [quickApproveOpen, setQuickApproveOpen] = useState<string | null>(null);
+
+  // Close quick-approve dropdown on outside click
+  useEffect(() => {
+    if (!quickApproveOpen) return;
+    const close = () => setQuickApproveOpen(null);
+    document.addEventListener("click", close);
+    return () => document.removeEventListener("click", close);
+  }, [quickApproveOpen]);
 
   // Saved custom UPI IDs (persisted in localStorage for quick reuse)
   const [savedUpiIds, setSavedUpiIds] = useState<string[]>(() => {
     try { return JSON.parse(localStorage.getItem("nexace_upi_ids") || "[]"); } catch { return []; }
   });
   const [orgLogoUrl, setOrgLogoUrl] = useState<string>("");
+  const [orgSignatureUrl, setOrgSignatureUrl] = useState<string>("");
   const [orgBankDetails, setOrgBankDetails] = useState<{
     bankName?: string;
     accountName?: string;
@@ -151,6 +164,9 @@ export function AdminInvoicesTab({ showToast, scope = "internal" }: AdminInvoice
           updatedAt: inv.updatedAt,
           paymentDetails: inv.paymentDetails,
           bankDetails: inv.bankDetails,
+          signatureUrl: inv.signatureUrl,
+          approvedBy: inv.approvedBy,
+          approvedAt: inv.approvedAt,
           ...(inv as any),
         }));
         setInvoices(loadedInvoices);
@@ -210,6 +226,9 @@ export function AdminInvoicesTab({ showToast, scope = "internal" }: AdminInvoice
           if (data.company.logoUrl) {
             setOrgLogoUrl(data.company.logoUrl);
           }
+          if (data.company.signatureUrl) {
+            setOrgSignatureUrl(data.company.signatureUrl);
+          }
           if (data.company.bankDetails) {
             setOrgBankDetails(data.company.bankDetails);
             if (data.company.bankDetails.upiId) {
@@ -249,17 +268,27 @@ export function AdminInvoicesTab({ showToast, scope = "internal" }: AdminInvoice
     await patchInvoice(invoiceId, { status: newStatus });
   };
 
-  /** Core PATCH — sends status + optional paymentDetails */
+  /** Core PATCH — smart-routes to IT or Finance endpoint to avoid sequential fallback */
   const patchInvoice = async (invoiceId: string, body: Record<string, unknown>) => {
     setUpdatingId(invoiceId);
     try {
-      let res = await fetch(`/api/finance/invoices/${invoiceId}`, {
+      // Determine primary endpoint from in-memory invoice category — avoids wasteful fallback round-trip
+      const targetInv = invoices.find((i) => (i._id || i.id) === invoiceId);
+      const cat = ((targetInv as any)?.category || "").toLowerCase();
+      const custNo = (targetInv?.customerNo || "").toUpperCase();
+      const isEmployee = cat.includes("employee") || custNo.startsWith("EMP-") ||
+        !!(targetInv as any)?.shiftAttendance || !!(targetInv as any)?.timesheetEntries;
+
+      const primary = isEmployee ? `/api/it/invoices/${invoiceId}` : `/api/finance/invoices/${invoiceId}`;
+      const fallback = isEmployee ? `/api/finance/invoices/${invoiceId}` : `/api/it/invoices/${invoiceId}`;
+
+      let res = await fetch(primary, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
       if (!res.ok) {
-        res = await fetch(`/api/it/invoices/${invoiceId}`, {
+        res = await fetch(fallback, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
@@ -360,6 +389,36 @@ export function AdminInvoicesTab({ showToast, scope = "internal" }: AdminInvoice
     setUpiScreenshotPreview(url);
   };
 
+  /**
+   * Quick-approve: Bank Transfer / Cash → patch directly (no modal).
+   * UPI → open the payment modal for transaction details.
+   */
+  const quickApprove = async (invoiceId: string, invoiceNo: string, method: PaymentMethod) => {
+    setQuickApproveOpen(null);
+    if (method === "UPI") {
+      // UPI needs transaction details — open full modal
+      setPaymentMethod("UPI");
+      setFromUpiId(orgUpiId || "nexace@okaxis");
+      const targetInv = invoices.find((i) => (i._id || i.id) === invoiceId);
+      const invUserUpi = (targetInv?.userUpiId || (targetInv as any)?.bankDetails?.upiId || "").trim();
+      setTargetPayeeUpiId(invUserUpi);
+      setToUpiId(invUserUpi);
+      setUpiTxnId("");
+      setUpiScreenshot(null);
+      setUpiScreenshotPreview("");
+      setPaymentModal({ open: true, invoiceId, invoiceNo });
+      return;
+    }
+    // Bank Transfer & Cash: approve instantly without modal
+    await patchInvoice(invoiceId, {
+      status: "Paid",
+      paymentDetails: {
+        method,
+        paidAt: new Date().toISOString(),
+      },
+    });
+  };
+
   const filteredInvoices = scopedInvoices
     .filter((inv) => {
       const q = search.toLowerCase();
@@ -420,6 +479,11 @@ export function AdminInvoicesTab({ showToast, scope = "internal" }: AdminInvoice
 
   const handleExportPDF = async (inv: Invoice) => {
     try {
+      const isEmployeeInvoice =
+        (inv.invoiceNo && inv.invoiceNo.startsWith("INV-SAL")) ||
+        (inv.customerNo && (inv.customerNo.startsWith("EMP-") || inv.customerNo.includes("SAL"))) ||
+        Boolean((inv as any).businessSubtitle && (inv as any).businessSubtitle.toUpperCase().includes("EMPLOYEE"));
+
       downloadInvoicePdf(
         {
           invoiceNo: inv.invoiceNo,
@@ -443,6 +507,11 @@ export function AdminInvoicesTab({ showToast, scope = "internal" }: AdminInvoice
           bankDetails: inv.bankDetails || orgBankDetails,
           paymentDetails: inv.paymentDetails,
           logoUrl: orgLogoUrl,
+          signatureUrl: inv.signatureUrl,
+          orgSignatureUrl: orgSignatureUrl,
+          employeeSignatureUrl: isEmployeeInvoice ? inv.signatureUrl : undefined,
+          approvedBy: inv.approvedBy,
+          approvedAt: inv.approvedAt,
         },
         `Invoice_${inv.invoiceNo}.pdf`
       );
@@ -749,6 +818,12 @@ export function AdminInvoicesTab({ showToast, scope = "internal" }: AdminInvoice
                               <span>{inv.paymentDetails.method}</span>
                             </span>
                           )}
+                          {inv.status === "Paid" && inv.approvedBy && (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/20 whitespace-nowrap">
+                              <i className="fa-solid fa-circle-check text-[9px] text-emerald-500" />
+                              <span>Approved by {inv.approvedBy}</span>
+                            </span>
+                          )}
                         </div>
                       </td>
 
@@ -779,17 +854,63 @@ export function AdminInvoicesTab({ showToast, scope = "internal" }: AdminInvoice
                           {(can("approveInvoices") || isAdmin || isOPS) && (
                             <>
                               {inv.status === "Pending" && (
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="sm"
-                                  disabled={isUpdating}
-                                  onClick={() => handleStatusChange(invId, "Paid", inv.invoiceNo)}
-                                  className="gap-1 text-xs font-semibold h-7 px-2 cursor-pointer bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
-                                  title="Approve & Mark as Paid"
+                                <div
+                                  className="relative"
+                                  onClick={(e) => e.stopPropagation()}
                                 >
-                                  <i className="fa-solid fa-check text-[10px]" /> Approve
-                                </Button>
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    disabled={isUpdating}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setQuickApproveOpen(quickApproveOpen === invId ? null : invId);
+                                    }}
+                                    className="gap-1 text-xs font-semibold h-7 px-2.5 cursor-pointer bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
+                                  >
+                                    <i className="fa-solid fa-check text-[10px]" />
+                                    Approve
+                                    <i className={cn("fa-solid fa-chevron-down text-[8px] transition-transform duration-150", quickApproveOpen === invId && "rotate-180")} />
+                                  </Button>
+
+                                  {/* Quick-approve dropdown — no modal needed for Bank/Cash */}
+                                  {quickApproveOpen === invId && (
+                                    <div className="absolute right-0 top-full mt-1 z-50 bg-card border border-border/80 rounded-xl shadow-2xl overflow-hidden w-48 animate-in fade-in zoom-in-95 duration-100">
+                                      <div className="px-3 pt-2.5 pb-1.5 border-b border-border/60">
+                                        <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Payment Method</p>
+                                      </div>
+                                      {(["Bank Transfer", "Cash", "UPI"] as PaymentMethod[]).map((method) => (
+                                        <button
+                                          key={method}
+                                          type="button"
+                                          disabled={isUpdating}
+                                          onClick={(e) => { e.stopPropagation(); quickApprove(invId, inv.invoiceNo, method); }}
+                                          className="flex items-center gap-2.5 w-full px-3 py-2.5 text-xs font-semibold text-foreground hover:bg-muted transition-colors cursor-pointer border-b border-border/40 last:border-b-0"
+                                        >
+                                          <span className={cn(
+                                            "w-6 h-6 rounded-lg flex items-center justify-center text-xs shrink-0",
+                                            method === "UPI" ? "bg-violet-500/10 text-violet-500" :
+                                            method === "Cash" ? "bg-emerald-500/10 text-emerald-500" :
+                                            "bg-sky-500/10 text-sky-500"
+                                          )}>
+                                            <i className={cn("fa-solid",
+                                              method === "UPI" ? "fa-qrcode" :
+                                              method === "Cash" ? "fa-money-bill-transfer" :
+                                              "fa-building-columns"
+                                            )} />
+                                          </span>
+                                          <span className="flex-1 text-left">{method}</span>
+                                          {method !== "UPI" ? (
+                                            <span className="text-[9px] font-bold text-emerald-500 bg-emerald-500/10 px-1.5 py-0.5 rounded-full">Quick</span>
+                                          ) : (
+                                            <i className="fa-solid fa-chevron-right text-[9px] text-muted-foreground/50" />
+                                          )}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
                               )}
 
                               <select

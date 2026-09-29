@@ -6,6 +6,7 @@ import { Notification } from "@/models/Notification";
 import { requireTenantSession, isAuthError } from "@/lib/auth-guard";
 import { sendEmail } from "@/lib/mail";
 import { User } from "@/models/User";
+import { Tenant } from "@/models/Tenant";
 import mongoose from "mongoose";
 
 export async function GET() {
@@ -58,7 +59,17 @@ export async function GET() {
 
     const invoices = await ITInvoice.find(query).sort({ createdAt: -1 }).lean();
 
-    return NextResponse.json({ invoices });
+    const tenantDoc = await Tenant.findById(tenantObjectId).select("signatureUrl").lean();
+    const orgSignatureUrl = (tenantDoc as any)?.signatureUrl?.trim() || "";
+
+    const enrichedInvoices = invoices.map((inv: any) => ({
+      ...inv,
+      approvedBy: inv.approvedBy || (inv.status === "Paid" ? (inv.paymentDetails?.paidBy || "Admin") : ""),
+      approvedAt: inv.approvedAt || (inv.status === "Paid" ? (inv.paymentDetails?.paidAt || inv.updatedAt) : ""),
+      signatureUrl: inv.signatureUrl || (inv.status === "Paid" ? orgSignatureUrl : ""),
+    }));
+
+    return NextResponse.json({ invoices: enrichedInvoices });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Internal Server Error";
     console.error("GET /api/it/invoices error:", error);
@@ -96,6 +107,7 @@ export async function POST(request: Request) {
       notes,
       shiftAttendance,
       timesheetEntries,
+      signatureUrl,
     } = body;
 
     if (!invoiceNo || !billedToName) {
@@ -134,6 +146,7 @@ export async function POST(request: Request) {
       // Structured shift clock & timesheet data for admin visibility
       shiftAttendance: shiftAttendance || null,
       timesheetEntries: timesheetEntries || null,
+      signatureUrl: signatureUrl || "",
       createdBy: userObjectId,
     });
 

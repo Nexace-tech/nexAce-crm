@@ -245,6 +245,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
       if (body.bio !== undefined) user.bio = body.bio;
       if (body.phone !== undefined) user.phone = body.phone;
       if (body.photoUrl !== undefined) user.photoUrl = body.photoUrl;
+      if (body.signatureUrl !== undefined) user.signatureUrl = body.signatureUrl;
       if (body.resumeUrl !== undefined) user.resumeUrl = body.resumeUrl;
       if (body.resumeFileName !== undefined) user.resumeFileName = body.resumeFileName;
       if (body.resumeFileSize !== undefined) user.resumeFileSize = body.resumeFileSize;

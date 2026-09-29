@@ -97,6 +97,9 @@ function formatForInvoiceDetails(inv: any): InvoiceDetailsData {
     paymentDetails: inv.paymentDetails,
     shiftAttendance: inv.shiftAttendance || null,
     timesheetEntries: inv.timesheetEntries || null,
+    signatureUrl: inv.signatureUrl || "",
+    approvedBy: inv.approvedBy || "",
+    approvedAt: inv.approvedAt || "",
   };
 }
 

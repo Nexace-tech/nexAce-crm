@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/db";
 import { FinanceInvoice } from "@/models/FinanceInvoice";
 import { ActivityLog } from "@/models/ActivityLog";
+import { Tenant } from "@/models/Tenant";
+import { User } from "@/models/User";
 import { requireTenantSession, isAuthError } from "@/lib/auth-guard";
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -14,9 +16,57 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const body = await request.json();
     await connectToDatabase();
 
+    // Fetch previous state so we can check if signatureUrl is already set
+    const previousInvoice = await FinanceInvoice.findOne({ _id: id, tenantId: tenantObjectId }).lean();
+    if (!previousInvoice) {
+      return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
+    }
+
+    // ── Stamp approver details & signature on approval ───────────────────────
+    const updateBody: Record<string, unknown> = { ...body };
+    if (body.status === "Paid") {
+      updateBody.approvedBy = session.userName || "Admin";
+      updateBody.approvedAt = new Date().toISOString();
+
+      try {
+        let effectiveSig = "";
+        // 1. Organization signature from Tenant (Primary company signature as requested by user)
+        const tenantForSig = await Tenant.findById(tenantObjectId).select("signatureUrl").lean();
+        if ((tenantForSig as any)?.signatureUrl?.trim()) {
+          effectiveSig = (tenantForSig as any).signatureUrl.trim();
+        }
+
+        // 2. Fallback: Approver's user profile signature
+        if (!effectiveSig) {
+          const approverUser = await User.findById(userObjectId).select("signatureUrl name").lean();
+          if ((approverUser as any)?.signatureUrl?.trim()) {
+            effectiveSig = (approverUser as any).signatureUrl.trim();
+          }
+        }
+
+        // 3. Fallback: Check if any Admin in this tenant has a signature
+        if (!effectiveSig) {
+          const adminWithSig = await User.findOne({
+            tenantId: tenantObjectId,
+            role: { $in: ["Admin", "Owner"] },
+            signatureUrl: { $exists: true, $ne: "" },
+          }).select("signatureUrl").lean();
+          if (adminWithSig && (adminWithSig as any).signatureUrl) {
+            effectiveSig = (adminWithSig as any).signatureUrl.trim();
+          }
+        }
+
+        if (effectiveSig) {
+          updateBody.signatureUrl = effectiveSig;
+        }
+      } catch (sigErr) {
+        console.error("Could not fetch signature for approval stamp:", sigErr);
+      }
+    }
+
     const invoice = await FinanceInvoice.findOneAndUpdate(
       { _id: id, tenantId: tenantObjectId },
-      { $set: body },
+      { $set: updateBody },
       { new: true }
     );
 

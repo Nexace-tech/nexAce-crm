@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/db";
 import { FinanceInvoice } from "@/models/FinanceInvoice";
 import { User } from "@/models/User";
+import { Tenant } from "@/models/Tenant";
 import { ActivityLog } from "@/models/ActivityLog";
 import { requireTenantSession, isAuthError } from "@/lib/auth-guard";
 
@@ -83,10 +84,16 @@ export async function GET() {
       };
     };
 
+    const tenantDoc = await Tenant.findById(tenantObjectId).select("signatureUrl").lean();
+    const orgSignatureUrl = (tenantDoc as any)?.signatureUrl?.trim() || "";
+
     const mappedFinanceInvoices = invoices.map((inv: any) => {
       const payeeInfo = getInvoicePayeeInfo(inv);
       return {
         ...inv,
+        approvedBy: inv.approvedBy || (inv.status === "Paid" ? (inv.paymentDetails?.paidBy || "Admin") : ""),
+        approvedAt: inv.approvedAt || (inv.status === "Paid" ? (inv.paymentDetails?.paidAt || inv.updatedAt) : ""),
+        signatureUrl: inv.signatureUrl || (inv.status === "Paid" ? orgSignatureUrl : ""),
         userUpiId: payeeInfo.userUpiId,
         bankDetails: payeeInfo.bankDetails,
       };
@@ -125,6 +132,9 @@ export async function GET() {
         customerNo: inv.customerNo,
         shiftAttendance: inv.shiftAttendance || null,
         timesheetEntries: inv.timesheetEntries || null,
+        signatureUrl: inv.signatureUrl || (inv.status === "Paid" ? orgSignatureUrl : ""),
+        approvedBy: inv.approvedBy || (inv.status === "Paid" ? (inv.paymentDetails?.paidBy || "Admin") : ""),
+        approvedAt: inv.approvedAt || (inv.status === "Paid" ? (inv.paymentDetails?.paidAt || inv.updatedAt) : ""),
       };
     });
 
@@ -172,6 +182,7 @@ export async function POST(request: Request) {
       venture: venture || "Ace Consultancys",
       notes: notes || "",
       lineItems: lineItems || [],
+      signatureUrl: body.signatureUrl || "",
     });
 
     await ActivityLog.create({
