@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { downloadInvoicePdf } from "@/lib/invoice-pdf";
+import { downloadElementAsPdf } from "@/lib/invoice-dom-pdf";
 
 export interface InvoiceDetailsItem {
   description: string;
@@ -123,6 +124,7 @@ export function InvoiceDetailsView({
   const printRef = useRef<HTMLDivElement>(null);
   const [companyLogoUrl, setCompanyLogoUrl] = useState<string>("");
   const [companySignatureUrl, setCompanySignatureUrl] = useState<string>("");
+  const [isDownloadingPdf, setIsDownloadingPdf] = useState<boolean>(false);
 
   useEffect(() => {
     fetch("/api/settings/company")
@@ -170,22 +172,31 @@ export function InvoiceDetailsView({
     : (companySignatureUrl || invoice.signatureUrl);
 
   const getStatusBadge = (status: string) => {
-    const config: Record<string, { style: string; icon: string; label: string }> = {
-      Paid: { style: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-300/80 dark:border-emerald-700", icon: "fa-check", label: "PAID IN FULL" },
-      Pending: { style: "bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border-amber-300/80 dark:border-amber-700", icon: "fa-clock", label: "PENDING" },
-      Sent: { style: "bg-sky-50 text-sky-700 dark:bg-sky-950/60 dark:text-sky-300 border-sky-300/80 dark:border-sky-700", icon: "fa-paper-plane", label: "SENT" },
-      Draft: { style: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border-slate-300 dark:border-slate-700", icon: "fa-pen-ruler", label: "DRAFT" },
-      Overdue: { style: "bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border-rose-300/80 dark:border-rose-700", icon: "fa-triangle-exclamation", label: "OVERDUE" },
-      Cancelled: { style: "bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400 border-zinc-300 dark:border-zinc-700 line-through", icon: "fa-ban", label: "CANCELLED" },
-      Archived: { style: "bg-purple-50 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300 border-purple-300/80 dark:border-purple-700", icon: "fa-box-archive", label: "ARCHIVED" },
+    const config: Record<string, { style: string; label: string }> = {
+      Paid: { style: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-300/80 dark:border-emerald-700", label: "PAID IN FULL" },
+      Pending: { style: "bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border-amber-300/80 dark:border-amber-700", label: "PENDING" },
+      Sent: { style: "bg-sky-50 text-sky-700 dark:bg-sky-950/60 dark:text-sky-300 border-sky-300/80 dark:border-sky-700", label: "SENT" },
+      Draft: { style: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border-slate-300 dark:border-slate-700", label: "DRAFT" },
+      Overdue: { style: "bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border-rose-300/80 dark:border-rose-700", label: "OVERDUE" },
+      Cancelled: { style: "bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400 border-zinc-300 dark:border-zinc-700 line-through", label: "CANCELLED" },
+      Archived: { style: "bg-purple-50 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300 border-purple-300/80 dark:border-purple-700", label: "ARCHIVED" },
     };
-    const c = config[status] || { style: "bg-muted text-muted-foreground border-border", icon: "fa-circle-info", label: status.toUpperCase() };
+    const c = config[status] || { style: "bg-muted text-muted-foreground border-border", label: status.toUpperCase() };
     return (
-      <span className={cn("inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-black tracking-wider border shadow-2xs", c.style)}>
-        <i className={cn("fa-solid text-[9px]", c.icon)} />
+      <span className={cn("inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-black tracking-wider border shadow-2xs", c.style)}>
         {c.label}
       </span>
     );
+  };
+
+  const formatSignatoryName = (raw: string) => {
+    if (!raw) return "NexAce";
+    const first = raw.trim().split(" ")[0] || "NexAce";
+    if (first.toUpperCase() === "NEXACE") return "NexAce";
+    if (first === first.toUpperCase()) {
+      return first.charAt(0).toUpperCase() + first.slice(1).toLowerCase();
+    }
+    return first;
   };
 
   const handlePrint = () => {
@@ -200,7 +211,7 @@ export function InvoiceDetailsView({
         <title>Invoice - ${invoice.invoiceNo}</title>
         <link rel="preconnect" href="https://fonts.googleapis.com">
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+        <link href="https://fonts.googleapis.com/css2?family=Alex+Brush&family=Dancing+Script:wght@500;600;700&family=Great+Vibes&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
         <style>
           @page { size: A4 portrait; margin: 8mm; }
@@ -395,7 +406,7 @@ export function InvoiceDetailsView({
           .sign-name { font-size: 12px; font-weight: 800; color: #0f172a; }
           .sign-role { font-size: 10.5px; color: #64748b; }
           .sign-verified { font-size: 9.5px; font-weight: 800; color: #059669; margin-top: 3px; display: flex; align-items: center; gap: 4px; }
-          .sign-cursive { font-family: Georgia, 'Times New Roman', serif; font-style: italic; font-size: 48px; font-weight: 700; color: #0f172a; height: 60px; display: flex; align-items: flex-end; }
+          .sign-cursive { font-family: 'Alex Brush', 'Great Vibes', 'Dancing Script', cursive; font-style: normal; font-size: 58px; font-weight: 400; color: #0f172a; height: 76px; display: flex; align-items: flex-end; line-height: 1.05; transform: rotate(-2deg); transform-origin: bottom left; }
           .sign-stamp-box {
             display: inline-flex; flex-direction: column; align-items: center; justify-content: center;
             padding: 5px 14px; border-radius: 8px;
@@ -438,19 +449,8 @@ export function InvoiceDetailsView({
               </div>
             </div>
             <div class="header-box">
-              <div class="ci-label">Commercial Invoice</div>
+              <div class="ci-label">${isEmployeeInvoice ? "Employee Invoice" : "Commercial Invoice"}</div>
               <div class="inv-number">#${invoice.invoiceNo}</div>
-              <div>
-                ${invoice.status === "Paid"
-                  ? `<span class="status-badge" style="background:#ecfdf5;border-color:#a7f3d0;color:#047857;"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#047857" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:middle;margin-right:2px;"><polyline points="20 6 9 17 4 12"></polyline></svg> PAID IN FULL</span>`
-                  : invoice.status === "Pending"
-                  ? `<span class="status-badge" style="background:#fffbeb;border-color:#fde68a;color:#b45309;">PENDING</span>`
-                  : invoice.status === "Overdue"
-                  ? `<span class="status-badge" style="background:#fff1f2;border-color:#fecdd3;color:#be123c;">OVERDUE</span>`
-                  : `<span class="status-badge" style="background:#f8fafc;border-color:#e2e8f0;color:#64748b;">${invoice.status.toUpperCase()}</span>`
-                }
-              </div>
-
             </div>
           </div>
 
@@ -629,7 +629,7 @@ export function InvoiceDetailsView({
                       <div class="sign-stamp-sub">Corporate Finance Desk • Verified</div>
                     </div>
                   </div>`
-                : `<div class="sign-cursive" style="justify-content:flex-end;">${signatoryEntity.split(" ")[0]}</div>`
+                : `<div class="sign-cursive" style="justify-content:flex-end;transform-origin:bottom right;">${formatSignatoryName(signatoryEntity)}</div>`
               }
               <div class="sign-line sign-line-right"></div>
               <div class="sign-name">Authorized Signatory</div>
@@ -674,43 +674,91 @@ export function InvoiceDetailsView({
   };
 
 
-  const handleDownloadPdf = () => {
+  const handleDownloadPdf = async () => {
+    setIsDownloadingPdf(true);
     try {
-      downloadInvoicePdf(
-        {
-          invoiceNo: invoice.invoiceNo,
-          invoiceDate: invoice.invoiceDate,
-          dueDate: invoice.dueDate,
-          customerNo: invoice.customerNo,
-          businessName: invoice.businessName || "NexAce IT Team",
-          businessSubtitle: (invoice as any).businessSubtitle || (isEmployeeInvoice ? "Employee • Engineering (Permanent Staff)" : undefined),
-          businessAddress: invoice.businessAddress,
-          businessEmail: invoice.businessEmail,
-          billedToName: invoice.billedToName || "Client",
-          billedToAddress: invoice.billedToAddress,
-          billedToEmail: invoice.billedToEmail,
-          items: invoice.items || [],
-          subtotal: invoice.subtotal || 0,
-          taxRate: invoice.taxRate,
-          taxAmount: invoice.taxAmount,
-          total: invoice.total || 0,
-          currency: invoice.currency || "INR",
-          status: invoice.status,
-          notes: invoice.notes,
-          paymentTerms: invoice.paymentTerms || "14 business days",
-          bankDetails: invoice.bankDetails,
-          paymentDetails: invoice.paymentDetails,
-          logoUrl: companyLogoUrl || (invoice as any).logoUrl,
-          signatureUrl: invoice.signatureUrl,
-          orgSignatureUrl: companySignatureUrl,
-          employeeSignatureUrl: isEmployeeInvoice ? invoice.signatureUrl : undefined,
-          approvedBy: invoice.approvedBy,
-          approvedAt: invoice.approvedAt,
-        },
-        `Invoice_${invoice.invoiceNo}.pdf`
-      );
+      if (printRef.current) {
+        await downloadElementAsPdf(printRef.current, {
+          fileName: `Invoice_${invoice.invoiceNo}.pdf`,
+          widthPx: 860,
+          marginMm: 6,
+        });
+      } else {
+        downloadInvoicePdf(
+          {
+            invoiceNo: invoice.invoiceNo,
+            invoiceDate: invoice.invoiceDate,
+            dueDate: invoice.dueDate,
+            customerNo: invoice.customerNo,
+            businessName: invoice.businessName || "NexAce IT Team",
+            businessSubtitle: (invoice as any).businessSubtitle || (isEmployeeInvoice ? "Employee • Engineering (Permanent Staff)" : undefined),
+            businessAddress: invoice.businessAddress,
+            businessEmail: invoice.businessEmail,
+            billedToName: invoice.billedToName || "Client",
+            billedToAddress: invoice.billedToAddress,
+            billedToEmail: invoice.billedToEmail,
+            items: invoice.items || [],
+            subtotal: invoice.subtotal || 0,
+            taxRate: invoice.taxRate,
+            taxAmount: invoice.taxAmount,
+            total: invoice.total || 0,
+            currency: invoice.currency || "INR",
+            status: invoice.status,
+            notes: invoice.notes,
+            paymentTerms: invoice.paymentTerms || "14 business days",
+            bankDetails: invoice.bankDetails,
+            paymentDetails: invoice.paymentDetails,
+            logoUrl: companyLogoUrl || (invoice as any).logoUrl,
+            signatureUrl: invoice.signatureUrl,
+            orgSignatureUrl: companySignatureUrl,
+            employeeSignatureUrl: isEmployeeInvoice ? invoice.signatureUrl : undefined,
+            approvedBy: invoice.approvedBy,
+            approvedAt: invoice.approvedAt,
+          },
+          `Invoice_${invoice.invoiceNo}.pdf`
+        );
+      }
     } catch (err) {
-      console.error("Failed to download PDF invoice:", err);
+      console.error("DOM PDF export failed, falling back to direct PDF generator:", err);
+      try {
+        downloadInvoicePdf(
+          {
+            invoiceNo: invoice.invoiceNo,
+            invoiceDate: invoice.invoiceDate,
+            dueDate: invoice.dueDate,
+            customerNo: invoice.customerNo,
+            businessName: invoice.businessName || "NexAce IT Team",
+            businessSubtitle: (invoice as any).businessSubtitle || (isEmployeeInvoice ? "Employee • Engineering (Permanent Staff)" : undefined),
+            businessAddress: invoice.businessAddress,
+            businessEmail: invoice.businessEmail,
+            billedToName: invoice.billedToName || "Client",
+            billedToAddress: invoice.billedToAddress,
+            billedToEmail: invoice.billedToEmail,
+            items: invoice.items || [],
+            subtotal: invoice.subtotal || 0,
+            taxRate: invoice.taxRate,
+            taxAmount: invoice.taxAmount,
+            total: invoice.total || 0,
+            currency: invoice.currency || "INR",
+            status: invoice.status,
+            notes: invoice.notes,
+            paymentTerms: invoice.paymentTerms || "14 business days",
+            bankDetails: invoice.bankDetails,
+            paymentDetails: invoice.paymentDetails,
+            logoUrl: companyLogoUrl || (invoice as any).logoUrl,
+            signatureUrl: invoice.signatureUrl,
+            orgSignatureUrl: companySignatureUrl,
+            employeeSignatureUrl: isEmployeeInvoice ? invoice.signatureUrl : undefined,
+            approvedBy: invoice.approvedBy,
+            approvedAt: invoice.approvedAt,
+          },
+          `Invoice_${invoice.invoiceNo}.pdf`
+        );
+      } catch (fallbackErr) {
+        console.error("Fallback PDF download also failed:", fallbackErr);
+      }
+    } finally {
+      setIsDownloadingPdf(false);
     }
   };
 
@@ -798,9 +846,15 @@ export function InvoiceDetailsView({
             type="button"
             size="sm"
             onClick={handleDownloadPdf}
-            className="gap-1.5 font-semibold h-8 px-3.5 cursor-pointer bg-rose-600 hover:bg-rose-700 text-white"
+            disabled={isDownloadingPdf}
+            className="gap-1.5 font-semibold h-8 px-3.5 cursor-pointer bg-rose-600 hover:bg-rose-700 text-white disabled:opacity-70"
           >
-            <i className="fa-solid fa-file-pdf text-[11px]" /> PDF
+            {isDownloadingPdf ? (
+              <i className="fa-solid fa-spinner fa-spin text-[11px]" />
+            ) : (
+              <i className="fa-solid fa-download text-[11px]" />
+            )}
+            {isDownloadingPdf ? "Downloading..." : "Download Invoice"}
           </Button>
         </div>
       </div>
@@ -813,9 +867,9 @@ export function InvoiceDetailsView({
         {/* Executive top accent brand stripe */}
         <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-500 via-teal-400 to-sky-500" />
 
-        <div className="p-6 sm:p-10 md:p-12 space-y-8">
+        <div className="p-5 sm:p-7 md:p-8 space-y-5">
           {/* ── Invoice Header ── */}
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-5 pb-6 border-b border-border/70">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-5 pb-5 border-b border-border/70">
             <div className="flex items-center gap-4">
               {companyLogoUrl ? (
                 <img
@@ -840,25 +894,13 @@ export function InvoiceDetailsView({
               </div>
             </div>
 
-            <div className="bg-slate-50/80 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 rounded-xl p-3 sm:min-w-[230px] text-right space-y-1 shadow-2xs">
+            <div className="bg-slate-50/80 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 rounded-xl p-3 sm:min-w-[210px] text-right space-y-1 shadow-2xs">
               <span className="text-[10px] font-black uppercase tracking-[0.15em] text-muted-foreground/80 block">
-                Commercial Invoice
+                {isEmployeeInvoice ? "Employee Invoice" : "Commercial Invoice"}
               </span>
               <div className="text-base sm:text-lg font-black font-mono text-foreground tracking-tight">
                 #{invoice.invoiceNo}
               </div>
-              <div className="flex justify-end">
-                {getStatusBadge(invoice.status)}
-              </div>
-              {invoice.approvedBy ? (
-                <div className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 pt-0.5">
-                  Approved: {invoice.approvedBy}
-                </div>
-              ) : (
-                <div className="text-[11px] font-medium text-muted-foreground pt-0.5">
-                  Ref: <span className="font-mono font-bold text-foreground">{invoice.customerNo || `REF-${invoice.invoiceNo}`}</span>
-                </div>
-              )}
             </div>
           </div>
 
@@ -929,17 +971,9 @@ export function InvoiceDetailsView({
 
           {/* ── Products / Services Table ── */}
           <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h3 className="text-xs font-extrabold text-foreground uppercase tracking-wider flex items-center gap-2">
-                <span className="w-6 h-6 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center text-primary">
-                  <i className="fa-solid fa-layer-group text-xs" />
-                </span>
-                Products / Service Items
-              </h3>
-              <span className="text-xs font-bold text-muted-foreground bg-muted/60 border border-border/50 px-3 py-1 rounded-full">
-                {invoice.items.length} {invoice.items.length === 1 ? "Item" : "Items"}
-              </span>
-            </div>
+            <h3 className="text-xs font-extrabold text-foreground uppercase tracking-wider">
+              Products / Service Items
+            </h3>
 
             <div className="border border-border/80 rounded-2xl overflow-hidden shadow-xs bg-card">
               <div className="overflow-x-auto">
@@ -976,8 +1010,7 @@ export function InvoiceDetailsView({
                           <td className="py-4 px-4">
                             <div className="font-bold text-foreground text-sm leading-snug">{mainTitle}</div>
                             {subPeriod && (
-                              <div className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1.5 font-medium">
-                                <i className="fa-solid fa-calendar-days text-[10px] opacity-70" />
+                              <div className="text-xs text-muted-foreground mt-0.5 font-medium">
                                 {subPeriod.replace(/[\[\]]/g, "")}
                               </div>
                             )}
@@ -1004,44 +1037,45 @@ export function InvoiceDetailsView({
 
           {/* ── Shift Clock & Timesheet Audit Breakdown (Admin View) ── */}
           {(invoice.shiftAttendance?.records?.length || invoice.timesheetEntries?.records?.length) ? (
-            <div className="space-y-4">
-              <h3 className="text-xs font-bold text-foreground uppercase tracking-wider flex items-center gap-2">
-                <i className="fa-solid fa-clock-rotate-left text-primary" /> Shift Clock &amp; Timesheet Audit
-              </h3>
-
+            <div className={cn("space-y-4", !invoice.timesheetEntries?.records?.length && "pdf-exclude-shift")}>
               {/* Shift Attendance Breakdown */}
               {invoice.shiftAttendance && invoice.shiftAttendance.records.length > 0 && (
-                <div className="border border-border/80 rounded-2xl overflow-hidden shadow-xs">
-                  <table className="w-full min-w-[500px] text-left text-xs">
-                    <thead className="bg-muted/50 border-b border-border font-bold text-muted-foreground uppercase text-[10px]">
-                      <tr>
-                        <th className="py-3 px-4">Date</th>
-                        <th className="py-3 px-3">Clock In</th>
-                        <th className="py-3 px-3">Clock Out</th>
-                        <th className="py-3 px-3 text-right">Hours</th>
-                        <th className="py-3 px-3 text-center">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border/60">
-                      {invoice.shiftAttendance.records.map((rec, idx) => (
-                        <tr key={idx} className="hover:bg-muted/10 transition-colors">
-                          <td className="py-2.5 px-4 font-mono font-semibold text-foreground">{rec.date}</td>
-                          <td className="py-2.5 px-3 text-muted-foreground">{rec.clockIn}</td>
-                          <td className="py-2.5 px-3 text-muted-foreground">
-                            {rec.clockOut === "Working..." ? (
-                              <span className="text-emerald-500 font-semibold">Active</span>
-                            ) : rec.clockOut}
-                          </td>
-                          <td className="py-2.5 px-3 text-right font-mono font-bold text-foreground">{rec.totalHours}h</td>
-                          <td className="py-2.5 px-3 text-center">
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                              {rec.status}
-                            </span>
-                          </td>
+                <div className="pdf-exclude-shift space-y-3">
+                  <h3 className="text-xs font-bold text-foreground uppercase tracking-wider flex items-center gap-2">
+                    <i className="fa-solid fa-clock-rotate-left text-primary" /> Shift Clock &amp; Attendance Breakdown
+                  </h3>
+                  <div className="border border-border/80 rounded-2xl overflow-hidden shadow-xs">
+                    <table className="w-full min-w-[500px] text-left text-xs">
+                      <thead className="bg-muted/50 border-b border-border font-bold text-muted-foreground uppercase text-[10px]">
+                        <tr>
+                          <th className="py-3 px-4">Date</th>
+                          <th className="py-3 px-3">Clock In</th>
+                          <th className="py-3 px-3">Clock Out</th>
+                          <th className="py-3 px-3 text-right">Hours</th>
+                          <th className="py-3 px-3 text-center">Status</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody className="divide-y divide-border/60">
+                        {invoice.shiftAttendance.records.map((rec, idx) => (
+                          <tr key={idx} className="hover:bg-muted/10 transition-colors">
+                            <td className="py-2.5 px-4 font-mono font-semibold text-foreground">{rec.date}</td>
+                            <td className="py-2.5 px-3 text-muted-foreground">{rec.clockIn}</td>
+                            <td className="py-2.5 px-3 text-muted-foreground">
+                              {rec.clockOut === "Working..." ? (
+                                <span className="text-emerald-500 font-semibold">Active</span>
+                              ) : rec.clockOut}
+                            </td>
+                            <td className="py-2.5 px-3 text-right font-mono font-bold text-foreground">{rec.totalHours}h</td>
+                            <td className="py-2.5 px-3 text-center">
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                                {rec.status}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               )}
 
@@ -1099,8 +1133,7 @@ export function InvoiceDetailsView({
             {invoice.status === "Paid" && invoice.paymentDetails?.method ? (
               <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/5 dark:bg-emerald-950/20 p-5 shadow-xs space-y-3">
                 <div className="flex items-center justify-between pb-3 border-b border-emerald-500/20">
-                  <h4 className="text-xs font-black text-emerald-700 dark:text-emerald-400 uppercase tracking-wider flex items-center gap-2">
-                    <i className="fa-solid fa-circle-check text-emerald-500" />
+                  <h4 className="text-xs font-black text-emerald-700 dark:text-emerald-400 uppercase tracking-wider">
                     Payment Received ({invoice.paymentDetails.method})
                   </h4>
                   <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 uppercase tracking-wider">
@@ -1110,13 +1143,7 @@ export function InvoiceDetailsView({
                 <div className="space-y-2.5 text-xs">
                   <div className="flex justify-between items-center py-1 border-b border-border/25">
                     <span className="text-muted-foreground">Payment Method</span>
-                    <span className="font-bold text-foreground flex items-center gap-1.5">
-                      <i className={cn(
-                        "fa-solid text-[11px]",
-                        invoice.paymentDetails.method === "UPI" ? "fa-qrcode text-violet-600 dark:text-violet-400" :
-                        invoice.paymentDetails.method === "Cash" ? "fa-money-bill-transfer text-emerald-600 dark:text-emerald-400" :
-                        "fa-building-columns text-sky-600 dark:text-sky-400"
-                      )} />
+                    <span className="font-bold text-foreground">
                       {invoice.paymentDetails.method === "Cash" ? "Cash Settlement" : invoice.paymentDetails.method}
                     </span>
                   </div>
@@ -1214,11 +1241,8 @@ export function InvoiceDetailsView({
                 </div>
               </div>
             ) : (
-              <div className="rounded-2xl border border-border/80 bg-muted/20 dark:bg-slate-900/40 p-5 shadow-xs space-y-3">
-                <div className="flex items-center gap-2 pb-3 border-b border-border/60">
-                  <span className="w-6 h-6 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center text-primary">
-                    <i className="fa-solid fa-building-columns text-xs" />
-                  </span>
+              <div className="rounded-2xl border border-border/80 bg-muted/20 dark:bg-slate-900/40 p-4 sm:p-5 shadow-xs space-y-3">
+                <div className="pb-3 border-b border-border/60">
                   <h4 className="text-xs font-black text-foreground uppercase tracking-wider">
                     Bank &amp; Payment Details
                   </h4>
@@ -1245,11 +1269,8 @@ export function InvoiceDetailsView({
             )}
 
             {/* Right: Financial Summary */}
-            <div className="rounded-2xl border border-border/80 bg-muted/20 dark:bg-slate-900/40 p-5 shadow-xs space-y-3">
-              <div className="flex items-center gap-2 pb-3 border-b border-border/60">
-                <span className="w-6 h-6 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center text-primary">
-                  <i className="fa-solid fa-calculator text-xs" />
-                </span>
+            <div className="rounded-2xl border border-border/80 bg-muted/20 dark:bg-slate-900/40 p-4 sm:p-5 shadow-xs space-y-3">
+              <div className="pb-3 border-b border-border/60">
                 <h4 className="text-xs font-black text-foreground uppercase tracking-wider">
                   Financial Summary
                 </h4>
@@ -1295,25 +1316,34 @@ export function InvoiceDetailsView({
                 <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">
                   PREPARED &amp; CLAIMED BY
                 </p>
-                <div className="h-10 flex items-end">
+                <div className="min-h-[76px] sm:min-h-[84px] flex items-end pb-1 overflow-visible">
                   {invoice.signatureUrl ? (
                     <img
                       src={invoice.signatureUrl}
                       alt="Claimant Signature"
-                      className="h-9 max-w-[160px] object-contain mix-blend-multiply dark:mix-blend-screen"
+                      className="h-14 max-w-[200px] object-contain mix-blend-multiply dark:mix-blend-screen"
                     />
                   ) : (
-                    <span className="font-serif italic text-2xl text-foreground font-bold tracking-wide select-none leading-none">
+                    <span
+                      style={{
+                        fontFamily: "'Alex Brush', 'Great Vibes', 'Dancing Script', cursive",
+                        fontSize: "58px",
+                        lineHeight: "1.05",
+                        transform: "rotate(-2.5deg)",
+                        transformOrigin: "bottom left",
+                      }}
+                      className="text-slate-900 dark:text-slate-100 font-normal tracking-wide select-none inline-block pl-1 transition-transform"
+                    >
                       {invoice.businessName || "Ashish Sharma"}
                     </span>
                   )}
                 </div>
-                <div className="w-56 border-b-2 border-foreground my-1" />
+                <div className="w-56 sm:w-64 border-b-2 border-slate-700/80 dark:border-slate-300/80 my-1" />
                 <div className="space-y-0.5">
                   <p className="text-sm font-extrabold text-foreground">{invoice.businessName}</p>
                   <p className="text-xs text-muted-foreground">{(invoice as any).businessSubtitle || "Employee • Engineering (Permanent Staff)"}</p>
-                  <p className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5 mt-1">
-                    <i className="fa-solid fa-circle-check text-[10px]" /> Claimant / Payee Verified
+                  <p className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 mt-1">
+                    • Claimant / Payee Verified
                   </p>
                 </div>
               </div>
@@ -1325,29 +1355,34 @@ export function InvoiceDetailsView({
               <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">
                 VERIFIED &amp; AUTHORIZED BY
               </p>
-              <div className="h-10 flex items-end justify-end">
+              <div className="min-h-[76px] sm:min-h-[84px] flex items-end justify-end pb-1 overflow-visible">
                 {displaySignature ? (
                   <img
                     src={displaySignature}
                     alt="Authorized Signature"
-                    className="h-9 max-w-[160px] object-contain mix-blend-multiply dark:mix-blend-screen"
+                    className="h-14 max-w-[200px] object-contain mix-blend-multiply dark:mix-blend-screen"
                   />
                 ) : (
-                  <div className="inline-flex flex-col items-center px-4 py-1.5 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 rounded-xl border border-emerald-500/30 shadow-2xs">
-                    <div className="flex items-center gap-1.5 text-[9.5px] font-black tracking-widest uppercase">
-                      <span>• DIGITALLY AUTHORIZED •</span>
-                    </div>
-                    <span className="text-[8px] font-medium text-muted-foreground mt-0.5">Corporate Finance Desk • Verified</span>
-                  </div>
+                  <span
+                    style={{
+                      fontFamily: "'Alex Brush', 'Great Vibes', 'Dancing Script', cursive",
+                      fontSize: "58px",
+                      lineHeight: "1.05",
+                      transform: "rotate(-2deg)",
+                      transformOrigin: "bottom right",
+                    }}
+                    className="text-slate-900 dark:text-slate-100 font-normal tracking-wide select-none inline-block pr-1 transition-transform"
+                  >
+                    {formatSignatoryName(signatoryEntity)}
+                  </span>
                 )}
               </div>
-              <div className="w-56 border-b-2 border-foreground my-1 ml-auto" />
+              <div className="w-56 sm:w-64 border-b-2 border-slate-700/80 dark:border-slate-300/80 my-1 ml-auto" />
               <div className="space-y-0.5">
                 <p className="text-sm font-extrabold text-foreground">Authorized Signatory</p>
                 {invoice.approvedBy && (
                   <p className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center justify-end gap-1.5 mt-1">
-                    <i className="fa-solid fa-circle-check text-[10px]" />
-                    Approved by {invoice.approvedBy}
+                    • Approved by {invoice.approvedBy}
                   </p>
                 )}
                 <p className="text-xs text-muted-foreground">{signatoryEntity}</p>
@@ -1356,27 +1391,17 @@ export function InvoiceDetailsView({
           </div>
 
           {/* ── Terms & Conditions + Notes ── */}
-          <div className="rounded-xl border border-border/80 bg-muted/15 dark:bg-slate-900/30 p-4 sm:p-5 space-y-3">
-            <div className="flex items-start gap-3">
-              <span className="w-5 h-5 rounded-md bg-teal-500/10 border border-teal-500/20 flex items-center justify-center text-teal-600 dark:text-teal-400 shrink-0 mt-0.5">
-                <i className="fa-solid fa-file-lines text-[10px]" />
-              </span>
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                <strong className="text-foreground uppercase tracking-wider text-[10px] font-black mr-1.5">TERMS &amp; CONDITIONS:</strong>
-                Payment is requested within {invoice.paymentTerms || "14 business days"} of receiving this invoice statement. For inquiries or remittances, please quote invoice reference <strong className="font-mono text-foreground font-bold">#{invoice.invoiceNo}</strong>.
-              </p>
-            </div>
+          <div className="rounded-xl border border-border/80 bg-muted/15 dark:bg-slate-900/30 p-3.5 sm:p-4 space-y-2">
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              <strong className="text-foreground uppercase tracking-wider text-[10px] font-black mr-1.5">TERMS &amp; CONDITIONS:</strong>
+              Payment is requested within {invoice.paymentTerms || "14 business days"} of receiving this invoice statement. For inquiries or remittances, please quote invoice reference <strong className="font-mono text-foreground font-bold">#{invoice.invoiceNo}</strong>.
+            </p>
 
             {invoice.notes && (
-              <div className="flex items-start gap-3 pt-3 border-t border-border/40">
-                <span className="w-5 h-5 rounded-md bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5">
-                  <i className="fa-solid fa-check text-[10px]" />
-                </span>
-                <p className="text-xs text-muted-foreground leading-relaxed">
-                  <strong className="text-foreground uppercase tracking-wider text-[10px] font-black mr-1.5">NOTES &amp; VERIFIED RECORDS:</strong>
-                  {invoice.notes}
-                </p>
-              </div>
+              <p className="text-xs text-muted-foreground leading-relaxed pt-2 border-t border-border/40">
+                <strong className="text-foreground uppercase tracking-wider text-[10px] font-black mr-1.5">NOTES &amp; VERIFIED RECORDS:</strong>
+                {invoice.notes}
+              </p>
             )}
           </div>
 

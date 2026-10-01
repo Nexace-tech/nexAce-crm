@@ -94,6 +94,10 @@ export function generateInvoicePdfDoc(invoice: InvoicePdfData): jsPDF {
       : "Rs. ";
 
   const isPaid = invoice.status === "Paid";
+  const isEmployeeInvoice =
+    (invoice.invoiceNo && invoice.invoiceNo.startsWith("INV-SAL")) ||
+    (invoice.customerNo && (invoice.customerNo.startsWith("EMP-") || invoice.customerNo.includes("SAL"))) ||
+    Boolean(invoice.businessSubtitle && invoice.businessSubtitle.toUpperCase().includes("EMPLOYEE"));
   const leftX = 14;
   const rightX = 196;
   const contentWidth = rightX - leftX; // 182mm
@@ -182,8 +186,8 @@ export function generateInvoicePdfDoc(invoice: InvoicePdfData): jsPDF {
   doc.text(headerSubtitle, leftX + 18, headerY + 11.5);
 
   // Header Right: Elegant Invoice Box matching preview
-  const invBoxW = 68;
-  const invBoxH = 22;
+  const invBoxW = 55;
+  const invBoxH = 14;
   const invBoxX = rightX - invBoxW;
   const invBoxY = headerY - 2;
 
@@ -192,75 +196,17 @@ export function generateInvoicePdfDoc(invoice: InvoicePdfData): jsPDF {
   doc.setLineWidth(0.35);
   doc.roundedRect(invBoxX, invBoxY, invBoxW, invBoxH, 2.5, 2.5, "FD");
 
-  // Commercial Invoice Small Cap Header
+  // Invoice Header Title
   doc.setFontSize(6);
   doc.setFont("helvetica", "bold");
   doc.setTextColor(148, 163, 184); // slate-400
-  doc.text("COMMERCIAL INVOICE", invBoxX + invBoxW - 4, invBoxY + 4.5, { align: "right" });
+  doc.text(isEmployeeInvoice ? "EMPLOYEE INVOICE" : "COMMERCIAL INVOICE", invBoxX + invBoxW - 4, invBoxY + 4.8, { align: "right" });
 
   // Invoice Number
   doc.setFontSize(10.5);
   doc.setFont("helvetica", "bold");
   doc.setTextColor(15, 23, 42);
-  doc.text(invoice.invoiceNo, invBoxX + invBoxW - 4, invBoxY + 9.8, { align: "right" });
-
-  // Status Pill Badge matching reference screenshot
-  const pillW = 28;
-  const pillH = 5;
-  const pillX = invBoxX + invBoxW - 4 - pillW;
-  const pillY = invBoxY + 11.2;
-
-  if (isPaid) {
-    doc.setFillColor(236, 253, 245); // emerald-50
-    doc.setDrawColor(167, 243, 208); // emerald-200
-    doc.setLineWidth(0.25);
-    doc.roundedRect(pillX, pillY, pillW, pillH, 2.5, 2.5, "FD");
-
-    // Vector checkmark
-    doc.setDrawColor(5, 150, 105);
-    doc.setLineWidth(0.4);
-    doc.line(pillX + 2.5, pillY + 2.6, pillX + 3.6, pillY + 3.6);
-    doc.line(pillX + 3.6, pillY + 3.6, pillX + 5.2, pillY + 1.6);
-
-    doc.setFontSize(6);
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(4, 120, 87); // emerald-700
-    doc.text("PAID IN FULL", pillX + 6.4, pillY + 3.6);
-  } else if (invoice.status === "Pending") {
-    doc.setFillColor(254, 243, 199); // amber-50
-    doc.setDrawColor(253, 230, 138); // amber-200
-    doc.setLineWidth(0.25);
-    doc.roundedRect(pillX, pillY, pillW, pillH, 2.5, 2.5, "FD");
-
-    doc.setFontSize(6);
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(180, 83, 9); // amber-700
-    doc.text("PENDING", pillX + pillW / 2, pillY + 3.6, { align: "center" });
-  } else {
-    doc.setFillColor(241, 245, 249);
-    doc.setDrawColor(203, 213, 225);
-    doc.setLineWidth(0.25);
-    doc.roundedRect(pillX, pillY, pillW, pillH, 2.5, 2.5, "FD");
-
-    doc.setFontSize(6);
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(71, 85, 105);
-    doc.text((invoice.status || "DRAFT").toUpperCase(), pillX + pillW / 2, pillY + 3.6, { align: "center" });
-  }
-
-  // Approved or Reference Line
-  if (invoice.approvedBy) {
-    doc.setFontSize(6);
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(5, 150, 105);
-    doc.text(`Approved: ${invoice.approvedBy}`, invBoxX + invBoxW - 4, invBoxY + 19.5, { align: "right" });
-  } else {
-    const refText = invoice.customerNo || `REF-${invoice.invoiceNo}`;
-    doc.setFontSize(6);
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(100, 116, 139);
-    doc.text(`Ref: ${refText}`, invBoxX + invBoxW - 4, invBoxY + 19.5, { align: "right" });
-  }
+  doc.text(invoice.invoiceNo, invBoxX + invBoxW - 4, invBoxY + 10.5, { align: "right" });
 
   // Subtle divider below header
   doc.setDrawColor(241, 245, 249);
@@ -580,11 +526,6 @@ export function generateInvoicePdfDoc(invoice: InvoicePdfData): jsPDF {
   doc.text(wordsValue, rValX, sumY, { align: "right" });
 
   // ── Dual Sign-Off Grid (Signatures BEFORE Terms & Notes) ──────────────────
-  const isEmployeeInvoice =
-    (invoice.invoiceNo && invoice.invoiceNo.startsWith("INV-SAL")) ||
-    (invoice.customerNo && (invoice.customerNo.startsWith("EMP-") || invoice.customerNo.includes("SAL"))) ||
-    Boolean(invoice.businessSubtitle && invoice.businessSubtitle.toUpperCase().includes("EMPLOYEE"));
-
   const companySignatoryName = isEmployeeInvoice
     ? (invoice.billedToName || "Nex Ace")
     : (invoice.businessName || "NexAce Technologies");
@@ -618,9 +559,9 @@ export function generateInvoicePdfDoc(invoice: InvoicePdfData): jsPDF {
       }
     } else {
       doc.setFont("times", "italic");
-      doc.setFontSize(14.5);
+      doc.setFontSize(26);
       doc.setTextColor(15, 23, 42);
-      doc.text(invoice.businessName || "Ashish Sharma", leftSigX + 3, sigY + 8.5);
+      doc.text(invoice.businessName || "Ashish Sharma", leftSigX + 2, sigY + 9.5);
     }
 
     // Bold solid line (border-b-2)
@@ -691,9 +632,10 @@ export function generateInvoicePdfDoc(invoice: InvoicePdfData): jsPDF {
     doc.text("Corporate Finance Desk • Verified", stampX + stampW / 2, stampY + 8.1, { align: "center" });
   } else {
     doc.setFont("times", "italic");
-    doc.setFontSize(14.5);
-    doc.setTextColor(15, 23, 42);
-    doc.text(companySignatoryName.split(" ")[0], rightSigX - 3, sigY + 8.5, { align: "right" });
+    doc.setFontSize(26);
+    const sigText = companySignatoryName.split(" ")[0];
+    const cleanSigText = sigText && sigText.toUpperCase() === "NEXACE" ? "NexAce" : sigText;
+    doc.text(cleanSigText, rightSigX - 2, sigY + 9.5, { align: "right" });
   }
 
   // Bold solid line (border-b-2)
