@@ -4,6 +4,7 @@ import { connectToDatabase } from "@/lib/db";
 import { Project } from "@/models/Project";
 import { User } from "@/models/User";
 import { getUserDataScope } from "@/lib/dataScope";
+import { ROLES, normalizeRoleKey } from "@/lib/roles";
 import mongoose from "mongoose";
 
 /**
@@ -73,21 +74,29 @@ export async function GET(request: Request) {
     }).select("projectId").lean();
     const assignedProjectIds = assignedTasks.map((t: any) => t.projectId).filter(Boolean);
 
-    if (dataScope.scope === "department") {
-      const loggedUser = await User.findById(session.userId).lean();
-      const userDept = loggedUser?.department;
-      const userObjId = new mongoose.Types.ObjectId(session.userId);
+    const userObjId = new mongoose.Types.ObjectId(session.userId);
+    const loggedUser = await User.findById(session.userId).lean();
+    // normalizeRoleKey resolves aliases/case (e.g. "staff" -> "Employee"). A raw
+    // role string compare is not enough here: dataScope intentionally leaves Employees
+    // at "department" scope (see /api/team), so this predicate is the only thing
+    // keeping them out of department-wide projects.
+    const isEmployeeOrFreelancer =
+      normalizeRoleKey(session.role) === ROLES.Employee ||
+      loggedUser?.employmentType === "Freelancer" ||
+      dataScope.scope === "own";
 
+    if (isEmployeeOrFreelancer) {
+      // Employees and freelancers can strictly only view projects assigned to them
       query.$or = [
         { members: userObjId },
-        { assignedDepartment: userDept },
         { _id: { $in: assignedProjectIds } },
       ];
-    } else if (dataScope.scope === "own") {
-      const userObjId = new mongoose.Types.ObjectId(session.userId);
+    } else if (dataScope.scope === "department") {
+      const userDept = loggedUser?.department?.trim();
       query.$or = [
         { members: userObjId },
         { _id: { $in: assignedProjectIds } },
+        ...(userDept ? [{ assignedDepartment: userDept, assignType: "Department" }] : []),
       ];
     }
 

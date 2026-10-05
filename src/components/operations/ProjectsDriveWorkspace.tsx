@@ -1847,6 +1847,9 @@ export function ProjectsDriveWorkspace({ initialTab, hideHeader = false }: Proje
                   className="h-9 rounded-xl border border-border/80 bg-background/80 px-3 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary font-medium max-w-[140px] cursor-pointer shadow-2xs"
                 >
                   <option value="all">All Assignees</option>
+                  {(isAdmin || isOPS) && (
+                    <option value="unassigned">Unassigned</option>
+                  )}
                   {teamMembers.map((m) => (
                     <option key={m._id} value={m._id}>{m.name || m.email}</option>
                   ))}
@@ -1929,6 +1932,17 @@ export function ProjectsDriveWorkspace({ initialTab, hideHeader = false }: Proje
               {columns.map((col) => {
                 const filteredTasks = tasks.filter((t) => {
                   if ((t.status || "To Do") !== col) return false;
+
+                  // Unassigned tasks only show for OPS and Admin
+                  if (!isAdmin && !isOPS && !t.assignee) return false;
+
+                  // Employee only sees what they have assigned
+                  const isStaff = !isAdmin && !isOPS && (currentUser?.role === "Employee" || currentUser?.employmentType === "Freelancer");
+                  if (isStaff) {
+                    const aId = (t.assignee?._id || t.assignee || "").toString();
+                    if (aId !== currentUser?._id) return false;
+                  }
+
                   if (taskSearchQuery.trim()) {
                     const q = taskSearchQuery.toLowerCase().trim();
                     const matchTitle = t.title?.toLowerCase().includes(q);
@@ -1937,7 +1951,9 @@ export function ProjectsDriveWorkspace({ initialTab, hideHeader = false }: Proje
                     if (!matchTitle && !matchDesc && !matchAssignee) return false;
                   }
                   if (taskPriorityFilter !== "all" && t.priority !== taskPriorityFilter) return false;
-                  if (taskAssigneeFilter !== "all") {
+                  if (taskAssigneeFilter === "unassigned") {
+                    if (t.assignee) return false;
+                  } else if (taskAssigneeFilter !== "all") {
                     const aId = t.assignee?._id || t.assignee;
                     if (aId !== taskAssigneeFilter) return false;
                   }
@@ -2221,7 +2237,19 @@ export function ProjectsDriveWorkspace({ initialTab, hideHeader = false }: Proje
 
               {/* Gantt Task Rows */}
               <div className="space-y-3">
-                {tasks.map((task) => {
+                {tasks
+                  .filter((task) => {
+                    // Unassigned tasks only show for OPS and Admin
+                    if (!isAdmin && !isOPS && !task.assignee) return false;
+                    // Employee only sees what they have assigned
+                    const isStaff = !isAdmin && !isOPS && (currentUser?.role === "Employee" || currentUser?.employmentType === "Freelancer");
+                    if (isStaff) {
+                      const aId = (task.assignee?._id || task.assignee || "").toString();
+                      if (aId !== currentUser?._id) return false;
+                    }
+                    return true;
+                  })
+                  .map((task) => {
                   const created = new Date(task.createdAt || Date.now());
                   const due = task.dueDate ? new Date(task.dueDate) : new Date(Date.now() + 86400000 * 7);
 

@@ -73,9 +73,14 @@ export async function GET(request: Request) {
       dueDate:  { $exists: true, $ne: null },
     };
 
+    const isOpsOrAdmin   = session.role === "Admin" || session.role === "OPS";
+
     // Scope to the requesting user's assigned tasks only
-    if (!isElevated) {
+    if (!isElevated || session.role === "Employee") {
       taskQuery.assignee = userObjectId;
+    } else if (!isOpsOrAdmin) {
+      // Unassigned tasks only show for OPS and Admin
+      taskQuery.assignee = { $exists: true, $ne: null };
     }
 
     const tasks = await Task.find(taskQuery)
@@ -85,6 +90,7 @@ export async function GET(request: Request) {
     const taskEvents = tasks
       // Apply department filter to tasks too (when a dept filter is active)
       .filter((task) => {
+        if (!isOpsOrAdmin && !task.assignee) return false;
         if (!department || department === "All") return true;
         const taskDept = (task.assignee as any)?.department;
         return !taskDept || taskDept === department;

@@ -3,7 +3,9 @@ import { getSession } from "@/lib/session";
 import { connectToDatabase } from "@/lib/db";
 import { Sprint } from "@/models/Sprint";
 import { Task } from "@/models/Task";
+import { User } from "@/models/User";
 import { getUserDataScope } from "@/lib/dataScope";
+import { ROLES, normalizeRoleKey } from "@/lib/roles";
 import mongoose from "mongoose";
 
 /**
@@ -34,14 +36,25 @@ export async function GET() {
       tenantId: tenantObjectId,
     }).sort({ startDate: -1 }).lean();
 
+    const isOpsOrAdmin = session.role === "Admin" || session.role === "OPS";
+    const loggedUser = await User.findById(session.userId).lean();
+    const isEmployeeOrFreelancer =
+      normalizeRoleKey(session.role) === ROLES.Employee ||
+      loggedUser?.employmentType === "Freelancer" ||
+      dataScope.scope === "own";
+
     // ✅ Performance: single batched Task query instead of N per-sprint queries (N+1 fix)
     const allSprintIds = rawSprints.map((s) => s._id);
     const taskBaseQuery: Record<string, unknown> = {
       tenantId: tenantObjectId,
       sprintId: { $in: allSprintIds },
+      isDeleted: { $ne: true },
     };
-    if (!isElevatedSprintUser) {
+    if (!isElevatedSprintUser || isEmployeeOrFreelancer) {
       taskBaseQuery.assignee = userObjectId;
+    } else if (!isOpsOrAdmin) {
+      // Unassigned tasks only show for OPS and Admin
+      taskBaseQuery.assignee = { $exists: true, $ne: null };
     }
 
     const allLinkedTasks = await Task.find(taskBaseQuery)

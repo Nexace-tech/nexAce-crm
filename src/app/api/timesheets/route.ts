@@ -69,19 +69,26 @@ export async function GET(request: Request) {
       tenantId: new mongoose.Types.ObjectId(session.tenantId),
     };
 
-    if (dataScope.scope === "department") {
-      const loggedUser = await User.findById(session.userId).lean();
-      const userDept = loggedUser?.department;
-      const reports = await User.find({
-        tenantId: new mongoose.Types.ObjectId(session.tenantId),
-        $or: [
-          { managerId: new mongoose.Types.ObjectId(session.userId) },
-          { department: userDept },
-        ]
-      }).select("_id");
-      const reportIds = reports.map((r) => r._id);
-      query.userId = { $in: reportIds };
-    } else if (dataScope.scope === "own") {
+    const isTeamQuery = searchParams.get("team") === "true";
+    const isPrivileged = session.role === "Admin" || session.role === "OPS" || dataScope.scope === "all";
+
+    if (isTeamQuery && (isPrivileged || dataScope.canViewFeature("viewTeamTimesheets") || session.role === "Manager")) {
+      if (dataScope.scope === "department") {
+        const loggedUser = await User.findById(session.userId).lean();
+        const userDept = loggedUser?.department;
+        const reports = await User.find({
+          tenantId: new mongoose.Types.ObjectId(session.tenantId),
+          $or: [
+            { managerId: new mongoose.Types.ObjectId(session.userId) },
+            ...(userDept ? [{ department: userDept }] : []),
+          ]
+        }).select("_id");
+        const reportIds = reports.map((r) => r._id);
+        query.userId = { $in: reportIds };
+      }
+      // If privileged and scope === "all", query.userId is not restricted (returns all team entries)
+    } else {
+      // Personal timesheet view: strictly the logged-in user's own timesheet entries
       query.userId = new mongoose.Types.ObjectId(session.userId);
     }
 
@@ -121,16 +128,68 @@ export async function POST(request: Request) {
 
     await connectToDatabase();
 
+    // Check project assignment authorization for non-privileged users
+    const isPrivileged = session.role === "Admin" || session.role === "OPS" || session.role === "Manager";
+    if (!isPrivileged) {
+      const userObjId = new mongoose.Types.ObjectId(session.userId);
+      const tenantObjId = new mongoose.Types.ObjectId(session.tenantId);
+      const { Project } = await import("@/models/Project");
+      const { Task } = await import("@/models/Task");
+
+      const assignedTasks = await Task.find({
+        tenantId: tenantObjId,
+        assignee: userObjId,
+        isDeleted: { $ne: true },
+      }).select("projectId").lean();
+      const assignedProjectIds = assignedTasks.map((t: any) => t.projectId).filter(Boolean);
+
+      const accessibleProjects = await Project.find({
+        tenantId: tenantObjId,
+        isDeleted: { $ne: true },
+        $or: [
+          { members: userObjId },
+          { _id: { $in: assignedProjectIds } },
+        ],
+      }).select("name").lean();
+
+      const allowedNames = new Set(accessibleProjects.map((p: any) => (p.name || "").trim().toLowerCase()));
+
+      const entriesWithHours = Array.isArray(body)
+        ? body.filter((e: any) => Number(e?.hours) > 0)
+        : Number(body?.hours) > 0 ? [body] : [];
+
+      const submittedProjectNames = entriesWithHours
+        .map((e: any) => (e?.project || "").trim().toLowerCase())
+        .filter(Boolean);
+
+      const hasUnauthorized = submittedProjectNames.some((pName) => !allowedNames.has(pName));
+      if (hasUnauthorized) {
+        return NextResponse.json(
+          { error: "Forbidden: You can only log timesheets for projects assigned to you." },
+          { status: 403 }
+        );
+      }
+    }
+
     if (Array.isArray(body)) {
+      // Filter out empty draft placeholder rows with no project and 0 hours
+      const activeEntries = body.filter(
+        (e: any) => Boolean(e?.project && String(e.project).trim()) || Number(e?.hours) > 0
+      );
+
       // Validate entries
-      for (const e of body) {
+      for (const e of activeEntries) {
         if (!e.project || !e.date || isNaN(Number(e.hours)) || Number(e.hours) < 0) {
           return NextResponse.json({ error: "Each entry requires project, date, and valid hours (>= 0)" }, { status: 400 });
         }
       }
 
+      if (activeEntries.length === 0) {
+        return NextResponse.json({ success: true, count: 0 });
+      }
+
       // Batch upsert for hours > 0, and deleteOne for hours == 0 (to clean up cleared cells)
-      const bulkOps: mongoose.mongo.AnyBulkWriteOperation<any>[] = body.map((entry: Record<string, unknown>) => {
+      const bulkOps: mongoose.mongo.AnyBulkWriteOperation<any>[] = activeEntries.map((entry: Record<string, unknown>) => {
         const hoursNum = Number(entry.hours);
         const filter = {
           userId: new mongoose.Types.ObjectId(session.userId),

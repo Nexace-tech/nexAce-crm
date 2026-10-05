@@ -90,10 +90,7 @@ function CalendarPageContent() {
     return mon;
   });
 
-  const [timesheetRows, setTimesheetRows] = useState<any[]>([
-    { project: "NexAce CRM Implementation", taskName: "UI/UX Development", comment: "", mon: 0, tue: 0, wed: 0, thu: 0, fri: 0, sat: 0, isBillable: true },
-    { project: "Client Portal Integration", taskName: "API endpoints integration", comment: "", mon: 0, tue: 0, wed: 0, thu: 0, fri: 0, sat: 0, isBillable: true },
-  ]);
+  const [timesheetRows, setTimesheetRows] = useState<any[]>([]);
   const [timesheetRowToDelete, setTimesheetRowToDelete] = useState<{ index: number; project: string; taskName: string } | null>(null);
   const [deletingTimesheetRow, setDeletingTimesheetRow] = useState<boolean>(false);
 
@@ -367,7 +364,8 @@ function CalendarPageContent() {
     showToast("Shift logs exported to Excel CSV format in IST successfully!", "success");
   };
 
-  const [projectsList, setProjectsList] = useState<string[]>(["General Administration"]);
+  const [projectsList, setProjectsList] = useState<string[]>([]);
+  const [assignedTasks, setAssignedTasks] = useState<any[]>([]);
 
   const isManagerOrAdmin = Boolean(
     isAdmin ||
@@ -416,17 +414,32 @@ function CalendarPageContent() {
               .filter(Boolean)
           )
         );
-        if (names.length > 0) {
-          setProjectsList(names);
-        }
+        setProjectsList(names);
+        return names;
       }
     } catch (e) {
       console.error(e);
     }
+    return [];
   };
 
-  const fetchTimesheets = async () => {
+  const fetchAssignedTasks = async () => {
     try {
+      const res = await fetch("/api/tasks?assignedOnly=true");
+      if (res.ok) {
+        const data = await res.json();
+        setAssignedTasks(data.tasks || []);
+        return data.tasks || [];
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    return [];
+  };
+
+  const fetchTimesheets = async (passedProjects?: string[]) => {
+    try {
+      const activeProjects = passedProjects !== undefined ? passedProjects : projectsList;
       const startStr = timesheetWeekStart.toISOString();
       const end = new Date(timesheetWeekStart);
       end.setDate(end.getDate() + 6);
@@ -450,8 +463,8 @@ function CalendarPageContent() {
                 taskName: entry.taskName,
                 comment: entry.comment || "",
                 mon: 0, tue: 0, wed: 0, thu: 0, fri: 0, sat: 0,
-                isBillable: entry.isBillable,
-                status: entry.status
+                isBillable: entry.isBillable !== false,
+                status: entry.status || "Draft"
               };
             } else if (!rowsMap[key].comment && entry.comment) {
               rowsMap[key].comment = entry.comment;
@@ -466,10 +479,13 @@ function CalendarPageContent() {
           });
           setTimesheetRows(Object.values(rowsMap));
         } else {
-          setTimesheetRows([
-            { project: projectsList[0] || "NexAce CRM Implementation", taskName: "UI/UX Development", comment: "", mon: 0, tue: 0, wed: 0, thu: 0, fri: 0, sat: 0, isBillable: true },
-            { project: projectsList[1] || "Client Portal Integration", taskName: "API endpoints integration", comment: "", mon: 0, tue: 0, wed: 0, thu: 0, fri: 0, sat: 0, isBillable: true },
-          ]);
+          if (activeProjects.length > 0) {
+            setTimesheetRows([
+              { project: activeProjects[0], taskName: "", comment: "", mon: 0, tue: 0, wed: 0, thu: 0, fri: 0, sat: 0, isBillable: true },
+            ]);
+          } else {
+            setTimesheetRows([]);
+          }
         }
       }  
       if (can("approveTimesheets") || isOPS || isAdmin || currentUser?.role === "Admin" || currentUser?.role === "OPS" || currentUser?.role === "Manager" || can("viewTeamTimesheets")) {
@@ -510,8 +526,9 @@ function CalendarPageContent() {
         if (activeTab === "calendar") await fetchEvents();
         else if (activeTab === "sprints") await fetchSprints();
         else if (activeTab === "timesheets") {
-          await fetchProjects();
-          await fetchTimesheets();
+          const projs = await fetchProjects();
+          await fetchAssignedTasks();
+          await fetchTimesheets(projs);
         }
         else if (activeTab === "attendance") await fetchAttendance();
       } catch (err) {
@@ -755,9 +772,13 @@ function CalendarPageContent() {
   };
 
   const handleAddTimesheetRow = () => {
+    if (projectsList.length === 0) {
+      showToast("No projects currently assigned to you. Contact your manager or admin.", "error");
+      return;
+    }
     setTimesheetRows([
       ...timesheetRows,
-      { project: projectsList[0] || "NexAce CRM Implementation", taskName: "", comment: "", mon: 0, tue: 0, wed: 0, thu: 0, fri: 0, sat: 0, isBillable: true },
+      { project: projectsList[0] || "", taskName: "", comment: "", mon: 0, tue: 0, wed: 0, thu: 0, fri: 0, sat: 0, isBillable: true },
     ]);
   };
 
@@ -772,9 +793,13 @@ function CalendarPageContent() {
     if (rowHours === 0 && (!targetRow.taskName || targetRow.taskName.trim() === "")) {
       const updated = timesheetRows.filter((_, i) => i !== idx);
       if (updated.length === 0) {
-        setTimesheetRows([
-          { project: projectsList[0] || "NexAce CRM Implementation", taskName: "", comment: "", mon: 0, tue: 0, wed: 0, thu: 0, fri: 0, sat: 0, isBillable: true },
-        ]);
+        if (projectsList.length > 0) {
+          setTimesheetRows([
+            { project: projectsList[0], taskName: "", comment: "", mon: 0, tue: 0, wed: 0, thu: 0, fri: 0, sat: 0, isBillable: true },
+          ]);
+        } else {
+          setTimesheetRows([]);
+        }
       } else {
         setTimesheetRows(updated);
       }
@@ -823,9 +848,9 @@ function CalendarPageContent() {
     setTimesheetRows((prevRows) => {
       const updated = prevRows.filter((_, i) => i !== index);
       if (updated.length === 0) {
-        return [
-          { project: projectsList[0] || "NexAce CRM Implementation", taskName: "", comment: "", mon: 0, tue: 0, wed: 0, thu: 0, fri: 0, sat: 0, isBillable: true },
-        ];
+        return projectsList.length > 0
+          ? [{ project: projectsList[0], taskName: "", comment: "", mon: 0, tue: 0, wed: 0, thu: 0, fri: 0, sat: 0, isBillable: true }]
+          : [];
       }
       return updated;
     });
@@ -837,13 +862,35 @@ function CalendarPageContent() {
     showToast("Timesheet row deleted!", "success");
   };
 
+  // Surfaces the server's own error text (403 "not assigned to this project",
+  // 400 validation, etc.). Without this a rejected save looks like a silent no-op.
+  const readApiError = async (res: Response, fallback: string) => {
+    try {
+      const data = await res.json();
+      return typeof data?.error === "string" && data.error.trim() ? data.error : fallback;
+    } catch {
+      return fallback;
+    }
+  };
+
   const handleSaveTimesheet = async (submitStatus: "Draft" | "Pending") => {
     const entryPayload: any[] = [];
     const weekdaysOffset = [0, 1, 2, 3, 4, 5];
     let hasAnyPositiveHours = false;
+    let missingProjectOnRowWithHours = false;
 
     timesheetRows.forEach((row) => {
       const days = ["mon", "tue", "wed", "thu", "fri", "sat"];
+      const rowHours = days.reduce((sum, day) => sum + (Number(row[day]) || 0), 0);
+      const projName = (row.project || "").trim();
+
+      if (!projName) {
+        if (rowHours > 0) {
+          missingProjectOnRowWithHours = true;
+        }
+        return; // Skip empty row with no project and 0 hours
+      }
+
       days.forEach((day, index) => {
         const hoursVal = Number(row[day]) || 0;
         if (hoursVal > 0) {
@@ -853,8 +900,8 @@ function CalendarPageContent() {
         entryDate.setDate(entryDate.getDate() + weekdaysOffset[index]);
         
         entryPayload.push({
-          project: row.project,
-          taskName: row.taskName || "General Tasks",
+          project: projName,
+          taskName: (row.taskName || "General Tasks").trim(),
           comment: row.comment ? String(row.comment).trim() : "",
           hours: hoursVal,
           date: entryDate,
@@ -864,8 +911,18 @@ function CalendarPageContent() {
       });
     });
 
+    if (missingProjectOnRowWithHours) {
+      showToast("Please select an assigned project for all timesheet rows with logged hours.", "error");
+      return;
+    }
+
     if (submitStatus === "Pending" && !hasAnyPositiveHours) {
       showToast("Please log at least one hour before submitting!", "error");
+      return;
+    }
+
+    if (submitStatus === "Draft" && entryPayload.length === 0) {
+      showToast("No timesheet entries to save.", "error");
       return;
     }
 
@@ -879,6 +936,8 @@ function CalendarPageContent() {
       if (res.ok) {
         await fetchTimesheets();
         showToast(submitStatus === "Pending" ? "Timesheet submitted for approval!" : "Timesheet draft saved!", "success");
+      } else {
+        showToast(await readApiError(res, "Failed to save timesheet."), "error");
       }
     } catch (err) {
       console.error(err);
@@ -896,6 +955,8 @@ function CalendarPageContent() {
       if (res.ok) {
         await fetchTimesheets();
         showToast(`Timesheet entry ${status}!`, "success");
+      } else {
+        showToast(await readApiError(res, "Failed to process timesheet entry."), "error");
       }
     } catch (err) {
       console.error(err);
@@ -2040,48 +2101,79 @@ function CalendarPageContent() {
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm text-left border-collapse">
-                    <thead>
-                      <tr className="border-b border-border text-muted-foreground text-xs font-semibold uppercase">
-                        <th className="py-2.5 pr-2 min-w-[140px]">Project</th>
-                        <th className="py-2.5 px-1.5 min-w-[120px]">Task Description</th>
-                        <th className="py-2.5 px-1.5 min-w-[130px]">Comment / Notes</th>
-                        <th className="py-2.5 px-1 text-center w-12">Mon</th>
-                        <th className="py-2.5 px-1 text-center w-12">Tue</th>
-                        <th className="py-2.5 px-1 text-center w-12">Wed</th>
-                        <th className="py-2.5 px-1 text-center w-12">Thu</th>
-                        <th className="py-2.5 px-1 text-center w-12">Fri</th>
-                        <th className="py-2.5 px-1 text-center w-12">Sat</th>
-                        <th className="py-2.5 px-1 text-center w-14">Total</th>
-                        <th className="py-2.5 px-1 text-center w-14">Billable</th>
-                        <th className="py-2.5 pl-1 pr-1 text-center w-14">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border/60">
-                      {timesheetRows.map((row, idx) => {
-                        const rowTotal = (Number(row.mon) || 0) + (Number(row.tue) || 0) + (Number(row.wed) || 0) + (Number(row.thu) || 0) + (Number(row.fri) || 0) + (Number(row.sat) || 0);
-                        return (
-                          <tr key={idx} className="hover:bg-accent/10 transition-colors">
-                            <td className="py-3 pr-2">
-                              <select
-                                value={row.project}
-                                onChange={(e) => handleRowChange(idx, "project", e.target.value)}
-                                className="w-full h-9 px-2 text-xs bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-                              >
-                                {Array.from(new Set(projectsList)).map((proj, pIdx) => (
-                                  <option key={`${proj}-${pIdx}`} value={proj}>{proj}</option>
-                                ))}
-                              </select>
-                            </td>
-                            <td className="py-3 px-1.5">
-                              <Input
-                                value={row.taskName}
-                                onChange={(e) => handleRowChange(idx, "taskName", e.target.value)}
-                                placeholder="e.g. Code Review"
-                                className="h-9 text-xs"
-                              />
-                            </td>
+                {loading ? (
+                  <div className="p-12 text-center text-muted-foreground flex flex-col items-center justify-center gap-2">
+                    <i className="fa-solid fa-circle-notch fa-spin text-2xl text-primary" />
+                    <span className="text-xs font-medium">Loading timesheets...</span>
+                  </div>
+                ) : projectsList.length === 0 && timesheetRows.length === 0 ? (
+                  <div className="p-8 text-center bg-muted/20 border border-dashed border-border rounded-xl space-y-3">
+                    <div className="w-12 h-12 rounded-full bg-primary/10 text-primary flex items-center justify-center mx-auto text-xl">
+                      <i className="fa-solid fa-folder-closed" />
+                    </div>
+                    <h4 className="font-bold text-base text-foreground">No Projects Assigned</h4>
+                    <p className="text-xs text-muted-foreground max-w-md mx-auto">
+                      For data privacy, employees and freelancers can only view and log timesheets for projects and tasks assigned to them. Once you are assigned to a project or task by your manager or administrator, you will be able to log your hours here.
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="overflow-x-auto">
+                    <table className="w-full text-sm text-left border-collapse">
+                      <thead>
+                        <tr className="border-b border-border text-muted-foreground text-xs font-semibold uppercase">
+                          <th className="py-2.5 pr-2 min-w-[140px]">Project</th>
+                          <th className="py-2.5 px-1.5 min-w-[120px]">Task Description</th>
+                          <th className="py-2.5 px-1.5 min-w-[130px]">Comment / Notes</th>
+                          <th className="py-2.5 px-1 text-center w-12">Mon</th>
+                          <th className="py-2.5 px-1 text-center w-12">Tue</th>
+                          <th className="py-2.5 px-1 text-center w-12">Wed</th>
+                          <th className="py-2.5 px-1 text-center w-12">Thu</th>
+                          <th className="py-2.5 px-1 text-center w-12">Fri</th>
+                          <th className="py-2.5 px-1 text-center w-12">Sat</th>
+                          <th className="py-2.5 px-1 text-center w-14">Total</th>
+                          <th className="py-2.5 px-1 text-center w-14">Billable</th>
+                          <th className="py-2.5 pl-1 pr-1 text-center w-14">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border/60">
+                        {timesheetRows.map((row, idx) => {
+                          const rowTotal = (Number(row.mon) || 0) + (Number(row.tue) || 0) + (Number(row.wed) || 0) + (Number(row.thu) || 0) + (Number(row.fri) || 0) + (Number(row.sat) || 0);
+                          return (
+                            <tr key={idx} className="hover:bg-accent/10 transition-colors">
+                              <td className="py-3 pr-2">
+                                <select
+                                  value={row.project}
+                                  onChange={(e) => handleRowChange(idx, "project", e.target.value)}
+                                  className="w-full h-9 px-2 text-xs bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                                >
+                                  {!row.project && <option value="">Select assigned project...</option>}
+                                  {row.project && !projectsList.includes(row.project) && (
+                                    <option value={row.project}>{row.project}</option>
+                                  )}
+                                  {Array.from(new Set(projectsList)).map((proj, pIdx) => (
+                                    <option key={`${proj}-${pIdx}`} value={proj}>{proj}</option>
+                                  ))}
+                                </select>
+                              </td>
+                              <td className="py-3 px-1.5">
+                                <Input
+                                  value={row.taskName}
+                                  onChange={(e) => handleRowChange(idx, "taskName", e.target.value)}
+                                  placeholder="e.g. Code Review"
+                                  list={`assigned-tasks-list-${idx}`}
+                                  className="h-9 text-xs"
+                                />
+                                <datalist id={`assigned-tasks-list-${idx}`}>
+                                  {assignedTasks
+                                    .filter((t) => !row.project || (t.projectId?.name || "").trim().toLowerCase() === (row.project || "").trim().toLowerCase())
+                                    .map((t, tIdx) => (
+                                      <option key={`${t._id || tIdx}`} value={t.title}>
+                                        {t.title} ({t.status || "To Do"})
+                                      </option>
+                                    ))}
+                                </datalist>
+                              </td>
                             <td className="py-3 px-1.5">
                               <Input
                                 value={row.comment || ""}
@@ -2166,7 +2258,9 @@ function CalendarPageContent() {
                     </Button>
                   </div>
                 </div>
-              </CardContent>
+              </>
+            )}
+          </CardContent>
             </Card>
 
             {/* Right sidebar details */}

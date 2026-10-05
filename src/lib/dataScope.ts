@@ -69,6 +69,10 @@ export async function getUserDataScope(session: { userId: string; role: string; 
   // Dynamic scope calculation based on granted feature permissions:
   let scope: "all" | "department" | "own" = "own";
 
+  // NOTE: scope is a *data-visibility* primitive shared by team/clients/referrals routes.
+  // It must NOT be narrowed to "own" for Employees/Freelancers: /api/team relies on
+  // "department" to return colleagues. Project & task visibility is enforced per-resource
+  // in /api/projects and /api/tasks instead (see isEmployeeOrFreelancer there).
   if (canViewFeature("manageUsers") || canViewFeature("viewAnalyticsDashboard") || canViewFeature("viewClients") || (isSubAdminRole(role) && canViewFeature("viewTeamDirectory")) || role === "HR" || role === "Admin") {
     scope = "all";
   } else if (canViewFeature("viewTeamDirectory") || canViewFeature("viewTeamTimesheets") || canViewFeature("viewTeamLeave") || canViewFeature("reviewTeamAppraisals") || role === "Manager") {

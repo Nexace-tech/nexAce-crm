@@ -6,6 +6,7 @@ import { Project } from "@/models/Project";
 import { ActivityLog } from "@/models/ActivityLog";
 import { User } from "@/models/User";
 import { getUserDataScope } from "@/lib/dataScope";
+import { ROLES, normalizeRoleKey } from "@/lib/roles";
 import { notify, notifyAdmins } from "@/lib/notify";
 import mongoose from "mongoose";
 
@@ -28,19 +29,49 @@ export async function GET(request: Request) {
 
     await connectToDatabase();
 
+    const dataScope = await getUserDataScope(session);
+    const userObjId = new mongoose.Types.ObjectId(session.userId);
+    const loggedUser = await User.findById(session.userId).lean();
+    const isOpsOrAdmin = session.role === "Admin" || session.role === "OPS";
+
+    // normalizeRoleKey resolves aliases/case (e.g. "staff" -> "Employee"). A raw
+    // role string compare is not enough here: dataScope intentionally leaves Employees
+    // at "department" scope (see /api/team), so this predicate is the only thing
+    // keeping them out of department-wide tasks.
+    const isEmployeeOrFreelancer =
+      normalizeRoleKey(session.role) === ROLES.Employee ||
+      loggedUser?.employmentType === "Freelancer" ||
+      dataScope.scope === "own";
+
     if (taskId) {
       const task = await Task.findOne({
         _id: new mongoose.Types.ObjectId(taskId),
         tenantId: new mongoose.Types.ObjectId(session.tenantId),
+        isDeleted: { $ne: true },
       })
         .populate("assignee", "name role photoUrl")
         .populate("projectId", "name")
         .lean();
+
+      if (!task) {
+        return NextResponse.json({ error: "Task not found" }, { status: 404 });
+      }
+
+      // Unassigned tasks: only OPS and Admin can view
+      if (!task.assignee && !isOpsOrAdmin) {
+        return NextResponse.json({ error: "Forbidden: Unassigned tasks are only visible to OPS and Admin" }, { status: 403 });
+      }
+
+      // Employees and Freelancers: strictly only see tasks assigned to them
+      if (isEmployeeOrFreelancer) {
+        const assignedId = task.assignee?._id ? String(task.assignee._id) : String(task.assignee || "");
+        if (assignedId !== session.userId) {
+          return NextResponse.json({ error: "Forbidden: You can only view tasks assigned to you" }, { status: 403 });
+        }
+      }
+
       return NextResponse.json({ task });
     }
-
-    const dataScope = await getUserDataScope(session);
-    const userObjId = new mongoose.Types.ObjectId(session.userId);
 
     const query: any = {
       tenantId: new mongoose.Types.ObjectId(session.tenantId),
@@ -56,39 +87,25 @@ export async function GET(request: Request) {
     }
 
     if (assigneeId) {
-      query.assignee = new mongoose.Types.ObjectId(assigneeId);
+      if (assigneeId === "unassigned" || assigneeId === "none") {
+        // Unassigned tasks only show for OPS and Admin
+        if (!isOpsOrAdmin) {
+          return NextResponse.json({ tasks: [] });
+        }
+        query.assignee = { $in: [null, undefined] };
+      } else if (assigneeId !== "all") {
+        query.assignee = new mongoose.Types.ObjectId(assigneeId);
+      }
     }
 
-    // Role-based task scoping
-    if (dataScope.scope === "own") {
-      // Find projects where the user is an assigned member
-      const userProjects = await Project.find({
-        tenantId: new mongoose.Types.ObjectId(session.tenantId),
-        members: userObjId,
-        isDeleted: { $ne: true },
-      }).select("_id");
-      const userProjectIds = userProjects.map((p) => p._id);
+    const assignedOnly = searchParams.get("assignedOnly") === "true";
 
-      const taskScopeCondition = {
-        $or: [
-          { assignee: userObjId },
-          { projectId: { $in: userProjectIds } },
-        ]
-      };
-
-      if (query.projectId) {
-        // If specific project selected, ensure user has access or task assigned
-        query.$and = [
-          { projectId: query.projectId },
-          taskScopeCondition,
-        ];
-        delete query.projectId;
-      } else {
-        query.$and = [taskScopeCondition];
-      }
+    // Non-privileged users (Employee / Freelancer) or explicit assignedOnly query:
+    // Strictly only see tasks assigned to them
+    if (assignedOnly || isEmployeeOrFreelancer) {
+      query.assignee = userObjId;
     } else if (dataScope.scope === "department") {
-      const loggedUser = await User.findById(session.userId).lean();
-      const userDept = loggedUser?.department;
+      const userDept = loggedUser?.department?.trim();
       const assignedTasks = await Task.find({
         tenantId: new mongoose.Types.ObjectId(session.tenantId),
         assignee: userObjId,
@@ -101,18 +118,28 @@ export async function GET(request: Request) {
         isDeleted: { $ne: true },
         $or: [
           { members: userObjId },
-          { assignedDepartment: userDept },
           { _id: { $in: assignedProjectIds } },
+          ...(userDept ? [{ assignedDepartment: userDept, assignType: "Department" }] : []),
         ],
       }).select("_id");
       const deptProjectIds = deptProjects.map((p) => p._id);
 
-      const deptScopeCondition = {
-        $or: [
-          { assignee: userObjId },
-          { projectId: { $in: deptProjectIds } },
-        ]
-      };
+      // In department scope:
+      // If OPS/Admin, allow unassigned department project tasks.
+      // If not OPS/Admin, unassigned tasks are hidden (require valid assignee).
+      const deptScopeCondition = isOpsOrAdmin
+        ? {
+            $or: [
+              { assignee: userObjId },
+              { projectId: { $in: deptProjectIds } },
+            ],
+          }
+        : {
+            $or: [
+              { assignee: userObjId },
+              { projectId: { $in: deptProjectIds }, assignee: { $ne: null, $exists: true } },
+            ],
+          };
 
       if (query.projectId) {
         query.$and = [
@@ -122,6 +149,12 @@ export async function GET(request: Request) {
         delete query.projectId;
       } else {
         query.$and = [deptScopeCondition];
+      }
+    } else if (!isOpsOrAdmin) {
+      // For any elevated non-OPS, non-Admin user (e.g. Sub Admin or manager with all scope):
+      // Unassigned tasks only show for OPS and Admin
+      if (!query.assignee) {
+        query.assignee = { $ne: null, $exists: true };
       }
     }
 
@@ -190,20 +223,25 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "Project not found" }, { status: 404 });
       }
 
-      // Check if user is an explicit member, or in matching department, or open project, or self-assigning
+      // Authorization: explicit project member, or member of the project's assigned
+      // department. Deliberately NO "open project" and NO "self-assign" escape hatch.
+      // Employees and Freelancers must strictly be explicit project members so they
+      // cannot attach tasks to unrelated department projects.
       const isMember = project.members?.some((m: any) => m.toString() === session.userId);
-      const isSelfAssign = assignee && assignee.toString() === session.userId;
-      const isOpenProject = !project.members || project.members.length === 0;
+
+      const currentUserDoc = await User.findById(userObjId).select("department employmentType").lean();
+      const isEmployeeOrFreelancer =
+        normalizeRoleKey(session.role) === ROLES.Employee ||
+        currentUserDoc?.employmentType === "Freelancer";
 
       let isDeptMember = false;
-      if (project.assignType === "Department" && project.assignedDepartment) {
-        const currentUserDoc = await User.findById(userObjId).select("department").lean();
+      if (!isEmployeeOrFreelancer && project.assignType === "Department" && project.assignedDepartment) {
         if (currentUserDoc?.department === project.assignedDepartment) {
           isDeptMember = true;
         }
       }
 
-      if (!isMember && !isDeptMember && !isOpenProject && !isSelfAssign) {
+      if (!isMember && !isDeptMember) {
         return NextResponse.json({ error: "Forbidden: You are not assigned to this project" }, { status: 403 });
       }
     }
@@ -298,15 +336,8 @@ export async function PUT(request: Request) {
 
     if (!isPrivileged) {
       const isAssignee = task.assignee && task.assignee.toString() === session.userId;
-      const isMember = task.projectId
-        ? await Project.exists({
-            _id: task.projectId,
-            tenantId: tenantObjId,
-            members: userObjId,
-          })
-        : false;
-      if (!isAssignee && !isMember) {
-        return NextResponse.json({ error: "Forbidden: you do not have access to this task" }, { status: 403 });
+      if (!isAssignee) {
+        return NextResponse.json({ error: "Forbidden: you can only update tasks assigned to you" }, { status: 403 });
       }
       // Non-privileged users cannot reassign a task to a different user
       if (assignee !== undefined && assignee !== null && assignee !== session.userId) {
