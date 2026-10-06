@@ -5,7 +5,7 @@ import { ITDevice } from "@/models/ITDevice";
 import { ActivityLog } from "@/models/ActivityLog";
 import { requireTenantSession, isAuthError } from "@/lib/auth-guard";
 
-export const DEVICE_TYPE_CODE: Record<string, string> = {
+const DEVICE_TYPE_CODE: Record<string, string> = {
   Laptop: "LAP",
   Desktop: "DES",
   Monitor: "MON",
@@ -16,7 +16,7 @@ export const DEVICE_TYPE_CODE: Record<string, string> = {
   Other: "OTH",
 };
 
-export async function getNextAssetTag(
+async function getNextAssetTag(
   tenantObjectId: mongoose.Types.ObjectId,
   deviceType: string
 ): Promise<string> {
