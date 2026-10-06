@@ -230,12 +230,13 @@ function isCategoryActive(cat: NavCategoryItem, pathname: string, currentTab: st
 
 interface SidebarNavMenuProps {
   canAccessModule: (key: string) => boolean;
+  can: (featureKey: string) => boolean;
   isEmployeeOrHR: boolean;
   isPending: boolean;
   onNavigate: () => void;
 }
 
-function SidebarNavMenu({ canAccessModule, isEmployeeOrHR, isPending, onNavigate }: SidebarNavMenuProps) {
+function SidebarNavMenu({ canAccessModule, can, isEmployeeOrHR, isPending, onNavigate }: SidebarNavMenuProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const currentTab = searchParams?.get("tab") || null;
@@ -361,7 +362,10 @@ function SidebarNavMenu({ canAccessModule, isEmployeeOrHR, isPending, onNavigate
               {allowedCategories.map((cat) => {
                 let visibleSubItems = cat.subItems
                   ? cat.subItems.filter((sub) => {
-                      if (sub.key) return canAccessModule(sub.key);
+                      if (sub.key) {
+                        if (sub.key === "it") return canAccessModule("it") || can("viewITPortal");
+                        return canAccessModule(sub.key);
+                      }
                       if (cat.key) return canAccessModule(cat.key);
                       return true;
                     })
@@ -385,10 +389,6 @@ function SidebarNavMenu({ canAccessModule, isEmployeeOrHR, isPending, onNavigate
                       },
                     ];
                   }
-                }
-
-                if (cat.id === "management" && isEmployeeOrHR) {
-                  visibleSubItems = visibleSubItems.filter((sub) => sub.key === "goals");
                 }
 
                 if (cat.id === "finance") {
@@ -670,7 +670,7 @@ function SidebarNavMenu({ canAccessModule, isEmployeeOrHR, isPending, onNavigate
 
 export function DashboardClientLayout({ session, menuItems, isPending = false, children }: DashboardClientLayoutProps) {
   const { user } = useAuthContext();
-  const { canAccessModule, isAdmin, isOPS, role: permRole } = usePermissions();
+  const { can, canAccessModule, isAdmin, isOPS, role: permRole } = usePermissions();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [tourOpen, setTourOpen] = useState(false);
@@ -813,6 +813,7 @@ export function DashboardClientLayout({ session, menuItems, isPending = false, c
         <React.Suspense fallback={<div className="flex-1 p-4" />}>
           <SidebarNavMenu
             canAccessModule={canAccessModule}
+            can={can}
             isEmployeeOrHR={isEmployeeOrHR}
             isPending={isPending}
             onNavigate={() => setMobileOpen(false)}

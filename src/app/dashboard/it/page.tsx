@@ -4483,7 +4483,7 @@ export default function ITCommandCenterPage() {
   const totalRecords = links.length + access.length + subs.length + devices.length + userInvoicesCount;
   const overallLoading = loadingLinks && loadingAccess && loadingSubs && loadingDevices && loadingInvoices;
 
-  if (!permLoading && !canAccessModule("it")) {
+  if (!permLoading && !canAccessModule("it") && !can("viewITPortal")) {
     return <AccessRestricted moduleName="IT Portal" icon="fa-solid fa-laptop-code" />;
   }
 

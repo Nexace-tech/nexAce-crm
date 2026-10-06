@@ -106,6 +106,9 @@ export default async function DashboardLayout({ children }: DashboardLayoutProps
   } else {
     // Dynamic Role-based filtering based on permissions configured by Admin
     menuItems = allModules.filter((mod) => {
+      if (mod.key === "it" && (customPermissions?.it === true || permDoc?.featurePermissions?.viewITPortal === true)) {
+        return true;
+      }
       if (customPermissions && customPermissions[mod.key] !== undefined) {
         return customPermissions[mod.key] === true;
       }

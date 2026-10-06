@@ -97,6 +97,16 @@ export function usePermissions() {
       return false;
     }
 
+    // IT Portal: accessible if either module permission "it" or feature permission "viewITPortal" is granted
+    if (moduleKey === "it") {
+      if (modulePermissions["it"] === true || featurePermissions["viewITPortal"] === true) {
+        return true;
+      }
+      if (modulePermissions["it"] === false && !featurePermissions["viewITPortal"]) {
+        return false;
+      }
+    }
+
     if (modulePermissions[moduleKey] !== undefined) {
       return Boolean(modulePermissions[moduleKey]);
     }
