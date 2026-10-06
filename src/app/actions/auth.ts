@@ -187,7 +187,7 @@ export async function registerAction(state: FormState | undefined, formData: For
         title: "New Employee Account Pending Approval",
         message: `${adminName} (@${usernameRaw}) registered an account and is awaiting approval.`,
         type: "system",
-        linkUrl: "/dashboard/team",
+        linkUrl: "/dashboard/clients?tab=users",
         read: false,
         adminOnly: true,
       }));
@@ -199,7 +199,7 @@ export async function registerAction(state: FormState | undefined, formData: For
           await sendEmail({
             to: recipient.email,
             subject: `[NexAce CRM] New Employee Approval Request: ${adminName}`,
-            text: `New account awaiting approval: ${adminName} (@${usernameRaw}, ${adminEmail}). Please review and approve in your dashboard.`,
+            text: `New account awaiting approval: ${adminName} (@${usernameRaw}, ${adminEmail}). Please review and approve in OPS Portal > User Accounts.`,
             html: `
               <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px; padding: 24px;">
                 <h2 style="color: #1e293b; margin-top: 0;">New Account Awaiting Approval</h2>
@@ -212,9 +212,9 @@ export async function registerAction(state: FormState | undefined, formData: For
                   <p style="margin: 4px 0; font-size: 14px; color: #1e293b;"><strong>Email:</strong> ${adminEmail}</p>
                   <p style="margin: 4px 0; font-size: 14px; color: #d97706;"><strong>Status:</strong> Pending Approval</p>
                 </div>
-                <p style="color: #475569; font-size: 14px;">Please sign in to your dashboard to approve or manage this account.</p>
+                <p style="color: #475569; font-size: 14px;">Please sign in to OPS Portal &gt; User Accounts to approve or configure this account.</p>
                 <div style="margin-top: 24px;">
-                  <a href="${appUrl}/dashboard/team" style="display: inline-block; padding: 10px 20px; background-color: #2563eb; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 14px;">Review &amp; Approve Employee</a>
+                  <a href="${appUrl}/dashboard/clients?tab=users" style="display: inline-block; padding: 10px 20px; background-color: #2563eb; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 14px;">Review &amp; Approve in OPS Portal</a>
                 </div>
               </div>
             `
@@ -225,18 +225,14 @@ export async function registerAction(state: FormState | undefined, formData: For
       }
     }
 
-    // 6. Only create session for Active users (Admins). Pending users must wait for approval.
-    if (assignedStatus === "Active") {
-      await createSession(
-        String(newUser._id),
-        String(tenant._id),
-        newUser.name,
-        tenant.name,
-        newUser.role
-      );
-    } else {
-      isPendingUser = true;
-    }
+    // 6. Create session for both Active and Pending users. Pending users will be shown the Under Approval screen.
+    await createSession(
+      String(newUser._id),
+      String(tenant._id),
+      newUser.name,
+      tenant.name,
+      newUser.role
+    );
   } catch (error: any) {
     if (error?.digest?.startsWith("NEXT_REDIRECT")) {
       throw error;
@@ -247,10 +243,7 @@ export async function registerAction(state: FormState | undefined, formData: For
     };
   }
 
-  // Active users (first Admin) go to the dashboard; Pending users go to login with a notice
-  if (isPendingUser) {
-    redirect("/login?pending=true");
-  }
+  // Redirect all registered users to the dashboard (Pending users see the Under Approval view)
   redirect("/dashboard");
 }
 
@@ -307,7 +300,7 @@ export async function loginAction(state: FormState | undefined, formData: FormDa
       };
     }
 
-    // Check account status — Suspended and Pending both cannot log in
+    // Check account status — Suspended accounts cannot log in
     if (user.status === "Suspended") {
       return {
         message: "Your employee account has been suspended. Please contact your workspace administrator.",
@@ -316,13 +309,7 @@ export async function loginAction(state: FormState | undefined, formData: FormDa
       };
     }
 
-    if (user.status === "Pending") {
-      return {
-        message: "Your account is pending approval. Please wait for your workspace administrator to activate your account.",
-        enteredEmail: email,
-        enteredPassword: password
-      };
-    }
+    // Pending accounts are allowed to log in and will be displayed the "Under Approval" holding dashboard.
 
     // Get tenant details
     const tenant = user.tenantId as any; // Cast populated tenantId

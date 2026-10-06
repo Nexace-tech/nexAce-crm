@@ -203,23 +203,34 @@ export async function PUT(request: Request, { params }: RouteParams) {
 
         // If employee was pending and is now approved (Active), send approval confirmation email
         if (wasPending && body.status === "Active" && user.email) {
-          const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+          const appUrl = process.env.NEXT_PUBLIC_APP_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
           try {
+            let managerName = "";
+            if (user.managerId) {
+              const mgr = await User.findById(user.managerId).select("name email").lean();
+              if (mgr) managerName = mgr.name;
+            }
+
             await sendEmail({
               to: user.email,
               subject: "🎉 Account Approved! Welcome to your Workspace",
-              text: `Hello ${user.name}, your employee account has been approved by your workspace administrator! You can now sign in at ${appUrl}/login`,
+              text: `Hello ${user.name}, your employee account has been approved by Operations! Assigned Department: ${user.department || "General"}. Reporting Manager: ${managerName || "Direct / Self-Managed"}. You can now sign in at ${appUrl}/login`,
               html: `
                 <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff;">
-                  <h2 style="color: #10b981; margin-top: 0;">Account Approved & Activated!</h2>
+                  <h2 style="color: #10b981; margin-top: 0;">Account Approved &amp; Activated!</h2>
                   <p style="color: #475569; font-size: 14px; line-height: 1.5;">
                     Hello <strong>${user.name}</strong> (@${user.username || "employee"}),
                   </p>
                   <p style="color: #475569; font-size: 14px; line-height: 1.5;">
-                    Great news! Your workspace administrator has reviewed and approved your employee registration.
+                    Great news! Your workspace administrator or Operations Manager has approved your registration.
                   </p>
+                  <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 16px; border-radius: 8px; margin: 16px 0; font-size: 14px; line-height: 1.6;">
+                    <p style="margin: 4px 0; color: #1e293b;"><strong>Department:</strong> ${user.department || "General"}</p>
+                    <p style="margin: 4px 0; color: #1e293b;"><strong>Role:</strong> ${user.role || "Employee"}</p>
+                    <p style="margin: 4px 0; color: #1e293b;"><strong>Reporting Manager:</strong> ${managerName || "Direct / Self-Managed"}</p>
+                  </div>
                   <div style="margin-top: 24px;">
-                    <a href="${appUrl}/login" style="display: inline-block; padding: 10px 20px; background-color: #10b981; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 14px;">Sign In to Employee Portal</a>
+                    <a href="${appUrl}/dashboard" style="display: inline-block; padding: 10px 20px; background-color: #10b981; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 14px;">Sign In to Workspace Dashboard</a>
                   </div>
                 </div>
               `

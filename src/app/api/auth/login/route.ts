@@ -58,12 +58,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (user.status === "Pending") {
-      return NextResponse.json(
-        { error: "Your account is pending admin approval. Please wait for activation." },
-        { status: 403 }
-      );
-    }
+    // Pending accounts can log in and view their Under Approval holding screen.
 
     const tenant = user.tenantId as any;
     if (!tenant) {

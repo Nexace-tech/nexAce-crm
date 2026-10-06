@@ -43,29 +43,30 @@ export function PendingApprovalDashboard({ user }: { user: any }) {
   };
 
   return (
-    <div className="space-y-6 pb-12 animate-in fade-in">
-      {/* Top Banner Notice for Pending Verification & Demo Preview Mode */}
-      <div className="rounded-2xl border border-amber-500/30 bg-gradient-to-r from-amber-500/15 via-orange-500/10 to-amber-500/15 p-4 md:p-5 shadow-lg relative overflow-hidden">
+    <div className="space-y-6 pb-12 animate-in fade-in max-w-4xl mx-auto pt-4">
+      {/* Top Banner Notice: Under Approval */}
+      <div className="rounded-2xl border border-amber-500/30 bg-gradient-to-r from-amber-500/15 via-orange-500/10 to-amber-500/15 p-5 md:p-6 shadow-lg relative overflow-hidden">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex items-start gap-3.5 min-w-0">
-            <div className="h-10 w-10 rounded-xl bg-amber-500/20 text-amber-500 flex items-center justify-center shrink-0 border border-amber-500/30 mt-0.5">
-              <i className="fa-solid fa-clock text-xl animate-pulse" />
+          <div className="flex items-start gap-4 min-w-0">
+            <div className="h-12 w-12 rounded-xl bg-amber-500/20 text-amber-500 flex items-center justify-center shrink-0 border border-amber-500/30 mt-0.5 shadow-inner">
+              <i className="fa-solid fa-user-clock text-2xl animate-pulse" />
             </div>
             <div>
               <div className="flex items-center gap-2 flex-wrap mb-1">
-                <Badge className="bg-amber-500/20 text-amber-600 dark:text-amber-400 border-amber-500/30 font-bold px-2.5 py-0.5 text-[11px] flex items-center gap-1.5">
+                <Badge className="bg-amber-500/20 text-amber-600 dark:text-amber-400 border-amber-500/30 font-bold px-2.5 py-0.5 text-xs flex items-center gap-1.5">
                   <span className="relative flex h-2 w-2">
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
                     <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
                   </span>
-                  Account Pending Admin Verification
+                  Under Approval
                 </Badge>
+                <span className="text-xs text-muted-foreground font-mono">Status: Pending OPS / Admin Verification</span>
               </div>
-              <p className="text-sm font-semibold text-foreground">
-                Welcome, <span className="text-amber-500 font-bold">{user?.name || user?.email}</span>! Your employee registration is awaiting administrator approval.
-              </p>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Full workspace tools will unlock automatically as soon as your administrator verifies your account.
+              <h2 className="text-lg font-bold text-foreground">
+                Welcome, <span className="text-amber-500 font-extrabold">{user?.name || user?.email}</span>! Your account is currently Under Approval.
+              </h2>
+              <p className="text-xs md:text-sm text-muted-foreground mt-0.5 leading-relaxed">
+                Your registration was received. An Administrator or Operations Manager is assigning your department and reporting manager.
               </p>
             </div>
           </div>
@@ -76,7 +77,7 @@ export function PendingApprovalDashboard({ user }: { user: any }) {
               size="sm"
               onClick={handleCheckStatus}
               disabled={checking}
-              className="text-xs font-semibold gap-1.5 shadow-md cursor-pointer"
+              className="text-xs font-semibold gap-1.5 shadow-md cursor-pointer bg-amber-600 hover:bg-amber-700 text-white"
             >
               <i className={`fa-solid fa-rotate text-xs ${checking ? "animate-spin" : ""}`} />
               {checking ? "Verifying..." : "Check Status"}
@@ -85,59 +86,119 @@ export function PendingApprovalDashboard({ user }: { user: any }) {
               variant="outline"
               size="sm"
               onClick={logout}
-              className="text-xs cursor-pointer"
+              className="text-xs cursor-pointer border-border hover:bg-muted text-foreground"
             >
+              <i className="fa-solid fa-arrow-right-from-bracket mr-1.5 text-muted-foreground" />
               Sign Out
             </Button>
           </div>
         </div>
 
         {statusMsg && (
-          <div className="mt-3 p-2 text-xs bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 rounded-lg font-medium flex items-center gap-2">
+          <div className="mt-3 p-2 text-xs bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 rounded-lg font-medium flex items-center gap-2 animate-in fade-in">
             <i className="fa-solid fa-circle-check" />
             <span>{statusMsg}</span>
           </div>
         )}
       </div>
 
-      {/* Content Grid: Registration Details */}
-      <div className="max-w-2xl mx-auto mt-8">
-        <Card className="p-6 space-y-5 border-amber-500/20 shadow-md bg-card">
-          <div className="pb-4 border-b border-border">
-            <h3 className="text-base font-bold text-foreground flex items-center gap-2">
-              <i className="fa-solid fa-id-card text-amber-500" /> Registration Details
-            </h3>
-            <p className="text-sm text-muted-foreground mt-1">Your account details have been securely recorded.</p>
+      {/* Progress Timeline Tracker */}
+      <div className="p-5 rounded-2xl border border-border bg-card/60 backdrop-blur-sm shadow-xs">
+        <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-4 flex items-center gap-2">
+          <i className="fa-solid fa-bars-progress text-primary" /> Onboarding &amp; Approval Progress
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="p-3.5 rounded-xl border border-emerald-500/30 bg-emerald-500/5 flex items-start gap-3">
+            <div className="h-8 w-8 rounded-lg bg-emerald-500/20 text-emerald-500 flex items-center justify-center shrink-0">
+              <i className="fa-solid fa-check text-sm font-bold" />
+            </div>
+            <div>
+              <p className="text-xs font-bold text-foreground">1. Registration Completed</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">Email verified and credentials secured.</p>
+            </div>
           </div>
 
-          <div className="space-y-4 text-sm">
-            <div className="p-4 rounded-xl bg-muted/30 border border-border/50 space-y-3">
-              <div>
-                <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Account Name</span>
-                <p className="font-bold text-foreground mt-0.5">{user?.name || "Employee User"}</p>
-              </div>
-              <div>
-                <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Registered Email</span>
-                <p className="font-mono text-foreground font-medium mt-0.5">{user?.email}</p>
-              </div>
-              <div>
-                <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Role</span>
-                <p className="font-medium text-primary mt-0.5">{user?.role || "Employee"}</p>
-              </div>
-              <div>
-                <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Workspace</span>
-                <p className="font-medium text-foreground mt-0.5">{user?.tenantId?.name || "NexAce Workspace"}</p>
-              </div>
+          <div className="p-3.5 rounded-xl border border-amber-500/40 bg-amber-500/10 flex items-start gap-3 shadow-xs">
+            <div className="h-8 w-8 rounded-lg bg-amber-500/20 text-amber-500 flex items-center justify-center shrink-0">
+              <i className="fa-solid fa-hourglass-half text-sm animate-pulse" />
             </div>
+            <div>
+              <p className="text-xs font-bold text-amber-600 dark:text-amber-400">2. Under Approval (In Review)</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">Department &amp; Reporting Manager allocation in OPS Portal.</p>
+            </div>
+          </div>
 
-            <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 space-y-2 mt-4">
-              <p className="font-bold flex items-center gap-2 text-sm">
-                <i className="fa-solid fa-bell text-amber-500 text-base" /> Next Steps
+          <div className="p-3.5 rounded-xl border border-border/60 bg-muted/20 flex items-start gap-3 opacity-60">
+            <div className="h-8 w-8 rounded-lg bg-muted text-muted-foreground flex items-center justify-center shrink-0">
+              <i className="fa-solid fa-lock text-sm" />
+            </div>
+            <div>
+              <p className="text-xs font-bold text-foreground">3. Workspace Tools Unlocked</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">Automated unlock once approved.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Content Grid: Registration Details & Information */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <Card className="p-5 space-y-4 border-border shadow-xs bg-card">
+          <div className="pb-3 border-b border-border flex items-center justify-between">
+            <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
+              <i className="fa-solid fa-id-card text-amber-500" /> Account Information
+            </h3>
+            <Badge variant="outline" className="text-[10px] text-amber-500 border-amber-500/30">
+              Pending Activation
+            </Badge>
+          </div>
+
+          <div className="space-y-3 text-xs">
+            <div className="flex justify-between py-1.5 border-b border-border/40">
+              <span className="text-muted-foreground font-medium">Full Name</span>
+              <span className="font-semibold text-foreground">{user?.name || "Employee User"}</span>
+            </div>
+            <div className="flex justify-between py-1.5 border-b border-border/40">
+              <span className="text-muted-foreground font-medium">Username</span>
+              <span className="font-mono text-foreground font-medium">@{user?.username || "—"}</span>
+            </div>
+            <div className="flex justify-between py-1.5 border-b border-border/40">
+              <span className="text-muted-foreground font-medium">Registered Email</span>
+              <span className="font-mono text-foreground font-medium">{user?.email}</span>
+            </div>
+            <div className="flex justify-between py-1.5 border-b border-border/40">
+              <span className="text-muted-foreground font-medium">Requested Role</span>
+              <span className="font-medium text-primary">{user?.role || "Employee"}</span>
+            </div>
+            <div className="flex justify-between py-1.5">
+              <span className="text-muted-foreground font-medium">Workspace Organization</span>
+              <span className="font-medium text-foreground">{user?.tenantId?.name || "NexAce Workspace"}</span>
+            </div>
+          </div>
+        </Card>
+
+        <Card className="p-5 space-y-4 border-border shadow-xs bg-card flex flex-col justify-between">
+          <div>
+            <div className="pb-3 border-b border-border">
+              <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
+                <i className="fa-solid fa-circle-info text-blue-500" /> What Happens Next?
+              </h3>
+            </div>
+            <div className="mt-3 space-y-3 text-xs text-muted-foreground leading-relaxed">
+              <p>
+                1. Your workspace administrator and Operations (OPS) team have been notified of your registration.
               </p>
-              <p className="text-xs leading-relaxed opacity-90">
-                An email alert was sent to your workspace administrator. You will be automatically redirected to your live employee dashboard as soon as an admin approves your request. Please check back later.
+              <p>
+                2. During the approval process, you will be assigned to your <strong>Department</strong> and assigned a <strong>Reporting Manager</strong>.
+              </p>
+              <p>
+                3. This screen checks for approval in the background every 30 seconds. You can also click <strong>&quot;Check Status&quot;</strong> anytime.
               </p>
             </div>
+          </div>
+
+          <div className="p-3 rounded-xl bg-muted/40 border border-border/60 text-[11px] text-muted-foreground flex items-center gap-2">
+            <i className="fa-solid fa-shield-halved text-primary shrink-0" />
+            <span>Need immediate access? Please notify your team leader or Operations administrator.</span>
           </div>
         </Card>
       </div>

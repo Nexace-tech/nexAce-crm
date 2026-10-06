@@ -336,6 +336,35 @@ function SidebarNavMenu({ canAccessModule, can, isEmployeeOrHR, isPending, onNav
     }));
   };
 
+  if (isPending) {
+    return (
+      <div className="flex-1 overflow-y-auto py-3 space-y-4 px-2.5">
+        <div className="space-y-1.5">
+          <div className="px-3 py-1 text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider select-none">
+            Workspace Status
+          </div>
+          <Link
+            href="/dashboard"
+            onClick={onNavigate}
+            className="flex items-center gap-3 px-3.5 py-2.5 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 font-semibold text-sm border border-amber-500/20 shadow-xs"
+          >
+            <i className="fa-solid fa-hourglass-half text-sm animate-pulse text-amber-500" />
+            <span>Under Approval</span>
+          </Link>
+        </div>
+
+        <div className="mx-2 p-3.5 rounded-xl bg-amber-500/5 border border-amber-500/20 text-xs text-muted-foreground space-y-2">
+          <div className="font-bold text-foreground flex items-center gap-1.5 text-amber-600 dark:text-amber-400 text-xs">
+            <i className="fa-solid fa-circle-exclamation text-xs" /> Awaiting Verification
+          </div>
+          <p className="text-[11px] leading-relaxed">
+            Your registration is currently under review in the OPS Portal. You will gain full access once an admin approves your profile and assigns your department.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex-1 overflow-y-auto py-3 space-y-4 px-2.5">
       {navSections.map((sec) => {
@@ -815,7 +844,7 @@ export function DashboardClientLayout({ session, menuItems, isPending = false, c
             canAccessModule={canAccessModule}
             can={can}
             isEmployeeOrHR={isEmployeeOrHR}
-            isPending={isPending}
+            isPending={isPending || user?.status === "Pending"}
             onNavigate={() => setMobileOpen(false)}
           />
         </React.Suspense>

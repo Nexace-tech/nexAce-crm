@@ -29,6 +29,11 @@ export default function DashboardHome() {
     return <Preloader label={loading ? "Loading Workspace Dashboard" : "Redirecting to Login..."} />;
   }
 
+  // 1. Check if user registration status is Pending (show holding Under Approval dashboard)
+  if (user.status === "Pending") {
+    return <PendingApprovalDashboard user={user} />;
+  }
+
   // Check if user has permission to access the Overview Dashboard module
   if (!canAccessModule("overview")) {
     return <AccessRestricted moduleName="Overview Dashboard" icon="fa-solid fa-chart-simple" />;
@@ -36,11 +41,6 @@ export default function DashboardHome() {
 
   // Normalize role so any casing variant from the DB ("admin", "Admin", "ADMIN") is handled safely
   const role = normalizeRoleKey(user.role).toLowerCase();
-
-  // 1. Check if user registration status is Pending
-  if (user.status === "Pending") {
-    return <PendingApprovalDashboard user={user} />;
-  }
 
   // 2. Separate views based on role (Admin, Manager, HR, Employee)
   if (role === "admin") {

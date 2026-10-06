@@ -58,6 +58,26 @@ export function UserManagementTab() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
 
+  // Approval Modal States for Pending Registrations
+  const [showApproveModal, setShowApproveModal] = useState(false);
+  const [selectedApproveUser, setSelectedApproveUser] = useState<IUser | null>(null);
+  const [approveFormData, setApproveFormData] = useState({
+    department: "General",
+    managerId: "",
+    role: "Employee",
+    employmentType: "Permanent",
+    salary: "" as string | number,
+  });
+  const [approveError, setApproveError] = useState("");
+  const [isApproving, setIsApproving] = useState(false);
+
+  // Reject / Decline Pending User Modal States
+  const [showRejectModal, setShowRejectModal] = useState(false);
+  const [selectedRejectUser, setSelectedRejectUser] = useState<IUser | null>(null);
+
+  // Departments List from Backend
+  const [departmentsList, setDepartmentsList] = useState<Array<{ _id: string; name: string }>>([]);
+
   // Form States for Editing / Creating
   const [formData, setFormData] = useState({
     name: "",
@@ -78,19 +98,29 @@ export function UserManagementTab() {
     return users.reduce((sum, u) => sum + (Number(u.salary) || 0), 0);
   }, [users]);
 
+  // Pending Users Memo & Available Managers Memo
+  const pendingUsers = useMemo(() => {
+    return users.filter((u) => u.status === "Pending");
+  }, [users]);
+
+  const availableManagers = useMemo(() => {
+    return users.filter((u) => u.status === "Active" || !u.status);
+  }, [users]);
+
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 8;
 
   const [availableRoles, setAvailableRoles] = useState<string[]>(["Admin", "OPS", "Manager", "HR", "Employee"]);
 
-  // Fetch Users & Custom Roles
+  // Fetch Users, Custom Roles & Departments
   const fetchUsers = async () => {
     try {
       setLoading(true);
-      const [teamRes, permRes] = await Promise.all([
+      const [teamRes, permRes, deptRes] = await Promise.all([
         fetch(`/api/team?_t=${Date.now()}`, { cache: "no-store" }),
         fetch("/api/settings/permissions", { cache: "no-store" }),
+        fetch("/api/departments", { cache: "no-store" }),
       ]);
       if (teamRes.ok) {
         const data = await teamRes.json();
@@ -101,6 +131,10 @@ export function UserManagementTab() {
         const custom: string[] = pData.customRoles || [];
         const allRoles = Array.from(new Set(["Admin", "OPS", "Manager", "HR", "Employee", ...custom]));
         setAvailableRoles(allRoles);
+      }
+      if (deptRes.ok) {
+        const dData = await deptRes.json();
+        setDepartmentsList(dData.departments || []);
       }
     } catch (err) {
       console.error("Error fetching users:", err);
@@ -135,6 +169,100 @@ export function UserManagementTab() {
   }, [filteredUsers, currentPage]);
 
   const totalPages = Math.ceil(filteredUsers.length / itemsPerPage) || 1;
+
+  // Open Approve Employee Modal
+  const handleOpenApprove = (user: IUser) => {
+    setSelectedApproveUser(user);
+    const defaultDept = departmentsList[0]?.name || user.department || "Engineering";
+    setApproveFormData({
+      department: defaultDept,
+      managerId: (user.managerId as any)?._id || "",
+      role: user.role && user.role !== "Admin" ? user.role : "Employee",
+      employmentType: user.employmentType || "Permanent",
+      salary: user.salary ? Number(user.salary) : "",
+    });
+    setApproveError("");
+    setShowApproveModal(true);
+  };
+
+  // Submit Approval
+  const handleApproveSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedApproveUser) return;
+
+    try {
+      setIsApproving(true);
+      setApproveError("");
+
+      const numSalary = approveFormData.salary === "" ? 0 : Number(approveFormData.salary) || 0;
+      const payload: any = {
+        status: "Active",
+        department: approveFormData.department,
+        managerId: approveFormData.managerId || null,
+        role: approveFormData.role,
+        employmentType: approveFormData.employmentType,
+        salary: numSalary,
+      };
+
+      const res = await fetch(`/api/team/${selectedApproveUser._id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to approve employee");
+      }
+
+      // Optimistically update local users state
+      const updatedUser = data.user || { ...selectedApproveUser, ...payload, status: "Active" };
+      setUsers((prev) =>
+        prev.map((u) => (u._id === selectedApproveUser._id ? { ...u, ...updatedUser } : u))
+      );
+
+      setShowApproveModal(false);
+      showToast(`🎉 ${selectedApproveUser.name} has been approved and assigned to ${approveFormData.department}!`, "success");
+      setSelectedApproveUser(null);
+      await fetchUsers();
+    } catch (err: any) {
+      setApproveError(err.message || "Failed to approve employee");
+    } finally {
+      setIsApproving(false);
+    }
+  };
+
+  // Open Reject Pending Registration Modal
+  const handleOpenReject = (user: IUser) => {
+    setSelectedRejectUser(user);
+    setShowRejectModal(true);
+  };
+
+  // Confirm Reject Pending Registration
+  const handleConfirmReject = async () => {
+    if (!selectedRejectUser) return;
+    try {
+      setIsSubmitting(true);
+      const res = await fetch(`/api/team/${selectedRejectUser._id}`, {
+        method: "DELETE",
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to decline registration");
+      }
+
+      setUsers((prev) => prev.filter((u) => u._id !== selectedRejectUser._id));
+      setShowRejectModal(false);
+      showToast(`Registration for ${selectedRejectUser.name} was declined.`, "success");
+      setSelectedRejectUser(null);
+      await fetchUsers();
+    } catch (err: any) {
+      showToast(err.message || "Failed to decline registration", "error");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   // Open Edit Modal
   const handleOpenEdit = (user: IUser) => {
@@ -324,6 +452,43 @@ export function UserManagementTab() {
         )}
       </div>
 
+      {/* PENDING APPROVALS ALERT BANNER (Option A) */}
+      {pendingUsers.length > 0 && canManageUsers && (
+        <div className="p-4 md:p-5 rounded-2xl border border-amber-500/40 bg-gradient-to-r from-amber-500/15 via-orange-500/10 to-amber-500/15 shadow-md flex flex-col md:flex-row md:items-center justify-between gap-4 animate-in fade-in">
+          <div className="flex items-start gap-3.5 min-w-0">
+            <div className="h-11 w-11 rounded-xl bg-amber-500/20 text-amber-500 flex items-center justify-center shrink-0 border border-amber-500/30 shadow-xs">
+              <i className="fa-solid fa-user-clock text-xl animate-pulse" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="font-bold text-foreground text-sm flex items-center gap-2">
+                  Pending Employee Approvals
+                  <Badge className="bg-amber-500 text-slate-950 font-extrabold px-2 py-0 text-xs shadow-xs">
+                    {pendingUsers.length} waiting
+                  </Badge>
+                </h3>
+              </div>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                New employees have registered and are waiting for department and reporting manager assignment before accessing the workspace.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2.5 shrink-0">
+            <Button
+              size="sm"
+              onClick={() => {
+                setStatusFilter("Pending");
+                setCurrentPage(1);
+              }}
+              className="bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs shadow-xs cursor-pointer gap-1.5"
+            >
+              <i className="fa-solid fa-users-viewfinder text-xs" /> Review Approvals ({pendingUsers.length})
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Quick Stats Grid */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5">
         <Card className="bg-card/50 border-border shadow-xs">
@@ -397,74 +562,134 @@ export function UserManagementTab() {
 
       {/* Filters and Search Controls */}
       <Card className="bg-card/50 border-border">
-        <CardContent className="p-4 flex flex-col md:flex-row gap-4 justify-between items-center">
-          {/* Search Bar */}
-          <div className="relative w-full md:w-96">
-            <i className="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground text-sm" />
-            <Input
-              type="text"
-              placeholder="Search by name, email, or department..."
-              value={searchQuery}
-              onChange={(e) => {
-                setSearchQuery(e.target.value);
-                setCurrentPage(1);
-              }}
-              className="pl-10 bg-background border-input text-foreground placeholder:text-muted-foreground rounded-xl"
-            />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery("")}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-              >
-                <i className="fa-solid fa-xmark text-sm" />
-              </button>
-            )}
+        <CardContent className="p-4 space-y-3.5">
+          <div className="flex flex-col md:flex-row gap-4 justify-between items-center">
+            {/* Search Bar */}
+            <div className="relative w-full md:w-96">
+              <i className="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground text-sm" />
+              <Input
+                type="text"
+                placeholder="Search by name, email, or department..."
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="pl-10 bg-background border-input text-foreground placeholder:text-muted-foreground rounded-xl"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery("")}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  <i className="fa-solid fa-xmark text-sm" />
+                </button>
+              )}
+            </div>
+
+            {/* Role Filter & Status Dropdown */}
+            <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+              {/* Role Filter */}
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground font-medium flex items-center gap-1">
+                  <i className="fa-solid fa-filter text-muted-foreground" /> Role:
+                </span>
+                <select
+                  value={roleFilter}
+                  onChange={(e) => {
+                    setRoleFilter(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                  className="bg-background border border-input text-foreground text-sm rounded-xl px-3 py-1.5 focus:outline-none focus:border-primary"
+                >
+                  <option value="All">All Roles</option>
+                  {availableRoles.map((r) => (
+                    <option key={r} value={r}>
+                      {r === "OPS" ? "OPS (SubAdmin)" : r}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Status Filter Dropdown */}
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground font-medium flex items-center gap-1">
+                  <i className="fa-solid fa-shield text-muted-foreground" /> Status:
+                </span>
+                <select
+                  value={statusFilter}
+                  onChange={(e) => {
+                    setStatusFilter(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                  className="bg-background border border-input text-foreground text-sm rounded-xl px-3 py-1.5 focus:outline-none focus:border-primary"
+                >
+                  <option value="All">All Statuses</option>
+                  <option value="Active">Active</option>
+                  <option value="Pending">Pending ({pendingUsers.length})</option>
+                  <option value="On Leave">On Leave</option>
+                  <option value="Suspended">Suspended</option>
+                </select>
+              </div>
+            </div>
           </div>
 
-          {/* Filters */}
-          <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
-            {/* Role Filter */}
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground font-medium flex items-center gap-1">
-                <i className="fa-solid fa-filter text-muted-foreground" /> Role:
-              </span>
-              <select
-                value={roleFilter}
-                onChange={(e) => {
-                  setRoleFilter(e.target.value);
-                  setCurrentPage(1);
-                }}
-                className="bg-background border border-input text-foreground text-sm rounded-xl px-3 py-1.5 focus:outline-none focus:border-primary"
-              >
-                <option value="All">All Roles</option>
-                {availableRoles.map((r) => (
-                  <option key={r} value={r}>
-                    {r === "OPS" ? "OPS (SubAdmin)" : r}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Status Filter */}
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground font-medium flex items-center gap-1">
-                <i className="fa-solid fa-shield text-muted-foreground" /> Status:
-              </span>
-              <select
-                value={statusFilter}
-                onChange={(e) => {
-                  setStatusFilter(e.target.value);
-                  setCurrentPage(1);
-                }}
-                className="bg-background border border-input text-foreground text-sm rounded-xl px-3 py-1.5 focus:outline-none focus:border-primary"
-              >
-                <option value="All">All Statuses</option>
-                <option value="Active">Active</option>
-                <option value="Pending">Pending</option>
-                <option value="On Leave">On Leave</option>
-                <option value="Suspended">Suspended</option>
-              </select>
-            </div>
+          {/* Quick Status Filter Pills */}
+          <div className="flex items-center gap-2 pt-2 border-t border-border/50 overflow-x-auto pb-0.5">
+            <span className="text-[11px] text-muted-foreground font-semibold uppercase tracking-wider shrink-0 mr-1">
+              Filter by:
+            </span>
+            <button
+              type="button"
+              onClick={() => { setStatusFilter("All"); setCurrentPage(1); }}
+              className={cn(
+                "px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer shrink-0",
+                statusFilter === "All"
+                  ? "bg-primary text-primary-foreground shadow-xs"
+                  : "bg-muted/40 hover:bg-muted text-muted-foreground hover:text-foreground"
+              )}
+            >
+              All ({users.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => { setStatusFilter("Active"); setCurrentPage(1); }}
+              className={cn(
+                "px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer shrink-0",
+                statusFilter === "Active"
+                  ? "bg-emerald-600 text-white shadow-xs"
+                  : "bg-muted/40 hover:bg-muted text-muted-foreground hover:text-foreground"
+              )}
+            >
+              Active ({users.filter(u => u.status === "Active" || !u.status).length})
+            </button>
+            <button
+              type="button"
+              onClick={() => { setStatusFilter("Pending"); setCurrentPage(1); }}
+              className={cn(
+                "px-3 py-1 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer shrink-0",
+                statusFilter === "Pending"
+                  ? "bg-amber-600 text-white shadow-xs"
+                  : pendingUsers.length > 0
+                  ? "bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 hover:bg-amber-500/25"
+                  : "bg-muted/40 hover:bg-muted text-muted-foreground hover:text-foreground"
+              )}
+            >
+              {pendingUsers.length > 0 && <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />}
+              Pending Approvals ({pendingUsers.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => { setStatusFilter("Suspended"); setCurrentPage(1); }}
+              className={cn(
+                "px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer shrink-0",
+                statusFilter === "Suspended"
+                  ? "bg-rose-600 text-white shadow-xs"
+                  : "bg-muted/40 hover:bg-muted text-muted-foreground hover:text-foreground"
+              )}
+            >
+              Suspended ({users.filter(u => u.status === "Suspended").length})
+            </button>
           </div>
         </CardContent>
       </Card>
@@ -606,11 +831,32 @@ export function UserManagementTab() {
                       <td className="px-6 py-4 text-right">
                         {canEditUser ? (
                           <div className="flex items-center justify-end gap-2">
+                            {u.status === "Pending" && canManageUsers && (
+                              <>
+                                <Button
+                                  size="sm"
+                                  onClick={() => handleOpenApprove(u)}
+                                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs px-2.5 py-1 gap-1.5 shadow-xs cursor-pointer"
+                                  title="Approve Employee & Assign Department"
+                                >
+                                  <i className="fa-solid fa-user-check text-xs" /> Approve
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => handleOpenReject(u)}
+                                  className="text-rose-500 hover:text-rose-600 hover:bg-rose-500/10 text-xs px-2 py-1 gap-1 cursor-pointer"
+                                  title="Decline Registration"
+                                >
+                                  <i className="fa-solid fa-user-xmark text-xs" /> Decline
+                                </Button>
+                              </>
+                            )}
                             <Button
                               variant="ghost"
                               size="sm"
                               onClick={() => handleOpenEdit(u)}
-                              className="text-foreground hover:bg-muted"
+                              className="text-foreground hover:bg-muted cursor-pointer"
                               title="Edit user role or status"
                             >
                               <i className="fa-solid fa-pen-to-square text-sm" />
@@ -623,7 +869,7 @@ export function UserManagementTab() {
                                   setSelectedUser(u);
                                   setShowDeleteModal(true);
                                 }}
-                                className="text-rose-500 hover:text-rose-600 hover:bg-rose-500/10"
+                                className="text-rose-500 hover:text-rose-600 hover:bg-rose-500/10 cursor-pointer"
                                 title="Remove User"
                               >
                                 <i className="fa-solid fa-trash-can text-sm" />
@@ -1177,6 +1423,247 @@ export function UserManagementTab() {
                 className="bg-rose-600 hover:bg-rose-700 text-white font-medium cursor-pointer"
               >
                 {isSubmitting ? "Deleting..." : "Delete User"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Approve Employee Modal */}
+      {showApproveModal && selectedApproveUser && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in"
+          onClick={() => setShowApproveModal(false)}
+        >
+          <div
+            className="bg-card border border-border rounded-2xl max-w-lg w-full p-6 space-y-5 shadow-2xl animate-in zoom-in-95 max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-border/80 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-500 flex items-center justify-center font-bold">
+                  <i className="fa-solid fa-user-check text-lg" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-foreground">Approve Employee Account</h3>
+                  <p className="text-xs text-muted-foreground">Assign department and reporting manager to activate access.</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowApproveModal(false)}
+                className="text-muted-foreground hover:text-foreground p-1 rounded-lg hover:bg-muted cursor-pointer"
+              >
+                <i className="fa-solid fa-xmark text-sm" />
+              </button>
+            </div>
+
+            {approveError && (
+              <div className="p-3 bg-rose-500/10 border border-rose-500/20 text-rose-500 text-xs rounded-xl flex items-center gap-2">
+                <i className="fa-solid fa-circle-exclamation shrink-0" />
+                <span>{approveError}</span>
+              </div>
+            )}
+
+            {/* Employee Info Header */}
+            <div className="p-3.5 bg-muted/30 border border-border/60 rounded-xl flex items-center gap-3">
+              <Avatar className="h-10 w-10 border border-border">
+                <AvatarImage src={selectedApproveUser.photoUrl} alt={selectedApproveUser.name} />
+                <AvatarFallback className="bg-primary/10 text-primary font-bold">
+                  {selectedApproveUser.name.split(" ").map((n) => n[0]).join("").toUpperCase()}
+                </AvatarFallback>
+              </Avatar>
+              <div className="min-w-0 flex-1">
+                <div className="font-semibold text-foreground text-sm flex items-center gap-2">
+                  {selectedApproveUser.name}
+                  <Badge className="bg-amber-500/15 text-amber-500 border-amber-500/30 text-[10px] py-0 font-medium">
+                    Pending Approval
+                  </Badge>
+                </div>
+                <p className="text-xs text-muted-foreground font-mono truncate">{selectedApproveUser.email}</p>
+              </div>
+            </div>
+
+            <form onSubmit={handleApproveSubmit} className="space-y-4">
+              {/* Department Dropdown */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                  <i className="fa-solid fa-building text-primary text-[11px]" />
+                  Department <span className="text-rose-500">*</span>
+                </label>
+                <select
+                  value={approveFormData.department}
+                  onChange={(e) => setApproveFormData({ ...approveFormData, department: e.target.value })}
+                  className="w-full bg-background border border-input rounded-xl px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary"
+                  required
+                >
+                  {departmentsList.length > 0 ? (
+                    departmentsList.map((d) => (
+                      <option key={d._id} value={d.name}>
+                        {d.name}
+                      </option>
+                    ))
+                  ) : (
+                    <>
+                      <option value="Engineering">Engineering</option>
+                      <option value="Management">Management</option>
+                      <option value="Design">Design</option>
+                      <option value="Marketing">Marketing</option>
+                      <option value="General">General</option>
+                    </>
+                  )}
+                </select>
+                <p className="text-[11px] text-muted-foreground">Select the organizational unit this employee belongs to.</p>
+              </div>
+
+              {/* Reporting Manager Dropdown */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                  <i className="fa-solid fa-user-tie text-primary text-[11px]" />
+                  Reporting Manager
+                </label>
+                <select
+                  value={approveFormData.managerId}
+                  onChange={(e) => setApproveFormData({ ...approveFormData, managerId: e.target.value })}
+                  className="w-full bg-background border border-input rounded-xl px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary"
+                >
+                  <option value="">None / Self-Managed (Direct Report to Leadership)</option>
+                  {availableManagers
+                    .filter((m) => m._id !== selectedApproveUser._id)
+                    .map((m) => (
+                      <option key={m._id} value={m._id}>
+                        {m.name} — {m.role} ({m.department || "General"})
+                      </option>
+                    ))}
+                </select>
+                <p className="text-[11px] text-muted-foreground">Assign their direct reporting lead for workflows, task delegations, and leaves.</p>
+              </div>
+
+              {/* Role and Employment Type Grid */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                    <i className="fa-solid fa-user-shield text-primary text-[11px]" /> Role
+                  </label>
+                  <select
+                    value={approveFormData.role}
+                    onChange={(e) => setApproveFormData({ ...approveFormData, role: e.target.value })}
+                    className="w-full bg-background border border-input rounded-xl px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary"
+                  >
+                    {availableRoles.map((r) => (
+                      <option key={r} value={r}>
+                        {r}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                    <i className="fa-solid fa-briefcase text-primary text-[11px]" /> Employment Type
+                  </label>
+                  <select
+                    value={approveFormData.employmentType}
+                    onChange={(e) => setApproveFormData({ ...approveFormData, employmentType: e.target.value })}
+                    className="w-full bg-background border border-input rounded-xl px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary"
+                  >
+                    <option value="Permanent">Permanent</option>
+                    <option value="Contract">Contract</option>
+                    <option value="Probation">Probation</option>
+                    <option value="Intern">Intern</option>
+                    <option value="Part-time">Part-time</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Monthly Base Salary (Optional) */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                  <i className="fa-solid fa-indian-rupee-sign text-emerald-500 text-[11px]" />
+                  Monthly Base Salary (Optional)
+                </label>
+                <Input
+                  type="number"
+                  placeholder="e.g. 50000"
+                  value={approveFormData.salary}
+                  onChange={(e) => setApproveFormData({ ...approveFormData, salary: e.target.value })}
+                  className="bg-background border-input text-foreground font-mono"
+                />
+              </div>
+
+              <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-xs text-emerald-700 dark:text-emerald-400 flex items-start gap-2">
+                <i className="fa-solid fa-paper-plane mt-0.5 shrink-0" />
+                <span>
+                  Approving will activate this employee&apos;s workspace account and automatically send an email notification to <strong>{selectedApproveUser.email}</strong>.
+                </span>
+              </div>
+
+              <div className="flex justify-end gap-2.5 pt-3 border-t border-border">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowApproveModal(false)}
+                  className="border-border text-foreground hover:bg-muted cursor-pointer"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  size="sm"
+                  disabled={isApproving}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold cursor-pointer gap-2 shadow-xs"
+                >
+                  {isApproving ? (
+                    <><i className="fa-solid fa-spinner fa-spin text-xs" /> Approving Account...</>
+                  ) : (
+                    <><i className="fa-solid fa-user-check text-xs" /> Confirm &amp; Approve Employee</>
+                  )}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Reject / Decline Pending User Modal */}
+      {showRejectModal && selectedRejectUser && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm animate-in fade-in"
+          onClick={() => setShowRejectModal(false)}
+        >
+          <div
+            className="bg-card border border-border rounded-2xl max-w-md w-full p-6 space-y-6 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-3 text-rose-500">
+              <div className="p-3 bg-rose-500/10 rounded-xl border border-rose-500/20">
+                <i className="fa-solid fa-user-xmark text-xl" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-foreground">Decline Registration</h3>
+                <p className="text-xs text-muted-foreground">Remove unauthorized or rejected registration.</p>
+              </div>
+            </div>
+
+            <p className="text-sm text-foreground leading-relaxed">
+              Are you sure you want to decline registration for <strong className="text-foreground">{selectedRejectUser.name}</strong> ({selectedRejectUser.email})? This will permanently delete their pending account.
+            </p>
+
+            <div className="flex justify-end gap-3 pt-4 border-t border-border">
+              <Button
+                variant="outline"
+                onClick={() => setShowRejectModal(false)}
+                className="border-border text-foreground hover:bg-muted cursor-pointer"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleConfirmReject}
+                disabled={isSubmitting}
+                className="bg-rose-600 hover:bg-rose-700 text-white font-medium cursor-pointer"
+              >
+                {isSubmitting ? "Declining..." : "Decline Account"}
               </Button>
             </div>
           </div>
