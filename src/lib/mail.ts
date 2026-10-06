@@ -15,30 +15,51 @@ export interface SendMailOptions {
   attachments?: EmailAttachment[];
 }
 
-export async function sendEmail({ to, subject, text, html, attachments }: SendMailOptions) {
+let cachedTransporter: nodemailer.Transporter | null = null;
+let cachedConfigKey = "";
+
+function getLiveTransporter(): nodemailer.Transporter | null {
   const host = process.env.SMTP_HOST?.trim();
   const port = parseInt(process.env.SMTP_PORT || "587");
   const user = process.env.SMTP_USER?.trim();
   const pass = process.env.SMTP_PASS?.replace(/\s+/g, "");
-  const from = process.env.SMTP_FROM || (user ? `NexAce CRM <${user}>` : "NexAce CRM <noreply@nexace.com>");
+
+  if (!host || !user || !pass) {
+    return null;
+  }
+
+  const configKey = `${host}:${port}:${user}:${pass}`;
+  if (cachedTransporter && cachedConfigKey === configKey) {
+    return cachedTransporter;
+  }
+
+  cachedTransporter = nodemailer.createTransport({
+    host,
+    port,
+    secure: port === 465,
+    auth: { user, pass },
+    tls: {
+      rejectUnauthorized: process.env.NODE_ENV === "production",
+    },
+  });
+  cachedConfigKey = configKey;
+  return cachedTransporter;
+}
+
+export async function sendEmail({ to, subject, text, html, attachments }: SendMailOptions) {
+  const user = process.env.SMTP_USER?.trim();
+  const rawFrom = process.env.SMTP_FROM?.trim()?.replace(/^["']|["']$/g, "");
+  const from = rawFrom || (user ? `NexAce CRM <${user}>` : "NexAce CRM <noreply@nexace.com>");
   const isProduction = process.env.NODE_ENV === "production";
 
-  if (host && user && pass) {
-    try {
-      const transporter = nodemailer.createTransport({
-        host,
-        port,
-        secure: port === 465,
-        auth: { user, pass },
-        tls: {
-          // Only bypass certificate verification in development; enforce in production
-          rejectUnauthorized: process.env.NODE_ENV === "production",
-        },
-      });
+  const liveTransporter = getLiveTransporter();
 
-      await transporter.sendMail({
+  // 1. Live SMTP Mode
+  if (liveTransporter) {
+    try {
+      await liveTransporter.sendMail({
         from,
-        to: to.toLowerCase(),
+        to: to.toLowerCase().trim(),
         subject,
         text,
         html,
@@ -48,16 +69,21 @@ export async function sendEmail({ to, subject, text, html, attachments }: SendMa
       return { success: true, isDev: false };
     } catch (err: unknown) {
       const errMsg = err instanceof Error ? err.message : String(err);
-      console.error("[SMTP Error] Failed to send email via SMTP:", errMsg);
-      if (isProduction) {
-        throw new Error(`SMTP Email Error: ${errMsg}`);
-      }
-      console.log("[SMTP Fallback] Falling back to simulated dev mail due to SMTP error...");
+      console.error("[SMTP Error] Failed to send email via live SMTP:", errMsg);
+      // In live SMTP mode, throw an error so the caller and user are informed rather than masking delivery failure
+      throw new Error(`SMTP Email Delivery Failed: ${errMsg}`);
     }
   }
 
-  // Developer Ethereal Email fallback
-  console.log("[SMTP] Using Ethereal simulated dev email transport...");
+  // 2. Production Guard: Never fall back to mock/dev mail in production
+  if (isProduction) {
+    throw new Error(
+      "Live SMTP server is not configured. Please set SMTP_HOST, SMTP_PORT, SMTP_USER, and SMTP_PASS in your environment."
+    );
+  }
+
+  // 3. Developer Ethereal Email sandbox (ONLY in local development when no SMTP credentials are provided)
+  console.warn("[SMTP Dev Sandbox] No live SMTP configured in .env.local. Falling back to Ethereal sandbox...");
   try {
     const testAccount = await nodemailer.createTestAccount();
     const transporter = nodemailer.createTransport({
@@ -72,7 +98,7 @@ export async function sendEmail({ to, subject, text, html, attachments }: SendMa
 
     const info = await transporter.sendMail({
       from: '"NexAce CRM Dev" <noreply@nexace.com>',
-      to: to.toLowerCase(),
+      to: to.toLowerCase().trim(),
       subject: `[DEV] ${subject}`,
       text,
       html,

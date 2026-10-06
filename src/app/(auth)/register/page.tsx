@@ -27,8 +27,6 @@ export default function RegisterPage() {
   const [codeSent, setCodeSent] = useState(false);
   const [verificationError, setVerificationError] = useState("");
   const [sendingCode, setSendingCode] = useState(false);
-  const [devPreviewUrl, setDevPreviewUrl] = useState("");
-  const [devCode, setDevCode] = useState("");
   
   // Timers
   const [redirectTimer, setRedirectTimer] = useState<number | null>(null);
@@ -76,8 +74,6 @@ export default function RegisterPage() {
       });
       const data = await res.json();
       if (res.ok) {
-        setDevPreviewUrl(data.previewUrl || "");
-        setDevCode(data.devCode || "");
         setCodeSent(true);
         setResendCooldown(30);
       } else {
@@ -138,25 +134,15 @@ export default function RegisterPage() {
               </div>
             )}
 
-            {/* Developer Mode Sandbox Code Notification */}
-            {devCode && (
-              <div className="p-3 bg-amber-500/15 border border-amber-500/30 rounded-lg text-xs space-y-1 text-amber-600 dark:text-amber-400">
-                <div className="font-bold flex items-center gap-1.5">
-                  <i className="fa-solid fa-flask text-xs" /> Developer Mode (No Live SMTP Configured)
+            {/* Production Live Email Verification Confirmation */}
+            {codeSent && (
+              <div className="p-3.5 bg-emerald-500/10 border border-emerald-500/25 rounded-lg text-xs space-y-1 text-emerald-600 dark:text-emerald-400 animate-in fade-in slide-in-from-top-2">
+                <div className="font-bold flex items-center gap-1.5 text-emerald-700 dark:text-emerald-300">
+                  <i className="fa-solid fa-circle-check text-xs" /> Verification Code Sent
                 </div>
-                <p>
-                  Verification Code: <strong className="font-mono text-sm tracking-wider text-foreground">{devCode}</strong>
+                <p className="text-[11.5px] text-muted-foreground leading-relaxed">
+                  A 6-digit verification code has been dispatched to <strong className="text-foreground">{email}</strong>. Please check your inbox (and spam folder).
                 </p>
-                {devPreviewUrl && (
-                  <a
-                    href={devPreviewUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-[11px] underline flex items-center gap-1 text-primary hover:text-primary/80"
-                  >
-                    <i className="fa-solid fa-arrow-up-right-from-square text-[10px]" /> View Ethereal Email Preview
-                  </a>
-                )}
               </div>
             )}
 
