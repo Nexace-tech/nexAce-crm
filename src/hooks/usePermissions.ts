@@ -25,6 +25,12 @@ export function usePermissions() {
         return;
       }
 
+      // Pending users only see Under Approval holding screen, no need to fetch permissions
+      if (user.status === "Pending") {
+        setLoading(false);
+        return;
+      }
+
       try {
         setLoading(true);
         const res = await fetch('/api/settings/permissions');

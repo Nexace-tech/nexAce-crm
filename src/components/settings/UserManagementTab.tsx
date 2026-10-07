@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from "react";
+import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import { usePermissions } from "@/hooks/usePermissions";
 import { Preloader } from "@/components/ui/Preloader";
@@ -29,10 +30,19 @@ interface IUser {
     name: string;
     email: string;
   };
+  hrId?: {
+    _id: string;
+    name: string;
+    email: string;
+  };
   createdAt?: string;
 }
 
 export function UserManagementTab() {
+  const searchParams = useSearchParams();
+  const filterQueryParam = searchParams?.get("filter") || searchParams?.get("status");
+  const isPendingFilterParam = filterQueryParam?.toLowerCase() === "pending" || searchParams?.get("pending") === "true";
+
   const { user: currentUser, loading: authLoading } = useAuth();
   const { can, isAdmin } = usePermissions();
   const canManageUsers = isAdmin || can("manageUsers");
@@ -43,7 +53,40 @@ export function UserManagementTab() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState<string>("All");
-  const [statusFilter, setStatusFilter] = useState<string>("All");
+  const [statusFilter, setStatusFilter] = useState<string>(isPendingFilterParam ? "Pending" : "All");
+
+  const handleStatusFilterChange = (newStatus: string) => {
+    setStatusFilter(newStatus);
+    setCurrentPage(1);
+    try {
+      const url = new URL(window.location.href);
+      if (newStatus === "All") {
+        url.searchParams.delete("filter");
+        url.searchParams.delete("status");
+        url.searchParams.delete("pending");
+      } else {
+        url.searchParams.set("filter", newStatus);
+      }
+      window.history.replaceState({}, "", url.toString());
+    } catch {
+      // ignore
+    }
+  };
+
+  // React to URL query parameter changes (e.g. from notifications deep-linking to ?filter=Pending)
+  useEffect(() => {
+    const filterParam = searchParams?.get("filter") || searchParams?.get("status");
+    if (filterParam) {
+      if (filterParam.toLowerCase() === "pending") {
+        setStatusFilter("Pending");
+      } else if (["active", "on leave", "suspended"].includes(filterParam.toLowerCase())) {
+        const capitalized = filterParam.charAt(0).toUpperCase() + filterParam.slice(1);
+        setStatusFilter(capitalized);
+      }
+    } else if (searchParams?.get("pending") === "true") {
+      setStatusFilter("Pending");
+    }
+  }, [searchParams]);
 
   // Floating Toast Notification
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
@@ -55,6 +98,8 @@ export function UserManagementTab() {
   // Selection & Modal States
   const [selectedUser, setSelectedUser] = useState<IUser | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [editModalTab, setEditModalTab] = useState<"identity" | "org" | "compensation" | "security">("identity");
+  const [showEditPassword, setShowEditPassword] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
 
@@ -64,6 +109,7 @@ export function UserManagementTab() {
   const [approveFormData, setApproveFormData] = useState({
     department: "General",
     managerId: "",
+    hrId: "",
     role: "Employee",
     employmentType: "Permanent",
     salary: "" as string | number,
@@ -82,9 +128,12 @@ export function UserManagementTab() {
   const [formData, setFormData] = useState({
     name: "",
     email: "",
+    phone: "",
     role: "Employee" as IUser["role"],
     status: "Active" as IUser["status"],
     department: "General",
+    managerId: "",
+    hrId: "",
     employmentType: "Permanent",
     salary: "" as string | number,
     newPassword: "",
@@ -98,13 +147,27 @@ export function UserManagementTab() {
     return users.reduce((sum, u) => sum + (Number(u.salary) || 0), 0);
   }, [users]);
 
-  // Pending Users Memo & Available Managers Memo
+  // Pending Users Memo & Available Managers / HRs Memo
   const pendingUsers = useMemo(() => {
     return users.filter((u) => u.status === "Pending");
   }, [users]);
 
   const availableManagers = useMemo(() => {
     return users.filter((u) => u.status === "Active" || !u.status);
+  }, [users]);
+
+  const availableHRs = useMemo(() => {
+    const activeUsers = users.filter((u) => u.status === "Active" || !u.status);
+    const hrUsers = activeUsers.filter((u) => u.role?.toLowerCase() === "hr");
+    const adminOpsUsers = activeUsers.filter((u) => {
+      const r = u.role?.toLowerCase();
+      return r === "admin" || r === "ops" || r === "sub admin";
+    });
+
+    if (hrUsers.length > 0) {
+      return [...hrUsers, ...adminOpsUsers];
+    }
+    return adminOpsUsers.length > 0 ? adminOpsUsers : activeUsers;
   }, [users]);
 
   // Pagination
@@ -174,9 +237,11 @@ export function UserManagementTab() {
   const handleOpenApprove = (user: IUser) => {
     setSelectedApproveUser(user);
     const defaultDept = departmentsList[0]?.name || user.department || "Engineering";
+    const defaultHr = (user.hrId as any)?._id || (availableHRs.find((h) => h.role?.toLowerCase() === "hr")?._id) || "";
     setApproveFormData({
       department: defaultDept,
       managerId: (user.managerId as any)?._id || "",
+      hrId: defaultHr,
       role: user.role && user.role !== "Admin" ? user.role : "Employee",
       employmentType: user.employmentType || "Permanent",
       salary: user.salary ? Number(user.salary) : "",
@@ -199,6 +264,7 @@ export function UserManagementTab() {
         status: "Active",
         department: approveFormData.department,
         managerId: approveFormData.managerId || null,
+        hrId: approveFormData.hrId || null,
         role: approveFormData.role,
         employmentType: approveFormData.employmentType,
         salary: numSalary,
@@ -225,6 +291,12 @@ export function UserManagementTab() {
       showToast(`🎉 ${selectedApproveUser.name} has been approved and assigned to ${approveFormData.department}!`, "success");
       setSelectedApproveUser(null);
       await fetchUsers();
+
+      // If no more pending users remain, automatically switch to "All" so the approved employee is visible
+      const remainingPending = users.filter((u) => u._id !== selectedApproveUser._id && u.status === "Pending");
+      if (remainingPending.length === 0) {
+        handleStatusFilterChange("All");
+      }
     } catch (err: any) {
       setApproveError(err.message || "Failed to approve employee");
     } finally {
@@ -268,16 +340,32 @@ export function UserManagementTab() {
   const handleOpenEdit = (user: IUser) => {
     setSelectedUser(user);
     const userSal = (user as any).salary;
+    const mgrId = user.managerId?._id
+      ? String(user.managerId._id)
+      : (user as any).managerId
+      ? String((user as any).managerId)
+      : "";
+    const hId = user.hrId?._id
+      ? String(user.hrId._id)
+      : (user as any).hrId
+      ? String((user as any).hrId)
+      : "";
+
     setFormData({
-      name: user.name,
-      email: user.email,
-      role: user.role,
+      name: user.name || "",
+      email: user.email || "",
+      phone: (user as any).phone || "",
+      role: user.role || "Employee",
       status: user.status || "Active",
       department: user.department || "General",
+      managerId: mgrId,
+      hrId: hId,
       employmentType: (user as any).employmentType || "Permanent",
       salary: userSal !== undefined && userSal !== null && Number(userSal) > 0 ? Number(userSal) : "",
       newPassword: "",
     });
+    setEditModalTab("identity");
+    setShowEditPassword(false);
     setFormError("");
     setShowEditModal(true);
   };
@@ -293,13 +381,21 @@ export function UserManagementTab() {
 
       const numSalary = formData.salary === "" ? 0 : Number(formData.salary) || 0;
       const payload: any = {
-        name: formData.name,
+        name: formData.name.trim(),
+        email: formData.email.trim(),
+        phone: formData.phone.trim(),
         role: formData.role,
         status: formData.status,
-        department: formData.department,
+        department: formData.department.trim() || "General",
+        managerId: formData.managerId || null,
+        hrId: formData.hrId || null,
         employmentType: formData.employmentType,
         salary: numSalary,
       };
+
+      if (formData.newPassword && formData.newPassword.trim()) {
+        payload.newPassword = formData.newPassword.trim();
+      }
 
       const res = await fetch(`/api/team/${selectedUser._id}`, {
         method: "PUT",
@@ -320,7 +416,7 @@ export function UserManagementTab() {
 
       setShowEditModal(false);
       setSelectedUser(null);
-      showToast(`Profile & salary for ${formData.name} updated successfully!`, "success");
+      showToast(`User account for ${formData.name} updated successfully!`, "success");
       await fetchUsers();
     } catch (err: any) {
       setFormError(err.message || "Something went wrong");
@@ -361,9 +457,12 @@ export function UserManagementTab() {
       setFormData({
         name: "",
         email: "",
+        phone: "",
         role: "Employee",
         status: "Active",
         department: "General",
+        managerId: "",
+        hrId: "",
         employmentType: "Permanent",
         salary: "",
         newPassword: "",
@@ -434,9 +533,12 @@ export function UserManagementTab() {
               setFormData({
                 name: "",
                 email: "",
+                phone: "",
                 role: "Employee",
                 status: "Active",
                 department: "General",
+                managerId: "",
+                hrId: "",
                 employmentType: "Permanent",
                 salary: "",
                 newPassword: "",
@@ -478,8 +580,7 @@ export function UserManagementTab() {
             <Button
               size="sm"
               onClick={() => {
-                setStatusFilter("Pending");
-                setCurrentPage(1);
+                handleStatusFilterChange("Pending");
               }}
               className="bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs shadow-xs cursor-pointer gap-1.5"
             >
@@ -619,8 +720,7 @@ export function UserManagementTab() {
                 <select
                   value={statusFilter}
                   onChange={(e) => {
-                    setStatusFilter(e.target.value);
-                    setCurrentPage(1);
+                    handleStatusFilterChange(e.target.value);
                   }}
                   className="bg-background border border-input text-foreground text-sm rounded-xl px-3 py-1.5 focus:outline-none focus:border-primary"
                 >
@@ -641,7 +741,7 @@ export function UserManagementTab() {
             </span>
             <button
               type="button"
-              onClick={() => { setStatusFilter("All"); setCurrentPage(1); }}
+              onClick={() => handleStatusFilterChange("All")}
               className={cn(
                 "px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer shrink-0",
                 statusFilter === "All"
@@ -653,7 +753,7 @@ export function UserManagementTab() {
             </button>
             <button
               type="button"
-              onClick={() => { setStatusFilter("Active"); setCurrentPage(1); }}
+              onClick={() => handleStatusFilterChange("Active")}
               className={cn(
                 "px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer shrink-0",
                 statusFilter === "Active"
@@ -665,7 +765,7 @@ export function UserManagementTab() {
             </button>
             <button
               type="button"
-              onClick={() => { setStatusFilter("Pending"); setCurrentPage(1); }}
+              onClick={() => handleStatusFilterChange("Pending")}
               className={cn(
                 "px-3 py-1 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer shrink-0",
                 statusFilter === "Pending"
@@ -680,7 +780,7 @@ export function UserManagementTab() {
             </button>
             <button
               type="button"
-              onClick={() => { setStatusFilter("Suspended"); setCurrentPage(1); }}
+              onClick={() => handleStatusFilterChange("Suspended")}
               className={cn(
                 "px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer shrink-0",
                 statusFilter === "Suspended"
@@ -906,241 +1006,590 @@ export function UserManagementTab() {
 
       {/* Edit User Modal */}
       {showEditModal && selectedUser && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in" onClick={() => setShowEditModal(false)}>
-          <div className="bg-card border border-border rounded-2xl max-w-xl w-full p-6 space-y-5 shadow-2xl animate-in zoom-in-95 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between border-b border-border/80 pb-4">
-              <div className="flex items-center gap-3">
-                <Avatar className="h-11 w-11 border border-border/80 shadow-xs">
-                  <AvatarImage src={selectedUser.photoUrl} alt={selectedUser.name} />
-                  <AvatarFallback className="bg-primary/10 text-primary font-bold">
-                    {selectedUser.name.split(" ").map((n) => n[0]).join("").toUpperCase()}
-                  </AvatarFallback>
-                </Avatar>
-                <div>
-                  <h3 className="text-base font-bold text-foreground flex items-center gap-2">
-                    Manage User: {selectedUser.name}
-                    <Badge variant="outline" className="text-[10px] py-0 px-2 bg-primary/5 text-primary border-primary/20">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/70 backdrop-blur-xs animate-in fade-in"
+          onClick={() => setShowEditModal(false)}
+        >
+          <div
+            className="bg-card border border-border rounded-2xl max-w-2xl w-full shadow-2xl animate-in zoom-in-95 flex flex-col max-h-[88vh] overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Sticky Modal Header */}
+            <div className="flex items-center justify-between p-4 sm:p-5 border-b border-border/80 bg-muted/20 shrink-0">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="relative">
+                  <Avatar className="h-11 w-11 border-2 border-border shadow-xs">
+                    <AvatarImage src={selectedUser.photoUrl} alt={selectedUser.name} />
+                    <AvatarFallback className="bg-primary/10 text-primary font-bold text-sm">
+                      {selectedUser.name.split(" ").map((n) => n[0]).join("").toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
+                  <span
+                    className={cn(
+                      "absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-card ring-1",
+                      formData.status === "Active"
+                        ? "bg-emerald-500 ring-emerald-500/20"
+                        : formData.status === "Pending"
+                        ? "bg-amber-500 ring-amber-500/20"
+                        : formData.status === "On Leave"
+                        ? "bg-sky-500 ring-sky-500/20"
+                        : "bg-rose-500 ring-rose-500/20"
+                    )}
+                  />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="text-base font-bold text-foreground truncate">
+                      Manage User: {formData.name || selectedUser.name}
+                    </h3>
+                    <Badge variant="outline" className="text-[10px] py-0 px-2 bg-primary/10 text-primary border-primary/20 font-semibold">
                       {formData.role}
                     </Badge>
-                  </h3>
-                  <p className="text-xs text-muted-foreground font-mono">{selectedUser.email}</p>
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        "text-[10px] py-0 px-2 font-medium",
+                        formData.status === "Active"
+                          ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20"
+                          : formData.status === "Pending"
+                          ? "bg-amber-500/10 text-amber-500 border-amber-500/20"
+                          : formData.status === "On Leave"
+                          ? "bg-sky-500/10 text-sky-500 border-sky-500/20"
+                          : "bg-rose-500/10 text-rose-500 border-rose-500/20"
+                      )}
+                    >
+                      {formData.status}
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground font-mono truncate">{selectedUser.email}</p>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={() => setShowEditModal(false)}
-                className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors cursor-pointer"
+                className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors cursor-pointer shrink-0 ml-2"
               >
                 <i className="fa-solid fa-xmark text-base" />
               </button>
             </div>
 
+            {/* Segmented Navigation Tab Bar */}
+            <div className="flex items-center gap-1.5 p-2 bg-muted/30 border-b border-border/80 overflow-x-auto no-scrollbar shrink-0">
+              <button
+                type="button"
+                onClick={() => setEditModalTab("identity")}
+                className={cn(
+                  "flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-lg transition-all whitespace-nowrap cursor-pointer",
+                  editModalTab === "identity"
+                    ? "bg-background text-foreground shadow-xs border border-border/60"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                )}
+              >
+                <i className="fa-solid fa-id-card text-sky-500 text-xs" />
+                <span>Identity &amp; Contact</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setEditModalTab("org")}
+                className={cn(
+                  "flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-lg transition-all whitespace-nowrap cursor-pointer",
+                  editModalTab === "org"
+                    ? "bg-background text-foreground shadow-xs border border-border/60"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                )}
+              >
+                <i className="fa-solid fa-sitemap text-indigo-400 text-xs" />
+                <span>Role &amp; Hierarchy</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setEditModalTab("compensation")}
+                className={cn(
+                  "flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-lg transition-all whitespace-nowrap cursor-pointer",
+                  editModalTab === "compensation"
+                    ? "bg-background text-foreground shadow-xs border border-border/60"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                )}
+              >
+                <i className="fa-solid fa-wallet text-emerald-500 text-xs" />
+                <span>Compensation</span>
+                {Number(formData.salary) > 0 && (
+                  <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 font-mono font-medium">
+                    ₹{Number(formData.salary) >= 100000 ? `${Number(formData.salary) / 100000}L` : `${Number(formData.salary) / 1000}k`}
+                  </span>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setEditModalTab("security")}
+                className={cn(
+                  "flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-lg transition-all whitespace-nowrap cursor-pointer",
+                  editModalTab === "security"
+                    ? "bg-background text-foreground shadow-xs border border-border/60"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                )}
+              >
+                <i className="fa-solid fa-shield-halved text-amber-500 text-xs" />
+                <span>Security &amp; Access</span>
+                {formData.newPassword && (
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                )}
+              </button>
+            </div>
+
+            {/* Error Message Banner */}
             {formError && (
-              <div className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-xl text-rose-500 text-xs flex items-center gap-2">
-                <i className="fa-solid fa-triangle-exclamation" /> {formError}
+              <div className="mx-5 mt-4 p-3 bg-rose-500/10 border border-rose-500/20 rounded-xl text-rose-500 text-xs flex items-center gap-2 shrink-0">
+                <i className="fa-solid fa-triangle-exclamation shrink-0" />
+                <span>{formError}</span>
               </div>
             )}
 
-            <form onSubmit={handleEditSubmit} className="space-y-4">
-              {/* Personal Details */}
-              <div className="space-y-3 p-3.5 bg-muted/20 rounded-xl border border-border/60">
-                <label className="text-xs font-bold text-foreground flex items-center gap-1.5">
-                  <i className="fa-solid fa-user-circle text-primary text-xs" /> Account Identity
-                </label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <label className="text-xs text-muted-foreground font-medium block">Full Name</label>
-                    <Input
-                      type="text"
-                      value={formData.name}
-                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                      required
-                      className="bg-background border-input text-foreground text-xs h-9"
-                    />
-                  </div>
+            {/* Form & Tab Content Body */}
+            <form onSubmit={handleEditSubmit} className="flex flex-col flex-1 min-h-0">
+              <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4">
+                {/* TAB 1: Identity & Contact */}
+                {editModalTab === "identity" && (
+                  <div className="space-y-4 animate-in fade-in duration-200">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                          <i className="fa-solid fa-user text-muted-foreground text-[11px]" />
+                          Full Name <span className="text-rose-500">*</span>
+                        </label>
+                        <div className="relative">
+                          <Input
+                            type="text"
+                            value={formData.name}
+                            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                            required
+                            placeholder="e.g. John Doe"
+                            className="bg-background border-input text-foreground text-sm h-10 pl-9"
+                          />
+                          <i className="fa-solid fa-user absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-xs pointer-events-none" />
+                        </div>
+                      </div>
 
-                  <div className="space-y-1">
-                    <label className="text-xs text-muted-foreground font-medium block">Department</label>
-                    <Input
-                      type="text"
-                      value={formData.department}
-                      onChange={(e) => setFormData({ ...formData, department: e.target.value })}
-                      className="bg-background border-input text-foreground text-xs h-9"
-                    />
-                  </div>
-                </div>
-              </div>
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                          <i className="fa-solid fa-envelope text-muted-foreground text-[11px]" />
+                          Email Address <span className="text-rose-500">*</span>
+                        </label>
+                        <div className="relative">
+                          <Input
+                            type="email"
+                            value={formData.email}
+                            onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                            required
+                            placeholder="employee@domain.com"
+                            className="bg-background border-input text-foreground text-sm h-10 pl-9"
+                          />
+                          <i className="fa-solid fa-envelope absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-xs pointer-events-none" />
+                        </div>
+                      </div>
 
-              {/* Roles & Status */}
-              <div className="space-y-3 p-3.5 bg-muted/20 rounded-xl border border-border/60">
-                <label className="text-xs font-bold text-foreground flex items-center gap-1.5">
-                  <i className="fa-solid fa-user-shield text-amber-500 text-xs" /> Role &amp; Access Status
-                </label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <label className="text-xs text-muted-foreground font-medium block">System Role</label>
-                    <select
-                      value={formData.role}
-                      onChange={(e) => setFormData({ ...formData, role: e.target.value as any })}
-                      className="w-full bg-background border border-input text-foreground text-xs rounded-lg px-3 h-9 focus:border-primary focus:outline-none"
-                    >
-                      {availableRoles.map((r) => (
-                        <option key={r} value={r}>
-                          {r === "OPS" ? "OPS (SubAdmin)" : r}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                          <i className="fa-solid fa-phone text-muted-foreground text-[11px]" />
+                          Phone Number
+                        </label>
+                        <div className="relative">
+                          <Input
+                            type="tel"
+                            value={formData.phone}
+                            onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                            placeholder="+91 98765 43210"
+                            className="bg-background border-input text-foreground text-sm h-10 pl-9"
+                          />
+                          <i className="fa-solid fa-phone absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-xs pointer-events-none" />
+                        </div>
+                      </div>
 
-                  <div className="space-y-1">
-                    <label className="text-xs text-muted-foreground font-medium block">Account Status</label>
-                    <select
-                      value={formData.status}
-                      onChange={(e) => setFormData({ ...formData, status: e.target.value as any })}
-                      className="w-full bg-background border border-input text-foreground text-xs rounded-lg px-3 h-9 focus:border-primary focus:outline-none"
-                    >
-                      <option value="Active">Active</option>
-                      <option value="Pending">Pending</option>
-                      <option value="On Leave">On Leave</option>
-                      <option value="Suspended">Suspended</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-
-              {/* Employment & Compensation */}
-              <div className="space-y-3 p-3.5 bg-emerald-500/5 dark:bg-emerald-950/20 rounded-xl border border-emerald-500/20">
-                <div className="flex items-center justify-between pb-1 border-b border-emerald-500/10">
-                  <label className="text-xs font-bold text-foreground flex items-center gap-1.5">
-                    <i className="fa-solid fa-money-bill-wave text-emerald-500 text-xs" /> Employment &amp; Compensation
-                  </label>
-                  <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
-                    <i className="fa-solid fa-lock text-[9px]" /> Admin Defined
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <label className="text-xs text-muted-foreground font-medium block">Employment Type</label>
-                    <select
-                      value={formData.employmentType}
-                      onChange={(e) => setFormData({ ...formData, employmentType: e.target.value })}
-                      className="w-full bg-background border border-input text-foreground text-xs rounded-lg px-3 h-9 focus:border-primary focus:outline-none"
-                    >
-                      <option value="Permanent">Full Time (Permanent)</option>
-                      <option value="Freelancer">Freelancer</option>
-                      <option value="Part-Time">Part-Time</option>
-                      <option value="Contractor">Contractor</option>
-                      <option value="Intern">Intern</option>
-                    </select>
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-xs text-muted-foreground font-medium block">
-                      Monthly Base Salary (₹)
-                    </label>
-                    <div className="relative">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-mono font-bold text-muted-foreground pointer-events-none">
-                        ₹
-                      </span>
-                      <Input
-                        type="number"
-                        min="0"
-                        placeholder="50000"
-                        value={formData.salary}
-                        onChange={(e) => setFormData({ ...formData, salary: e.target.value })}
-                        className="bg-background border-input text-foreground font-mono font-bold text-xs h-9 pl-7"
-                      />
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                          <i className="fa-solid fa-building text-muted-foreground text-[11px]" />
+                          Department
+                        </label>
+                        <div className="relative">
+                          <select
+                            value={formData.department}
+                            onChange={(e) => setFormData({ ...formData, department: e.target.value })}
+                            className="w-full bg-background border border-input text-foreground text-sm rounded-xl pl-9 pr-8 h-10 focus:border-primary focus:outline-none appearance-none cursor-pointer"
+                          >
+                            <option value="General">General</option>
+                            {departmentsList.map((d) => (
+                              <option key={d._id} value={d.name}>
+                                {d.name}
+                              </option>
+                            ))}
+                            {!departmentsList.some((d) => d.name.toLowerCase() === formData.department.toLowerCase()) &&
+                              formData.department &&
+                              formData.department !== "General" && (
+                                <option value={formData.department}>{formData.department}</option>
+                              )}
+                          </select>
+                          <i className="fa-solid fa-building absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-xs pointer-events-none" />
+                          <i className="fa-solid fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-[10px] pointer-events-none" />
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                </div>
 
-                {/* Quick Salary Preset Buttons */}
-                <div className="space-y-1.5 pt-1">
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <span className="text-[10px] text-muted-foreground font-medium mr-1">Quick presets:</span>
-                    {[25000, 35000, 50000, 75000, 100000, 150000].map((preset) => (
-                      <button
-                        key={preset}
-                        type="button"
-                        onClick={() => setFormData({ ...formData, salary: preset })}
-                        className={cn(
-                          "text-[10px] px-2 py-0.5 rounded-md border font-mono transition-all cursor-pointer",
-                          Number(formData.salary) === preset
-                            ? "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border-emerald-500/40 font-bold shadow-xs"
-                            : "bg-background text-muted-foreground hover:text-foreground hover:bg-muted border-border"
-                        )}
-                      >
-                        ₹{preset >= 100000 ? `${preset / 100000}L` : `${preset / 1000}k`}
-                      </button>
-                    ))}
-                    {formData.salary !== "" && Number(formData.salary) > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => setFormData({ ...formData, salary: "" })}
-                        className="text-[10px] px-1.5 py-0.5 text-rose-500 hover:text-rose-600 hover:bg-rose-500/10 rounded transition-colors cursor-pointer"
-                        title="Clear salary"
-                      >
-                        <i className="fa-solid fa-xmark text-[9px]" />
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                {/* Live Financial Projection Breakdown */}
-                {Number(formData.salary) > 0 && (
-                  <div className="p-2.5 bg-background/80 border border-emerald-500/20 rounded-xl grid grid-cols-3 gap-2 text-center animate-in fade-in">
-                    <div>
-                      <span className="text-[10px] text-muted-foreground block">Monthly Base</span>
-                      <span className="text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400">
-                        ₹{Number(formData.salary).toLocaleString()}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-[10px] text-muted-foreground block">Annual CTC</span>
-                      <span className="text-xs font-mono font-bold text-foreground">
-                        ₹{(Number(formData.salary) * 12).toLocaleString()}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-[10px] text-muted-foreground block">Est. Daily (26d)</span>
-                      <span className="text-xs font-mono font-bold text-muted-foreground">
-                        ~₹{Math.round(Number(formData.salary) / 26).toLocaleString()}
-                      </span>
+                    <div className="p-3 bg-muted/20 border border-border/60 rounded-xl flex items-center gap-2.5 text-xs text-muted-foreground">
+                      <i className="fa-solid fa-circle-info text-primary text-sm shrink-0" />
+                      <span>Employee contact and department details synchronize across team directories, task delegations, and chat mentions.</span>
                     </div>
                   </div>
                 )}
 
-                <div className="p-2 bg-primary/5 border border-primary/10 rounded-lg flex items-start gap-2 text-[11px] text-muted-foreground">
-                  <i className="fa-solid fa-circle-info text-[10px] text-primary mt-0.5 shrink-0" />
-                  <span>
-                    The monthly base salary set here is locked for the user and automatically synchronizes with their self-service invoice generator and attendance salary claims.
-                  </span>
-                </div>
+                {/* TAB 2: Role & Hierarchy */}
+                {editModalTab === "org" && (
+                  <div className="space-y-4 animate-in fade-in duration-200">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                          <i className="fa-solid fa-user-shield text-amber-500 text-[11px]" />
+                          System Role <span className="text-rose-500">*</span>
+                        </label>
+                        <div className="relative">
+                          <select
+                            value={formData.role}
+                            onChange={(e) => setFormData({ ...formData, role: e.target.value as any })}
+                            className="w-full bg-background border border-input text-foreground text-sm rounded-xl pl-9 pr-8 h-10 focus:border-primary focus:outline-none appearance-none cursor-pointer"
+                          >
+                            {availableRoles.map((r) => (
+                              <option key={r} value={r}>
+                                {r === "OPS" ? "OPS (SubAdmin)" : r}
+                              </option>
+                            ))}
+                          </select>
+                          <i className="fa-solid fa-user-shield absolute left-3 top-1/2 -translate-y-1/2 text-amber-500 text-xs pointer-events-none" />
+                          <i className="fa-solid fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-[10px] pointer-events-none" />
+                        </div>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                          <i className="fa-solid fa-circle-dot text-emerald-500 text-[11px]" />
+                          Account Status <span className="text-rose-500">*</span>
+                        </label>
+                        <div className="relative">
+                          <select
+                            value={formData.status}
+                            onChange={(e) => setFormData({ ...formData, status: e.target.value as any })}
+                            className="w-full bg-background border border-input text-foreground text-sm rounded-xl pl-9 pr-8 h-10 focus:border-primary focus:outline-none appearance-none cursor-pointer"
+                          >
+                            <option value="Active">Active (Full Workspace Access)</option>
+                            <option value="Pending">Pending (Registration Review)</option>
+                            <option value="On Leave">On Leave (Temporary Inactivity)</option>
+                            <option value="Suspended">Suspended (Access Disabled)</option>
+                          </select>
+                          <i className="fa-solid fa-signal absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-xs pointer-events-none" />
+                          <i className="fa-solid fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-[10px] pointer-events-none" />
+                        </div>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                          <i className="fa-solid fa-user-tie text-indigo-400 text-[11px]" />
+                          Reporting Manager
+                        </label>
+                        <div className="relative">
+                          <select
+                            value={formData.managerId}
+                            onChange={(e) => setFormData({ ...formData, managerId: e.target.value })}
+                            className="w-full bg-background border border-input text-foreground text-sm rounded-xl pl-9 pr-8 h-10 focus:border-primary focus:outline-none appearance-none cursor-pointer"
+                          >
+                            <option value="">None / Self-Managed (Direct Leadership)</option>
+                            {availableManagers
+                              .filter((u) => u._id !== selectedUser._id)
+                              .map((u) => (
+                                <option key={u._id} value={u._id}>
+                                  {u.name} — {u.role} ({u.department || "General"})
+                                </option>
+                              ))}
+                          </select>
+                          <i className="fa-solid fa-user-tie absolute left-3 top-1/2 -translate-y-1/2 text-indigo-400 text-xs pointer-events-none" />
+                          <i className="fa-solid fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-[10px] pointer-events-none" />
+                        </div>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                          <i className="fa-solid fa-user-gear text-purple-400 text-[11px]" />
+                          Assigned HR Partner
+                        </label>
+                        <div className="relative">
+                          <select
+                            value={formData.hrId}
+                            onChange={(e) => setFormData({ ...formData, hrId: e.target.value })}
+                            className="w-full bg-background border border-input text-foreground text-sm rounded-xl pl-9 pr-8 h-10 focus:border-primary focus:outline-none appearance-none cursor-pointer"
+                          >
+                            <option value="">None / Default Workspace HR</option>
+                            {availableHRs
+                              .filter((u) => u._id !== selectedUser._id)
+                              .map((u) => (
+                                <option key={u._id} value={u._id}>
+                                  {u.name} — {u.role} ({u.email})
+                                </option>
+                              ))}
+                          </select>
+                          <i className="fa-solid fa-user-gear absolute left-3 top-1/2 -translate-y-1/2 text-purple-400 text-xs pointer-events-none" />
+                          <i className="fa-solid fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-[10px] pointer-events-none" />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Hierarchy Preview */}
+                    <div className="p-3 bg-muted/20 border border-border/60 rounded-xl space-y-2">
+                      <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block">
+                        Assigned Organizational Structure
+                      </span>
+                      <div className="flex flex-wrap items-center gap-2 text-xs">
+                        <span className="px-2.5 py-1 rounded-lg bg-background border border-border text-foreground font-medium flex items-center gap-1.5">
+                          <i className="fa-solid fa-user-tie text-indigo-400 text-[11px]" />
+                          Manager:{" "}
+                          <strong className="text-foreground font-semibold">
+                            {availableManagers.find((m) => m._id === formData.managerId)?.name || "Direct Leadership"}
+                          </strong>
+                        </span>
+                        <i className="fa-solid fa-arrow-right text-[10px] text-muted-foreground" />
+                        <span className="px-2.5 py-1 rounded-lg bg-primary/10 border border-primary/20 text-primary font-bold">
+                          {formData.name || selectedUser.name}
+                        </span>
+                        <span className="ml-auto px-2.5 py-1 rounded-lg bg-background border border-border text-foreground font-medium flex items-center gap-1.5">
+                          <i className="fa-solid fa-user-gear text-purple-400 text-[11px]" />
+                          HR:{" "}
+                          <strong className="text-foreground font-semibold">
+                            {availableHRs.find((h) => h._id === formData.hrId)?.name || "Workspace Default"}
+                          </strong>
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* TAB 3: Compensation & Payroll */}
+                {editModalTab === "compensation" && (
+                  <div className="space-y-4 animate-in fade-in duration-200">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                          <i className="fa-solid fa-briefcase text-emerald-500 text-[11px]" />
+                          Employment Type
+                        </label>
+                        <div className="relative">
+                          <select
+                            value={formData.employmentType}
+                            onChange={(e) => setFormData({ ...formData, employmentType: e.target.value })}
+                            className="w-full bg-background border border-input text-foreground text-sm rounded-xl pl-9 pr-8 h-10 focus:border-primary focus:outline-none appearance-none cursor-pointer"
+                          >
+                            <option value="Permanent">Full Time (Permanent)</option>
+                            <option value="Freelancer">Freelancer</option>
+                            <option value="Part-Time">Part-Time</option>
+                            <option value="Contractor">Contractor</option>
+                            <option value="Intern">Intern</option>
+                          </select>
+                          <i className="fa-solid fa-briefcase absolute left-3 top-1/2 -translate-y-1/2 text-emerald-500 text-xs pointer-events-none" />
+                          <i className="fa-solid fa-chevron-down absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground text-[10px] pointer-events-none" />
+                        </div>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                            <i className="fa-solid fa-indian-rupee-sign text-emerald-500 text-[11px]" />
+                            Monthly Base Salary (₹)
+                          </label>
+                          <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20 flex items-center gap-1">
+                            <i className="fa-solid fa-lock text-[9px]" /> Admin Defined
+                          </span>
+                        </div>
+                        <div className="relative">
+                          <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm font-mono font-bold text-muted-foreground pointer-events-none">
+                            ₹
+                          </span>
+                          <Input
+                            type="number"
+                            min="0"
+                            placeholder="50000"
+                            value={formData.salary}
+                            onChange={(e) => setFormData({ ...formData, salary: e.target.value })}
+                            className="bg-background border-input text-foreground font-mono font-bold text-sm h-10 pl-8"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Quick Preset Buttons */}
+                    <div className="space-y-1.5">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="text-[11px] text-muted-foreground font-medium mr-1 flex items-center gap-1">
+                          <i className="fa-solid fa-bolt text-amber-500 text-[10px]" /> Quick Presets:
+                        </span>
+                        {[25000, 35000, 50000, 75000, 100000, 150000].map((preset) => (
+                          <button
+                            key={preset}
+                            type="button"
+                            onClick={() => setFormData({ ...formData, salary: preset })}
+                            className={cn(
+                              "text-xs px-2.5 py-1 rounded-lg border font-mono font-medium transition-all cursor-pointer",
+                              Number(formData.salary) === preset
+                                ? "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border-emerald-500/40 font-bold shadow-xs"
+                                : "bg-background text-muted-foreground hover:text-foreground hover:bg-muted border-border"
+                            )}
+                          >
+                            ₹{preset >= 100000 ? `${preset / 100000}L` : `${preset / 1000}k`}
+                          </button>
+                        ))}
+                        {formData.salary !== "" && Number(formData.salary) > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => setFormData({ ...formData, salary: "" })}
+                            className="text-xs px-2 py-1 text-rose-500 hover:text-rose-600 hover:bg-rose-500/10 rounded-lg transition-colors cursor-pointer border border-transparent hover:border-rose-500/20"
+                          >
+                            <i className="fa-solid fa-xmark mr-1 text-[10px]" /> Clear
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Live Financial Projection Breakdown */}
+                    <div className="p-3.5 bg-emerald-500/5 dark:bg-emerald-950/20 border border-emerald-500/20 rounded-xl space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-300 flex items-center gap-1.5">
+                          <i className="fa-solid fa-calculator text-xs" />
+                          Compensation Breakdown
+                        </span>
+                        <span className="text-[10px] text-muted-foreground font-mono">Auto Calculated</span>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2.5 text-center">
+                        <div className="p-2.5 rounded-lg bg-background/80 border border-emerald-500/20">
+                          <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold block mb-0.5">
+                            Monthly Base
+                          </span>
+                          <span className="text-sm font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                            ₹{Number(formData.salary || 0).toLocaleString()}
+                          </span>
+                        </div>
+                        <div className="p-2.5 rounded-lg bg-background/80 border border-emerald-500/20">
+                          <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold block mb-0.5">
+                            Annual CTC
+                          </span>
+                          <span className="text-sm font-mono font-bold text-foreground">
+                            ₹{(Number(formData.salary || 0) * 12).toLocaleString()}
+                          </span>
+                        </div>
+                        <div className="p-2.5 rounded-lg bg-background/80 border border-emerald-500/20">
+                          <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold block mb-0.5">
+                            Daily Est. (26d)
+                          </span>
+                          <span className="text-sm font-mono font-bold text-muted-foreground">
+                            ~₹{Math.round(Number(formData.salary || 0) / 26).toLocaleString()}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="p-2.5 bg-primary/5 border border-primary/10 rounded-xl flex items-start gap-2 text-xs text-muted-foreground">
+                      <i className="fa-solid fa-circle-check text-emerald-500 text-sm mt-0.5 shrink-0" />
+                      <span>This base salary automatically pre-populates self-service invoices, tax calculations, and payroll claims.</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* TAB 4: Security & Access */}
+                {editModalTab === "security" && (
+                  <div className="space-y-4 animate-in fade-in duration-200">
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                        <i className="fa-solid fa-key text-sky-500 text-[11px]" />
+                        Reset Account Password
+                      </label>
+                      <div className="relative">
+                        <Input
+                          type={showEditPassword ? "text" : "password"}
+                          placeholder="Enter new password to reset, or leave blank to keep unchanged"
+                          value={formData.newPassword}
+                          onChange={(e) => setFormData({ ...formData, newPassword: e.target.value })}
+                          className="bg-background border-input text-foreground text-sm h-10 pl-9 pr-10 font-mono"
+                        />
+                        <i className="fa-solid fa-lock absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-xs pointer-events-none" />
+                        <button
+                          type="button"
+                          onClick={() => setShowEditPassword(!showEditPassword)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground text-xs p-1 cursor-pointer transition-colors"
+                          title={showEditPassword ? "Hide password" : "Show password"}
+                        >
+                          <i className={cn("fa-solid", showEditPassword ? "fa-eye-slash" : "fa-eye")} />
+                        </button>
+                      </div>
+                      <p className="text-[11px] text-muted-foreground leading-relaxed">
+                        Leave blank to keep existing password. If resetting, enter at least 8 characters with uppercase, lowercase, numbers, and symbols.
+                      </p>
+                    </div>
+
+                    <div className="p-3.5 bg-muted/20 border border-border/60 rounded-xl space-y-2">
+                      <div className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                        <i className="fa-solid fa-shield-halved text-sky-500 text-xs" />
+                        Admin Override &amp; First-Time Setup
+                      </div>
+                      <p className="text-xs text-muted-foreground leading-relaxed">
+                        Setting a new password here directly overrides their login credentials without requiring the employee&apos;s existing password or an email OTP code.
+                      </p>
+                    </div>
+                  </div>
+                )}
               </div>
 
-              <div className="flex justify-end gap-2.5 pt-3 border-t border-border">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowEditModal(false)}
-                  className="border-border text-foreground hover:bg-muted cursor-pointer"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type="submit"
-                  size="sm"
-                  disabled={isSubmitting}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold cursor-pointer gap-2"
-                >
-                  {isSubmitting ? (
-                    <><i className="fa-solid fa-spinner fa-spin text-xs" /> Saving Changes...</>
-                  ) : (
-                    <><i className="fa-solid fa-check text-xs" /> Save Changes</>
-                  )}
-                </Button>
+              {/* Sticky Modal Footer */}
+              <div className="p-3.5 sm:p-4 bg-muted/20 border-t border-border flex items-center justify-between gap-3 shrink-0">
+                <div className="flex items-center gap-2">
+                  {(["identity", "org", "compensation", "security"] as const).map((tabKey) => (
+                    <button
+                      key={tabKey}
+                      type="button"
+                      onClick={() => setEditModalTab(tabKey)}
+                      className={cn(
+                        "h-2 rounded-full transition-all cursor-pointer",
+                        editModalTab === tabKey ? "w-6 bg-primary" : "w-2 bg-muted-foreground/30 hover:bg-muted-foreground/60"
+                      )}
+                      title={`Switch to ${tabKey}`}
+                    />
+                  ))}
+                  <span className="text-[11px] text-muted-foreground ml-1.5 hidden sm:inline">
+                    {editModalTab === "identity" && "Step 1: Identity & Contact"}
+                    {editModalTab === "org" && "Step 2: Role & Hierarchy"}
+                    {editModalTab === "compensation" && "Step 3: Compensation & Payroll"}
+                    {editModalTab === "security" && "Step 4: Security & Access"}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowEditModal(false)}
+                    className="border-border text-foreground hover:bg-muted cursor-pointer"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="submit"
+                    size="sm"
+                    disabled={isSubmitting}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold cursor-pointer gap-2 shadow-xs px-4"
+                  >
+                    {isSubmitting ? (
+                      <><i className="fa-solid fa-spinner fa-spin text-xs" /> Saving Changes...</>
+                    ) : (
+                      <><i className="fa-solid fa-check text-xs" /> Save Changes</>
+                    )}
+                  </Button>
+                </div>
               </div>
             </form>
           </div>
@@ -1446,7 +1895,7 @@ export function UserManagementTab() {
                 </div>
                 <div>
                   <h3 className="text-base font-bold text-foreground">Approve Employee Account</h3>
-                  <p className="text-xs text-muted-foreground">Assign department and reporting manager to activate access.</p>
+                  <p className="text-xs text-muted-foreground">Assign department, reporting manager, and HR to activate access.</p>
                 </div>
               </div>
               <button
@@ -1537,6 +1986,29 @@ export function UserManagementTab() {
                     ))}
                 </select>
                 <p className="text-[11px] text-muted-foreground">Assign their direct reporting lead for workflows, task delegations, and leaves.</p>
+              </div>
+
+              {/* Assigned HR Dropdown */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                  <i className="fa-solid fa-user-gear text-primary text-[11px]" />
+                  Assigned HR
+                </label>
+                <select
+                  value={approveFormData.hrId}
+                  onChange={(e) => setApproveFormData({ ...approveFormData, hrId: e.target.value })}
+                  className="w-full bg-background border border-input rounded-xl px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary"
+                >
+                  <option value="">None / Default Workspace HR</option>
+                  {availableHRs
+                    .filter((h) => h._id !== selectedApproveUser._id)
+                    .map((h) => (
+                      <option key={h._id} value={h._id}>
+                        {h.name} — {h.role} ({h.email})
+                      </option>
+                    ))}
+                </select>
+                <p className="text-[11px] text-muted-foreground">Assign their dedicated HR partner for appraisals, onboarding, attendance, and queries.</p>
               </div>
 
               {/* Role and Employment Type Grid */}

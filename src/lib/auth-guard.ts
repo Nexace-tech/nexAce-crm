@@ -21,7 +21,8 @@ export interface AuthenticatedContext {
  * Returns either the authenticated context or an immediate NextResponse error.
  */
 export async function requireTenantSession(
-  allowedRoles?: string[]
+  allowedRoles?: string[],
+  allowPending: boolean = false
 ): Promise<AuthenticatedContext | NextResponse> {
   const session = await getSession(true); // DB revalidation happens below in requireTenantSession()
 
@@ -36,7 +37,7 @@ export async function requireTenantSession(
     tenantId: new mongoose.Types.ObjectId(session.tenantId),
   }).lean();
 
-  if (!user || user.status === "Pending" || user.status === "Suspended") {
+  if (!user || user.status === "Suspended" || (!allowPending && user.status === "Pending")) {
     return NextResponse.json({ error: "Unauthorized access: Account not active" }, { status: 401 });
   }
 

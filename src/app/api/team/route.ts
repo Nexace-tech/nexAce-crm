@@ -95,10 +95,11 @@ export async function GET(request: Request) {
       query.$and.push({ $or: searchConditions });
     }
 
-    // Find users and populate their manager's details using lean() for ultra-fast query execution
+    // Find users and populate their manager's & assigned HR details using lean() for ultra-fast query execution
     const users = await User.find(query)
       .select("-passwordHash")
       .populate("managerId", "name email role photoUrl")
+      .populate("hrId", "name email role photoUrl")
       .sort({ name: 1 })
       .lean();
 

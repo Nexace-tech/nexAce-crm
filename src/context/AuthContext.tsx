@@ -75,6 +75,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
         }
 
+        if (response.status === 401) {
+          const errData = await response.json().catch(() => ({}));
+          const reason = errData?.error === "Account suspended" ? "suspended" : "account_removed";
+          setUser(null);
+          if (typeof window !== "undefined" && window.location.pathname.startsWith("/dashboard")) {
+            window.location.href = `/api/auth/logout?reason=${reason}`;
+            return;
+          }
+        }
+
         if (!retried) {
           await new Promise((resolve) => setTimeout(resolve, 800));
           return await executeFetch(true);
@@ -82,7 +92,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         setUser(null);
         if (typeof window !== "undefined" && window.location.pathname.startsWith("/dashboard")) {
-          router.push("/login");
+          window.location.href = "/api/auth/logout?reason=account_removed";
+          return;
         }
       } catch (error) {
         console.error("Error fetching user session:", error);

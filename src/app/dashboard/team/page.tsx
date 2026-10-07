@@ -96,9 +96,16 @@ export default function TeamDashboardPage() {
   const [activeTab, setActiveTab] = useState<"directory" | "orgchart" | "manager" | "departments">("directory");
   const [searchQuery, setSearchQuery] = useState("");
   const [departmentFilter, setDepartmentFilter] = useState("All");
+  const [statusFilter, setStatusFilter] = useState("All");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [selectedMember, setSelectedMember] = useState<any | null>(null);
   const [orgZoom, setOrgZoom] = useState(1);
+
+  // Manager Panel states
+  const [selectedManagerId, setSelectedManagerId] = useState<string>("");
+  const [reassignMemberId, setReassignMemberId] = useState<string>("");
+  const [targetManagerId, setTargetManagerId] = useState<string>("");
+  const [isReassigning, setIsReassigning] = useState<boolean>(false);
 
   // Bulk Member Selection
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
@@ -878,20 +885,111 @@ export default function TeamDashboardPage() {
   const isAdmin = Boolean(userRole && (userRole.toLowerCase() === "admin" || isSubAdminRole(userRole)));
   const isManagerOrAdmin = Boolean(isAdmin || userRole.toLowerCase() === "manager");
 
+  // List of all managers/leaders in the company
+  const availableManagersList = useMemo(() => {
+    const managersMap = new Map<string, any>();
+
+    // Always include currentUser
+    if (currentUser?._id) {
+      managersMap.set(String(currentUser._id), {
+        _id: String(currentUser._id),
+        name: currentUser.name || "Current User",
+        role: currentUser.role || "Admin",
+        photoUrl: (currentUser as any).photoUrl || "",
+        email: currentUser.email || "",
+      });
+    }
+
+    users.forEach((u) => {
+      const roleLower = (u.role || "").toLowerCase();
+      const isLead =
+        roleLower === "admin" ||
+        roleLower === "manager" ||
+        roleLower === "ops" ||
+        roleLower === "hr" ||
+        isSubAdminRole(u.role);
+
+      if (u.managerId) {
+        const m = u.managerId;
+        const mId = m?._id ? String(m._id) : String(m);
+        if (mId && !managersMap.has(mId)) {
+          managersMap.set(mId, {
+            _id: mId,
+            name: m?.name || "Manager",
+            role: m?.role || "Manager",
+            photoUrl: m?.photoUrl || "",
+            email: m?.email || "",
+          });
+        }
+      }
+
+      if (isLead && u._id) {
+        managersMap.set(String(u._id), {
+          _id: String(u._id),
+          name: u.name,
+          role: u.role,
+          photoUrl: u.photoUrl || "",
+          email: u.email || "",
+        });
+      }
+    });
+
+    return Array.from(managersMap.values());
+  }, [users, currentUser]);
+
+  const activeManagerId = selectedManagerId || String(currentUser?._id || "");
+  const activeManagerObj = useMemo(() => {
+    return availableManagersList.find((m) => m._id === activeManagerId) || {
+      _id: activeManagerId,
+      name: currentUser?.name || "You",
+      role: currentUser?.role || "Admin",
+    };
+  }, [availableManagersList, activeManagerId, currentUser]);
+
   const directReports = useMemo(() => {
-    if (!currentUser?._id) return [];
-    const currentId = String(currentUser._id);
+    if (activeManagerId === "all") {
+      return users.filter((u) => Boolean(u.managerId));
+    }
     return users.filter((u) => {
-      // managerId may be a populated object { _id, name } or a raw string/ObjectId
       const raw = u.managerId;
       const mgrId = raw?._id ? String(raw._id) : raw ? String(raw) : "";
-      return mgrId === currentId;
+      return mgrId === activeManagerId;
     });
-  }, [users, currentUser?._id]);
+  }, [users, activeManagerId]);
+
+  const selectedReassignMember = useMemo(() => {
+    return users.find((u) => u._id === reassignMemberId) || null;
+  }, [users, reassignMemberId]);
+
+  const handleQuickReassign = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!reassignMemberId) {
+      showToast("Please select a team member to reassign.", "error");
+      return;
+    }
+    if (!targetManagerId) {
+      showToast("Please select the target manager or choose top-level.", "error");
+      return;
+    }
+
+    setIsReassigning(true);
+    try {
+      const targetMgr = targetManagerId === "none" ? null : targetManagerId;
+      await handleReassign(reassignMemberId, targetMgr);
+      setReassignMemberId("");
+      setTargetManagerId("");
+    } catch (err: any) {
+      console.error(err);
+      showToast(err.message || "Failed to reassign member", "error");
+    } finally {
+      setIsReassigning(false);
+    }
+  };
 
   const filteredUsers = useMemo(() => {
     return users.filter((m) => {
       const matchesDept = departmentFilter === "All" || m.department === departmentFilter || (m.departments && m.departments.includes(departmentFilter));
+      const matchesStatus = statusFilter === "All" || m.status === statusFilter || (!m.status && statusFilter === "Active");
       const query = searchQuery.toLowerCase().trim();
       const matchesQuery = !query ||
         m.name?.toLowerCase().includes(query) ||
@@ -899,9 +997,9 @@ export default function TeamDashboardPage() {
         m.role?.toLowerCase().includes(query) ||
         m.phone?.includes(query) ||
         (m.skills && m.skills.some((s: string) => s.toLowerCase().includes(query)));
-      return matchesDept && matchesQuery;
+      return matchesDept && matchesStatus && matchesQuery;
     });
-  }, [users, departmentFilter, searchQuery]);
+  }, [users, departmentFilter, statusFilter, searchQuery]);
 
   const totalPages = Math.max(1, Math.ceil(filteredUsers.length / itemsPerPage));
 
@@ -912,7 +1010,7 @@ export default function TeamDashboardPage() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, departmentFilter, itemsPerPage]);
+  }, [searchQuery, departmentFilter, statusFilter, itemsPerPage]);
 
   // Auto-set reporting manager to first HR when adding an Employee
   useEffect(() => {
@@ -1069,7 +1167,7 @@ export default function TeamDashboardPage() {
                 <select
                   value={departmentFilter}
                   onChange={(e) => setDepartmentFilter(e.target.value)}
-                  className="h-9 px-3 text-sm bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                  className="h-9 px-3 text-xs bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
                 >
                   <option value="All">All Departments</option>
                   {departmentsList.map((dept) => (
@@ -1077,6 +1175,18 @@ export default function TeamDashboardPage() {
                       {dept.name}
                     </option>
                   ))}
+                </select>
+
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className="h-9 px-3 text-xs bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                >
+                  <option value="All">All Statuses ({users.length})</option>
+                  <option value="Active">Active ({users.filter(u => u.status === "Active" || !u.status).length})</option>
+                  <option value="Pending">Pending ({users.filter(u => u.status === "Pending").length})</option>
+                  <option value="On Leave">On Leave ({users.filter(u => u.status === "On Leave").length})</option>
+                  <option value="Suspended">Suspended ({users.filter(u => u.status === "Suspended").length})</option>
                 </select>
 
                 <div className="flex items-center border border-border rounded-md overflow-hidden bg-muted/40">
@@ -1601,142 +1711,319 @@ export default function TeamDashboardPage() {
       {/* Manager Panel Tab */}
       {activeTab === "manager" && (
         <div className="space-y-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-lg font-bold text-foreground flex items-center gap-2">
-                <i className="fa-solid fa-crown text-amber-500 text-lg" /> Manager Leadership Panel
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 rounded-2xl border border-border bg-card/60 backdrop-blur-xl shadow-md">
+            <div className="space-y-1">
+              <h2 className="text-xl font-bold tracking-tight text-foreground flex items-center gap-2.5">
+                <span className="p-2 bg-amber-500/10 text-amber-500 rounded-xl border border-amber-500/20 flex items-center justify-center">
+                  <i className="fa-solid fa-crown text-base" />
+                </span>
+                Manager Leadership Panel
               </h2>
               <p className="text-xs text-muted-foreground">
-                Overview of your direct reports, team allocation, and reporting hierarchy management.
+                Overview of direct reports, department teams, and reporting line hierarchy.
               </p>
             </div>
-            <Badge color="primary" variant="soft" rounded="full" className="px-3 py-1">
-              {directReports.length} Direct Report{directReports.length === 1 ? "" : "s"}
-            </Badge>
+
+            {/* Manager Team Selector Dropdown */}
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-2 bg-background/80 border border-border rounded-xl px-3 py-1.5 shadow-2xs">
+                <span className="text-xs text-muted-foreground font-semibold flex items-center gap-1.5 shrink-0">
+                  <i className="fa-solid fa-user-tie text-primary text-xs" /> View Manager:
+                </span>
+                <select
+                  value={activeManagerId}
+                  onChange={(e) => setSelectedManagerId(e.target.value)}
+                  className="bg-transparent text-xs text-foreground font-semibold focus:outline-none cursor-pointer pr-2"
+                >
+                  <option value={String(currentUser?._id || "")}>
+                    My Team ({currentUser?.name || "You"})
+                  </option>
+                  <option value="all">All Organization Teams</option>
+                  {availableManagersList
+                    .filter((m) => m._id !== String(currentUser?._id))
+                    .map((m) => {
+                      const reportCount = users.filter((u) => {
+                        const r = u.managerId;
+                        return (r?._id ? String(r._id) : String(r)) === m._id;
+                      }).length;
+                      return (
+                        <option key={m._id} value={m._id}>
+                          {m.name} ({m.role}) — {reportCount} report{reportCount === 1 ? "" : "s"}
+                        </option>
+                      );
+                    })}
+                </select>
+              </div>
+
+              <Badge className="bg-primary/10 text-primary border-primary/20 px-3 py-1.5 font-bold text-xs rounded-xl shadow-2xs shrink-0">
+                <i className="fa-solid fa-users mr-1.5 text-[11px]" />
+                {directReports.length} Direct Report{directReports.length === 1 ? "" : "s"}
+              </Badge>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Direct Reports Card */}
-            <Card className="lg:col-span-2">
-              <CardHeader>
-                <CardTitle className="text-base font-bold flex items-center gap-2">
-                  <i className="fa-solid fa-users text-primary" /> Direct Reports
-                </CardTitle>
-                <CardDescription>Members reporting directly to you ({currentUser?.name})</CardDescription>
+            <Card className="lg:col-span-2 border-border shadow-xs">
+              <CardHeader className="pb-3 border-b border-border/50">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="text-base font-bold flex items-center gap-2">
+                      <i className="fa-solid fa-users text-primary" /> Direct Reports
+                    </CardTitle>
+                    <CardDescription>
+                      {activeManagerId === "all"
+                        ? "Members across all managed teams in the organization"
+                        : `Members reporting directly to ${activeManagerObj.name} (${activeManagerObj.role})`}
+                    </CardDescription>
+                  </div>
+                  {activeManagerId !== String(currentUser?._id) && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setSelectedManagerId(String(currentUser?._id || ""))}
+                      className="text-xs text-muted-foreground hover:text-foreground h-7 px-2"
+                    >
+                      Reset to My Team
+                    </Button>
+                  )}
+                </div>
               </CardHeader>
-              <CardContent className="space-y-3">
+              <CardContent className="p-4 space-y-3">
                 {directReports.length === 0 ? (
-                  <div className="py-8 text-center text-muted-foreground text-sm space-y-1">
-                    <i className="fa-solid fa-people-group text-4xl mx-auto opacity-50" />
-                    <p>You currently have no direct reports assigned.</p>
+                  <div className="py-12 text-center text-muted-foreground space-y-3">
+                    <div className="w-14 h-14 rounded-2xl bg-muted/30 border border-border flex items-center justify-center mx-auto text-muted-foreground/50">
+                      <i className="fa-solid fa-people-group text-2xl" />
+                    </div>
+                    <div>
+                      <p className="font-semibold text-sm text-foreground">No direct reports assigned</p>
+                      <p className="text-xs text-muted-foreground mt-0.5 max-w-sm mx-auto">
+                        {activeManagerId === String(currentUser?._id)
+                          ? "You currently have no team members assigned. Use the Team Structure card on the right to assign members."
+                          : `${activeManagerObj.name} does not have any employees reporting to them yet.`}
+                      </p>
+                    </div>
                   </div>
                 ) : (
-                  directReports.map((report) => (
-                    <div
-                      key={report._id}
-                      onClick={() => handleSelectMember(report._id)}
-                      className="p-4 rounded-xl border border-border bg-accent/20 hover:bg-accent/50 transition-colors cursor-pointer flex items-center justify-between gap-4"
-                    >
-                      <div className="flex items-center gap-3">
-                        <Avatar size="default">
-                          {report.photoUrl ? (
-                            <AvatarImage src={report.photoUrl} alt={report.name} />
-                          ) : (
-                            <AvatarFallback>{report.name.substring(0, 2).toUpperCase()}</AvatarFallback>
-                          )}
-                        </Avatar>
-                        <div>
-                          <p className="font-semibold text-sm text-foreground">{report.name}</p>
-                          <p className="text-xs text-muted-foreground">{report.role} &bull; {report.email}</p>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-3">
-                        <Badge color="primary" variant="soft" rounded="full">
-                          {report.department || "General"}
-                        </Badge>
-                        <Badge
-                          color={report.status === "Active" ? "success" : report.status === "On Leave" ? "warning" : "destructive"}
-                          variant="soft"
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {directReports.map((report) => {
+                      const initials = report.name
+                        .split(" ")
+                        .map((n: string) => n[0])
+                        .join("")
+                        .toUpperCase();
+                      return (
+                        <div
+                          key={report._id}
+                          onClick={() => handleSelectMember(report._id)}
+                          className="p-3.5 rounded-xl border border-border bg-card hover:border-primary/50 hover:shadow-md transition-all cursor-pointer flex flex-col justify-between gap-3 group relative overflow-hidden"
                         >
-                          {report.status || "Active"}
-                        </Badge>
-                      </div>
-                    </div>
-                  ))
+                          <div className="flex items-start gap-3 min-w-0">
+                            <Avatar className="h-10 w-10 border border-border/60 shrink-0">
+                              {report.photoUrl ? (
+                                <AvatarImage src={report.photoUrl} alt={report.name} />
+                              ) : (
+                                <AvatarFallback className="bg-primary/10 text-primary font-bold text-xs">{initials}</AvatarFallback>
+                              )}
+                            </Avatar>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center justify-between gap-1">
+                                <p className="font-bold text-xs text-foreground truncate group-hover:text-primary transition-colors">
+                                  {report.name}
+                                </p>
+                                <Badge
+                                  className={cn(
+                                    "text-[10px] px-1.5 py-0 font-medium shrink-0",
+                                    report.status === "Active" || !report.status
+                                      ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
+                                      : report.status === "Pending"
+                                      ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"
+                                      : "bg-muted text-muted-foreground"
+                                  )}
+                                >
+                                  {report.status || "Active"}
+                                </Badge>
+                              </div>
+                              <p className="text-[11px] text-muted-foreground truncate">{report.role}</p>
+                              <p className="text-[10px] text-muted-foreground/80 truncate mt-0.5">{report.email}</p>
+                            </div>
+                          </div>
+
+                          <div className="pt-2 border-t border-border/50 flex items-center justify-between text-[11px]">
+                            <span className="text-muted-foreground truncate text-[10px]">
+                              Dept: <strong className="text-foreground">{report.department || "General"}</strong>
+                            </span>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setReassignMemberId(report._id);
+                                const currentMgrId = report.managerId?._id ? String(report.managerId._id) : report.managerId ? String(report.managerId) : "";
+                                setTargetManagerId(currentMgrId);
+                              }}
+                              className="text-[10px] font-semibold text-primary hover:underline flex items-center gap-1 cursor-pointer"
+                              title="Reassign Reporting Line"
+                            >
+                              <i className="fa-solid fa-arrows-rotate text-[9px]" /> Reassign
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 )}
               </CardContent>
             </Card>
 
-            {/* Quick Reassign & Team Management */}
-            <Card>
-              <CardHeader>
+            {/* Quick Reassign & Team Management Card */}
+            <Card className="border-border shadow-xs">
+              <CardHeader className="pb-3 border-b border-border/50">
                 <CardTitle className="text-base font-bold flex items-center gap-2">
                   <i className="fa-solid fa-sitemap text-primary" /> Team Structure Actions
                 </CardTitle>
-                <CardDescription>Manage reporting lines for organization members</CardDescription>
+                <CardDescription>Assign or reassign reporting managers for team members</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <label className="text-xs font-semibold text-foreground">Select Member to Reassign</label>
-                  <select
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      if (val) handleSelectMember(val);
-                    }}
-                    className="w-full h-9 px-3 text-xs bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-                  >
-                    <option value="">Choose employee...</option>
-                    {users.map((u) => (
-                      <option key={u._id} value={u._id}>
-                        {u.name} ({u.role})
-                      </option>
-                    ))}
-                  </select>
-                </div>
+              <CardContent className="p-4 space-y-4">
+                <form onSubmit={handleQuickReassign} className="space-y-3.5">
+                  {/* Select Member */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-foreground flex items-center justify-between">
+                      <span>1. Select Team Member</span>
+                      {selectedReassignMember && (
+                        <span className="text-[10px] text-muted-foreground">
+                          {selectedReassignMember.role}
+                        </span>
+                      )}
+                    </label>
+                    <select
+                      value={reassignMemberId}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setReassignMemberId(val);
+                        if (val) {
+                          const found = users.find((u) => u._id === val);
+                          const curMgrId = found?.managerId?._id
+                            ? String(found.managerId._id)
+                            : found?.managerId
+                            ? String(found.managerId)
+                            : "";
+                          setTargetManagerId(curMgrId);
+                        } else {
+                          setTargetManagerId("");
+                        }
+                      }}
+                      className="w-full h-9 px-3 text-xs bg-background border border-border rounded-xl text-foreground font-medium focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary cursor-pointer"
+                    >
+                      <option value="">Choose employee to reassign...</option>
+                      {users.map((u) => (
+                        <option key={u._id} value={u._id}>
+                          {u.name} ({u.role}) — {u.department || "General"}
+                        </option>
+                      ))}
+                    </select>
 
-                <div className="p-3.5 rounded-lg border border-border bg-muted/40 space-y-2 text-xs text-muted-foreground">
-                  <p className="font-semibold text-foreground flex items-center gap-1.5">
-                    <i className="fa-solid fa-wand-magic-sparkles text-amber-500 text-xs" /> Manager Drag & Drop
+                    {/* Current Manager Indicator */}
+                    {selectedReassignMember && (
+                      <div className="p-2 rounded-lg bg-accent/40 border border-border/50 text-[11px] flex items-center justify-between">
+                        <span className="text-muted-foreground">Currently reports to:</span>
+                        <span className="font-semibold text-foreground">
+                          {selectedReassignMember.managerId?.name || "None (Top Level)"}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Select Target Manager */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-foreground">
+                      2. Assign Reporting Manager
+                    </label>
+                    <select
+                      value={targetManagerId}
+                      onChange={(e) => setTargetManagerId(e.target.value)}
+                      disabled={!reassignMemberId}
+                      className="w-full h-9 px-3 text-xs bg-background border border-border rounded-xl text-foreground font-medium focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary disabled:opacity-50 cursor-pointer"
+                    >
+                      <option value="">Choose new manager...</option>
+                      <option value="none">None (Top-Level Executive / Independent)</option>
+                      {availableManagersList
+                        .filter((m) => m._id !== reassignMemberId)
+                        .map((m) => (
+                          <option key={m._id} value={m._id}>
+                            {m.name} ({m.role})
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+
+                  {/* Submit Button */}
+                  <Button
+                    type="submit"
+                    disabled={!reassignMemberId || isReassigning}
+                    className="w-full text-xs font-bold gap-2 shadow-xs bg-primary hover:bg-primary/90 text-primary-foreground h-9 cursor-pointer"
+                  >
+                    {isReassigning ? (
+                      <>
+                        <i className="fa-solid fa-spinner fa-spin text-xs" /> Reassigning...
+                      </>
+                    ) : (
+                      <>
+                        <i className="fa-solid fa-user-check text-xs" /> Update Reporting Line
+                      </>
+                    )}
+                  </Button>
+                </form>
+
+                <div className="p-3.5 rounded-xl border border-amber-500/20 bg-amber-500/5 space-y-1.5 text-xs text-muted-foreground">
+                  <p className="font-semibold text-foreground flex items-center gap-1.5 text-xs">
+                    <i className="fa-solid fa-wand-magic-sparkles text-amber-500 text-xs" /> Org Chart Drag &amp; Drop
                   </p>
-                  <p>
-                    You can also switch to the <strong>Org Chart</strong> tab to visually drag and drop team members onto new managers.
+                  <p className="text-[11px] leading-relaxed">
+                    You can also switch to the <strong>Org Chart</strong> tab to visually drag and drop team cards onto their new managers.
                   </p>
                 </div>
               </CardContent>
             </Card>
           </div>
 
-          {/* Pending Approvals */}
+          {/* Pending Approvals & Team KPI Status */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <Card>
-              <CardHeader>
+            <Card className="border-border shadow-xs">
+              <CardHeader className="pb-3 border-b border-border/50">
                 <CardTitle className="text-base font-bold flex items-center gap-2">
                   <i className="fa-solid fa-circle-exclamation text-amber-500" /> Pending Approvals
                 </CardTitle>
-                <CardDescription>Leave requests and timesheets awaiting your action</CardDescription>
+                <CardDescription>Leave requests and timesheets awaiting action</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-3">
+              <CardContent className="p-4 space-y-3">
                 {directReports.length === 0 ? (
-                  <p className="text-sm text-muted-foreground py-4 text-center">No direct reports â€” no pending approvals.</p>
+                  <p className="text-xs text-muted-foreground py-6 text-center">
+                    No direct reports — no pending approvals.
+                  </p>
                 ) : (
                   <>
-                    <div className="flex items-center justify-between p-3 rounded-lg border border-amber-500/20 bg-amber-500/5">
+                    <div className="flex items-center justify-between p-3 rounded-xl border border-amber-500/20 bg-amber-500/5">
                       <div className="space-y-0.5">
-                        <p className="text-sm font-semibold text-foreground">Timesheet Approvals</p>
-                        <p className="text-xs text-muted-foreground">Submitted by your direct reports this week</p>
+                        <p className="text-xs font-bold text-foreground">Timesheet Approvals</p>
+                        <p className="text-[11px] text-muted-foreground">Submitted by direct reports this cycle</p>
                       </div>
-                      <Badge color="warning" variant="soft">{directReports.length} pending</Badge>
+                      <Badge className="bg-amber-500/20 text-amber-600 dark:text-amber-400 font-bold border-amber-500/30 text-xs">
+                        {directReports.length} reports
+                      </Badge>
                     </div>
-                    <div className="flex items-center justify-between p-3 rounded-lg border border-primary/20 bg-primary/5">
+                    <div className="flex items-center justify-between p-3 rounded-xl border border-primary/20 bg-primary/5">
                       <div className="space-y-0.5">
-                        <p className="text-sm font-semibold text-foreground">Leave Requests</p>
-                        <p className="text-xs text-muted-foreground">Time-off requests from your team</p>
+                        <p className="text-xs font-bold text-foreground">Leave Requests</p>
+                        <p className="text-[11px] text-muted-foreground">Time-off requests from active team</p>
                       </div>
-                      <Badge color="primary" variant="soft">0 pending</Badge>
+                      <Badge className="bg-primary/20 text-primary font-bold border-primary/30 text-xs">
+                        0 pending
+                      </Badge>
                     </div>
-                    <Button variant="outline" size="sm" className="w-full mt-1" asChild>
-                      <a href="/dashboard/hr">Go to HR Portal â†’</a>
+                    <Button variant="outline" size="sm" className="w-full mt-1 text-xs font-semibold gap-1.5" asChild>
+                      <a href="/dashboard/hr">
+                        Go to HR Portal <i className="fa-solid fa-arrow-right text-[10px]" />
+                      </a>
                     </Button>
                   </>
                 )}
@@ -1744,44 +2031,63 @@ export default function TeamDashboardPage() {
             </Card>
 
             {/* Team KPI Status */}
-            <Card>
-              <CardHeader>
+            <Card className="border-border shadow-xs">
+              <CardHeader className="pb-3 border-b border-border/50">
                 <CardTitle className="text-base font-bold flex items-center gap-2">
-                  <i className="fa-solid fa-trophy text-emerald-500" /> Team KPI Status
+                  <i className="fa-solid fa-trophy text-emerald-500" /> Team Performance &amp; Activity
                 </CardTitle>
-                <CardDescription>At-a-glance performance status for your direct reports</CardDescription>
+                <CardDescription>At-a-glance status for managed reports</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-3">
+              <CardContent className="p-4 space-y-3">
                 {directReports.length === 0 ? (
-                  <p className="text-sm text-muted-foreground py-4 text-center">No direct reports to display KPIs for.</p>
+                  <p className="text-xs text-muted-foreground py-6 text-center">
+                    No direct reports to display status for.
+                  </p>
                 ) : (
-                  directReports.slice(0, 4).map((report: any) => (
-                    <div key={report._id} className="flex items-center justify-between gap-3">
-                      <div className="flex items-center gap-2">
-                        <Avatar size="sm">
+                  directReports.slice(0, 5).map((report: any) => (
+                    <div
+                      key={report._id}
+                      onClick={() => handleSelectMember(report._id)}
+                      className="flex items-center justify-between gap-3 p-2 rounded-lg hover:bg-muted/40 transition-colors cursor-pointer"
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <Avatar className="h-7 w-7 border border-border/60 shrink-0">
                           {report.photoUrl ? (
                             <AvatarImage src={report.photoUrl} alt={report.name} />
                           ) : (
-                            <AvatarFallback>{report.name.substring(0, 2).toUpperCase()}</AvatarFallback>
+                            <AvatarFallback className="bg-primary/10 text-primary text-[10px] font-bold">
+                              {report.name.substring(0, 2).toUpperCase()}
+                            </AvatarFallback>
                           )}
                         </Avatar>
-                        <div>
-                          <p className="text-xs font-semibold text-foreground">{report.name}</p>
-                          <p className="text-xs text-muted-foreground">{report.role}</p>
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold text-foreground truncate">{report.name}</p>
+                          <p className="text-[10px] text-muted-foreground truncate">{report.role} &bull; {report.department || "General"}</p>
                         </div>
                       </div>
-                      <Badge
-                        color={report.status === "Active" ? "success" : report.status === "On Leave" ? "warning" : "destructive"}
-                        variant="soft"
-                        className="shrink-0"
-                      >
-                        {report.status || "Active"}
-                      </Badge>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className={cn(
+                          "w-2 h-2 rounded-full",
+                          report.isOnline ? "bg-emerald-500 animate-pulse" : "bg-slate-400"
+                        )} title={report.isOnline ? "Online" : "Offline"} />
+                        <Badge
+                          className={cn(
+                            "text-[10px] px-2 py-0 font-medium",
+                            report.status === "Active" || !report.status
+                              ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
+                              : "bg-muted text-muted-foreground"
+                          )}
+                        >
+                          {report.status || "Active"}
+                        </Badge>
+                      </div>
                     </div>
                   ))
                 )}
-                {directReports.length > 4 && (
-                  <p className="text-xs text-muted-foreground text-center pt-1">+{directReports.length - 4} more reports</p>
+                {directReports.length > 5 && (
+                  <p className="text-[11px] text-muted-foreground text-center pt-1 font-medium">
+                    +{directReports.length - 5} more team members
+                  </p>
                 )}
               </CardContent>
             </Card>

@@ -188,7 +188,7 @@ export function PendingApprovalDashboard({ user }: { user: any }) {
                 1. Your workspace administrator and Operations (OPS) team have been notified of your registration.
               </p>
               <p>
-                2. During the approval process, you will be assigned to your <strong>Department</strong> and assigned a <strong>Reporting Manager</strong>.
+                2. During the approval process, you will be assigned to your <strong>Department</strong>, a <strong>Reporting Manager</strong>, and an <strong>Assigned HR</strong>.
               </p>
               <p>
                 3. This screen checks for approval in the background every 30 seconds. You can also click <strong>&quot;Check Status&quot;</strong> anytime.

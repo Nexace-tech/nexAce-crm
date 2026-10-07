@@ -25,13 +25,17 @@ export default function DashboardHome() {
     }
   }, [loading, user, router]);
 
-  if (loading || !user || permLoading) {
+  if (loading || !user) {
     return <Preloader label={loading ? "Loading Workspace Dashboard" : "Redirecting to Login..."} />;
   }
 
   // 1. Check if user registration status is Pending (show holding Under Approval dashboard)
   if (user.status === "Pending") {
     return <PendingApprovalDashboard user={user} />;
+  }
+
+  if (permLoading) {
+    return <Preloader label="Loading Workspace Dashboard" />;
   }
 
   // Check if user has permission to access the Overview Dashboard module

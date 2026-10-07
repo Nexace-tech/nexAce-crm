@@ -22,6 +22,7 @@ export function EmployeeDashboard({ user }: { user: any }) {
   const [sprints, setSprints] = useState<any[]>([]);
   const [teamLeaves, setTeamLeaves] = useState<any[]>([]);
   const [announcements, setAnnouncements] = useState<any[]>([]);
+  const [onboardingChecklist, setOnboardingChecklist] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
 
   // Export & Toast State
@@ -93,13 +94,14 @@ export function EmployeeDashboard({ user }: { user: any }) {
     async function fetchEmployeeData() {
       try {
         // ✅ Performance: run all fetches in parallel — no waterfall
-        const [attRes, taskRes, tsRes, sprintRes, leaveRes, annRes] = await Promise.all([
+        const [attRes, taskRes, tsRes, sprintRes, leaveRes, annRes, chkRes] = await Promise.all([
           fetch("/api/attendance"),
           fetch("/api/tasks"),
           fetch("/api/timesheets"),
           fetch("/api/sprints"),
           fetch("/api/hr/leaves"),
           fetch("/api/chat/announcements"),
+          fetch("/api/hr/checklists?type=Onboarding"),
         ]);
 
         // Process attendance
@@ -137,6 +139,11 @@ export function EmployeeDashboard({ user }: { user: any }) {
         if (annRes.ok) {
           const aData = await annRes.json();
           setAnnouncements(aData.announcements || []);
+        }
+        if (chkRes && chkRes.ok) {
+          const chkData = await chkRes.json();
+          const activeChk = (chkData.checklists || []).find((c: any) => c.type === "Onboarding" && c.status === "In Progress");
+          setOnboardingChecklist(activeChk || null);
         }
       } catch (err) {
         console.error("Failed to fetch employee tasks/timesheets/sprints/announcements:", err);
@@ -598,6 +605,64 @@ export function EmployeeDashboard({ user }: { user: any }) {
           </Button>
         </div>
       </div>
+
+      {/* New Hire Onboarding & Document Submission Banner */}
+      {onboardingChecklist && (
+        <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-sky-500/10 border-2 border-emerald-500/30 shadow-lg relative overflow-hidden animate-in fade-in slide-in-from-top-2">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-start gap-3.5">
+              <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 flex items-center justify-center shrink-0 text-xl shadow-xs">
+                <i className="fa-solid fa-sparkles" />
+              </div>
+              <div className="space-y-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="font-bold text-base text-foreground">
+                    Welcome to the Team, {user?.name}! 🎉
+                  </h3>
+                  <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30">
+                    Action Required: Onboarding
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Your workspace account has been activated! Your dedicated HR Partner has requested your verification documents (Government ID proof, Address verification, Banking details).
+                </p>
+                <div className="flex items-center gap-3 pt-1 text-xs">
+                  <span className="font-medium text-foreground flex items-center gap-1.5">
+                    <i className="fa-solid fa-list-check text-emerald-500 text-xs" />
+                    Progress:{" "}
+                    <strong>
+                      {(onboardingChecklist.items || []).filter((i: any) => i.completed).length} of{" "}
+                      {(onboardingChecklist.items || []).length} completed
+                    </strong>
+                  </span>
+                  <div className="w-32 bg-background/80 h-2 rounded-full overflow-hidden border border-emerald-500/20">
+                    <div
+                      className="bg-emerald-500 h-full rounded-full transition-all"
+                      style={{
+                        width: `${
+                          (onboardingChecklist.items || []).length > 0
+                            ? ((onboardingChecklist.items || []).filter((i: any) => i.completed).length /
+                                (onboardingChecklist.items || []).length) *
+                              100
+                            : 0
+                        }%`,
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <Button asChild className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shadow-md gap-2 cursor-pointer">
+                <Link href="/dashboard/hr?tab=checklists">
+                  <i className="fa-solid fa-file-arrow-up text-xs" /> Upload Onboarding Documents &rarr;
+                </Link>
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Employee Personal KPI Metric Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">

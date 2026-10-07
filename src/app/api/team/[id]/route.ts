@@ -29,6 +29,7 @@ export async function GET(request: Request, { params }: RouteParams) {
     const user = await User.findById(id)
       .select("-passwordHash")
       .populate("managerId", "name email role photoUrl")
+      .populate("hrId", "name email role photoUrl")
       .lean();
 
     if (!user || (user.tenantId as any).toString() !== session.tenantId) {
@@ -96,19 +97,21 @@ export async function PUT(request: Request, { params }: RouteParams) {
     }
 
     // Determine allowed updates
-    // Both Self and Admin can update name and email (with duplicate checking and email code verification)
     if (body.email && body.email.toLowerCase() !== user.email) {
-      // 1. Verify code against the CURRENT email (that's where the OTP was sent)
-      if (!body.code) {
-        return NextResponse.json({ error: "Verification code is required to update email address." }, { status: 400 });
-      }
-      const verification = await EmailVerification.findOne({ email: user.email });
-      const isExpired = verification && (Date.now() - new Date(verification.createdAt).getTime() > 10 * 60 * 1000);
-      if (!verification || verification.code !== body.code || isExpired) {
-        if (verification && isExpired) {
-          await EmailVerification.deleteOne({ _id: verification._id });
+      // 1. Verify code against CURRENT email only when a user is updating their OWN email
+      if (isSelf) {
+        if (!body.code) {
+          return NextResponse.json({ error: "Verification code is required to update email address." }, { status: 400 });
         }
-        return NextResponse.json({ error: "Incorrect or expired verification code. Please request a new code." }, { status: 400 });
+        const verification = await EmailVerification.findOne({ email: user.email });
+        const isExpired = verification && (Date.now() - new Date(verification.createdAt).getTime() > 10 * 60 * 1000);
+        if (!verification || verification.code !== body.code || isExpired) {
+          if (verification && isExpired) {
+            await EmailVerification.deleteOne({ _id: verification._id });
+          }
+          return NextResponse.json({ error: "Incorrect or expired verification code. Please request a new code." }, { status: 400 });
+        }
+        await EmailVerification.deleteOne({ _id: verification._id });
       }
 
       // 2. Duplicate checking on new email within this tenant
@@ -121,8 +124,6 @@ export async function PUT(request: Request, { params }: RouteParams) {
         return NextResponse.json({ error: "Email address is already in use by another user in this workspace." }, { status: 400 });
       }
 
-      // 3. Clear code and update email
-      await EmailVerification.deleteOne({ _id: verification._id });
       user.email = body.email.toLowerCase();
     }
     if (body.name && body.name.trim() !== user.name) {
@@ -170,6 +171,8 @@ export async function PUT(request: Request, { params }: RouteParams) {
       user.forcePasswordReset = false;
     }
 
+    let wasApprovedFromPending = false;
+
     // Admin / Permitted user updates
     if (canEditOthers) {
       if (body.role && typeof body.role === "string") {
@@ -196,49 +199,15 @@ export async function PUT(request: Request, { params }: RouteParams) {
       if (body.managerId !== undefined) {
         user.managerId = body.managerId ? new mongoose.Types.ObjectId(body.managerId) : undefined;
       }
+      if (body.hrId !== undefined) {
+        user.hrId = body.hrId ? new mongoose.Types.ObjectId(body.hrId) : undefined;
+      }
 
       if (body.status && ["Active", "Pending", "On Leave", "Suspended"].includes(body.status)) {
-        const wasPending = user.status === "Pending";
-        user.status = body.status;
-
-        // If employee was pending and is now approved (Active), send approval confirmation email
-        if (wasPending && body.status === "Active" && user.email) {
-          const appUrl = process.env.NEXT_PUBLIC_APP_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
-          try {
-            let managerName = "";
-            if (user.managerId) {
-              const mgr = await User.findById(user.managerId).select("name email").lean();
-              if (mgr) managerName = mgr.name;
-            }
-
-            await sendEmail({
-              to: user.email,
-              subject: "🎉 Account Approved! Welcome to your Workspace",
-              text: `Hello ${user.name}, your employee account has been approved by Operations! Assigned Department: ${user.department || "General"}. Reporting Manager: ${managerName || "Direct / Self-Managed"}. You can now sign in at ${appUrl}/login`,
-              html: `
-                <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 560px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff;">
-                  <h2 style="color: #10b981; margin-top: 0;">Account Approved &amp; Activated!</h2>
-                  <p style="color: #475569; font-size: 14px; line-height: 1.5;">
-                    Hello <strong>${user.name}</strong> (@${user.username || "employee"}),
-                  </p>
-                  <p style="color: #475569; font-size: 14px; line-height: 1.5;">
-                    Great news! Your workspace administrator or Operations Manager has approved your registration.
-                  </p>
-                  <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 16px; border-radius: 8px; margin: 16px 0; font-size: 14px; line-height: 1.6;">
-                    <p style="margin: 4px 0; color: #1e293b;"><strong>Department:</strong> ${user.department || "General"}</p>
-                    <p style="margin: 4px 0; color: #1e293b;"><strong>Role:</strong> ${user.role || "Employee"}</p>
-                    <p style="margin: 4px 0; color: #1e293b;"><strong>Reporting Manager:</strong> ${managerName || "Direct / Self-Managed"}</p>
-                  </div>
-                  <div style="margin-top: 24px;">
-                    <a href="${appUrl}/dashboard" style="display: inline-block; padding: 10px 20px; background-color: #10b981; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 14px;">Sign In to Workspace Dashboard</a>
-                  </div>
-                </div>
-              `
-            });
-          } catch (mailErr) {
-            console.error("Failed to send account approval confirmation email:", mailErr);
-          }
+        if (user.status === "Pending" && body.status === "Active") {
+          wasApprovedFromPending = true;
         }
+        user.status = body.status;
       }
       if (body.shiftTime !== undefined) user.shiftTime = body.shiftTime;
       if (body.shiftName !== undefined) user.shiftName = body.shiftName;
@@ -304,6 +273,132 @@ export async function PUT(request: Request, { params }: RouteParams) {
       await User.updateOne({ _id: user._id }, { $set: directUpdate });
     }
 
+    // Post-Approval Workflow: Initialize Onboarding Checklist, notify HR & Employee
+    if (wasApprovedFromPending) {
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
+      try {
+        let managerName = "";
+        if (user.managerId) {
+          const mgr = await User.findById(user.managerId).select("name email").lean();
+          if (mgr) managerName = mgr.name;
+        }
+        let hrName = "";
+        if (user.hrId) {
+          const hrDoc = await User.findById(user.hrId).select("name email").lean();
+          if (hrDoc) hrName = hrDoc.name;
+        }
+
+        // 1. Auto-initialize Onboarding Checklist if not already created
+        const { HROnboarding } = await import("@/models/HROnboarding");
+        let checklist = await HROnboarding.findOne({
+          tenantId: user.tenantId,
+          userId: user._id,
+          type: "Onboarding",
+        });
+
+        if (!checklist) {
+          const empType = user.employmentType || "Permanent";
+          let defaultItems = [
+            { id: "1", title: "Submit Identity & Government ID Proof (Aadhaar / Passport / SSN)", category: "Document", completed: false },
+            { id: "2", title: "Submit Address & Residence Proof", category: "Document", completed: false },
+            { id: "3", title: "Submit Bank Details / Cancelled Cheque", category: "Document", completed: false },
+            { id: "4", title: "Sign Non-Disclosure Agreement (NDA)", category: "NDA", completed: false },
+            { id: "5", title: "Job Description, KRAs & Company Code of Conduct Sign-off", category: "Compliance", completed: false },
+          ];
+
+          if (empType === "Contractor" || empType === "Freelancer") {
+            defaultItems = [
+              { id: "1", title: "Sign Independent Contractor / Freelance MSA Agreement", category: "Contract", completed: false },
+              { id: "2", title: "Sign Contractor Non-Disclosure Agreement (NDA)", category: "NDA", completed: false },
+              { id: "3", title: "Tax Identification Setup (W-9 / GST / PAN)", category: "Document", completed: false },
+              { id: "4", title: "Invoicing & Banking Details Verification", category: "Document", completed: false },
+              { id: "5", title: "Role-Based Tool & Repository Access Configuration", category: "Access", completed: false },
+            ];
+          } else if (empType === "Intern") {
+            defaultItems = [
+              { id: "1", title: "Educational Institution NOC & Student Identity Proof", category: "Document", completed: false },
+              { id: "2", title: "Sign Internship Agreement & Confidentiality Terms", category: "NDA", completed: false },
+              { id: "3", title: "Bank Details for Stipend Disbursement", category: "Document", completed: false },
+              { id: "4", title: "Mentor Assignment & Learning Goals Sign-off", category: "KRA Sign-off", completed: false },
+            ];
+          }
+
+          checklist = await HROnboarding.create({
+            tenantId: user.tenantId,
+            userId: user._id,
+            userName: user.name,
+            userEmail: user.email,
+            employmentType: empType,
+            type: "Onboarding",
+            status: "In Progress",
+            items: defaultItems,
+          });
+        }
+
+        // 2. Notify Assigned HR Partner (In-App)
+        const { notify } = await import("@/lib/notify");
+        if (user.hrId) {
+          await notify(user.tenantId, user.hrId.toString(), {
+            title: "✨ New Employee Assigned for Onboarding",
+            message: `${user.name} has been approved and assigned to you as their HR Partner. Please review their onboarding & document collection.`,
+            type: "hr",
+            linkUrl: `/dashboard/hr?tab=checklists`,
+          });
+        }
+
+        // 3. Notify Employee (In-App)
+        await notify(user.tenantId, user._id.toString(), {
+          title: "🎉 Welcome Aboard! Please Submit Onboarding Documents",
+          message: `Your account is active! Your HR Partner (${hrName || "HR Team"}) has requested your onboarding documents.`,
+          type: "hr",
+          linkUrl: `/dashboard/hr?tab=checklists`,
+        });
+
+        // 4. Send Welcome & Approval Confirmation Email with Onboarding CTA
+        if (user.email) {
+          const hrText = hrName ? ` Assigned HR: ${hrName}.` : "";
+          const hrHtml = hrName ? `<p style="margin: 4px 0; color: #1e293b;"><strong>Assigned HR:</strong> ${hrName}</p>` : "";
+
+          await sendEmail({
+            to: user.email,
+            subject: "🎉 Account Approved! Welcome to your Workspace",
+            text: `Hello ${user.name}, your employee account has been approved by Operations! Assigned Department: ${user.department || "General"}. Reporting Manager: ${managerName || "Direct / Self-Managed"}.${hrText} Next Step: Please log in at ${appUrl}/login and submit your onboarding documents.`,
+            html: `
+              <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 580px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff;">
+                <h2 style="color: #10b981; margin-top: 0;">Account Approved &amp; Activated!</h2>
+                <p style="color: #475569; font-size: 14px; line-height: 1.5;">
+                  Hello <strong>${user.name}</strong> (@${user.username || "employee"}),
+                </p>
+                <p style="color: #475569; font-size: 14px; line-height: 1.5;">
+                  Great news! Your workspace administrator or Operations Manager has approved your registration.
+                </p>
+                <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 16px; border-radius: 8px; margin: 16px 0; font-size: 14px; line-height: 1.6;">
+                  <p style="margin: 4px 0; color: #1e293b;"><strong>Department:</strong> ${user.department || "General"}</p>
+                  <p style="margin: 4px 0; color: #1e293b;"><strong>Role:</strong> ${user.role || "Employee"}</p>
+                  <p style="margin: 4px 0; color: #1e293b;"><strong>Reporting Manager:</strong> ${managerName || "Direct / Self-Managed"}</p>
+                  ${hrHtml}
+                </div>
+                <div style="background-color: #ecfdf5; border: 1px solid #a7f3d0; padding: 16px; border-radius: 8px; margin: 16px 0;">
+                  <h3 style="margin-top: 0; margin-bottom: 6px; color: #065f46; font-size: 14px; font-weight: 700;">Action Required: Submit Onboarding Documents</h3>
+                  <p style="margin: 0 0 12px 0; color: #047857; font-size: 13px; line-height: 1.5;">
+                    Your dedicated HR Partner (${hrName || "HR Operations"}) has initiated your onboarding workflow. Please sign in and upload your required identification, address verification, and banking information.
+                  </p>
+                  <a href="${appUrl}/dashboard/hr?tab=checklists" style="display: inline-block; padding: 9px 18px; background-color: #059669; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 13px;">
+                    Upload Onboarding Documents &rarr;
+                  </a>
+                </div>
+                <div style="margin-top: 20px;">
+                  <a href="${appUrl}/dashboard" style="display: inline-block; padding: 10px 20px; background-color: #10b981; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 14px;">Sign In to Workspace Dashboard</a>
+                </div>
+              </div>
+            `
+          });
+        }
+      } catch (postApprovalErr) {
+        console.error("Failed to execute post-approval onboarding workflow:", postApprovalErr);
+      }
+    }
+
     // If user edited their own profile critical credentials, clean up old session and re-mint cookie
     if (isSelf && (body.name || body.email || body.role)) {
       try {
@@ -322,7 +417,11 @@ export async function PUT(request: Request, { params }: RouteParams) {
     }
 
     // Never return the password hash to the client - fetch fresh document to ensure all fields like salary are returned
-    const freshUser = await User.findById(user._id).select("-passwordHash").lean();
+    const freshUser = await User.findById(user._id)
+      .select("-passwordHash")
+      .populate("managerId", "name email role photoUrl")
+      .populate("hrId", "name email role photoUrl")
+      .lean();
     return NextResponse.json({ success: true, user: freshUser || user.toObject() });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Internal Server Error";

@@ -53,6 +53,8 @@ export default function HRPage() {
   const [deptFilter, setDeptFilter] = useState("All");
   const [roleFilter, setRoleFilter] = useState("All");
   const [searchQuery, setSearchQuery] = useState("");
+  const [onboardingFilter, setOnboardingFilter] = useState<"All" | "PendingOnboarding" | "AssignedToMe">("All");
+  const [remindingUserId, setRemindingUserId] = useState<string | null>(null);
 
   // Checklists State (Onboarding / Offboarding)
   const [checklists, setChecklists] = useState<any[]>([]);
@@ -257,6 +259,24 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
   const showToast = (message: string, type: "success" | "error" = "success") => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3500);
+  };
+
+  const handleSendReminder = async (userId: string, userName: string, checklistId?: string) => {
+    try {
+      setRemindingUserId(userId);
+      const res = await fetch("/api/hr/checklists/remind", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, checklistId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to send reminder");
+      showToast(data.message || `Reminder sent to ${userName}`);
+    } catch (err: any) {
+      showToast(err.message || "Failed to send reminder", "error");
+    } finally {
+      setRemindingUserId(null);
+    }
   };
 
   // Fetchers
@@ -875,7 +895,19 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
     const matchesDept = deptFilter === "All" || u.department === deptFilter || (u.departments && u.departments.includes(deptFilter));
     const matchesRole = roleFilter === "All" || u.role === roleFilter;
     const matchesSearch = !searchQuery || (u.name?.toLowerCase() || "").includes(searchQuery.toLowerCase()) || (u.email?.toLowerCase() || "").includes(searchQuery.toLowerCase());
-    return matchesDept && matchesRole && matchesSearch;
+    
+    let matchesOnboarding = true;
+    if (onboardingFilter === "PendingOnboarding") {
+      matchesOnboarding = checklists.some(
+        (c) => (c.userId === u._id || c.userId?._id === u._id) && c.type === "Onboarding" && c.status === "In Progress"
+      );
+    } else if (onboardingFilter === "AssignedToMe") {
+      const currentUserId = user?._id || "";
+      const assignedHrId = u.hrId?._id || u.hrId;
+      matchesOnboarding = assignedHrId === currentUserId;
+    }
+
+    return matchesDept && matchesRole && matchesSearch && matchesOnboarding;
   });
 
   // Calculate probation dates
@@ -1119,7 +1151,7 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
       {/* TAB 1: EMPLOYEE DIRECTORY — guarded */}
       {activeTab === "directory" && (isManagerOrAdmin || can("viewHRDirectory") || Boolean(user)) && (
         <div className="space-y-4">
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-muted/20 p-3 rounded-lg border border-border">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-muted/20 p-3 rounded-lg border border-border flex-wrap">
             <div className="flex items-center gap-2 w-full sm:w-auto">
               <i className="fa-solid fa-magnifying-glass text-muted-foreground text-sm" />
               <Input
@@ -1129,6 +1161,49 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
                 className="w-full sm:w-64 h-9"
               />
             </div>
+
+            {/* Quick Onboarding Filter Chips */}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <Button
+                variant={onboardingFilter === "All" ? "default" : "outline"}
+                size="sm"
+                className="h-8 text-xs px-2.5 cursor-pointer"
+                onClick={() => setOnboardingFilter("All")}
+              >
+                All Staff
+              </Button>
+              <Button
+                variant={onboardingFilter === "PendingOnboarding" ? "default" : "outline"}
+                size="sm"
+                className={cn(
+                  "h-8 text-xs px-2.5 cursor-pointer gap-1.5",
+                  onboardingFilter === "PendingOnboarding"
+                    ? "bg-amber-600 hover:bg-amber-700 text-white"
+                    : "border-amber-500/30 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10"
+                )}
+                onClick={() => setOnboardingFilter("PendingOnboarding")}
+              >
+                <i className="fa-solid fa-sparkles text-[10px]" />
+                New Hires (Onboarding)
+                {checklists.filter((c) => c.type === "Onboarding" && c.status === "In Progress").length > 0 && (
+                  <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] bg-amber-500/20 font-bold">
+                    {checklists.filter((c) => c.type === "Onboarding" && c.status === "In Progress").length}
+                  </span>
+                )}
+              </Button>
+              {isManagerOrAdmin && (
+                <Button
+                  variant={onboardingFilter === "AssignedToMe" ? "default" : "outline"}
+                  size="sm"
+                  className="h-8 text-xs px-2.5 cursor-pointer gap-1.5"
+                  onClick={() => setOnboardingFilter("AssignedToMe")}
+                >
+                  <i className="fa-solid fa-user-check text-[10px]" />
+                  Assigned to Me
+                </Button>
+              )}
+            </div>
+
             <div className="flex items-center gap-3 w-full sm:w-auto">
               <select
                 value={deptFilter}
@@ -1156,56 +1231,134 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredUsers.map((u) => (
-              <Card key={u._id} className="hover:shadow-md transition-all">
-                <CardContent className="p-5 space-y-3">
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="h-10 w-10 rounded-full bg-primary/20 text-primary font-bold flex items-center justify-center text-base border border-primary/30">
-                        {u.name.charAt(0)}
+            {filteredUsers.map((u) => {
+              const userChecklist = checklists.find(
+                (c) => (c.userId === u._id || c.userId?._id === u._id) && c.type === "Onboarding"
+              );
+              const isPendingOnboarding = userChecklist && userChecklist.status === "In Progress";
+              const completedTasks = userChecklist?.items?.filter((i: any) => i.completed).length || 0;
+              const totalTasks = userChecklist?.items?.length || 0;
+              const hrPartnerName = u.hrId?.name || (typeof u.hrId === "string" ? u.hrId : "");
+
+              return (
+                <Card
+                  key={u._id}
+                  className={cn(
+                    "hover:shadow-md transition-all relative overflow-hidden",
+                    isPendingOnboarding
+                      ? "border-amber-500/50 bg-amber-500/[0.03] shadow-amber-500/10 ring-1 ring-amber-500/20"
+                      : ""
+                  )}
+                >
+                  <CardContent className="p-5 space-y-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="h-10 w-10 rounded-full bg-primary/20 text-primary font-bold flex items-center justify-center text-base border border-primary/30 shrink-0">
+                          {u.name.charAt(0)}
+                        </div>
+                        <div className="min-w-0">
+                          <h4 className="font-bold text-sm text-foreground truncate">{u.name}</h4>
+                          <p className="text-xs text-muted-foreground truncate">{u.email}</p>
+                        </div>
                       </div>
-                      <div>
-                        <h4 className="font-bold text-sm text-foreground">{u.name}</h4>
-                        <p className="text-xs text-muted-foreground">{u.email}</p>
+                      <div className="flex flex-col items-end gap-1 shrink-0">
+                        <Badge color={u.role === "Admin" ? "destructive" : u.role === "Manager" ? "primary" : "default"}>
+                          {u.role}
+                        </Badge>
+                        {isPendingOnboarding && (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 flex items-center gap-1 shadow-2xs">
+                            <i className="fa-solid fa-sparkles text-[9px] animate-pulse" /> New Hire
+                          </span>
+                        )}
                       </div>
                     </div>
-                    <Badge color={u.role === "Admin" ? "destructive" : u.role === "Manager" ? "primary" : "default"}>
-                      {u.role}
-                    </Badge>
-                  </div>
-                  <div className="pt-2 border-t border-border/60 text-xs space-y-1">
-                    <p className="text-muted-foreground flex justify-between">
-                      <span>Department:</span>
-                      <span className="font-semibold text-foreground">{u.department || "General"}</span>
-                    </p>
-                    <p className="text-muted-foreground flex justify-between">
-                      <span>Joined:</span>
-                      <span className="font-medium text-foreground">{u.joinDate ? new Date(u.joinDate).toLocaleDateString() : "N/A"}</span>
-                    </p>
-                    <p className="text-muted-foreground flex justify-between">
-                      <span>Shift:</span>
-                      <span className="font-medium text-foreground">{u.shiftTime || "09:00 AM - 05:00 PM"}</span>
-                    </p>
-                    {u.resumeUrl && (
-                      <div className="pt-2 mt-1 border-t border-border/50 flex justify-between items-center">
-                        <span className="text-muted-foreground flex items-center gap-1.5 font-medium">
-                          <i className="fa-solid fa-file-lines text-rose-500 text-xs" /> Resume / CV:
-                        </span>
-                        <a
-                          href={u.resumeUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          download={u.resumeFileName || "Resume"}
-                          className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline"
-                        >
-                          <i className="fa-solid fa-arrow-down-to-line text-[10px]" /> Download
-                        </a>
+
+                    {/* Onboarding Checklist Quick Status & Action for HR */}
+                    {isPendingOnboarding && (
+                      <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/25 space-y-2">
+                        <div className="flex items-center justify-between text-[11px]">
+                          <span className="font-semibold text-amber-800 dark:text-amber-300 flex items-center gap-1">
+                            <i className="fa-solid fa-file-shield text-xs text-amber-600" /> Docs &amp; Onboarding
+                          </span>
+                          <span className="font-mono text-xs font-semibold text-amber-700 dark:text-amber-400">
+                            {completedTasks}/{totalTasks} Done
+                          </span>
+                        </div>
+                        <div className="w-full bg-background/80 h-1.5 rounded-full overflow-hidden border border-amber-500/20">
+                          <div
+                            className="bg-amber-500 h-full rounded-full transition-all"
+                            style={{ width: `${totalTasks > 0 ? (completedTasks / totalTasks) * 100 : 0}%` }}
+                          />
+                        </div>
+                        <div className="flex items-center justify-between pt-0.5 gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 text-[11px] px-2 flex-1 border-amber-500/30 text-amber-700 dark:text-amber-300 hover:bg-amber-500/15 cursor-pointer font-medium"
+                            onClick={() => {
+                              setSelectedChecklistDetails(userChecklist);
+                              setActiveTab("checklists");
+                            }}
+                          >
+                            <i className="fa-solid fa-eye text-[10px] mr-1" /> View Checklist
+                          </Button>
+                          <Button
+                            variant="default"
+                            size="sm"
+                            disabled={remindingUserId === u._id}
+                            className="h-7 text-[11px] px-2.5 bg-amber-600 hover:bg-amber-700 text-white cursor-pointer font-medium shadow-2xs"
+                            onClick={() => handleSendReminder(u._id, u.name, userChecklist._id)}
+                          >
+                            {remindingUserId === u._id ? (
+                              <><i className="fa-solid fa-spinner fa-spin text-[10px] mr-1" /> Reminding...</>
+                            ) : (
+                              <><i className="fa-solid fa-bell text-[10px] mr-1" /> Remind Docs</>
+                            )}
+                          </Button>
+                        </div>
                       </div>
                     )}
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+
+                    <div className="pt-2 border-t border-border/60 text-xs space-y-1">
+                      <p className="text-muted-foreground flex justify-between">
+                        <span>Department:</span>
+                        <span className="font-semibold text-foreground">{u.department || "General"}</span>
+                      </p>
+                      {hrPartnerName && (
+                        <p className="text-muted-foreground flex justify-between">
+                          <span>Assigned HR:</span>
+                          <span className="font-semibold text-primary">{hrPartnerName}</span>
+                        </p>
+                      )}
+                      <p className="text-muted-foreground flex justify-between">
+                        <span>Joined:</span>
+                        <span className="font-medium text-foreground">{u.joinDate ? new Date(u.joinDate).toLocaleDateString() : "N/A"}</span>
+                      </p>
+                      <p className="text-muted-foreground flex justify-between">
+                        <span>Shift:</span>
+                        <span className="font-medium text-foreground">{u.shiftTime || "09:00 AM - 05:00 PM"}</span>
+                      </p>
+                      {u.resumeUrl && (
+                        <div className="pt-2 mt-1 border-t border-border/50 flex justify-between items-center">
+                          <span className="text-muted-foreground flex items-center gap-1.5 font-medium">
+                            <i className="fa-solid fa-file-lines text-rose-500 text-xs" /> Resume / CV:
+                          </span>
+                          <a
+                            href={u.resumeUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            download={u.resumeFileName || "Resume"}
+                            className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline"
+                          >
+                            <i className="fa-solid fa-arrow-down-to-line text-[10px]" /> Download
+                          </a>
+                        </div>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
         </div>
       )}

@@ -539,11 +539,11 @@ export function NotificationBell({ onOpen }: NotificationBellProps = {}) {
                 </button>
               </div>
               <p className="text-xs text-muted-foreground mt-1 line-clamp-2 leading-relaxed">{latestToast.message}</p>
-              {latestToast.linkUrl && (
+              {Boolean(getNotificationTargetUrl(latestToast) || latestToast.linkUrl) && (
                 <a
-                  href={latestToast.linkUrl}
+                  href={getNotificationTargetUrl(latestToast) || latestToast.linkUrl || "#"}
                   onClick={() => setLatestToast(null)}
-                  className="inline-flex items-center gap-1 text-[11px] font-bold text-primary hover:underline mt-2"
+                  className="inline-flex items-center gap-1 text-[11px] font-bold text-primary hover:underline mt-2 cursor-pointer"
                 >
                   View Details <i className="fa-solid fa-arrow-right text-[10px]" />
                 </a>

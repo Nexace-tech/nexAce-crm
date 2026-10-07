@@ -1886,7 +1886,7 @@ export default function OperationsPage() {
       )}
 
       {/* TAB: USER MANAGEMENT (moved from Settings) */}
-      {activeTab === "users" && (can("manageUsers") || isAdmin) && (
+      {activeTab === "users" && (can("manageUsers") || isAdmin || isOPS) && (
         <UserManagementTab />
       )}
 

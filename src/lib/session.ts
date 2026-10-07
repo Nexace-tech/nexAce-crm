@@ -23,6 +23,7 @@ export interface SessionPayload {
   userName: string;
   tenantName: string;
   role: string;
+  status?: string;
   expiresAt: Date;
 }
 
@@ -105,13 +106,13 @@ export async function getSession(skipDbValidation = false): Promise<SessionPaylo
       return null;
     }
 
-    if (user.status === "Pending" || user.status === "Suspended") {
-      // Explicitly blocked — force re-auth
+    if (user.status === "Suspended") {
+      // Explicitly blocked — force re-auth for suspended accounts
       return null;
     }
 
-    // Return session with DB-authoritative role (not JWT-self-asserted)
-    return { ...payload, role: user.role };
+    // Return session with DB-authoritative role and status (Pending users retain session to view Under Approval dashboard)
+    return { ...payload, role: user.role, status: user.status };
   } catch {
     // Transient DB error (cold-start reconnect, timeout, etc.).
     // Fall back to the JWT payload so a momentary DB hiccup on app
@@ -144,6 +145,12 @@ export async function updateSession() {
 }
 
 export async function deleteSession() {
-  const cookieStore = await cookies();
-  cookieStore.delete("session");
+  try {
+    const cookieStore = await cookies();
+    cookieStore.delete("session");
+  } catch (err) {
+    // In Server Components render phase, modifying cookies throws an error.
+    // Catching here prevents unhandled crashes.
+    console.warn("[session] deleteSession skipped cookie modification (read-only render context):", err);
+  }
 }

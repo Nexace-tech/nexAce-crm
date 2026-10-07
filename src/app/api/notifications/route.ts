@@ -2,19 +2,20 @@ import { NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/db";
 import { Notification } from "@/models/Notification";
 import { requireTenantSession, isAuthError } from "@/lib/auth-guard";
+import { isSubAdminRole } from "@/lib/roles";
 
 /**
  * GET: Fetch unread and recent notifications for the logged-in user.
  */
 export async function GET() {
   try {
-    const authResult = await requireTenantSession();
+    const authResult = await requireTenantSession(undefined, true);
     if (isAuthError(authResult)) return authResult;
 
     const { tenantObjectId, userObjectId, session } = authResult;
     await connectToDatabase();
 
-    const isAdminLevel = ["Admin", "OPS"].includes(session.role);
+    const isAdminLevel = ["Admin", "OPS"].includes(session.role) || isSubAdminRole(session.role);
 
     // Admin-operational notification titles that non-admin roles should never see
     const ADMIN_ONLY_TITLES = [
@@ -123,7 +124,7 @@ export async function POST(request: Request) {
  */
 export async function PATCH(request: Request) {
   try {
-    const authResult = await requireTenantSession();
+    const authResult = await requireTenantSession(undefined, true);
     if (isAuthError(authResult)) return authResult;
 
     const { tenantObjectId, userObjectId } = authResult;
@@ -161,7 +162,7 @@ export async function PATCH(request: Request) {
  */
 export async function DELETE(request: Request) {
   try {
-    const authResult = await requireTenantSession();
+    const authResult = await requireTenantSession(undefined, true);
     if (isAuthError(authResult)) return authResult;
 
     const { tenantObjectId, userObjectId } = authResult;

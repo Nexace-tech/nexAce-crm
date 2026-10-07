@@ -1,4 +1,4 @@
-import { getSession, deleteSession } from "@/lib/session";
+import { getSession } from "@/lib/session";
 import { redirect } from "next/navigation";
 import { connectToDatabase } from "@/lib/db";
 import { User } from "@/models/User";
@@ -48,9 +48,9 @@ export default async function DashboardLayout({ children }: DashboardLayoutProps
 
   if (!dbUser) {
     if (!dbError) {
-      // User was explicitly not found in DB
-      await deleteSession();
-      redirect("/login");
+      // User was explicitly not found in DB (e.g. employee was removed from CRM)
+      // Redirecting via /api/auth/logout route handler cleanly purges session cookies without Server Component mutation errors
+      redirect("/api/auth/logout?reason=account_removed");
     }
     // On transient DB connection error, fallback to session info rather than logging the user out
     dbUser = {
@@ -59,6 +59,11 @@ export default async function DashboardLayout({ children }: DashboardLayoutProps
       tenantId: { name: session.tenantName },
       status: "Active",
     };
+  }
+
+  // Restrict suspended users immediately from accessing Dashboard
+  if (dbUser.status === "Suspended") {
+    redirect("/api/auth/logout?reason=suspended");
   }
 
   const role = dbUser.role || session.role;

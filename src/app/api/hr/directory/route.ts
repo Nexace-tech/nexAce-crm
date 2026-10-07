@@ -31,6 +31,7 @@ export async function GET(req: Request) {
 
     const users = await User.find(query)
       .select("-passwordHash")
+      .populate("hrId", "name email role")
       .sort({ createdAt: -1 })
       .lean();
 

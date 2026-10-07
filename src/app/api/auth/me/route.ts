@@ -38,9 +38,19 @@ export async function GET() {
       if (!dbError) {
         const { deleteSession } = await import("@/lib/session");
         await deleteSession();
-        return NextResponse.json({ user: null }, { status: 401 });
+        const res = NextResponse.json({ user: null, error: "Account not found" }, { status: 401 });
+        res.cookies.delete("session");
+        return res;
       }
       return NextResponse.json({ error: "Service temporarily unavailable" }, { status: 503 });
+    }
+
+    if (user.status === "Suspended") {
+      const { deleteSession } = await import("@/lib/session");
+      await deleteSession();
+      const res = NextResponse.json({ user: null, error: "Account suspended" }, { status: 401 });
+      res.cookies.delete("session");
+      return res;
     }
 
     return NextResponse.json(

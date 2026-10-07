@@ -180,7 +180,22 @@ export function getNotificationTargetUrl(n: { type?: string; title?: string; mes
     if (rawLink.includes("/dashboard/settings?tab=self-invoices")) {
       return `/dashboard/settings?tab=invoice${invoiceNo ? `&invoiceNo=${invoiceNo}` : ""}`;
     }
+    if (rawLink.includes("/dashboard/clients?tab=users") || rawLink.includes("/dashboard/users")) {
+      const isPendingEmployee = title.includes("pending") || title.includes("approval") || msg.includes("pending") || msg.includes("approval") || rawLink.includes("filter=Pending");
+      if (isPendingEmployee && !rawLink.includes("filter=Pending")) {
+        return "/dashboard/clients?tab=users&filter=Pending";
+      }
+      return rawLink;
+    }
     return rawLink;
+  }
+
+  // Pending employee approval notifications
+  if (
+    (title.includes("employee") || title.includes("user") || msg.includes("employee") || msg.includes("user") || title.includes("account")) &&
+    (title.includes("pending") || title.includes("approval") || msg.includes("pending") || msg.includes("approval") || msg.includes("awaiting"))
+  ) {
+    return "/dashboard/clients?tab=users&filter=Pending";
   }
 
   // Invoice notifications

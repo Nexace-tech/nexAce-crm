@@ -11,6 +11,7 @@ export interface IUser extends Document {
   department?: string;
   departments?: string[];
   managerId?: mongoose.Types.ObjectId;
+  hrId?: mongoose.Types.ObjectId;
   skills?: string[];
   joinDate?: Date;
   status?: "Active" | "Pending" | "On Leave" | "Suspended";
@@ -57,6 +58,7 @@ const UserSchema: Schema = new Schema({
   department: { type: String },
   departments: [{ type: String }],
   managerId: { type: Schema.Types.ObjectId, ref: "User" },
+  hrId: { type: Schema.Types.ObjectId, ref: "User" },
   skills: [{ type: String }],
   joinDate: { type: Date, default: Date.now },
   status: { type: String, enum: ["Active", "Pending", "On Leave", "Suspended"], default: "Pending" },
@@ -99,7 +101,7 @@ UserSchema.index({ email: 1, tenantId: 1 }, { unique: true });
 UserSchema.index({ tenantId: 1, role: 1 });
 
 // Force invalidate in-memory Mongoose model cache if schema updated
-if (mongoose.models.User && (!mongoose.models.User.schema.path("salary") || !mongoose.models.User.schema.path("bankDetails") || !mongoose.models.User.schema.path("resumeUrl") || !mongoose.models.User.schema.path("signatureUrl"))) {
+if (mongoose.models.User && (!mongoose.models.User.schema.path("salary") || !mongoose.models.User.schema.path("bankDetails") || !mongoose.models.User.schema.path("resumeUrl") || !mongoose.models.User.schema.path("signatureUrl") || !mongoose.models.User.schema.path("hrId"))) {
   delete (mongoose.models as any).User;
 }
 

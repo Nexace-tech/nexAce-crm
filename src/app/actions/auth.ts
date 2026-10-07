@@ -176,9 +176,12 @@ export async function registerAction(state: FormState | undefined, formData: For
     // Delete verification record only after User.create succeeds
     await EmailVerification.deleteOne({ _id: verification._id });
 
-    // Notify only Admin users about new registration (only Admins can approve accounts)
-    const tenantAdmins = await User.find({ tenantId: tenant._id, role: "Admin", status: "Active" });
-    const notifyRecipients = [...tenantAdmins];
+    // Notify workspace admins/ops about new registration for approval
+    const notifyRecipients = await User.find({
+      tenantId: tenant._id,
+      role: { $in: ["Admin", "OPS", "Sub Admin"] },
+      status: "Active",
+    });
 
     if (notifyRecipients.length > 0) {
       const notifDocs = notifyRecipients.map((a) => ({
@@ -187,7 +190,7 @@ export async function registerAction(state: FormState | undefined, formData: For
         title: "New Employee Account Pending Approval",
         message: `${adminName} (@${usernameRaw}) registered an account and is awaiting approval.`,
         type: "system",
-        linkUrl: "/dashboard/clients?tab=users",
+        linkUrl: "/dashboard/clients?tab=users&filter=Pending",
         read: false,
         adminOnly: true,
       }));
@@ -199,7 +202,7 @@ export async function registerAction(state: FormState | undefined, formData: For
           await sendEmail({
             to: recipient.email,
             subject: `[NexAce CRM] New Employee Approval Request: ${adminName}`,
-            text: `New account awaiting approval: ${adminName} (@${usernameRaw}, ${adminEmail}). Please review and approve in OPS Portal > User Accounts.`,
+            text: `New account awaiting approval: ${adminName} (@${usernameRaw}, ${adminEmail}). Please review and approve in OPS Portal > User Accounts -- Pending Employee Approvals.`,
             html: `
               <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px; padding: 24px;">
                 <h2 style="color: #1e293b; margin-top: 0;">New Account Awaiting Approval</h2>
@@ -214,7 +217,7 @@ export async function registerAction(state: FormState | undefined, formData: For
                 </div>
                 <p style="color: #475569; font-size: 14px;">Please sign in to OPS Portal &gt; User Accounts to approve or configure this account.</p>
                 <div style="margin-top: 24px;">
-                  <a href="${appUrl}/dashboard/clients?tab=users" style="display: inline-block; padding: 10px 20px; background-color: #2563eb; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 14px;">Review &amp; Approve in OPS Portal</a>
+                  <a href="${appUrl}/dashboard/clients?tab=users&filter=Pending" style="display: inline-block; padding: 10px 20px; background-color: #2563eb; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 14px;">Review &amp; Approve in OPS Portal</a>
                 </div>
               </div>
             `
@@ -265,7 +268,7 @@ export async function loginAction(state: FormState | undefined, formData: FormDa
   }
 
   if (Object.keys(errors).length > 0) {
-    return { errors, enteredEmail: email, enteredPassword: password };
+    return { errors, enteredEmail: email };
   }
 
   try {
@@ -277,7 +280,6 @@ export async function loginAction(state: FormState | undefined, formData: FormDa
       return {
         message: `Too many login attempts. Please wait ${waitSeconds}s before trying again.`,
         enteredEmail: email,
-        enteredPassword: password
       };
     }
 
@@ -296,7 +298,6 @@ export async function loginAction(state: FormState | undefined, formData: FormDa
       return {
         message: "Invalid email or password.",
         enteredEmail: email,
-        enteredPassword: password
       };
     }
 
@@ -305,7 +306,6 @@ export async function loginAction(state: FormState | undefined, formData: FormDa
       return {
         message: "Your employee account has been suspended. Please contact your workspace administrator.",
         enteredEmail: email,
-        enteredPassword: password
       };
     }
 
@@ -317,7 +317,6 @@ export async function loginAction(state: FormState | undefined, formData: FormDa
       return {
         message: "Company tenant associated with this account was not found.",
         enteredEmail: email,
-        enteredPassword: password
       };
     }
 
@@ -337,7 +336,6 @@ export async function loginAction(state: FormState | undefined, formData: FormDa
     return {
       message: getDescriptiveErrorMessage(error, "An error occurred during login. Please check your network connection and database settings."),
       enteredEmail: email,
-      enteredPassword: password
     };
   }
 

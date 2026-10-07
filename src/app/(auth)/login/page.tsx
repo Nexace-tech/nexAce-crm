@@ -13,6 +13,7 @@ function LoginForm() {
   const urlEmail = searchParams.get("email") || "";
   const isRedirected = searchParams.get("redirected") === "true";
   const isPendingApproval = searchParams.get("pending") === "true";
+  const errorParam = searchParams.get("error");
 
   const [state, formAction, isPending] = useActionState(loginAction, undefined);
   const [showPassword, setShowPassword] = useState(false);
@@ -40,6 +41,30 @@ function LoginForm() {
 
         <CardContent>
           <form action={formAction} className="space-y-4">
+            {errorParam === "account_removed" && (
+              <div className="p-3.5 text-xs bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/25 rounded-xl font-medium flex items-start gap-2.5">
+                <i className="fa-solid fa-user-xmark text-sm mt-0.5 text-red-500 flex-shrink-0" />
+                <div className="space-y-0.5">
+                  <div className="font-bold text-sm">Account Removed</div>
+                  <p className="leading-relaxed text-muted-foreground">
+                    This employee account is no longer registered or was removed by the administrator. Access to the dashboard has been revoked.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {errorParam === "suspended" && (
+              <div className="p-3.5 text-xs bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/25 rounded-xl font-medium flex items-start gap-2.5">
+                <i className="fa-solid fa-ban text-sm mt-0.5 text-red-500 flex-shrink-0" />
+                <div className="space-y-0.5">
+                  <div className="font-bold text-sm">Account Suspended</div>
+                  <p className="leading-relaxed text-muted-foreground">
+                    Your account has been suspended by the administrator. Access to the dashboard has been restricted.
+                  </p>
+                </div>
+              </div>
+            )}
+
             {isPendingApproval && (
               <div className="p-3.5 text-xs bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/30 rounded-lg font-medium space-y-1">
                 <div className="flex items-center gap-1.5 font-bold text-sm">
@@ -51,7 +76,7 @@ function LoginForm() {
               </div>
             )}
 
-            {isRedirected && !isPendingApproval && (
+            {isRedirected && !isPendingApproval && !errorParam && (
               <div className="p-3 text-xs bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 rounded-md font-medium flex items-center gap-2">
                 <i className="fa-solid fa-circle-info text-base" />
                 <span>An account with this email address already exists. Please sign in below.</span>
@@ -111,8 +136,6 @@ function LoginForm() {
                   name="password"
                   type={showPassword ? "text" : "password"}
                   autoComplete="off"
-                  key={state?.enteredPassword ?? "password-input"}
-                  defaultValue={state?.enteredPassword ?? ""}
                   placeholder="••••••••"
                   className="pr-10"
                   required
