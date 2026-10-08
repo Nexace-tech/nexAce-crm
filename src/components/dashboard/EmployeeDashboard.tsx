@@ -23,6 +23,10 @@ export function EmployeeDashboard({ user }: { user: any }) {
   const [teamLeaves, setTeamLeaves] = useState<any[]>([]);
   const [announcements, setAnnouncements] = useState<any[]>([]);
   const [onboardingChecklist, setOnboardingChecklist] = useState<any | null>(null);
+  const [employeeDocs, setEmployeeDocs] = useState<any[]>([]);
+  const [uploadModalDoc, setUploadModalDoc] = useState<any | null>(null);
+  const [uploadDocFile, setUploadDocFile] = useState<File | null>(null);
+  const [uploadingDoc, setUploadingDoc] = useState(false);
   const [loading, setLoading] = useState(true);
 
   // Export & Toast State
@@ -94,7 +98,7 @@ export function EmployeeDashboard({ user }: { user: any }) {
     async function fetchEmployeeData() {
       try {
         // ✅ Performance: run all fetches in parallel — no waterfall
-        const [attRes, taskRes, tsRes, sprintRes, leaveRes, annRes, chkRes] = await Promise.all([
+        const [attRes, taskRes, tsRes, sprintRes, leaveRes, annRes, chkRes, docRes] = await Promise.all([
           fetch("/api/attendance"),
           fetch("/api/tasks"),
           fetch("/api/timesheets"),
@@ -102,6 +106,7 @@ export function EmployeeDashboard({ user }: { user: any }) {
           fetch("/api/hr/leaves"),
           fetch("/api/chat/announcements"),
           fetch("/api/hr/checklists?type=Onboarding"),
+          fetch("/api/hr/documents"),
         ]);
 
         // Process attendance
@@ -145,6 +150,10 @@ export function EmployeeDashboard({ user }: { user: any }) {
           const activeChk = (chkData.checklists || []).find((c: any) => c.type === "Onboarding" && c.status === "In Progress");
           setOnboardingChecklist(activeChk || null);
         }
+        if (docRes && docRes.ok) {
+          const docData = await docRes.json();
+          setEmployeeDocs(docData.documents || []);
+        }
       } catch (err) {
         console.error("Failed to fetch employee tasks/timesheets/sprints/announcements:", err);
       } finally {
@@ -157,6 +166,37 @@ export function EmployeeDashboard({ user }: { user: any }) {
     const pollInterval = setInterval(fetchAttendanceStatus, 30_000);
     return () => clearInterval(pollInterval);
   }, []);
+
+  const handleEmployeeDocSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!uploadModalDoc || !uploadDocFile) return;
+    try {
+      setUploadingDoc(true);
+      const formData = new FormData();
+      formData.append("file", uploadDocFile);
+      formData.append("documentId", uploadModalDoc._id);
+      formData.append("title", uploadModalDoc.title);
+      formData.append("category", uploadModalDoc.category || "Document");
+      const res = await fetch("/api/hr/documents/upload", {
+        method: "POST",
+        body: formData,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Upload failed");
+      showToast(`"${uploadModalDoc.title}" submitted successfully!`, "success");
+      setUploadModalDoc(null);
+      setUploadDocFile(null);
+      const dRes = await fetch("/api/hr/documents");
+      if (dRes.ok) {
+        const d = await dRes.json();
+        setEmployeeDocs(d.documents || []);
+      }
+    } catch (err: any) {
+      showToast(err.message || "Failed to upload document", "error");
+    } finally {
+      setUploadingDoc(false);
+    }
+  };
 
   const handleToggleClock = async () => {
     const action = clockedIn ? "out" : "in";
@@ -612,7 +652,7 @@ export function EmployeeDashboard({ user }: { user: any }) {
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div className="flex items-start gap-3.5">
               <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 flex items-center justify-center shrink-0 text-xl shadow-xs">
-                <i className="fa-solid fa-sparkles" />
+                <i className="fa-solid fa-user-check" />
               </div>
               <div className="space-y-1">
                 <div className="flex items-center gap-2 flex-wrap">
@@ -655,7 +695,7 @@ export function EmployeeDashboard({ user }: { user: any }) {
 
             <div className="flex items-center gap-2 shrink-0">
               <Button asChild className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shadow-md gap-2 cursor-pointer">
-                <Link href="/dashboard/hr?tab=checklists">
+                <Link href="/dashboard/hr?tab=checklists&highlight=true">
                   <i className="fa-solid fa-file-arrow-up text-xs" /> Upload Onboarding Documents &rarr;
                 </Link>
               </Button>
@@ -663,6 +703,142 @@ export function EmployeeDashboard({ user }: { user: any }) {
           </div>
         </div>
       )}
+
+      {/* Employee Documents Section */}
+      <Card className="border-border shadow-xs overflow-hidden">
+        <CardHeader className="pb-3 border-b border-border/50 bg-muted/20">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <CardTitle className="text-base font-bold flex items-center gap-2">
+                <i className="fa-solid fa-folder-closed text-primary" /> My Required Documents &amp; Submissions
+              </CardTitle>
+              <CardDescription className="text-xs">
+                Documents requested by your HR partner for identity verification, payroll, and compliance.
+              </CardDescription>
+            </div>
+            <div className="flex items-center gap-2">
+              <Badge
+                className={cn(
+                  "text-xs px-2.5 py-0.5 font-bold",
+                  user?.documentsSubmitted
+                    ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30"
+                    : "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30"
+                )}
+              >
+                {user?.documentsSubmitted ? (
+                  <><i className="fa-solid fa-circle-check mr-1 text-emerald-500" /> Documents Verified by HR</>
+                ) : (
+                  <><i className="fa-solid fa-clock mr-1 text-amber-500" /> Pending HR Verification</>
+                )}
+              </Badge>
+              <Button asChild variant="outline" size="sm" className="h-7 text-xs">
+                <Link href="/dashboard/hr?tab=vault">
+                  <i className="fa-solid fa-vault mr-1 text-[10px]" /> Vault
+                </Link>
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="p-4 space-y-3">
+          {(() => {
+            const myDocs = employeeDocs.filter(
+              (d) =>
+                (d.targetUserId?._id || d.targetUserId) === user?._id ||
+                d.targetUserId === user?.id
+            );
+
+            if (myDocs.length === 0) {
+              return (
+                <div className="py-6 text-center text-xs text-muted-foreground space-y-1">
+                  <i className="fa-solid fa-file-circle-check text-muted-foreground/60 text-2xl" />
+                  <p className="font-semibold text-foreground">No specific document requests pending</p>
+                  <p className="text-[11px]">Your HR partner has not requested any additional documents at this time.</p>
+                </div>
+              );
+            }
+
+            return (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {myDocs.map((doc: any) => {
+                  const statusColors: Record<string, string> = {
+                    Requested: "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30",
+                    Submitted: "bg-sky-500/15 text-sky-700 dark:text-sky-400 border-sky-500/30",
+                    Verified: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30",
+                    Rejected: "bg-rose-500/15 text-rose-700 dark:text-rose-400 border-rose-500/30",
+                  };
+
+                  return (
+                    <div
+                      key={doc._id}
+                      className="p-3.5 rounded-xl border border-border bg-card/60 flex flex-col justify-between gap-3 hover:border-primary/40 transition-colors"
+                    >
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs font-bold text-foreground truncate">{doc.title}</span>
+                          <Badge className={cn("text-[10px] px-2 py-0 font-bold shrink-0", statusColors[doc.status || "Submitted"])}>
+                            {doc.status || "Submitted"}
+                          </Badge>
+                        </div>
+                        <p className="text-[11px] text-muted-foreground">
+                          Category: <span className="font-medium text-foreground">{doc.category || "Document"}</span>
+                          {doc.notes && <span> &bull; Note: {doc.notes}</span>}
+                        </p>
+                        {doc.status === "Requested" && doc.requestedBy?.userName && (
+                          <p className="text-[10px] text-amber-600 dark:text-amber-400 font-medium">
+                            Requested by HR {doc.requestedBy.userName}
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="flex items-center justify-between pt-2 border-t border-border/50 text-xs">
+                        {doc.fileUrl ? (
+                          <a
+                            href={doc.fileUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-primary hover:underline font-semibold inline-flex items-center gap-1 text-[11px]"
+                          >
+                            <i className="fa-solid fa-file text-[10px]" /> View Uploaded File
+                          </a>
+                        ) : (
+                          <span className="text-[11px] text-amber-600 dark:text-amber-400 italic">
+                            Action required
+                          </span>
+                        )}
+
+                        {doc.status === "Requested" || !doc.fileUrl ? (
+                          <Button
+                            size="sm"
+                            className="h-7 px-3 text-xs font-semibold bg-primary hover:bg-primary/90 text-primary-foreground gap-1.5 cursor-pointer shadow-xs"
+                            onClick={() => {
+                              setUploadModalDoc(doc);
+                              setUploadDocFile(null);
+                            }}
+                          >
+                            <i className="fa-solid fa-upload text-[10px]" /> Upload File
+                          </Button>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 px-2.5 text-xs font-semibold gap-1.5 cursor-pointer"
+                            onClick={() => {
+                              setUploadModalDoc(doc);
+                              setUploadDocFile(null);
+                            }}
+                          >
+                            <i className="fa-solid fa-arrow-rotate-right text-[10px]" /> Re-upload
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
+        </CardContent>
+      </Card>
 
       {/* Employee Personal KPI Metric Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
@@ -1114,6 +1290,71 @@ export function EmployeeDashboard({ user }: { user: any }) {
           )}
         </div>
       </div>
+
+      {/* Upload Requested Document Modal */}
+      {uploadModalDoc && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-card border border-border rounded-2xl w-full max-w-md shadow-2xl overflow-hidden">
+            <div className="flex items-center justify-between p-4 border-b border-border bg-muted/20">
+              <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
+                <i className="fa-solid fa-file-arrow-up text-primary" /> Upload Document
+              </h3>
+              <button
+                type="button"
+                onClick={() => setUploadModalDoc(null)}
+                className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted cursor-pointer"
+              >
+                <i className="fa-solid fa-xmark text-xs" />
+              </button>
+            </div>
+            <form onSubmit={handleEmployeeDocSubmit} className="p-4 space-y-4">
+              <div className="p-3 rounded-xl bg-muted/30 border border-border space-y-1">
+                <p className="text-xs font-bold text-foreground">{uploadModalDoc.title}</p>
+                <p className="text-[11px] text-muted-foreground">Category: {uploadModalDoc.category || "Document"}</p>
+                {uploadModalDoc.notes && (
+                  <p className="text-[11px] text-primary/90 font-medium">Instructions: {uploadModalDoc.notes}</p>
+                )}
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-foreground">Select File *</label>
+                <input
+                  type="file"
+                  required
+                  accept=".pdf,.png,.jpg,.jpeg,.docx,.xlsx"
+                  onChange={(e) => setUploadDocFile(e.target.files?.[0] || null)}
+                  className="w-full text-xs text-foreground file:mr-2 file:py-1 file:px-2.5 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/90 cursor-pointer"
+                />
+                <p className="text-[10px] text-muted-foreground">Supported formats: PDF, PNG, JPG, DOCX, XLSX (Max 25 MB)</p>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-border">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setUploadModalDoc(null)}
+                  className="text-xs cursor-pointer"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  size="sm"
+                  disabled={uploadingDoc || !uploadDocFile}
+                  className="text-xs font-semibold gap-1.5 cursor-pointer shadow-xs"
+                >
+                  {uploadingDoc ? (
+                    <><i className="fa-solid fa-spinner fa-spin text-xs" /> Uploading...</>
+                  ) : (
+                    <><i className="fa-solid fa-cloud-arrow-up text-xs" /> Submit Document</>
+                  )}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

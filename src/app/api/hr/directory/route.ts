@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/db";
 import { User } from "@/models/User";
 import { requireTenantSession, isAuthError } from "@/lib/auth-guard";
-import { isSubAdminRole } from "@/lib/roles";
+import { getHRAccessScope } from "@/lib/hrIsolation";
 
 export async function GET(req: Request) {
   try {
@@ -17,9 +17,9 @@ export async function GET(req: Request) {
 
     const query: any = { tenantId: tenantObjectId };
 
-    const isPrivileged = session.role === "Admin" || session.role === "Manager" || session.role === "HR" || session.role === "OPS" || isSubAdminRole(session.role);
-    if (!isPrivileged) {
-      query._id = userObjectId;
+    const scope = await getHRAccessScope(session, tenantObjectId, userObjectId);
+    if (scope.allowedUserIds) {
+      query._id = { $in: scope.allowedUserIds };
     }
 
     if (department && department !== "All") {
@@ -31,11 +31,17 @@ export async function GET(req: Request) {
 
     const users = await User.find(query)
       .select("-passwordHash")
-      .populate("hrId", "name email role")
+      .populate("hrId", "name email role photoUrl")
+      .populate("onboardedBy.hrId", "name email role")
+      .populate("documentsConfirmedBy.hrId", "name email role")
       .sort({ createdAt: -1 })
       .lean();
 
-    return NextResponse.json({ users });
+    return NextResponse.json({
+      users,
+      isolateHRData: scope.isIsolated,
+      isPrivilegedAdmin: scope.isPrivilegedAdmin,
+    });
   } catch (error: unknown) {
     console.error("GET /api/hr/directory error:", error);
     return NextResponse.json({ error: "Failed to fetch directory" }, { status: 500 });

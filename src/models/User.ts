@@ -44,6 +44,17 @@ export interface IUser extends Document {
    lastActiveAt?: Date;
    forcePasswordReset?: boolean;
    deviceTokens?: string[];
+   onboardedBy?: {
+     hrId?: mongoose.Types.ObjectId;
+     hrName?: string;
+     date?: Date;
+   };
+   documentsSubmitted?: boolean;
+   documentsConfirmedBy?: {
+     hrId?: mongoose.Types.ObjectId;
+     hrName?: string;
+     confirmedAt?: Date;
+   };
    createdAt: Date;
  }
 
@@ -91,6 +102,17 @@ const UserSchema: Schema = new Schema({
    lastActiveAt: { type: Date, default: Date.now },
    forcePasswordReset: { type: Boolean, default: false },
    deviceTokens: [{ type: String }],
+   onboardedBy: {
+     hrId: { type: Schema.Types.ObjectId, ref: "User" },
+     hrName: { type: String, default: "" },
+     date: { type: Date }
+   },
+   documentsSubmitted: { type: Boolean, default: false },
+   documentsConfirmedBy: {
+     hrId: { type: Schema.Types.ObjectId, ref: "User" },
+     hrName: { type: String, default: "" },
+     confirmedAt: { type: Date }
+   },
    createdAt: { type: Date, default: Date.now }
 });
 
@@ -101,7 +123,7 @@ UserSchema.index({ email: 1, tenantId: 1 }, { unique: true });
 UserSchema.index({ tenantId: 1, role: 1 });
 
 // Force invalidate in-memory Mongoose model cache if schema updated
-if (mongoose.models.User && (!mongoose.models.User.schema.path("salary") || !mongoose.models.User.schema.path("bankDetails") || !mongoose.models.User.schema.path("resumeUrl") || !mongoose.models.User.schema.path("signatureUrl") || !mongoose.models.User.schema.path("hrId"))) {
+if (mongoose.models.User && (!mongoose.models.User.schema.path("salary") || !mongoose.models.User.schema.path("bankDetails") || !mongoose.models.User.schema.path("resumeUrl") || !mongoose.models.User.schema.path("signatureUrl") || !mongoose.models.User.schema.path("hrId") || !mongoose.models.User.schema.path("documentsSubmitted") || !mongoose.models.User.schema.path("onboardedBy"))) {
   delete (mongoose.models as any).User;
 }
 

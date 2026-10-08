@@ -30,6 +30,8 @@ export async function GET(request: Request, { params }: RouteParams) {
       .select("-passwordHash")
       .populate("managerId", "name email role photoUrl")
       .populate("hrId", "name email role photoUrl")
+      .populate("onboardedBy.hrId", "name email role photoUrl")
+      .populate("documentsConfirmedBy.hrId", "name email role photoUrl")
       .lean();
 
     if (!user || (user.tenantId as any).toString() !== session.tenantId) {
@@ -88,9 +90,11 @@ export async function PUT(request: Request, { params }: RouteParams) {
     const dataScope = await getUserDataScope(session);
     const isAdminSession = session.role === "Admin" || isSubAdminRole(session.role);
     const canManageUsers = isAdminSession || dataScope.canViewFeature("manageUsers");
+    const canChangeRoles = isAdminSession || dataScope.canViewFeature("changeUserRoles");
     // Admin and OPS (SubAdmin) can always change roles; others need the explicit feature flag
-    const canChangeRoles = isAdminSession || canManageUsers || dataScope.canViewFeature("changeUserRoles");
-    const canEditOthers = canManageUsers || canChangeRoles;
+    const isHR = session.role === "HR";
+    const canEditOthers = canManageUsers || canChangeRoles || isHR;
+    const userObjectId = new mongoose.Types.ObjectId(session.userId);
 
     if (!isSelf && !canEditOthers) {
       return NextResponse.json({ error: "Forbidden: Access denied" }, { status: 403 });
@@ -206,8 +210,28 @@ export async function PUT(request: Request, { params }: RouteParams) {
       if (body.status && ["Active", "Pending", "On Leave", "Suspended"].includes(body.status)) {
         if (user.status === "Pending" && body.status === "Active") {
           wasApprovedFromPending = true;
+          user.onboardedBy = {
+            hrId: userObjectId,
+            hrName: session.userName,
+            date: new Date(),
+          };
         }
         user.status = body.status;
+      }
+      if (body.onboardedBy) {
+        user.onboardedBy = {
+          hrId: userObjectId,
+          hrName: session.userName,
+          date: new Date(),
+        };
+      }
+      if (body.documentsSubmitted !== undefined) {
+        user.documentsSubmitted = Boolean(body.documentsSubmitted);
+        user.documentsConfirmedBy = {
+          hrId: userObjectId,
+          hrName: session.userName,
+          confirmedAt: new Date(),
+        };
       }
       if (body.shiftTime !== undefined) user.shiftTime = body.shiftTime;
       if (body.shiftName !== undefined) user.shiftName = body.shiftName;
@@ -332,6 +356,11 @@ export async function PUT(request: Request, { params }: RouteParams) {
             type: "Onboarding",
             status: "In Progress",
             items: defaultItems,
+            onboardedBy: {
+              hrId: userObjectId,
+              hrName: session.userName,
+              date: new Date(),
+            },
           });
         }
 
@@ -383,7 +412,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
                   <p style="margin: 0 0 12px 0; color: #047857; font-size: 13px; line-height: 1.5;">
                     Your dedicated HR Partner (${hrName || "HR Operations"}) has initiated your onboarding workflow. Please sign in and upload your required identification, address verification, and banking information.
                   </p>
-                  <a href="${appUrl}/dashboard/hr?tab=checklists" style="display: inline-block; padding: 9px 18px; background-color: #059669; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 13px;">
+                  <a href="${appUrl}/dashboard/hr?tab=checklists&highlight=true" style="display: inline-block; padding: 9px 18px; background-color: #059669; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 13px;">
                     Upload Onboarding Documents &rarr;
                   </a>
                 </div>
@@ -421,6 +450,8 @@ export async function PUT(request: Request, { params }: RouteParams) {
       .select("-passwordHash")
       .populate("managerId", "name email role photoUrl")
       .populate("hrId", "name email role photoUrl")
+      .populate("onboardedBy.hrId", "name email role photoUrl")
+      .populate("documentsConfirmedBy.hrId", "name email role photoUrl")
       .lean();
     return NextResponse.json({ success: true, user: freshUser || user.toObject() });
   } catch (error: unknown) {

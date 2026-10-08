@@ -84,6 +84,55 @@ export async function POST(req: Request) {
     const finalTargetUserId = (isPrivileged && requestedTargetUserId) ? requestedTargetUserId : userObjectId;
     const finalTargetUserName = (isPrivileged && requestedTargetUserName) ? requestedTargetUserName : session.userName;
 
+    const documentId = formData.get("documentId") as string | null;
+
+    if (documentId) {
+      const existingDoc = await HRDocument.findOne({ _id: documentId, tenantId: tenantObjectId });
+      if (existingDoc) {
+        existingDoc.fileUrl = fileUrl;
+        existingDoc.fileSize = fileSizeLabel;
+        existingDoc.status = "Submitted";
+        existingDoc.uploadedBy = session.userName;
+        if (title) existingDoc.title = title;
+        await existingDoc.save();
+
+        // Notify HR who requested it, or assigned HR, or Workspace Admins
+        try {
+          const { notify, notifyAdmins } = await import("@/lib/notify");
+          const { User } = await import("@/models/User");
+          const targetUser = await User.findById(existingDoc.targetUserId || finalTargetUserId).select("hrId name").lean();
+
+          if (existingDoc.requestedBy?.userId) {
+            await notify(tenantObjectId, existingDoc.requestedBy.userId.toString(), {
+              title: "Document Submitted by Employee",
+              message: `${session.userName} submitted document "${existingDoc.title}".`,
+              type: "hr",
+              linkUrl: "/dashboard/hr?tab=vault",
+            });
+          } else if (targetUser?.hrId) {
+            await notify(tenantObjectId, targetUser.hrId.toString(), {
+              title: "Document Submitted by Employee",
+              message: `${session.userName} submitted document "${existingDoc.title}".`,
+              type: "hr",
+              linkUrl: "/dashboard/hr?tab=vault",
+            });
+          } else {
+            // No dedicated HR assigned — Workspace Admins receive the notification
+            await notifyAdmins(tenantObjectId, {
+              title: "Document Submitted by Employee",
+              message: `${session.userName} submitted document "${existingDoc.title}".`,
+              type: "hr",
+              linkUrl: "/dashboard/hr?tab=vault",
+            }, ["Admin", "OPS"]);
+          }
+        } catch (e) {
+          console.warn("Failed to notify HR/Admins on document submission:", e);
+        }
+
+        return NextResponse.json({ document: existingDoc }, { status: 200 });
+      }
+    }
+
     const doc = await HRDocument.create({
       tenantId: tenantObjectId,
       title,
@@ -94,7 +143,33 @@ export async function POST(req: Request) {
       targetUserName: finalTargetUserName,
       isRestricted: true,
       uploadedBy: session.userName,
+      status: "Submitted",
     });
+
+    // Notify assigned HR or fallback to Admins on new document creation
+    try {
+      const { notify, notifyAdmins } = await import("@/lib/notify");
+      const { User } = await import("@/models/User");
+      const targetUser = await User.findById(finalTargetUserId).select("hrId name").lean();
+
+      if (targetUser?.hrId) {
+        await notify(tenantObjectId, targetUser.hrId.toString(), {
+          title: "New Document Uploaded",
+          message: `${session.userName} uploaded "${title}".`,
+          type: "hr",
+          linkUrl: "/dashboard/hr?tab=vault",
+        });
+      } else {
+        await notifyAdmins(tenantObjectId, {
+          title: "New Document Uploaded",
+          message: `${session.userName} uploaded "${title}".`,
+          type: "hr",
+          linkUrl: "/dashboard/hr?tab=vault",
+        }, ["Admin", "OPS"]);
+      }
+    } catch (e) {
+      console.warn("Failed to notify HR/Admins on new document upload:", e);
+    }
 
     return NextResponse.json({ document: doc }, { status: 201 });
   } catch (error: unknown) {

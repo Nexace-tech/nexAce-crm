@@ -54,6 +54,7 @@ export interface ITenant extends Document {
   customShifts?: IShiftConfig[];
   employmentTypes?: string[];
   signatureUrl?: string;
+  isolateHRData?: boolean;
   createdAt: Date;
 }
 
@@ -113,6 +114,7 @@ const TenantSchema: Schema = new Schema({
     default: ["Permanent", "Freelancer", "Part-Time", "Contractor", "Intern"]
   },
   signatureUrl: { type: String, default: "" },
+  isolateHRData: { type: Boolean, default: false },
   createdAt: { type: Date, default: Date.now }
 }, { strict: false });
 

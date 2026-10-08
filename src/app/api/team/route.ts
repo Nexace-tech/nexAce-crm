@@ -100,6 +100,8 @@ export async function GET(request: Request) {
       .select("-passwordHash")
       .populate("managerId", "name email role photoUrl")
       .populate("hrId", "name email role photoUrl")
+      .populate("onboardedBy.hrId", "name email role photoUrl")
+      .populate("documentsConfirmedBy.hrId", "name email role photoUrl")
       .sort({ name: 1 })
       .lean();
 

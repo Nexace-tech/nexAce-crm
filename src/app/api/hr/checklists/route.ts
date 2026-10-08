@@ -21,12 +21,16 @@ export async function GET(req: Request) {
     if (type) query.type = type;
     if (employmentType) query.employmentType = employmentType;
 
-    const isPrivileged = session.role === "Admin" || session.role === "Manager" || session.role === "HR" || session.role === "OPS" || isSubAdminRole(session.role);
-    if (!isPrivileged) {
-      query.userId = userObjectId;
+    const { getHRAccessScope } = await import("@/lib/hrIsolation");
+    const scope = await getHRAccessScope(session, tenantObjectId, userObjectId);
+    if (scope.allowedUserIds) {
+      query.userId = { $in: scope.allowedUserIds };
     }
 
-    const checklists = await HROnboarding.find(query).sort({ createdAt: -1 }).lean();
+    const checklists = await HROnboarding.find(query)
+      .populate("onboardedBy.hrId", "name email role")
+      .sort({ createdAt: -1 })
+      .lean();
     return NextResponse.json({ checklists });
   } catch (error: unknown) {
     console.error("GET /api/hr/checklists error:", error);
@@ -119,7 +123,7 @@ export async function POST(req: Request) {
   try {
     const authResult = await requireTenantSession(["Admin", "Manager"]);
     if (isAuthError(authResult)) return authResult;
-    const { tenantObjectId } = authResult;
+    const { tenantObjectId, userObjectId, session } = authResult;
 
     await connectToDatabase();
     const body = await req.json();
@@ -178,7 +182,28 @@ export async function POST(req: Request) {
       status: "In Progress",
       dueDate: dueDate ? new Date(dueDate) : undefined,
       items: finalItems,
+      onboardedBy: {
+        hrId: userObjectId,
+        hrName: session.userName,
+        date: new Date(),
+      },
     });
+
+    // Also update User record with onboardedBy details
+    try {
+      const { User } = await import("@/models/User");
+      await User.findByIdAndUpdate(userId, {
+        $set: {
+          onboardedBy: {
+            hrId: userObjectId,
+            hrName: session.userName,
+            date: new Date(),
+          },
+        },
+      });
+    } catch (e) {
+      console.warn("Failed to update User.onboardedBy on checklist creation:", e);
+    }
 
     // Notify employee of assigned checklist
     await notify(tenantObjectId, userId, {
@@ -236,13 +261,22 @@ export async function PUT(req: Request) {
       checklist.status = "Completed";
       checklist.completedDate = new Date();
 
-      // Notify Admins when checklist fully completed
-      await notifyAdmins(tenantObjectId, {
-        title: `${checklist.type} Checklist Completed`,
-        message: `${checklist.userName} completed all ${checklist.type} checklist items.`,
-        type: "hr",
-        linkUrl: "/dashboard/hr?tab=checklists",
-      });
+      try {
+        const { User } = await import("@/models/User");
+        const userRec = await User.findById(checklist.userId).select("hrId").lean();
+        const payload = {
+          title: `${checklist.type} Checklist Completed`,
+          message: `${checklist.userName} completed all ${checklist.type} checklist items.`,
+          type: "hr" as const,
+          linkUrl: "/dashboard/hr?tab=checklists",
+        };
+        if (userRec?.hrId) {
+          await notify(tenantObjectId, userRec.hrId.toString(), payload);
+        }
+        await notifyAdmins(tenantObjectId, payload, ["Admin", "OPS"]);
+      } catch (err) {
+        console.warn("Failed to dispatch completion notification:", err);
+      }
     } else {
       checklist.status = "In Progress";
     }

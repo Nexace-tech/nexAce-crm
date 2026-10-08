@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 700" width="800" height="700">
+  <defs>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;display=swap');
+      text { font-family: 'Inter', system-ui, -apple-system, sans-serif; }
+      .center-title { font-size: 32px; font-weight: 800; fill: #1e3a8a; }
+      .center-sub { font-size: 16px; font-weight: 500; fill: #64748b; }
+      .step-num { font-size: 14px; font-weight: 700; fill: #1e3a8a; }
+      .step-title { font-size: 15px; font-weight: 700; fill: #0f172a; }
+      .step-desc { font-size: 11px; font-weight: 400; fill: #64748b; }
+      .arrow-path { fill: none; stroke: #334155; stroke-width: 1.6; stroke-linecap: round; }
+    </style>
+    <!-- Arrowhead Marker -->
+    <marker id="arrowhead" markerWidth="8" markerHeight="6" refX="6" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#334155" />
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="100%" height="100%" fill="#ffffff" />
+
+  <!-- Center Title & Subtitle -->
+  <g text-anchor="middle">
+    <text x="400" y="344" class="center-title">Onboarding</text>
+    <text x="400" y="372" class="center-sub">Employee Lifecycle</text>
+  </g>
+  <!-- Arrow 1 to 1 -->
+  <path d="M 448.24 181.78 A 175 175 0 0 1 521.57 224.12" class="arrow-path" marker-end="url(#arrowhead)" />
+  <!-- Arrow 2 to 2 -->
+  <path d="M 569.80 307.66 A 175 175 0 0 1 569.80 392.34" class="arrow-path" marker-end="url(#arrowhead)" />
+  <!-- Arrow 3 to 3 -->
+  <path d="M 521.57 475.88 A 175 175 0 0 1 448.24 518.22" class="arrow-path" marker-end="url(#arrowhead)" />
+  <!-- Arrow 4 to 4 -->
+  <path d="M 351.76 518.22 A 175 175 0 0 1 278.43 475.88" class="arrow-path" marker-end="url(#arrowhead)" />
+  <!-- Arrow 5 to 5 -->
+  <path d="M 230.20 392.34 A 175 175 0 0 1 230.20 307.66" class="arrow-path" marker-end="url(#arrowhead)" />
+  <!-- Arrow 6 to 6 -->
+  <path d="M 278.43 224.12 A 175 175 0 0 1 351.76 181.78" class="arrow-path" marker-end="url(#arrowhead)" />
+
+  <!-- Node 1: Registration -->
+  <g transform="translate(400.00, 125.00)">
+    <!-- Number Badge -->
+    <circle cx="0" cy="0" r="15" fill="#e0f2fe" stroke="#38bdf8" stroke-width="1.5" />
+    <text x="0" y="5" text-anchor="middle" class="step-num">1</text>
+
+    <!-- Step Title -->
+    <text x="0" y="26" text-anchor="middle" class="step-title">Registration</text>
+
+    <!-- Subtitle lines -->
+    <text x="0" y="42" text-anchor="middle" class="step-desc">Candidate signs up or accepts invite</text>
+    <text x="0" y="56" text-anchor="middle" class="step-desc">Account created with 'Pending' status</text>
+  </g>
+
+  <!-- Node 2: HR Assignment -->
+  <g transform="translate(594.86, 237.50)">
+    <!-- Number Badge -->
+    <circle cx="0" cy="0" r="15" fill="#e0f2fe" stroke="#38bdf8" stroke-width="1.5" />
+    <text x="0" y="5" text-anchor="middle" class="step-num">2</text>
+
+    <!-- Step Title -->
+    <text x="0" y="26" text-anchor="middle" class="step-title">HR Assignment</text>
+
+    <!-- Subtitle lines -->
+    <text x="0" y="42" text-anchor="middle" class="step-desc">Admin assigns cohort & designated HR</text>
+    <text x="0" y="56" text-anchor="middle" class="step-desc">HR Data Isolation hides other HRs</text>
+  </g>
+
+  <!-- Node 3: Checklist Setup -->
+  <g transform="translate(594.86, 462.50)">
+    <!-- Number Badge -->
+    <circle cx="0" cy="0" r="15" fill="#e0f2fe" stroke="#38bdf8" stroke-width="1.5" />
+    <text x="0" y="5" text-anchor="middle" class="step-num">3</text>
+
+    <!-- Step Title -->
+    <text x="0" y="26" text-anchor="middle" class="step-title">Checklist Setup</text>
+
+    <!-- Subtitle lines -->
+    <text x="0" y="42" text-anchor="middle" class="step-desc">HR initializes onboarding checklist</text>
+    <text x="0" y="56" text-anchor="middle" class="step-desc">Stamps 'onboardedBy' audit metadata</text>
+  </g>
+
+  <!-- Node 4: Document Upload -->
+  <g transform="translate(400.00, 575.00)">
+    <!-- Number Badge -->
+    <circle cx="0" cy="0" r="15" fill="#e0f2fe" stroke="#38bdf8" stroke-width="1.5" />
+    <text x="0" y="5" text-anchor="middle" class="step-num">4</text>
+
+    <!-- Step Title -->
+    <text x="0" y="26" text-anchor="middle" class="step-title">Document Upload</text>
+
+    <!-- Subtitle lines -->
+    <text x="0" y="42" text-anchor="middle" class="step-desc">Employee views required documents</text>
+    <text x="0" y="56" text-anchor="middle" class="step-desc">Uploads ID proofs & compliance files</text>
+  </g>
+
+  <!-- Node 5: HR Verification -->
+  <g transform="translate(205.14, 462.50)">
+    <!-- Number Badge -->
+    <circle cx="0" cy="0" r="15" fill="#e0f2fe" stroke="#38bdf8" stroke-width="1.5" />
+    <text x="0" y="5" text-anchor="middle" class="step-num">5</text>
+
+    <!-- Step Title -->
+    <text x="0" y="26" text-anchor="middle" class="step-title">HR Verification</text>
+
+    <!-- Subtitle lines -->
+    <text x="0" y="42" text-anchor="middle" class="step-desc">HR audits files & verifies submissions</text>
+    <text x="0" y="56" text-anchor="middle" class="step-desc">Flips 'Docs Confirmed' toggle switch</text>
+  </g>
+
+  <!-- Node 6: Active Status -->
+  <g transform="translate(205.14, 237.50)">
+    <!-- Number Badge -->
+    <circle cx="0" cy="0" r="15" fill="#e0f2fe" stroke="#38bdf8" stroke-width="1.5" />
+    <text x="0" y="5" text-anchor="middle" class="step-num">6</text>
+
+    <!-- Step Title -->
+    <text x="0" y="26" text-anchor="middle" class="step-title">Active Status</text>
+
+    <!-- Subtitle lines -->
+    <text x="0" y="42" text-anchor="middle" class="step-desc">Status promoted to 'Active'</text>
+    <text x="0" y="56" text-anchor="middle" class="step-desc">Full workspace & deliverables unlocked</text>
+  </g>
+</svg>

@@ -36,6 +36,11 @@ export interface IHROnboarding extends Document {
   dueDate?: Date;
   completedDate?: Date;
   items: IChecklistItem[];
+  onboardedBy?: {
+    hrId?: mongoose.Types.ObjectId;
+    hrName?: string;
+    date?: Date;
+  };
   createdAt: Date;
   updatedAt: Date;
 }
@@ -91,6 +96,11 @@ const HROnboardingSchema = new Schema(
     dueDate: { type: Date },
     completedDate: { type: Date },
     items: [ChecklistItemSchema],
+    onboardedBy: {
+      hrId: { type: Schema.Types.ObjectId, ref: "User" },
+      hrName: { type: String, default: "" },
+      date: { type: Date, default: Date.now },
+    },
   },
   { timestamps: true }
 );

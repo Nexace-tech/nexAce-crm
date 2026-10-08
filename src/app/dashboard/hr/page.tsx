@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/hooks/useAuth";
+import { useSearchParams } from "next/navigation";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -45,6 +46,19 @@ export default function HRPage() {
     ["directory", "tasks", "checklists", "leaves", "vault", "cases", "appraisals", "probation", "sandbox"]
   );
 
+  const searchParams = useSearchParams();
+  const highlightParam = searchParams?.get("highlight");
+  const checklistSectionRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (highlightParam === "true" && activeTab === "checklists") {
+      const timer = setTimeout(() => {
+        checklistSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 350);
+      return () => clearTimeout(timer);
+    }
+  }, [highlightParam, activeTab]);
+
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
 
@@ -55,6 +69,15 @@ export default function HRPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [onboardingFilter, setOnboardingFilter] = useState<"All" | "PendingOnboarding" | "AssignedToMe">("All");
   const [remindingUserId, setRemindingUserId] = useState<string | null>(null);
+  const [isHRIsoActive, setIsHRIsoActive] = useState(false);
+  const [togglingIso, setTogglingIso] = useState(false);
+  const [selectedDocUser, setSelectedDocUser] = useState<any | null>(null);
+  const [showDocUserModal, setShowDocUserModal] = useState(false);
+  const [reqDocTitle, setReqDocTitle] = useState("");
+  const [reqDocCategory, setReqDocCategory] = useState("Document");
+  const [reqDocNotes, setReqDocNotes] = useState("");
+  const [requestingDoc, setRequestingDoc] = useState(false);
+  const [verifyingDocId, setVerifyingDocId] = useState<string | null>(null);
 
   // Checklists State (Onboarding / Offboarding)
   const [checklists, setChecklists] = useState<any[]>([]);
@@ -288,9 +311,127 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
       if (res.ok) {
         const d = await res.json();
         setDirectoryUsers(d.users || []);
+        if (d.isolateHRData !== undefined) {
+          setIsHRIsoActive(Boolean(d.isolateHRData));
+        }
       }
     } catch {
       // Quietly handle transient network disconnect
+    }
+  };
+
+  const handleToggleHRIso = async () => {
+    try {
+      setTogglingIso(true);
+      const nextVal = !isHRIsoActive;
+      const res = await fetch("/api/settings/hr-isolation", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isolateHRData: nextVal }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to update isolation");
+      setIsHRIsoActive(nextVal);
+      showToast(data.message || (nextVal ? "HR Data Isolation enabled" : "HR Data Isolation disabled"));
+      await Promise.all([
+        fetchDirectory(),
+        fetchChecklists(),
+        fetchLeaves(),
+        fetchDocuments(),
+        fetchCases(),
+        fetchAppraisals(),
+      ]);
+    } catch (err: any) {
+      showToast(err.message || "Failed to toggle isolation", "error");
+    } finally {
+      setTogglingIso(false);
+    }
+  };
+
+  const handleToggleDocumentSubmission = async (targetUserId: string, nextStatus: boolean) => {
+    try {
+      const res = await fetch(`/api/team/${targetUserId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ documentsSubmitted: nextStatus }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to update documents confirmation status");
+      showToast(nextStatus ? "Documents confirmed & verified!" : "Documents marked as Pending.");
+      setDirectoryUsers((prev) =>
+        prev.map((u) =>
+          u._id === targetUserId
+            ? {
+                ...u,
+                documentsSubmitted: nextStatus,
+                documentsConfirmedBy: {
+                  hrId: user?._id,
+                  hrName: user?.name,
+                  confirmedAt: new Date().toISOString(),
+                },
+              }
+            : u
+        )
+      );
+    } catch (err: any) {
+      showToast(err.message || "Failed to update status", "error");
+    }
+  };
+
+  const handleOpenEmployeeDocsModal = (u: any) => {
+    setSelectedDocUser(u);
+    setReqDocTitle("");
+    setReqDocCategory("Document");
+    setReqDocNotes("");
+    setShowDocUserModal(true);
+  };
+
+  const handleRequestDocument = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedDocUser || !reqDocTitle.trim()) return;
+    try {
+      setRequestingDoc(true);
+      const res = await fetch("/api/hr/documents", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: reqDocTitle.trim(),
+          category: reqDocCategory,
+          notes: reqDocNotes.trim(),
+          targetUserId: selectedDocUser._id,
+          targetUserName: selectedDocUser.name,
+          status: "Requested",
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to request document");
+      showToast(`Document request sent to ${selectedDocUser.name}`);
+      setReqDocTitle("");
+      setReqDocNotes("");
+      await fetchDocuments();
+    } catch (err: any) {
+      showToast(err.message || "Failed to request document", "error");
+    } finally {
+      setRequestingDoc(false);
+    }
+  };
+
+  const handleVerifyDocument = async (documentId: string, status: "Verified" | "Rejected") => {
+    try {
+      setVerifyingDocId(documentId);
+      const res = await fetch("/api/hr/documents", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ documentId, status }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to update document status");
+      showToast(`Document marked as ${status}`);
+      await fetchDocuments();
+    } catch (err: any) {
+      showToast(err.message || "Failed to update document status", "error");
+    } finally {
+      setVerifyingDocId(null);
     }
   };
 
@@ -946,6 +1087,39 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
+          {(isAdmin || isOPS) && (
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl border border-border bg-card shadow-2xs">
+              <div className="flex flex-col text-left">
+                <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                  <i className="fa-solid fa-user-shield text-purple-500 text-xs" /> HR Data Isolation
+                </span>
+                <span className="text-[10px] text-muted-foreground">
+                  {isHRIsoActive ? "Active: HRs see assigned users only" : "Disabled: HRs see all workspace users"}
+                </span>
+              </div>
+              <Button
+                variant={isHRIsoActive ? "default" : "outline"}
+                size="sm"
+                disabled={togglingIso}
+                onClick={handleToggleHRIso}
+                className={cn(
+                  "h-7 text-xs px-2.5 font-bold cursor-pointer transition-all gap-1.5 ml-1",
+                  isHRIsoActive
+                    ? "bg-purple-600 hover:bg-purple-700 text-white shadow-2xs"
+                    : "border-muted-foreground/30 text-muted-foreground hover:text-foreground"
+                )}
+                title="Toggle whether HR officers only see their assigned employees or all workspace employees"
+              >
+                {togglingIso ? (
+                  <i className="fa-solid fa-spinner fa-spin text-xs" />
+                ) : isHRIsoActive ? (
+                  <><i className="fa-solid fa-lock text-[10px]" /> Isolated</>
+                ) : (
+                  <><i className="fa-solid fa-lock-open text-[10px]" /> Shared</>
+                )}
+              </Button>
+            </div>
+          )}
           {(can("applyLeave") || isAdmin || isOPS) && (
             <Button variant="outline" size="sm" onClick={() => { setActiveTab("leaves"); setShowLeaveForm(true); }} className="gap-2 cursor-pointer">
               <i className="fa-solid fa-calendar-days text-xs" /> Request Leave
@@ -1183,7 +1357,7 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
                 )}
                 onClick={() => setOnboardingFilter("PendingOnboarding")}
               >
-                <i className="fa-solid fa-sparkles text-[10px]" />
+                <i className="fa-solid fa-user-plus text-[10px]" />
                 New Hires (Onboarding)
                 {checklists.filter((c) => c.type === "Onboarding" && c.status === "In Progress").length > 0 && (
                   <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] bg-amber-500/20 font-bold">
@@ -1267,7 +1441,7 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
                         </Badge>
                         {isPendingOnboarding && (
                           <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 flex items-center gap-1 shadow-2xs">
-                            <i className="fa-solid fa-sparkles text-[9px] animate-pulse" /> New Hire
+                            <i className="fa-solid fa-user-plus text-[9px] animate-pulse" /> New Hire
                           </span>
                         )}
                       </div>
@@ -1319,7 +1493,7 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
                       </div>
                     )}
 
-                    <div className="pt-2 border-t border-border/60 text-xs space-y-1">
+                    <div className="pt-2 border-t border-border/60 text-xs space-y-1.5">
                       <p className="text-muted-foreground flex justify-between">
                         <span>Department:</span>
                         <span className="font-semibold text-foreground">{u.department || "General"}</span>
@@ -1330,6 +1504,21 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
                           <span className="font-semibold text-primary">{hrPartnerName}</span>
                         </p>
                       )}
+                      {(u.onboardedBy?.hrName || u.onboardedBy?.hrId?.name) && (
+                        <div className="p-1.5 rounded-lg bg-purple-500/10 border border-purple-500/20 text-[11px] flex justify-between items-center">
+                          <span className="text-purple-700 dark:text-purple-300 font-semibold flex items-center gap-1">
+                            <i className="fa-solid fa-user-check text-[10px]" /> Onboarded by:
+                          </span>
+                          <span className="font-bold text-foreground">
+                            {u.onboardedBy?.hrName || u.onboardedBy?.hrId?.name}
+                            {u.onboardedBy?.date && (
+                              <span className="text-[10px] text-muted-foreground ml-1">
+                                ({new Date(u.onboardedBy.date).toLocaleDateString()})
+                              </span>
+                            )}
+                          </span>
+                        </div>
+                      )}
                       <p className="text-muted-foreground flex justify-between">
                         <span>Joined:</span>
                         <span className="font-medium text-foreground">{u.joinDate ? new Date(u.joinDate).toLocaleDateString() : "N/A"}</span>
@@ -1339,7 +1528,7 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
                         <span className="font-medium text-foreground">{u.shiftTime || "09:00 AM - 05:00 PM"}</span>
                       </p>
                       {u.resumeUrl && (
-                        <div className="pt-2 mt-1 border-t border-border/50 flex justify-between items-center">
+                        <div className="pt-1.5 mt-1 border-t border-border/50 flex justify-between items-center">
                           <span className="text-muted-foreground flex items-center gap-1.5 font-medium">
                             <i className="fa-solid fa-file-lines text-rose-500 text-xs" /> Resume / CV:
                           </span>
@@ -1354,6 +1543,38 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
                           </a>
                         </div>
                       )}
+
+                      {/* Document Submission Toggle & Interactive Requests */}
+                      <div className="pt-2 mt-1 border-t border-border/60 flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[11px] text-muted-foreground font-medium">Docs:</span>
+                          <button
+                            type="button"
+                            onClick={() => handleToggleDocumentSubmission(u._id, !u.documentsSubmitted)}
+                            className={cn(
+                              "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border cursor-pointer transition-all hover:scale-105",
+                              u.documentsSubmitted
+                                ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30"
+                                : "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30"
+                            )}
+                            title="Click to toggle document verification status"
+                          >
+                            {u.documentsSubmitted ? (
+                              <><i className="fa-solid fa-circle-check text-[9px] text-emerald-500" /> Confirmed</>
+                            ) : (
+                              <><i className="fa-solid fa-clock text-[9px] text-amber-500" /> Pending</>
+                            )}
+                          </button>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-6 text-[10px] px-2 gap-1 border-primary/30 text-primary hover:bg-primary/10 cursor-pointer font-semibold"
+                          onClick={() => handleOpenEmployeeDocsModal(u)}
+                        >
+                          <i className="fa-solid fa-folder-open text-[9px]" /> Docs &amp; Requests
+                        </Button>
+                      </div>
                     </div>
                   </CardContent>
                 </Card>
@@ -1365,7 +1586,40 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
 
       {/* TAB 2: ONBOARDING / OFFBOARDING & CONTRACTS GRID — guarded */}
       {activeTab === "checklists" && (isManagerOrAdmin || can("viewHROnboarding") || Boolean(user)) && (
-        <div className="space-y-4">
+        <div ref={checklistSectionRef} className="space-y-4">
+          {/* Highlight Notification Banner for Checklist & Document Upload */}
+          {highlightParam === "true" && (
+            <div className="p-4 rounded-2xl bg-gradient-to-r from-emerald-500/15 via-teal-500/15 to-emerald-500/10 border-2 border-emerald-500 shadow-lg shadow-emerald-500/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in fade-in slide-in-from-top-2">
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-2xl bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 flex items-center justify-center shrink-0 text-xl shadow-xs">
+                  <i className="fa-solid fa-file-circle-check" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-sm text-foreground flex items-center gap-2">
+                    <span>Onboarding Checklist &amp; Document Submissions</span>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500 text-white animate-pulse">
+                      Action Required
+                    </span>
+                  </h4>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Please review your active onboarding contract below. Click on your card to upload required identification, NDA, and compliance verification files.
+                  </p>
+                </div>
+              </div>
+              <Button
+                size="sm"
+                onClick={() => {
+                  const myActiveChecklist = checklists.find(
+                    (c) => (c.userId === user?._id || c.userEmail?.toLowerCase() === user?.email?.toLowerCase()) && c.status === "In Progress"
+                  ) || checklists.find((c) => c.userId === user?._id || c.userEmail?.toLowerCase() === user?.email?.toLowerCase());
+                  if (myActiveChecklist) setSelectedChecklistDetails(myActiveChecklist);
+                }}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold gap-1.5 shrink-0 self-start sm:self-auto cursor-pointer shadow-xs"
+              >
+                <i className="fa-solid fa-folder-open text-xs" /> Open My Checklist &rarr;
+              </Button>
+            </div>
+          )}
           {/* Header & Controls Bar modeled after Dreams Technologies Contracts Grid */}
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-card border border-border/80 p-4 rounded-2xl shadow-xs">
             <div className="flex items-center gap-3">
@@ -1437,42 +1691,44 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
             </div>
           </div>
 
-          {/* Filter Pills: Type & Employment Type */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-            <div className="flex items-center gap-2 flex-wrap">
-              {/* Type Filter */}
-              <div className="flex gap-1 bg-muted/40 p-1 rounded-lg border border-border">
-                {(["All", "Onboarding", "Offboarding"] as const).map((t) => (
-                  <Button
-                    key={t}
-                    variant={checklistTypeFilter === t ? "default" : "ghost"}
-                    size="sm"
-                    className="h-7 text-xs px-2.5"
-                    onClick={() => setChecklistTypeFilter(t)}
-                  >
-                    {t}
-                  </Button>
-                ))}
-              </div>
+          {/* Filter Pills: Type & Employment Type — Visible to HR & Admins only */}
+          {isManagerOrAdmin && (
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+              <div className="flex items-center gap-2 flex-wrap">
+                {/* Type Filter */}
+                <div className="flex gap-1 bg-muted/40 p-1 rounded-lg border border-border">
+                  {(["All", "Onboarding", "Offboarding"] as const).map((t) => (
+                    <Button
+                      key={t}
+                      variant={checklistTypeFilter === t ? "default" : "ghost"}
+                      size="sm"
+                      className="h-7 text-xs px-2.5"
+                      onClick={() => setChecklistTypeFilter(t)}
+                    >
+                      {t}
+                    </Button>
+                  ))}
+                </div>
 
-              <div className="h-4 w-px bg-border hidden sm:block" />
+                <div className="h-4 w-px bg-border hidden sm:block" />
 
-              {/* Employment Type Filter */}
-              <div className="flex gap-1 bg-muted/40 p-1 rounded-lg border border-border flex-wrap">
-                {(["All", "Contractor", "Freelancer", "Part-Time", "Intern", "Permanent"] as const).map((emp) => (
-                  <Button
-                    key={emp}
-                    variant={checklistEmploymentTypeFilter === emp ? "default" : "ghost"}
-                    size="sm"
-                    className="h-7 text-xs px-2.5"
-                    onClick={() => setChecklistEmploymentTypeFilter(emp)}
-                  >
-                    {emp === "All" ? "All Types" : emp}
-                  </Button>
-                ))}
+                {/* Employment Type Filter */}
+                <div className="flex gap-1 bg-muted/40 p-1 rounded-lg border border-border flex-wrap">
+                  {(["All", "Contractor", "Freelancer", "Part-Time", "Intern", "Permanent"] as const).map((emp) => (
+                    <Button
+                      key={emp}
+                      variant={checklistEmploymentTypeFilter === emp ? "default" : "ghost"}
+                      size="sm"
+                      className="h-7 text-xs px-2.5"
+                      onClick={() => setChecklistEmploymentTypeFilter(emp)}
+                    >
+                      {emp === "All" ? "All Types" : emp}
+                    </Button>
+                  ))}
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
           {/* CONTENT SECTION */}
           {(() => {
@@ -1538,95 +1794,180 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
                       ? `${c.contractDetails.currency || "$"} Fixed`
                       : "Standard";
 
+                    const isUserCard = c.userId === user?._id || c.userEmail?.toLowerCase() === user?.email?.toLowerCase();
+                    const isHighlighted = (highlightParam === "true" || !isManagerOrAdmin) && isUserCard && c.status === "In Progress";
+
                     return (
                       <div
                         key={c._id}
-                        className="bg-card border border-border/80 rounded-2xl p-4 hover:shadow-md transition-all flex flex-col justify-between group hover:border-primary/40 relative"
+                        className={cn(
+                          "rounded-2xl p-5 transition-all flex flex-col justify-between group relative overflow-hidden",
+                          isHighlighted
+                            ? "bg-gradient-to-b from-emerald-500/[0.05] via-card to-card border-2 border-emerald-500 shadow-xl shadow-emerald-500/10 ring-1 ring-emerald-500/30"
+                            : "bg-card border border-border/80 hover:border-primary/40 hover:shadow-md"
+                        )}
                       >
+                        {/* Top Accent Strip for Highlighted Card */}
+                        {isHighlighted && (
+                          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-500 via-teal-400 to-emerald-500" />
+                        )}
+
                         <div>
-                          {/* Top Row: ID Badge & Menu Button */}
-                          <div className="flex items-center justify-between mb-3">
-                            <span className="px-2.5 py-0.5 rounded text-[11px] font-semibold bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/20 uppercase tracking-wide">
-                              {contractId}
-                            </span>
-                            <div className="flex items-center gap-1.5">
-                              <Badge variant="outline" className={cn("text-[10px] py-0", c.status === "Completed" ? "border-emerald-500/30 text-emerald-600" : "")}>
-                                {c.status}
-                              </Badge>
-                              <button
-                                type="button"
-                                onClick={() => setSelectedChecklistDetails(c)}
-                                className="w-7 h-7 rounded-md border border-border flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 text-xs transition-colors cursor-pointer"
-                                title="Contract & Tasks Menu"
-                              >
-                                <i className="fa-solid fa-ellipsis-vertical" />
-                              </button>
+                          {/* Top Row: Clean ID Pill, Status Badge & Context Menu */}
+                          <div className="flex items-center justify-between gap-2 mb-3.5">
+                            <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
+                              <span className="px-2 py-0.5 rounded-md text-[11px] font-mono font-bold bg-muted text-foreground/80 border border-border shrink-0 uppercase tracking-wider">
+                                {contractId}
+                              </span>
+                              {isHighlighted ? (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 flex items-center gap-1 shrink-0">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> Active
+                                </span>
+                              ) : (
+                                <Badge
+                                  variant="soft"
+                                  color={c.status === "Completed" ? "success" : "warning"}
+                                  className="text-[10px] py-0 shrink-0 font-medium"
+                                >
+                                  {c.status}
+                                </Badge>
+                              )}
                             </div>
+
+                            <button
+                              type="button"
+                              onClick={() => setSelectedChecklistDetails(c)}
+                              className="w-7 h-7 rounded-lg border border-border/70 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/80 text-xs transition-colors cursor-pointer shrink-0"
+                              title="Contract & Checklist Options"
+                            >
+                              <i className="fa-solid fa-ellipsis-vertical" />
+                            </button>
                           </div>
 
-                          {/* Contract Title & Category */}
-                          <div className="mb-3">
+                          {/* Contract Title & Role/Type Chips */}
+                          <div className="mb-3 space-y-1">
                             <h4
                               onClick={() => setSelectedChecklistDetails(c)}
-                              className="font-bold text-sm text-foreground hover:text-primary transition-colors cursor-pointer truncate"
+                              className="font-bold text-base text-foreground hover:text-primary transition-colors cursor-pointer truncate"
                               title={`${c.userName} - ${empType}`}
                             >
                               {c.contractDetails?.sowReference ? `${c.userName} (${c.contractDetails.sowReference})` : `${c.userName}'s Contract`}
                             </h4>
-                            <p className="text-xs text-muted-foreground mt-0.5 truncate">
-                              Category : <span className="text-foreground/90 font-medium">{empType}</span> ({c.type})
-                            </p>
-                          </div>
-
-                          {/* Dates Block */}
-                          <div className="space-y-1.5 my-3 text-xs text-muted-foreground">
-                            <div className="flex items-center gap-2">
-                              <i className="fa-regular fa-calendar-days text-muted-foreground/70 text-xs w-3.5" />
-                              <span>Date : <strong className="text-foreground/90 font-normal">{startDateStr}</strong></span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <i className="fa-regular fa-calendar-check text-muted-foreground/70 text-xs w-3.5" />
-                              <span>Open till : <strong className="text-foreground/90 font-normal">{endDateStr}</strong></span>
+                            <div className="flex items-center gap-1.5 flex-wrap text-xs">
+                              <span className={cn("inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium border", EMPLOYMENT_TYPE_CONFIG[empType]?.badge || "bg-muted text-foreground border-border")}>
+                                <i className={cn(EMPLOYMENT_TYPE_CONFIG[empType]?.icon || "fa-solid fa-briefcase", "text-[10px]")} />
+                                {empType}
+                              </span>
+                              <span className="text-[11px] text-muted-foreground">•</span>
+                              <span className="text-[11px] text-muted-foreground font-medium">{c.type}</span>
                             </div>
                           </div>
 
-                          {/* Contractor Profile Sub-box */}
-                          <div className="bg-muted/40 border border-border/60 rounded-xl p-2.5 flex items-center gap-2.5 mb-3.5">
-                            <div className="w-9 h-9 rounded-full bg-primary/10 text-primary border border-primary/20 flex items-center justify-center shrink-0 font-bold text-xs uppercase shadow-2xs">
+                          {/* Schedule Dates */}
+                          <div className="grid grid-cols-2 gap-2 my-3 p-2.5 rounded-xl bg-muted/30 border border-border/50 text-[11px]">
+                            <div className="min-w-0">
+                              <span className="text-muted-foreground block text-[10px] uppercase font-semibold">Start Date</span>
+                              <span className="font-medium text-foreground truncate block">{startDateStr}</span>
+                            </div>
+                            <div className="min-w-0">
+                              <span className="text-muted-foreground block text-[10px] uppercase font-semibold">Valid Till</span>
+                              <span className="font-medium text-foreground truncate block">{endDateStr}</span>
+                            </div>
+                          </div>
+
+                          {/* Employee / Candidate Mini Profile */}
+                          <div className="bg-muted/40 border border-border/60 rounded-xl p-2.5 flex items-center gap-2.5 mb-2.5">
+                            <div className="w-8 h-8 rounded-full bg-primary/10 text-primary border border-primary/20 flex items-center justify-center shrink-0 font-bold text-xs uppercase shadow-2xs">
                               {c.userName.charAt(0)}
                             </div>
                             <div className="min-w-0 flex-1">
-                              <p className="text-xs font-semibold text-foreground truncate">{c.userName}</p>
+                              <p className="text-xs font-bold text-foreground truncate">{c.userName}</p>
                               <p className="text-[11px] text-muted-foreground truncate">{c.userEmail || empType}</p>
                             </div>
                           </div>
 
+                          {/* Assigned HR partner / Admin oversight info pill */}
+                          {(() => {
+                            const linkedUser = directoryUsers.find(
+                              (u) => u._id === (c.userId?._id || c.userId) ||
+                                     u.email?.toLowerCase() === c.userEmail?.toLowerCase()
+                            );
+                            const cardHrName =
+                              c.onboardedBy?.hrName ||
+                              c.onboardedBy?.hrId?.name ||
+                              linkedUser?.hrId?.name ||
+                              linkedUser?.onboardedBy?.hrName;
+
+                            const adminUser =
+                              directoryUsers.find((u) => u.role === "Admin" || (u.role && u.role.toLowerCase() === "admin")) ||
+                              directoryUsers.find((u) => isSubAdminRole(u.role));
+                            const cardAdminName = adminUser?.name || "Admin";
+
+                            const hasHR = Boolean(cardHrName && cardHrName.trim() && cardHrName.toLowerCase() !== "hr operations");
+                            const label = hasHR ? "HR" : "Admin";
+                            const name = hasHR ? cardHrName : cardAdminName;
+
+                            return (
+                              <div className={cn(
+                                "flex items-center gap-1.5 px-2.5 py-1 mb-3 rounded-lg border text-xs",
+                                hasHR ? "bg-purple-500/10 border-purple-500/20" : "bg-sky-500/10 border-sky-500/20"
+                              )}>
+                                <i className={cn("fa-solid text-[11px] shrink-0", hasHR ? "fa-user-shield text-purple-500" : "fa-shield-halved text-sky-500")} />
+                                <span className="text-[11px] text-muted-foreground">{label}:</span>
+                                <span className="font-bold text-foreground text-[11px] truncate">{name}</span>
+                              </div>
+                            );
+                          })()}
+
                           {/* Checklist Tasks Progress Bar */}
-                          <div className="space-y-1 mb-3.5">
-                            <div className="flex justify-between text-[11px]">
-                              <span className="text-muted-foreground">Checklist Progress</span>
-                              <span className="font-semibold text-foreground">{completedCount}/{totalItems} Tasks ({progressPct}%)</span>
+                          <div className="space-y-1.5 mb-4">
+                            <div className="flex justify-between text-xs">
+                              <span className="text-muted-foreground font-medium flex items-center gap-1">
+                                <i className="fa-solid fa-list-check text-[11px] text-primary" /> Checklist Progress
+                              </span>
+                              <span className="font-bold text-foreground font-mono">{completedCount}/{totalItems} ({progressPct}%)</span>
                             </div>
-                            <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
-                              <div className="h-full bg-primary transition-all" style={{ width: `${progressPct}%` }} />
+                            <div className="w-full h-2 bg-muted/80 rounded-full overflow-hidden p-0.5 border border-border/50">
+                              <div
+                                className="h-full bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full transition-all duration-500"
+                                style={{ width: `${progressPct}%` }}
+                              />
                             </div>
                           </div>
                         </div>
 
-                        {/* Footer: Value Tag & Action Button */}
-                        <div className="flex items-center justify-between pt-2.5 border-t border-border/60 mt-auto">
-                          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/20">
-                            <i className="fa-solid fa-user text-[10px]" />
-                            <span>Value : {valueStr}</span>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => setSelectedChecklistDetails(c)}
-                            className="w-7 h-7 rounded-md border border-border flex items-center justify-center text-muted-foreground hover:text-primary hover:border-primary/40 hover:bg-primary/5 transition-all cursor-pointer"
-                            title="View Checklist Tasks"
-                          >
-                            <i className="fa-regular fa-file-lines text-xs" />
-                          </button>
+                        {/* Footer: Full-width Action CTA for Active card, or Clean Tag + View Tasks */}
+                        <div className="pt-3 border-t border-border/60 mt-auto">
+                          {isHighlighted ? (
+                            <Button
+                              type="button"
+                              onClick={() => setSelectedChecklistDetails(c)}
+                              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs h-9 shadow-md gap-2 cursor-pointer transition-all hover:scale-[1.01]"
+                            >
+                              <i className="fa-solid fa-file-arrow-up text-xs" /> Upload Onboarding Documents &rarr;
+                            </Button>
+                          ) : (
+                            <div className="flex items-center justify-between gap-2">
+                              {valueStr !== "Standard" ? (
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/20 truncate">
+                                  <i className="fa-solid fa-coins text-[10px]" /> {valueStr}
+                                </span>
+                              ) : (
+                                <span className="text-[11px] text-muted-foreground font-medium flex items-center gap-1">
+                                  <i className="fa-solid fa-briefcase text-muted-foreground/60 text-[10px]" /> Standard Role
+                                </span>
+                              )}
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setSelectedChecklistDetails(c)}
+                                className="h-8 text-xs px-3 gap-1.5 font-semibold cursor-pointer hover:bg-primary hover:text-white transition-colors"
+                              >
+                                <i className="fa-solid fa-list-check text-xs" /> View Tasks
+                              </Button>
+                            </div>
+                          )}
                         </div>
                       </div>
                     );
@@ -3108,6 +3449,7 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
             className="w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-card border border-border rounded-2xl p-6 shadow-2xl space-y-4 animate-in zoom-in-95"
             onClick={(e) => e.stopPropagation()}
           >
+            {/* Header info */}
             <div className="flex items-center justify-between border-b border-border pb-3">
               <div className="flex items-center gap-2.5">
                 <div className="w-10 h-10 rounded-full bg-primary/10 text-primary border border-primary/20 flex items-center justify-center font-bold text-sm uppercase">
@@ -3136,6 +3478,87 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
                 <i className="fa-solid fa-xmark text-sm" />
               </button>
             </div>
+
+            {/* Assigned HR Partner Strip with Admin Fallback */}
+            {(() => {
+              const linkedUser = directoryUsers.find(
+                (u) => u._id === (selectedChecklistDetails.userId?._id || selectedChecklistDetails.userId) ||
+                       u.email?.toLowerCase() === selectedChecklistDetails.userEmail?.toLowerCase()
+              );
+
+              // Find HR Name
+              const hrName =
+                selectedChecklistDetails.onboardedBy?.hrName ||
+                selectedChecklistDetails.onboardedBy?.hrId?.name ||
+                linkedUser?.hrId?.name ||
+                linkedUser?.onboardedBy?.hrName ||
+                "";
+
+              const hrEmail =
+                selectedChecklistDetails.onboardedBy?.hrId?.email ||
+                linkedUser?.hrId?.email ||
+                "";
+
+              // Find Admin Name fallback if no HR assigned
+              const adminUser =
+                directoryUsers.find((u) => u.role === "Admin" || (u.role && u.role.toLowerCase() === "admin")) ||
+                directoryUsers.find((u) => isSubAdminRole(u.role));
+
+              const adminName = adminUser?.name || "Workspace Admin";
+              const adminEmail = adminUser?.email || "";
+
+              const hasHR = Boolean(hrName && hrName.trim() && hrName.toLowerCase() !== "hr operations");
+              const displayName = hasHR ? hrName : adminName;
+              const displayEmail = hasHR ? hrEmail : adminEmail;
+              const onboardingDate = selectedChecklistDetails.onboardedBy?.date || linkedUser?.onboardedBy?.date;
+
+              return (
+                <div className={cn(
+                  "p-3 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs",
+                  hasHR ? "bg-purple-500/10 border-purple-500/20" : "bg-sky-500/10 border-sky-500/20"
+                )}>
+                  <div className="flex items-center gap-2.5">
+                    <div className={cn(
+                      "w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-sm font-bold shadow-2xs border",
+                      hasHR
+                        ? "bg-purple-500/20 text-purple-600 dark:text-purple-400 border-purple-500/30"
+                        : "bg-sky-500/20 text-sky-600 dark:text-sky-400 border-sky-500/30"
+                    )}>
+                      <i className={cn("fa-solid", hasHR ? "fa-user-shield" : "fa-shield-halved")} />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                          {hasHR ? "ASSIGNED HR PARTNER:" : "WORKSPACE ADMIN (OVERSIGHT):"}
+                        </span>
+                        <span className="font-bold text-foreground text-xs">{displayName}</span>
+                        {displayEmail && (
+                          <span className="text-[11px] text-muted-foreground font-mono">({displayEmail})</span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        {hasHR
+                          ? (onboardingDate
+                              ? `Designated HR partner overseeing onboarding (Initiated on ${new Date(onboardingDate).toLocaleDateString()})`
+                              : "Designated HR partner overseeing document verification & onboarding workflow.")
+                          : `No dedicated HR assigned yet. Supervised directly by Workspace Admin (${adminName}).`}
+                      </p>
+                    </div>
+                  </div>
+                  <Badge
+                    variant="soft"
+                    className={cn(
+                      "text-[10px] font-bold self-start sm:self-auto shrink-0",
+                      hasHR
+                        ? "bg-purple-500/20 text-purple-700 dark:text-purple-300 border-purple-500/30"
+                        : "bg-sky-500/20 text-sky-700 dark:text-sky-300 border-sky-500/30"
+                    )}
+                  >
+                    {hasHR ? "Designated HR" : "Workspace Admin"}
+                  </Badge>
+                </div>
+              );
+            })()}
 
             {/* Contract metadata strip if present */}
             {selectedChecklistDetails.contractDetails && (
@@ -4230,6 +4653,277 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
                   Close Preview
                 </Button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Employee Documents & Requests Modal */}
+      {showDocUserModal && selectedDocUser && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto animate-in fade-in">
+          <div className="bg-card border border-border rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden my-8 max-h-[90vh] flex flex-col">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-5 border-b border-border bg-muted/20 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-primary/10 border border-primary/20 text-primary flex items-center justify-center text-lg font-bold">
+                  <i className="fa-solid fa-folder-open text-primary" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-foreground flex items-center gap-2">
+                    Employee Documents &amp; Requests
+                  </h3>
+                  <p className="text-xs text-muted-foreground">
+                    {selectedDocUser.name} &bull; {selectedDocUser.email} &bull; {selectedDocUser.department || "General"}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowDocUserModal(false)}
+                className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
+              >
+                <i className="fa-solid fa-xmark text-sm" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-5 overflow-y-auto space-y-6 flex-1">
+              {/* Overall Verification Status Banner */}
+              <div className="p-4 rounded-xl border border-border bg-muted/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-foreground">Overall Verification Status:</span>
+                    <Badge
+                      className={cn(
+                        "text-[10px] px-2 py-0.5 font-bold",
+                        selectedDocUser.documentsSubmitted
+                          ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30"
+                          : "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30"
+                      )}
+                    >
+                      {selectedDocUser.documentsSubmitted ? (
+                        <><i className="fa-solid fa-circle-check mr-1" /> Confirmed &amp; Verified</>
+                      ) : (
+                        <><i className="fa-solid fa-clock mr-1" /> Pending Documents</>
+                      )}
+                    </Badge>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    {selectedDocUser.documentsConfirmedBy?.hrName
+                      ? `Confirmed by ${selectedDocUser.documentsConfirmedBy.hrName} on ${new Date(selectedDocUser.documentsConfirmedBy.confirmedAt || Date.now()).toLocaleDateString()}`
+                      : "Mark complete once all required documents have been inspected."}
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  variant={selectedDocUser.documentsSubmitted ? "outline" : "default"}
+                  onClick={async () => {
+                    const next = !selectedDocUser.documentsSubmitted;
+                    await handleToggleDocumentSubmission(selectedDocUser._id, next);
+                    setSelectedDocUser((prev: any) => ({ ...prev, documentsSubmitted: next }));
+                  }}
+                  className={cn(
+                    "text-xs font-semibold cursor-pointer gap-1.5 shrink-0",
+                    !selectedDocUser.documentsSubmitted
+                      ? "bg-emerald-600 hover:bg-emerald-700 text-white"
+                      : "border-amber-500/40 text-amber-600 hover:bg-amber-500/10"
+                  )}
+                >
+                  <i className={cn("fa-solid", selectedDocUser.documentsSubmitted ? "fa-arrow-rotate-left" : "fa-check-double")} />
+                  {selectedDocUser.documentsSubmitted ? "Mark as Pending" : "Confirm All Documents"}
+                </Button>
+              </div>
+
+              {/* Existing Documents List */}
+              <div className="space-y-3">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center justify-between">
+                  <span>Current Documents &amp; Requests</span>
+                  <span className="text-[11px] font-normal lowercase">
+                    {documents.filter((d) => (d.targetUserId?._id || d.targetUserId) === selectedDocUser._id).length} document(s)
+                  </span>
+                </h4>
+
+                {(() => {
+                  const userDocs = documents.filter(
+                    (d) => (d.targetUserId?._id || d.targetUserId) === selectedDocUser._id
+                  );
+
+                  if (userDocs.length === 0) {
+                    return (
+                      <div className="p-6 rounded-xl border border-dashed border-border text-center space-y-1">
+                        <i className="fa-solid fa-file-circle-question text-muted-foreground text-2xl" />
+                        <p className="text-xs font-medium text-foreground">No documents requested or submitted yet</p>
+                        <p className="text-[11px] text-muted-foreground">
+                          Use the form below to ask {selectedDocUser.name} for required onboarding files.
+                        </p>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="space-y-2">
+                      {userDocs.map((doc: any) => {
+                        const statusColors: Record<string, string> = {
+                          Requested: "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30",
+                          Submitted: "bg-sky-500/15 text-sky-700 dark:text-sky-400 border-sky-500/30",
+                          Verified: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30",
+                          Rejected: "bg-rose-500/15 text-rose-700 dark:text-rose-400 border-rose-500/30",
+                        };
+
+                        return (
+                          <div
+                            key={doc._id}
+                            className="p-3.5 rounded-xl border border-border bg-card flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:border-primary/30 transition-colors"
+                          >
+                            <div className="space-y-1 min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="text-xs font-bold text-foreground truncate">{doc.title}</span>
+                                <Badge className="text-[10px] px-2 py-0 bg-muted text-muted-foreground border-border">
+                                  {doc.category || "Document"}
+                                </Badge>
+                                <Badge className={cn("text-[10px] px-2 py-0 font-bold", statusColors[doc.status || "Submitted"])}>
+                                  {doc.status || "Submitted"}
+                                </Badge>
+                              </div>
+                              <p className="text-[11px] text-muted-foreground">
+                                {doc.status === "Requested" && doc.requestedBy?.userName && (
+                                  <span>Requested by {doc.requestedBy.userName} &bull; </span>
+                                )}
+                                {doc.notes && <span>Instructions: {doc.notes} &bull; </span>}
+                                <span>Updated: {new Date(doc.updatedAt || doc.createdAt).toLocaleDateString()}</span>
+                              </p>
+                            </div>
+
+                            <div className="flex items-center gap-2 shrink-0">
+                              {doc.fileUrl ? (
+                                <a
+                                  href={doc.fileUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="h-7 px-2.5 rounded-lg border border-primary/30 text-primary hover:bg-primary/10 text-xs font-semibold inline-flex items-center gap-1.5 transition-colors"
+                                >
+                                  <i className="fa-solid fa-arrow-up-right-from-square text-[10px]" /> View File
+                                </a>
+                              ) : (
+                                <span className="text-[10px] text-amber-600 dark:text-amber-400 font-medium italic">
+                                  Awaiting Upload
+                                </span>
+                              )}
+
+                              {/* Verify / Reject buttons for HR */}
+                              {doc.status === "Submitted" && (
+                                <>
+                                  <Button
+                                    size="sm"
+                                    disabled={verifyingDocId === doc._id}
+                                    onClick={() => handleVerifyDocument(doc._id, "Verified")}
+                                    className="h-7 px-2.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white gap-1 cursor-pointer"
+                                  >
+                                    <i className="fa-solid fa-check text-[10px]" /> Verify
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    disabled={verifyingDocId === doc._id}
+                                    onClick={() => handleVerifyDocument(doc._id, "Rejected")}
+                                    className="h-7 px-2 text-xs border-destructive/30 text-destructive hover:bg-destructive/10 cursor-pointer"
+                                  >
+                                    <i className="fa-solid fa-xmark text-[10px]" /> Reject
+                                  </Button>
+                                </>
+                              )}
+
+                              {doc.status === "Verified" && (
+                                <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1">
+                                  <i className="fa-solid fa-circle-check text-xs" /> Verified
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
+              </div>
+
+              {/* Ask for Document Form */}
+              <div className="p-4 rounded-xl border border-primary/20 bg-primary/[0.02] space-y-3">
+                <div className="flex items-center gap-2">
+                  <i className="fa-solid fa-paper-plane text-primary text-xs" />
+                  <h4 className="text-xs font-bold text-foreground">Ask Employee for Document</h4>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  Send a formal document request to {selectedDocUser.name}. They will be notified and can upload the file directly.
+                </p>
+
+                <form onSubmit={handleRequestDocument} className="space-y-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-semibold text-foreground">Document Title *</label>
+                      <Input
+                        value={reqDocTitle}
+                        onChange={(e) => setReqDocTitle(e.target.value)}
+                        placeholder="e.g. Government ID Proof / Degree Certificate"
+                        className="h-8 text-xs bg-background"
+                        required
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-semibold text-foreground">Category</label>
+                      <select
+                        value={reqDocCategory}
+                        onChange={(e) => setReqDocCategory(e.target.value)}
+                        className="w-full h-8 px-2 text-xs bg-background border border-border rounded-md text-foreground"
+                      >
+                        <option value="Document">General Document / ID</option>
+                        <option value="Offer Letter">Signed Offer Letter</option>
+                        <option value="NDA">Non-Disclosure Agreement (NDA)</option>
+                        <option value="Contract">Independent Contractor Agreement</option>
+                        <option value="Tax Document">Tax Identification / W-9 / Form 16</option>
+                        <option value="KRA Agreement">KRA Sign-off Agreement</option>
+                        <option value="Other">Other Compliance Document</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-semibold text-foreground">Special Instructions / Notes</label>
+                    <Input
+                      value={reqDocNotes}
+                      onChange={(e) => setReqDocNotes(e.target.value)}
+                      placeholder="e.g. Please upload clear scanned copy with both front and back sides."
+                      className="h-8 text-xs bg-background"
+                    />
+                  </div>
+
+                  <div className="flex justify-end pt-1">
+                    <Button
+                      type="submit"
+                      disabled={requestingDoc || !reqDocTitle.trim()}
+                      className="h-8 text-xs px-3 font-semibold gap-1.5 cursor-pointer shadow-xs"
+                    >
+                      {requestingDoc ? (
+                        <><i className="fa-solid fa-spinner fa-spin text-xs" /> Sending...</>
+                      ) : (
+                        <><i className="fa-solid fa-paper-plane text-xs" /> Send Document Request</>
+                      )}
+                    </Button>
+                  </div>
+                </form>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-border bg-muted/20 flex justify-end shrink-0">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowDocUserModal(false)}
+                className="h-8 px-4 text-xs cursor-pointer"
+              >
+                Close
+              </Button>
             </div>
           </div>
         </div>

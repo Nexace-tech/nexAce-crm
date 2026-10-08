@@ -843,6 +843,11 @@ export function UserManagementTab() {
                               )}
                             </div>
                             <div className="text-xs text-muted-foreground font-mono">{u.email}</div>
+                            {((u as any).onboardedBy?.hrName || (u as any).onboardedBy?.hrId?.name) && (
+                              <div className="text-[10px] text-purple-600 dark:text-purple-400 font-medium flex items-center gap-1 mt-0.5">
+                                <i className="fa-solid fa-user-check text-[9px]" /> Onboarded by {(u as any).onboardedBy.hrName || (u as any).onboardedBy.hrId?.name}
+                              </div>
+                            )}
                           </div>
                         </div>
                       </td>
@@ -907,6 +912,19 @@ export function UserManagementTab() {
                           />
                           {u.status || "Active"}
                         </span>
+                        <div className="mt-1">
+                          <span
+                            className={cn(
+                              "inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border font-medium",
+                              (u as any).documentsSubmitted
+                                ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
+                                : "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"
+                            )}
+                          >
+                            <i className={cn("fa-solid text-[8px]", (u as any).documentsSubmitted ? "fa-circle-check text-emerald-500" : "fa-clock text-amber-500")} />
+                            {(u as any).documentsSubmitted ? "Docs Verified" : "Docs Pending"}
+                          </span>
+                        </div>
                       </td>
 
                       <td className="px-6 py-4 text-foreground font-medium">

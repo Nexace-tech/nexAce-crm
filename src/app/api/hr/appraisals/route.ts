@@ -15,9 +15,10 @@ export async function GET(req: Request) {
     await connectToDatabase();
     const query: any = { tenantId: tenantObjectId };
 
-    const isPrivileged = session.role === "Admin" || session.role === "Manager" || session.role === "HR" || session.role === "OPS" || isSubAdminRole(session.role);
-    if (!isPrivileged) {
-      query.userId = userObjectId;
+    const { getHRAccessScope } = await import("@/lib/hrIsolation");
+    const scope = await getHRAccessScope(session, tenantObjectId, userObjectId);
+    if (scope.allowedUserIds) {
+      query.userId = { $in: scope.allowedUserIds };
     }
 
     const appraisals = await HRAppraisal.find(query).sort({ createdAt: -1 }).lean();
