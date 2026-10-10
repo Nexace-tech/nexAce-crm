@@ -93,7 +93,9 @@ export async function PUT(request: Request, { params }: RouteParams) {
     const canChangeRoles = isAdminSession || dataScope.canViewFeature("changeUserRoles");
     // Admin and OPS (SubAdmin) can always change roles; others need the explicit feature flag
     const isHR = session.role === "HR";
-    const canEditOthers = canManageUsers || canChangeRoles || isHR;
+    const canReassignLine = isAdminSession || dataScope.canViewFeature("reassignReportingLine");
+    const canReassignHR = isAdminSession || dataScope.canViewFeature("reassignHRPartner");
+    const canEditOthers = canManageUsers || canChangeRoles || isHR || canReassignLine || canReassignHR;
     const userObjectId = new mongoose.Types.ObjectId(session.userId);
 
     if (!isSelf && !canEditOthers) {
@@ -201,9 +203,15 @@ export async function PUT(request: Request, { params }: RouteParams) {
         user.departments = [body.department];
       }
       if (body.managerId !== undefined) {
+        if (!isAdminSession && !canManageUsers && !canReassignLine) {
+          return NextResponse.json({ error: "Forbidden: You do not have permission to reassign reporting managers" }, { status: 403 });
+        }
         user.managerId = body.managerId ? new mongoose.Types.ObjectId(body.managerId) : undefined;
       }
       if (body.hrId !== undefined) {
+        if (!isAdminSession && !canManageUsers && !canReassignHR) {
+          return NextResponse.json({ error: "Forbidden: You do not have permission to reassign HR partners" }, { status: 403 });
+        }
         user.hrId = body.hrId ? new mongoose.Types.ObjectId(body.hrId) : undefined;
       }
 

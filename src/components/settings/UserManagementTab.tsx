@@ -47,10 +47,15 @@ export function UserManagementTab() {
   const { can, isAdmin } = usePermissions();
   const canManageUsers = isAdmin || can("manageUsers");
   const canChangeRoles = isAdmin || can("changeUserRoles");
-  const canEditUser = canManageUsers || canChangeRoles;
+  const canReassignLine = isAdmin || can("reassignReportingLine");
+  const canReassignHR = isAdmin || can("reassignHRPartner");
+  const canManageHRIso = isAdmin || can("manageHRIsolation");
+  const canEditUser = canManageUsers || canChangeRoles || canReassignLine || canReassignHR;
 
   const [users, setUsers] = useState<IUser[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isHRIsoActive, setIsHRIsoActive] = useState<boolean>(false);
+  const [togglingHRIso, setTogglingHRIso] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState<string>("All");
   const [statusFilter, setStatusFilter] = useState<string>(isPendingFilterParam ? "Pending" : "All");
@@ -176,14 +181,15 @@ export function UserManagementTab() {
 
   const [availableRoles, setAvailableRoles] = useState<string[]>(["Admin", "OPS", "Manager", "HR", "Employee"]);
 
-  // Fetch Users, Custom Roles & Departments
+  // Fetch Users, Custom Roles, Departments & Multi-HR Isolation
   const fetchUsers = async () => {
     try {
       setLoading(true);
-      const [teamRes, permRes, deptRes] = await Promise.all([
+      const [teamRes, permRes, deptRes, hrIsoRes] = await Promise.all([
         fetch(`/api/team?_t=${Date.now()}`, { cache: "no-store" }),
         fetch("/api/settings/permissions", { cache: "no-store" }),
         fetch("/api/departments", { cache: "no-store" }),
+        fetch("/api/settings/hr-isolation", { cache: "no-store" }).catch(() => null),
       ]);
       if (teamRes.ok) {
         const data = await teamRes.json();
@@ -199,10 +205,34 @@ export function UserManagementTab() {
         const dData = await deptRes.json();
         setDepartmentsList(dData.departments || []);
       }
+      if (hrIsoRes && hrIsoRes.ok) {
+        const hrData = await hrIsoRes.json();
+        setIsHRIsoActive(Boolean(hrData.isolateHRData));
+      }
     } catch (err) {
       console.error("Error fetching users:", err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleToggleHRIso = async () => {
+    try {
+      setTogglingHRIso(true);
+      const nextVal = !isHRIsoActive;
+      const res = await fetch("/api/settings/hr-isolation", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isolateHRData: nextVal }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to update Multi-HR isolation");
+      setIsHRIsoActive(nextVal);
+      showToast(data.message || (nextVal ? "Multi-HR Data Isolation enabled" : "Multi-HR Data Isolation disabled"), "success");
+    } catch (err: any) {
+      showToast(err.message || "Failed to toggle Multi-HR isolation", "error");
+    } finally {
+      setTogglingHRIso(false);
     }
   };
 
@@ -527,31 +557,67 @@ export function UserManagementTab() {
           </div>
         </div>
 
-        {canManageUsers && (
-          <Button
-            onClick={() => {
-              setFormData({
-                name: "",
-                email: "",
-                phone: "",
-                role: "Employee",
-                status: "Active",
-                department: "General",
-                managerId: "",
-                hrId: "",
-                employmentType: "Permanent",
-                salary: "",
-                newPassword: "",
-              });
-              setFormError("");
-              setCreatedTempPassword(null);
-              setShowCreateModal(true);
-            }}
-            className="bg-primary hover:bg-primary/90 text-primary-foreground gap-2 font-medium shadow-md"
-          >
-            <i className="fa-solid fa-user-plus" /> Add New User
-          </Button>
-        )}
+        <div className="flex flex-wrap items-center gap-2.5">
+          {(isAdmin || currentUser?.role === "OPS" || canManageHRIso) && (
+            <div className="flex items-center gap-2.5 px-3 py-1.5 rounded-xl border border-border bg-card/80 backdrop-blur-md shadow-2xs">
+              <div className="flex flex-col text-left">
+                <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                  <i className="fa-solid fa-users-viewfinder text-purple-500 text-xs" /> Multi-HR Option
+                </span>
+                <span className="text-[10px] text-muted-foreground hidden sm:inline">
+                  {isHRIsoActive ? "Isolated: HRs manage assigned staff" : "Shared: HRs view all staff"}
+                </span>
+              </div>
+              <Button
+                variant={isHRIsoActive ? "default" : "outline"}
+                size="sm"
+                disabled={togglingHRIso}
+                onClick={handleToggleHRIso}
+                className={cn(
+                  "h-7 text-xs px-2.5 font-bold cursor-pointer transition-all gap-1.5 ml-1",
+                  isHRIsoActive
+                    ? "bg-purple-600 hover:bg-purple-700 text-white shadow-2xs"
+                    : "border-muted-foreground/30 text-muted-foreground hover:text-foreground"
+                )}
+                title="Toggle whether HR officers only see their assigned employees or all workspace employees"
+              >
+                {togglingHRIso ? (
+                  <i className="fa-solid fa-spinner fa-spin text-xs" />
+                ) : isHRIsoActive ? (
+                  <><i className="fa-solid fa-lock text-[10px]" /> Isolated</>
+                ) : (
+                  <><i className="fa-solid fa-lock-open text-[10px]" /> Shared</>
+                )}
+              </Button>
+            </div>
+          )}
+
+          {canManageUsers && (
+            <Button
+              onClick={() => {
+                setFormData({
+                  name: "",
+                  email: "",
+                  phone: "",
+                  role: "Employee",
+                  status: "Active",
+                  department: "General",
+                  managerId: "",
+                  hrId: "",
+                  employmentType: "Permanent",
+                  salary: "",
+                  newPassword: "",
+                });
+                setFormError("");
+                setCreatedTempPassword(null);
+                setShowCreateModal(true);
+              }}
+              className="bg-primary hover:bg-primary/90 text-primary-foreground gap-2 font-medium shadow-md cursor-pointer"
+            >
+              <i className="fa-solid fa-user-plus" /> Add New User
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* PENDING APPROVALS ALERT BANNER (Option A) */}

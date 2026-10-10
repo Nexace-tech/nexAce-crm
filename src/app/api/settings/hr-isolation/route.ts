@@ -33,14 +33,28 @@ export async function PUT(req: Request) {
     if (isAuthError(authResult)) return authResult;
     const { tenantObjectId, session } = authResult;
 
-    const isAdminOrOps =
+    const { RolePermission } = await import("@/models/RolePermission");
+    const { normalizeRoleKey } = await import("@/lib/roles");
+
+    let hasManageHRPerm = false;
+    try {
+      const rolePerm = await RolePermission.findOne({ tenantId: tenantObjectId, role: normalizeRoleKey(session.role) }).lean();
+      if (rolePerm?.featurePermissions?.manageHRIsolation) {
+        hasManageHRPerm = true;
+      }
+    } catch {
+      // fallback
+    }
+
+    const isAuthorized =
       session.role === "Admin" ||
       session.role === "OPS" ||
-      isSubAdminRole(session.role);
+      isSubAdminRole(session.role) ||
+      hasManageHRPerm;
 
-    if (!isAdminOrOps) {
+    if (!isAuthorized) {
       return NextResponse.json(
-        { error: "Forbidden: Only Workspace Admins can toggle HR Data Isolation" },
+        { error: "Forbidden: You do not have permission to toggle Multi-HR Data Isolation" },
         { status: 403 }
       );
     }

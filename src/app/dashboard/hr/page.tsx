@@ -1088,7 +1088,7 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          {(isAdmin || isOPS) && (
+          {(isAdmin || isOPS || can("manageHRIsolation")) && (
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl border border-border bg-card shadow-2xs">
               <div className="flex flex-col text-left">
                 <span className="text-xs font-bold text-foreground flex items-center gap-1.5">

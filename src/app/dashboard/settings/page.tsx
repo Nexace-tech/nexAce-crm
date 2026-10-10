@@ -216,6 +216,8 @@ function SettingsPageContent() {
   const [copiedSlug, setCopiedSlug] = useState(false);
   const companyLogoInputRef = React.useRef<HTMLInputElement | null>(null);
   const [showRemovePhotoModal, setShowRemovePhotoModal] = useState(false);
+  const [isHRIsoActive, setIsHRIsoActive] = useState<boolean>(false);
+  const [togglingHRIso, setTogglingHRIso] = useState<boolean>(false);
 
   useEffect(() => {
     if (user) {
@@ -320,8 +322,37 @@ function SettingsPageContent() {
           setCompanySignatureSavedAt(c.signatureUrl ? new Date(c.updatedAt || Date.now()).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : null);
         }
       }
+      try {
+        const hrRes = await fetch("/api/settings/hr-isolation");
+        if (hrRes.ok) {
+          const hrData = await hrRes.json();
+          setIsHRIsoActive(Boolean(hrData.isolateHRData));
+        }
+      } catch {
+        // quiet fallback
+      }
     } catch (e) {
       console.error(e);
+    }
+  };
+
+  const handleToggleHRIso = async () => {
+    try {
+      setTogglingHRIso(true);
+      const nextVal = !isHRIsoActive;
+      const res = await fetch("/api/settings/hr-isolation", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isolateHRData: nextVal }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to update Multi-HR isolation");
+      setIsHRIsoActive(nextVal);
+      showToast(data.message || (nextVal ? "Multi-HR Data Isolation enabled" : "Multi-HR Data Isolation disabled"), "success");
+    } catch (err: any) {
+      showToast(err.message || "Failed to toggle Multi-HR isolation", "error");
+    } finally {
+      setTogglingHRIso(false);
     }
   };
 
@@ -2020,6 +2051,86 @@ function SettingsPageContent() {
                   </div>
                 </div>
               </form>
+            </CardContent>
+          </Card>
+
+          {/* Multi-HR Data Isolation & Governance Card */}
+          <Card className="border border-border/80 shadow-xs overflow-hidden">
+            <CardHeader className="bg-muted/15 border-b border-border/60 pb-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="space-y-1">
+                  <CardTitle className="text-base font-bold flex items-center gap-2 text-foreground">
+                    <div className="w-7 h-7 rounded-lg bg-purple-500/10 flex items-center justify-center text-purple-500">
+                      <i className="fa-solid fa-users-viewfinder text-sm" />
+                    </div>
+                    Multi-HR Option &amp; Partner Isolation
+                  </CardTitle>
+                  <CardDescription className="text-xs text-muted-foreground">
+                    Control organizational visibility for Human Resources officers and employee portfolio partitioning
+                  </CardDescription>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant={isHRIsoActive ? "default" : "outline"}
+                    size="sm"
+                    disabled={togglingHRIso}
+                    onClick={handleToggleHRIso}
+                    className={cn(
+                      "h-8 text-xs px-3 font-bold cursor-pointer transition-all gap-1.5",
+                      isHRIsoActive
+                        ? "bg-purple-600 hover:bg-purple-700 text-white shadow-xs"
+                        : "border-muted-foreground/30 text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    {togglingHRIso ? (
+                      <i className="fa-solid fa-spinner fa-spin text-xs" />
+                    ) : isHRIsoActive ? (
+                      <><i className="fa-solid fa-lock text-[11px]" /> Isolated Mode Active</>
+                    ) : (
+                      <><i className="fa-solid fa-lock-open text-[11px]" /> Shared Mode Active</>
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="p-5">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className={cn(
+                  "p-4 rounded-xl border transition-all",
+                  isHRIsoActive ? "border-purple-500/30 bg-purple-500/5 ring-1 ring-purple-500/20" : "border-border/60 bg-muted/20 opacity-75"
+                )}>
+                  <div className="flex items-start gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-purple-500/10 text-purple-500 flex items-center justify-center shrink-0 mt-0.5">
+                      <i className="fa-solid fa-user-lock text-sm" />
+                    </div>
+                    <div className="space-y-1">
+                      <h4 className="text-xs font-bold text-foreground">Partitioned Portfolios (Isolated)</h4>
+                      <p className="text-[11px] text-muted-foreground leading-relaxed">
+                        Each HR specialist only accesses, approves leaves, reviews appraisals, and manages onboarding for employees specifically assigned to them.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className={cn(
+                  "p-4 rounded-xl border transition-all",
+                  !isHRIsoActive ? "border-primary/30 bg-primary/5 ring-1 ring-primary/20" : "border-border/60 bg-muted/20 opacity-75"
+                )}>
+                  <div className="flex items-start gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0 mt-0.5">
+                      <i className="fa-solid fa-users text-sm" />
+                    </div>
+                    <div className="space-y-1">
+                      <h4 className="text-xs font-bold text-foreground">Company-Wide Access (Shared)</h4>
+                      <p className="text-[11px] text-muted-foreground leading-relaxed">
+                        All authorized HR personnel have global visibility and can manage employee directories, leaves, policies, and records across every department.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </CardContent>
           </Card>
         </div>

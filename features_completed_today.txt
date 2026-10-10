@@ -70,5 +70,24 @@
 - Backend Enforcement: /api/calendar/availability (GET, POST, DELETE)
   dynamically checks tenant RolePermission entries to govern roster access and
   multi-user schedule management.
+
+8. REASSIGN & MULTI-HR OPTION (RBAC & SETTINGS GOVERNANCE)
+--------------------------------------------------------------------------------
+- Granular RBAC Feature Permissions:
+    * Reassign Reporting Managers (reassignReportingLine) under Team > User Management & Hiring
+    * Assign & Reassign HR Partners (reassignHRPartner) under HR & Leave > HR Operations
+    * Manage Multi-HR Data Isolation (manageHRIsolation) under HR & Leave > HR Operations
+- Role Defaults & Archetypes:
+    * Preset templates updated with "HR Operations & People Lead" archetype
+    * Default permissions configured for OPS (all true), Manager (reassignReportingLine true),
+      HR (reassignReportingLine, reassignHRPartner, manageHRIsolation true), and Employee (false)
+- Multi-HR Governance in Settings:
+    * Added interactive Multi-HR Option & Partner Isolation card in Settings > Organization
+    * Added inline Multi-HR Option toggle badge in Settings > User Management
+    * Integrated with PUT/GET /api/settings/hr-isolation and dynamic RBAC checks
+- Reassignment Capabilities in Team Directory & Org Chart:
+    * /api/team/reassign supports dynamic RBAC for reassignReportingLine and reassignHRPartner
+    * OrgChartNode enables drag-and-drop hierarchy reassignment for authorized roles
+    * Quick Reassign button in Team Directory table rows and Edit Member drawer
 ================================================================================
 

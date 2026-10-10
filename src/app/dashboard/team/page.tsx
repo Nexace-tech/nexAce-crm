@@ -83,7 +83,7 @@ export default function TeamDashboardPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user: currentUser, loading: authLoading, refreshUser } = useAuth();
-  const { canAccessModule, loading: permLoading } = usePermissions();
+  const { canAccessModule, can, loading: permLoading } = usePermissions();
   const [users, setUsers] = useState<any[]>([]);
   const [departmentsList, setDepartmentsList] = useState<IDepartmentItem[]>([]);
   const [editEmploymentType, setEditEmploymentType] = useState("Permanent");
@@ -145,6 +145,7 @@ export default function TeamDashboardPage() {
   const [editDepts, setEditDepts] = useState<string[]>(["Engineering"]);
   const [editRole, setEditRole] = useState("Employee");
   const [editManagerId, setEditManagerId] = useState("");
+  const [editHrId, setEditHrId] = useState("");
   const [editSocialLinkedin, setEditSocialLinkedin] = useState("");
   const [editSocialTwitter, setEditSocialTwitter] = useState("");
   const [editSocialGithub, setEditSocialGithub] = useState("");
@@ -490,9 +491,16 @@ export default function TeamDashboardPage() {
         updateData.departments = editDepts;
         updateData.department = editDepts[0] || "General";
         updateData.role = editRole;
-        updateData.managerId = editManagerId || null;
         updateData.employmentType = editEmploymentType;
         updateData.salary = Number(editSalary) || 0;
+      }
+
+      if (isAdmin || canReassignLine) {
+        updateData.managerId = editManagerId || null;
+      }
+
+      if (isAdmin || canReassignHR) {
+        updateData.hrId = editHrId || null;
       }
 
       const response = await fetch(`/api/team/${selectedMember._id}`, {
@@ -750,6 +758,12 @@ export default function TeamDashboardPage() {
         ? String(member.managerId)
         : "";
       setEditManagerId(mgrId);
+      const hId = member.hrId?._id
+        ? String(member.hrId._id)
+        : member.hrId
+        ? String(member.hrId)
+        : "";
+      setEditHrId(hId);
       setEditSocialLinkedin(member.socialLinks?.linkedin || "");
       setEditSocialTwitter(member.socialLinks?.twitter || "");
       setEditSocialGithub(member.socialLinks?.github || "");
@@ -884,6 +898,18 @@ export default function TeamDashboardPage() {
   const userRole = useMemo(() => (currentUser?.role || "").trim(), [currentUser?.role]);
   const isAdmin = Boolean(userRole && (userRole.toLowerCase() === "admin" || isSubAdminRole(userRole)));
   const isManagerOrAdmin = Boolean(isAdmin || userRole.toLowerCase() === "manager");
+  const canReassignLine = Boolean(isAdmin || can("reassignReportingLine"));
+  const canReassignHR = Boolean(isAdmin || can("reassignHRPartner"));
+
+  // List of all HR partners available in the company
+  const availableHRsList = useMemo(() => {
+    return users.filter(
+      (u) =>
+        u.role?.toLowerCase() === "hr" ||
+        u.role?.toLowerCase() === "admin" ||
+        (u.departments && u.departments.includes("HR"))
+    );
+  }, [users]);
 
   // List of all managers/leaders in the company
   const availableManagersList = useMemo(() => {
@@ -1426,7 +1452,7 @@ export default function TeamDashboardPage() {
                       <th className="p-4 font-semibold">Social Profiles</th>
                       <th className="p-4 font-semibold">Reporting Line</th>
                       <th className="p-4 font-semibold">Status</th>
-                      {isAdmin && <th className="p-4 font-semibold text-right">Action</th>}
+                      {(isAdmin || canReassignLine) && <th className="p-4 font-semibold text-right">Action</th>}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
@@ -1543,18 +1569,36 @@ export default function TeamDashboardPage() {
                               {member.status}
                             </Badge>
                           </td>
-                          {isAdmin && (
+                          {(isAdmin || canReassignLine) && (
                             <td className="p-4 text-right" onClick={(e) => e.stopPropagation()}>
-                              {!isSelf && (
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => setMemberToDelete(member)}
-                                  className="text-destructive hover:bg-destructive/10"
-                                >
-                                  Remove
-                                </Button>
-                              )}
+                              <div className="flex items-center justify-end gap-1.5">
+                                {canReassignLine && !isSelf && (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => {
+                                      setReassignMemberId(member._id);
+                                      const currentMgrId = member.managerId?._id ? String(member.managerId._id) : member.managerId ? String(member.managerId) : "";
+                                      setTargetManagerId(currentMgrId);
+                                      setActiveTab("manager");
+                                    }}
+                                    className="h-7 text-xs px-2 font-semibold text-primary border-primary/30 hover:bg-primary/10 gap-1 cursor-pointer"
+                                    title="Reassign Reporting Line"
+                                  >
+                                    <i className="fa-solid fa-arrows-rotate text-[10px]" /> Reassign
+                                  </Button>
+                                )}
+                                {isAdmin && !isSelf && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => setMemberToDelete(member)}
+                                    className="h-7 text-xs text-destructive hover:bg-destructive/10 cursor-pointer"
+                                  >
+                                    Remove
+                                  </Button>
+                                )}
+                              </div>
                             </td>
                           )}
                         </tr>
@@ -1698,7 +1742,7 @@ export default function TeamDashboardPage() {
                     key={root._id}
                     node={root}
                     onReassign={handleReassign}
-                    isAdmin={isAdmin}
+                    isAdmin={canReassignLine}
                     onSelectMember={handleSelectMember}
                   />
                 ))}
@@ -2426,13 +2470,16 @@ export default function TeamDashboardPage() {
                     />
                   </div>
                 )}
-                {isAdmin && (
+                {(isAdmin || canReassignLine) && (
                   <div className="space-y-1">
-                    <label className="text-xs font-semibold text-foreground">Reporting Manager</label>
+                    <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                      <i className="fa-solid fa-arrows-rotate text-primary text-[11px]" />
+                      Reporting Manager
+                    </label>
                     <select
                       value={editManagerId}
                       onChange={(e) => setEditManagerId(e.target.value)}
-                      className="w-full h-9 px-3 text-sm bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                      className="w-full h-9 px-3 text-sm bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer"
                     >
                       <option value="">None (Reports to CEO / Top-level)</option>
                       {users
@@ -2440,6 +2487,28 @@ export default function TeamDashboardPage() {
                         .map((u) => (
                           <option key={u._id} value={u._id}>
                             {u.name} ({u.role || "Member"})
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+                )}
+                {(isAdmin || canReassignHR) && (
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                      <i className="fa-solid fa-user-gear text-purple-400 text-[11px]" />
+                      Assigned HR Partner
+                    </label>
+                    <select
+                      value={editHrId}
+                      onChange={(e) => setEditHrId(e.target.value)}
+                      className="w-full h-9 px-3 text-sm bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer"
+                    >
+                      <option value="">None / Workspace Default HR</option>
+                      {availableHRsList
+                        .filter((u) => u._id !== selectedMember._id)
+                        .map((u) => (
+                          <option key={u._id} value={u._id}>
+                            {u.name} ({u.role || "HR"})
                           </option>
                         ))}
                     </select>

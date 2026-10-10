@@ -82,7 +82,7 @@ export const DEFAULT_FEATURE_PERMISSIONS: Record<string, Record<string, boolean>
     // Overview
     viewKpiWidgets: true, viewShiftOverview: true, viewRecentActivity: true, viewAnnouncements: true, createAnnouncements: true,
     // Team
-    viewTeamDirectory: true, viewEmployeeProfiles: true, editEmployeeProfiles: true, inviteTeamMembers: true, deactivateEmployees: true, viewSalaryData: true, viewOrgChart: true,
+    viewTeamDirectory: true, viewEmployeeProfiles: true, editEmployeeProfiles: true, inviteTeamMembers: true, deactivateEmployees: true, reassignReportingLine: true, viewSalaryData: true, viewOrgChart: true,
     // Calendar & Time
     logOwnTimesheet: true, editOwnTimesheet: true, viewTeamTimesheets: true, approveTimesheets: true, exportTimesheets: true, manageShifts: true, viewShiftCalendar: true, clockInOut: true, viewTeamAvailability: true, manageTeamAvailability: true, logOwnAvailability: true,
     // Projects
@@ -94,7 +94,7 @@ export const DEFAULT_FEATURE_PERMISSIONS: Record<string, Record<string, boolean>
     // Chat
     sendChatMessages: true, createChatChannels: true, deleteChatChannels: true, pinChatMessages: true, deleteOthersChatMessages: true, viewMailCenter: true, sendEmails: true, deleteEmails: true, viewWhatsAppPanel: true, sendWhatsAppMessages: true, startVirtualHuddles: true, joinVirtualHuddles: true,
     // HR & Leave
-    viewOwnLeaves: true, applyLeaves: true, viewAllLeaves: true, approveLeaves: true, manageCompanyChecklists: true, manageHRVault: true, manageHRCases: true,
+    viewOwnLeaves: true, applyLeaves: true, viewAllLeaves: true, approveLeaves: true, manageCompanyChecklists: true, manageHRVault: true, manageHRCases: true, reassignHRPartner: true, manageHRIsolation: true,
     // Appraisals
     viewOwnAppraisals: true, submitSelfReview: true, viewManagerReviews: true, createAppraisalCycles: true,
     // Goals & OKRs
@@ -121,7 +121,7 @@ export const DEFAULT_FEATURE_PERMISSIONS: Record<string, Record<string, boolean>
     // Overview
     viewKpiWidgets: true, viewShiftOverview: true, viewRecentActivity: true, viewAnnouncements: true, createAnnouncements: true,
     // Team
-    viewTeamDirectory: true, viewEmployeeProfiles: true, editEmployeeProfiles: false, inviteTeamMembers: false, deactivateEmployees: false, viewSalaryData: false, viewOrgChart: true,
+    viewTeamDirectory: true, viewEmployeeProfiles: true, editEmployeeProfiles: false, inviteTeamMembers: false, deactivateEmployees: false, reassignReportingLine: true, viewSalaryData: false, viewOrgChart: true,
     // Calendar & Time
     logOwnTimesheet: true, editOwnTimesheet: true, viewTeamTimesheets: true, approveTimesheets: true, exportTimesheets: true, manageShifts: true, viewShiftCalendar: true, clockInOut: true, viewTeamAvailability: true, manageTeamAvailability: true, logOwnAvailability: true,
     // Projects
@@ -133,7 +133,7 @@ export const DEFAULT_FEATURE_PERMISSIONS: Record<string, Record<string, boolean>
     // Chat
     sendChatMessages: true, createChatChannels: true, deleteChatChannels: false, pinChatMessages: true, deleteOthersChatMessages: false, viewMailCenter: true, sendEmails: true, deleteEmails: false, viewWhatsAppPanel: true, sendWhatsAppMessages: true, startVirtualHuddles: true, joinVirtualHuddles: true,
     // HR & Leave
-    viewOwnLeaves: true, applyLeaves: true, viewAllLeaves: true, approveLeaves: true, manageCompanyChecklists: false, manageHRVault: false, manageHRCases: false,
+    viewOwnLeaves: true, applyLeaves: true, viewAllLeaves: true, approveLeaves: true, manageCompanyChecklists: false, manageHRVault: false, manageHRCases: false, reassignHRPartner: false, manageHRIsolation: false,
     // Appraisals
     viewOwnAppraisals: true, submitSelfReview: true, viewManagerReviews: true, createAppraisalCycles: false,
     // Goals & OKRs
@@ -160,7 +160,7 @@ export const DEFAULT_FEATURE_PERMISSIONS: Record<string, Record<string, boolean>
     // Overview
     viewKpiWidgets: true, viewShiftOverview: true, viewRecentActivity: true, viewAnnouncements: true, createAnnouncements: false,
     // Team
-    viewTeamDirectory: true, viewEmployeeProfiles: true, editEmployeeProfiles: true, inviteTeamMembers: true, deactivateEmployees: false, viewSalaryData: true, viewOrgChart: true,
+    viewTeamDirectory: true, viewEmployeeProfiles: true, editEmployeeProfiles: true, inviteTeamMembers: true, deactivateEmployees: false, reassignReportingLine: true, viewSalaryData: true, viewOrgChart: true,
     // Calendar & Time
     logOwnTimesheet: true, editOwnTimesheet: true, viewTeamTimesheets: true, approveTimesheets: true, exportTimesheets: true, manageShifts: false, viewShiftCalendar: true, clockInOut: true, viewTeamAvailability: true, manageTeamAvailability: true, logOwnAvailability: true,
     // Projects
@@ -172,7 +172,7 @@ export const DEFAULT_FEATURE_PERMISSIONS: Record<string, Record<string, boolean>
     // Chat
     sendChatMessages: true, createChatChannels: false, deleteChatChannels: false, pinChatMessages: false, deleteOthersChatMessages: false, viewMailCenter: true, sendEmails: true, deleteEmails: false, viewWhatsAppPanel: false, sendWhatsAppMessages: false, startVirtualHuddles: true, joinVirtualHuddles: true,
     // HR & Leave
-    viewOwnLeaves: true, applyLeaves: true, viewAllLeaves: true, approveLeaves: true, manageCompanyChecklists: true, manageHRVault: true, manageHRCases: true,
+    viewOwnLeaves: true, applyLeaves: true, viewAllLeaves: true, approveLeaves: true, manageCompanyChecklists: true, manageHRVault: true, manageHRCases: true, reassignHRPartner: true, manageHRIsolation: true,
     // Appraisals
     viewOwnAppraisals: true, submitSelfReview: true, viewManagerReviews: true, createAppraisalCycles: true,
     // Goals & OKRs
@@ -199,7 +199,7 @@ export const DEFAULT_FEATURE_PERMISSIONS: Record<string, Record<string, boolean>
     // Overview
     viewKpiWidgets: true, viewShiftOverview: false, viewRecentActivity: true, viewAnnouncements: true, createAnnouncements: false,
     // Team
-    viewTeamDirectory: true, viewEmployeeProfiles: true, editEmployeeProfiles: false, inviteTeamMembers: false, deactivateEmployees: false, viewSalaryData: false, viewOrgChart: true,
+    viewTeamDirectory: true, viewEmployeeProfiles: true, editEmployeeProfiles: false, inviteTeamMembers: false, deactivateEmployees: false, reassignReportingLine: false, viewSalaryData: false, viewOrgChart: true,
     // Calendar & Time
     logOwnTimesheet: true, editOwnTimesheet: true, viewTeamTimesheets: false, approveTimesheets: false, exportTimesheets: false, manageShifts: false, viewShiftCalendar: true, clockInOut: true, viewTeamAvailability: false, manageTeamAvailability: false, logOwnAvailability: true,
     // Projects
@@ -211,7 +211,7 @@ export const DEFAULT_FEATURE_PERMISSIONS: Record<string, Record<string, boolean>
     // Chat
     sendChatMessages: true, createChatChannels: false, deleteChatChannels: false, pinChatMessages: false, deleteOthersChatMessages: false, viewMailCenter: false, sendEmails: false, deleteEmails: false, viewWhatsAppPanel: false, sendWhatsAppMessages: false, startVirtualHuddles: false, joinVirtualHuddles: true,
     // HR & Leave
-    viewOwnLeaves: true, applyLeaves: true, viewAllLeaves: false, approveLeaves: false, manageCompanyChecklists: false, manageHRVault: false, manageHRCases: false,
+    viewOwnLeaves: true, applyLeaves: true, viewAllLeaves: false, approveLeaves: false, manageCompanyChecklists: false, manageHRVault: false, manageHRCases: false, reassignHRPartner: false, manageHRIsolation: false,
     // Appraisals
     viewOwnAppraisals: true, submitSelfReview: true, viewManagerReviews: false, createAppraisalCycles: false,
     // Goals & OKRs

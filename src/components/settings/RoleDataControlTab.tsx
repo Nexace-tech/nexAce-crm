@@ -76,6 +76,7 @@ export const FEATURE_ACTIONS: FeatureMeta[] = [
   { key: "editEmployeeProfiles", name: "Edit Any Employee Profile", category: "Team", subGroup: "Employee Roster & Profiles", description: "Modify name, department, or contact info for any user", icon: "fa-solid fa-user-pen" },
   { key: "inviteTeamMembers", name: "Invite New Team Members", category: "Team", subGroup: "User Management & Hiring", description: "Send workspace invitation emails to new hires", icon: "fa-solid fa-user-plus" },
   { key: "deactivateEmployees", name: "Deactivate / Suspend Users", category: "Team", subGroup: "User Management & Hiring", description: "Suspend or remove team members from the workspace", icon: "fa-solid fa-user-slash" },
+  { key: "reassignReportingLine", name: "Reassign Reporting Managers", category: "Team", subGroup: "User Management & Hiring", description: "Reassign direct manager and organizational reporting lines for team members", icon: "fa-solid fa-arrows-rotate" },
   { key: "viewSalaryData", name: "View Compensation Data", category: "Team", subGroup: "Compensation & Org Structure", description: "See salary bands and compensation details per employee", icon: "fa-solid fa-sack-dollar" },
   { key: "viewOrgChart", name: "View Visual Org Hierarchy Chart", category: "Team", subGroup: "Compensation & Org Structure", description: "Access interactive organization tree structure", icon: "fa-solid fa-sitemap" },
 
@@ -154,6 +155,8 @@ export const FEATURE_ACTIONS: FeatureMeta[] = [
   { key: "manageCompanyChecklists", name: "Manage On/Offboarding Checklists", category: "HR & Leave", subGroup: "HR Operations", description: "Create and assign employee onboarding workflow tasks", icon: "fa-solid fa-list-check" },
   { key: "manageHRVault", name: "Manage Company Policy Vault", category: "HR & Leave", subGroup: "HR Operations", description: "Upload and publish legal policies and handbook files", icon: "fa-solid fa-vault" },
   { key: "manageHRCases", name: "Manage Employee Grievance Cases", category: "HR & Leave", subGroup: "HR Operations", description: "Handle confidential HR disputes and disciplinary cases", icon: "fa-solid fa-scale-balanced" },
+  { key: "reassignHRPartner", name: "Assign & Reassign HR Partners", category: "HR & Leave", subGroup: "HR Operations", description: "Allocate or reassign dedicated HR partners to employees and new hires", icon: "fa-solid fa-user-pen" },
+  { key: "manageHRIsolation", name: "Manage Multi-HR Data Isolation", category: "HR & Leave", subGroup: "HR Operations", description: "Toggle Multi-HR isolation scope so HR officers only view their assigned staff", icon: "fa-solid fa-users-viewfinder" },
 
   // Appraisals
   { key: "viewOwnAppraisals", name: "View Own Performance Appraisals", category: "Appraisals", subGroup: "Performance Reviews", description: "See self review results and manager appraisal feedback", icon: "fa-solid fa-star" },
@@ -301,7 +304,7 @@ const PRESET_TEMPLATES: RolePresetTemplate[] = [
     modules: ["overview", "team", "calendar", "projects", "chat", "referrals", "goals", "hr", "analytics", "notifications"],
     features: [
       "viewKpiWidgets", "viewShiftOverview", "viewRecentActivity", "viewAnnouncements",
-      "viewTeamDirectory", "viewEmployeeProfiles", "viewOrgChart",
+      "viewTeamDirectory", "viewEmployeeProfiles", "viewOrgChart", "reassignReportingLine",
       "logOwnTimesheet", "editOwnTimesheet", "viewTeamTimesheets", "approveTimesheets", "exportTimesheets", "manageShifts", "viewShiftCalendar", "clockInOut",
       "viewTeamAvailability", "manageTeamAvailability", "logOwnAvailability",
       "viewProjects", "createProjects", "deleteProjects", "assignTasksToOthers", "changeTaskStatus", "commentOnTasks", "deleteTaskComments", "manageProjectWiki", "viewProjectGantt", "exportProjectData",
@@ -311,6 +314,25 @@ const PRESET_TEMPLATES: RolePresetTemplate[] = [
       "viewOwnLeaves", "applyLeaves", "viewAllLeaves", "viewOwnAppraisals", "submitSelfReview", "viewManagerReviews",
       "viewGoals", "createGoals", "sendKudos", "submitSurvey",
       "viewAnalyticsOverview", "viewPerformanceMetrics", "exportAuditLogs",
+      "viewNotifications",
+    ],
+  },
+  {
+    id: "hr_lead",
+    name: "HR Operations & People Lead",
+    badge: "People & Culture",
+    description: "Manage employee profiles, onboarding, leaves, multi-HR isolation, partner reassignments, and grievances.",
+    icon: "fa-solid fa-users-gear",
+    modules: ["overview", "team", "calendar", "hr", "appraisals", "goals", "referrals", "chat", "analytics", "notifications"],
+    features: [
+      "viewKpiWidgets", "viewShiftOverview", "viewAnnouncements",
+      "viewTeamDirectory", "viewEmployeeProfiles", "editEmployeeProfiles", "inviteTeamMembers", "viewOrgChart", "reassignReportingLine",
+      "logOwnTimesheet", "editOwnTimesheet", "viewTeamTimesheets", "approveTimesheets", "exportTimesheets", "clockInOut", "viewShiftCalendar", "viewTeamAvailability", "manageTeamAvailability", "logOwnAvailability",
+      "viewOwnLeaves", "applyLeaves", "viewAllLeaves", "approveLeaves", "manageCompanyChecklists", "manageHRVault", "manageHRCases", "reassignHRPartner", "manageHRIsolation",
+      "viewOwnAppraisals", "submitSelfReview", "viewManagerReviews", "createAppraisalCycles",
+      "viewGoals", "sendKudos", "submitSurvey", "createPulseSurveys",
+      "submitReferral", "viewOwnReferrals", "viewAllReferrals", "manageReferrals",
+      "sendChatMessages", "viewMailCenter", "sendEmails", "joinVirtualHuddles",
       "viewNotifications",
     ],
   },
