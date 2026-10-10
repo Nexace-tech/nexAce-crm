@@ -20,7 +20,7 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const authResult = await requireTenantSession(["Admin", "OPS", "Sub Admin", "Manager"]);
+    const authResult = await requireTenantSession(["Admin", "OPS", "Sub Admin", "Manager", "HR"]);
     if (isAuthError(authResult)) return authResult;
     const { tenantObjectId, userObjectId, session } = authResult;
 
@@ -35,6 +35,33 @@ export async function PATCH(
     const previousInvoice = await ITInvoice.findOne({ _id: id, tenantId: tenantObjectId }).lean();
     if (!previousInvoice) {
       return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
+    }
+
+    // ── HR Data Isolation Check ──────────────────────────────────────────────
+    if (session.role === "HR") {
+      const tenantDoc = await Tenant.findById(tenantObjectId).select("isolateHRData").lean();
+      if ((tenantDoc as any)?.isolateHRData && (previousInvoice as any).createdBy) {
+        const creatorUser = await User.findById((previousInvoice as any).createdBy).select("hrId").lean();
+        if (creatorUser?.hrId?.toString() !== userObjectId.toString()) {
+          return NextResponse.json(
+            { error: "Forbidden: You can only review and approve invoices for your assigned employees under HR Data Isolation." },
+            { status: 403 }
+          );
+        }
+      }
+    }
+
+    // ── MANDATORY APPROVAL GATE BEFORE PAYMENT ───────────────────────────────
+    // Payment processing is strictly blocked unless the invoice has already been Approved.
+    if (body.status === "Paid" || body.paymentDetails) {
+      if ((previousInvoice as any).status !== "Approved") {
+        return NextResponse.json(
+          {
+            error: "Approval Mandatory: This timesheet/invoice must be approved by an HR Partner or Admin before payment can be processed.",
+          },
+          { status: 400 }
+        );
+      }
     }
 
     // ── Finance Portal Screenshot: Save base64 to Drive ──────────────────────
@@ -94,7 +121,7 @@ export async function PATCH(
     }
 
     // Build final update body — insert processed paymentDetails and paidDate
-    const updateBody = { ...body, ...(paymentDetails ? { paymentDetails } : {}) };
+    const updateBody: Record<string, any> = { ...body, ...(paymentDetails ? { paymentDetails } : {}) };
 
     if (body.status === "Paid" && !body.paidDate && !(previousInvoice as any).paidDate) {
       updateBody.paidDate = new Date().toISOString().slice(0, 10);
@@ -102,12 +129,59 @@ export async function PATCH(
       updateBody.paidDate = body.paidDate;
     }
 
-    // ── Stamp approver details & signature on approval ───────────────────────
-    // When an invoice is approved / marked Paid, always record approvedBy & approvedAt,
-    // and freeze the approver's signature (or org signature) onto the document.
-    if (body.status === "Paid") {
+    // ── Handle Explicit Approval Transition ──────────────────────────────────
+    if (body.status === "Approved") {
       updateBody.approvedBy = session.userName || "Admin";
       updateBody.approvedAt = new Date().toISOString();
+      updateBody.approverRole = session.role === "HR" ? "HR" : "Admin";
+      updateBody.rejectionReason = "";
+      updateBody.rejectedBy = "";
+      updateBody.rejectedAt = "";
+
+      // 1-Click Auto-approve attached project timesheet entries
+      try {
+        const { TimeEntry } = await import("@/models/TimeEntry");
+        const employeeId = (previousInvoice as any).createdBy;
+        if (employeeId) {
+          await TimeEntry.updateMany(
+            {
+              tenantId: tenantObjectId,
+              userId: employeeId,
+              status: { $in: ["Draft", "Pending", "Submitted"] },
+            },
+            {
+              $set: {
+                status: "Approved",
+                approvedBy: userObjectId,
+              },
+            }
+          );
+        }
+      } catch (tsErr) {
+        console.warn("Could not auto-approve time entries on invoice approval:", tsErr);
+      }
+    }
+
+    // ── Handle Explicit Rejection Transition ──────────────────────────────────
+    if (body.status === "Rejected") {
+      if (!body.rejectionReason || !body.rejectionReason.trim()) {
+        return NextResponse.json(
+          { error: "Rejection feedback reason is mandatory" },
+          { status: 400 }
+        );
+      }
+      updateBody.rejectionReason = body.rejectionReason.trim();
+      updateBody.rejectedBy = session.userName || "Admin";
+      updateBody.rejectedAt = new Date().toISOString();
+      updateBody.approvedBy = "";
+      updateBody.approvedAt = "";
+      updateBody.approverRole = null;
+    }
+
+    // ── Stamp approver details & signature on approval / mark Paid ───────────
+    if (body.status === "Paid" || body.status === "Approved") {
+      if (!updateBody.approvedBy) updateBody.approvedBy = session.userName || "Admin";
+      if (!updateBody.approvedAt) updateBody.approvedAt = new Date().toISOString();
 
       try {
         let effectiveSig = "";
@@ -171,17 +245,31 @@ export async function PATCH(
           if (!internalUser) return;
 
           const isPaid = updated.status === "Paid";
+          const isApproved = updated.status === "Approved";
+          const isRejected = updated.status === "Rejected";
           const payMethod = updated.paymentDetails?.method || "";
           const hasReceipt = isPaid && updated.paymentDetails?.screenshotUrl;
+
+          let notifTitle = `Invoice Status Updated: ${updated.invoiceNo}`;
+          let notifMsg = `Your invoice (${updated.invoiceNo}) status was updated to "${updated.status}" by ${session.userName || "Admin"}.`;
+
+          if (isPaid) {
+            notifTitle = `✅ Invoice Paid: ${updated.invoiceNo}`;
+            notifMsg = `Your invoice (${updated.invoiceNo}) has been paid via ${payMethod} by ${session.userName || "Admin"}.${hasReceipt ? " Payment receipt is attached." : ""}`;
+          } else if (isApproved) {
+            notifTitle = `✨ Invoice Approved: ${updated.invoiceNo}`;
+            notifMsg = `Your invoice & attached timesheets (${updated.invoiceNo}) have been approved by ${session.userName} (${session.role}) and authorized for payout.`;
+          } else if (isRejected) {
+            notifTitle = `❌ Invoice Rejected: ${updated.invoiceNo}`;
+            notifMsg = `Your invoice (${updated.invoiceNo}) was rejected by ${session.userName} (${session.role}). Reason: ${updated.rejectionReason || "Please review and resubmit."}`;
+          }
 
           // In-app notification
           await Notification.create({
             tenantId: tenantObjectId,
             recipientId: internalUser._id,
-            title: `Invoice Status Updated: ${updated.invoiceNo}`,
-            message: isPaid
-              ? `Your invoice (${updated.invoiceNo}) has been approved & marked Paid via ${payMethod} by ${session.userName || "Admin"}.${hasReceipt ? " Payment receipt is attached." : ""}`
-              : `Your invoice (${updated.invoiceNo}) status was updated to "${updated.status}" by ${session.userName || "Admin"}.`,
+            title: notifTitle,
+            message: notifMsg,
             type: "system",
             linkUrl: `/dashboard/settings?tab=invoice&invoiceNo=${encodeURIComponent(updated.invoiceNo)}`,
             read: false,
@@ -228,23 +316,53 @@ export async function PATCH(
             const receiptSection = hasReceipt
               ? `<p style="margin:8px 0;font-size:13px;">📎 <strong>Payment Receipt:</strong> A screenshot of the payment has been attached in your Finance Portal under Drive Space.</p>`
               : "";
+
+            const emailSubject = isPaid
+              ? `[NexAce CRM] Invoice Approved & Paid: ${updated.invoiceNo}`
+              : isApproved
+              ? `[NexAce CRM] Invoice Approved: ${updated.invoiceNo}`
+              : isRejected
+              ? `[NexAce CRM] Invoice Rejected: ${updated.invoiceNo}`
+              : `[NexAce CRM] Invoice Status Updated: ${updated.invoiceNo}`;
+
+            const emailHeading = isPaid
+              ? "✅ Invoice Paid"
+              : isApproved
+              ? "✨ Invoice & Timesheet Approved"
+              : isRejected
+              ? "❌ Invoice Rejected"
+              : "✦ Invoice Status Update";
+
+            const headingColor = isPaid
+              ? "#10b981"
+              : isApproved
+              ? "#059669"
+              : isRejected
+              ? "#e11d48"
+              : "#4f46e5";
+
             await sendEmail({
               to: internalUser.email,
-              subject: `[NexAce CRM] Invoice ${isPaid ? "Approved & Paid" : "Status Updated"}: ${updated.invoiceNo}`,
-              text: isPaid
-                ? `Hello ${internalUser.name},\n\nYour invoice ${updated.invoiceNo} has been approved and marked as Paid via ${payMethod} by ${session.userName || "Admin"}.\n\nTotal: ₹${updated.total?.toLocaleString()}\n\nPlease find your official invoice PDF attached.\n\nLog in to your NexAce dashboard to view payment details.`
-                : `Hello ${internalUser.name},\n\nYour invoice ${updated.invoiceNo} status has been updated to "${updated.status}".\n\nPlease find your invoice PDF attached.\n\nLog in to your NexAce dashboard to view details.`,
+              subject: emailSubject,
+              text: notifMsg,
               html: `
                 <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px; padding: 24px;">
-                  <h2 style="color: ${isPaid ? "#10b981" : "#4f46e5"}; margin-top: 0;">${isPaid ? "✅ Invoice Approved & Paid" : "✦ Invoice Status Update"}</h2>
+                  <h2 style="color: ${headingColor}; margin-top: 0;">${emailHeading}</h2>
                   <p style="color: #475569; font-size: 14px;">Hello <strong>${internalUser.name}</strong>,</p>
-                  <p style="color: #475569; font-size: 14px;">${isPaid
-                    ? `Your invoice has been <strong>approved and paid</strong> by <strong>${session.userName || "Admin"}</strong>.`
-                    : `The status of your invoice has been updated by <strong>${session.userName || "Admin"}</strong>:`
+                  <p style="color: #475569; font-size: 14px;">${
+                    isPaid
+                      ? `Your invoice has been <strong>paid</strong> by <strong>${session.userName || "Admin"}</strong>.`
+                      : isApproved
+                      ? `Your invoice and attached work hours have been <strong>approved</strong> by <strong>${session.userName} (${session.role})</strong> and authorized for payment processing.`
+                      : isRejected
+                      ? `Your invoice was <strong>rejected</strong> by <strong>${session.userName} (${session.role})</strong>.`
+                      : `The status of your invoice has been updated by <strong>${session.userName || "Admin"}</strong>:`
                   }</p>
                   <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 16px; border-radius: 8px; margin: 16px 0;">
                     <p style="margin: 4px 0; font-size: 14px;"><strong>Invoice Number:</strong> ${updated.invoiceNo}</p>
-                    <p style="margin: 4px 0; font-size: 14px;"><strong>Status:</strong> <span style="color: ${isPaid ? "#10b981" : "#2563eb"}; font-weight: bold;">${updated.status}</span></p>
+                    <p style="margin: 4px 0; font-size: 14px;"><strong>Status:</strong> <span style="color: ${headingColor}; font-weight: bold;">${updated.status}</span></p>
+                    ${isRejected && updated.rejectionReason ? `<p style="margin: 6px 0; font-size: 14px; color: #e11d48; background-color: #ffe4e6; padding: 8px; border-radius: 6px;"><strong>Rejection Reason:</strong> ${updated.rejectionReason}</p>` : ""}
+                    ${isApproved && updated.approvedBy ? `<p style="margin: 4px 0; font-size: 14px;"><strong>Approved By:</strong> ${updated.approvedBy} (${updated.approverRole || session.role})</p>` : ""}
                     ${isPaid ? `<p style="margin: 4px 0; font-size: 14px;"><strong>Payment Method:</strong> ${payMethod}</p>` : ""}
                     ${isPaid && updated.paymentDetails?.upiId ? `<p style="margin: 4px 0; font-size: 14px;"><strong>UPI ID:</strong> ${updated.paymentDetails.upiId}</p>` : ""}
                     ${isPaid && updated.paymentDetails?.transactionId ? `<p style="margin: 4px 0; font-size: 14px;"><strong>Transaction ID:</strong> ${updated.paymentDetails.transactionId}</p>` : ""}
@@ -252,7 +370,7 @@ export async function PATCH(
                   </div>
                   <p style="margin: 10px 0; font-size: 13px; color: #16a34a; font-weight: bold;">📄 Official invoice PDF is attached to this email.</p>
                   ${receiptSection}
-                  <p style="color: #94a3b8; font-size: 12px; margin-top: 16px;">Log in to your NexAce dashboard to view the full invoice and payment details.</p>
+                  <p style="color: #94a3b8; font-size: 12px; margin-top: 16px;">Log in to your NexAce dashboard to view details.</p>
                 </div>
               `,
               attachments,

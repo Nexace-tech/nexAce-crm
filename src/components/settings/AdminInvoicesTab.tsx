@@ -37,7 +37,7 @@ interface Invoice {
   taxAmount: number;
   total: number;
   currency: string;
-  status: "Draft" | "Sent" | "Pending" | "Paid" | "Overdue" | "Archived" | "Cancelled";
+  status: "Draft" | "Sent" | "Pending" | "Approved" | "Rejected" | "Paid" | "Overdue" | "Archived" | "Cancelled";
   notes?: string;
   createdAt?: string;
   updatedAt?: string;
@@ -60,6 +60,10 @@ interface Invoice {
   signatureUrl?: string;
   approvedBy?: string;
   approvedAt?: string;
+  approverRole?: string;
+  rejectionReason?: string;
+  rejectedBy?: string;
+  rejectedAt?: string;
 }
 
 type PaymentMethod = "Bank Transfer" | "UPI" | "Cash";
@@ -240,16 +244,29 @@ export function AdminInvoicesTab({ showToast, scope = "internal" }: AdminInvoice
       .catch((err) => console.error("Could not fetch org company details:", err));
   }, [scope]);
 
+  // Rejection modal state
+  const [rejectModal, setRejectModal] = useState<{ open: boolean; invoiceId: string; invoiceNo: string; reason: string }>({
+    open: false,
+    invoiceId: "",
+    invoiceNo: "",
+    reason: "",
+  });
+
   /** Opens payment modal if marking Paid, otherwise patches directly */
   const handleStatusChange = async (invoiceId: string, newStatus: string, invoiceNo?: string) => {
     if (newStatus === "Paid") {
+      const targetInv = invoices.find((i) => (i._id || i.id) === invoiceId);
+      if (targetInv?.status !== "Approved") {
+        showToast("Approval Mandatory: This invoice must be approved by an HR Partner or Admin before payment can be processed.", "error");
+        return;
+      }
+
       setPaymentMethod("Bank Transfer");
 
       // Default Paid From
       setFromUpiId(orgUpiId || "nexace@okaxis");
 
       // Default Paid To (Auto-pick payee UPI ID if available for this invoice/creator)
-      const targetInv = invoices.find((i) => (i._id || i.id) === invoiceId);
       const invUserUpi = (
         targetInv?.userUpiId ||
         (targetInv as any)?.bankDetails?.upiId ||
@@ -265,6 +282,12 @@ export function AdminInvoicesTab({ showToast, scope = "internal" }: AdminInvoice
       setPaymentModal({ open: true, invoiceId, invoiceNo: invoiceNo || "" });
       return;
     }
+
+    if (newStatus === "Rejected") {
+      setRejectModal({ open: true, invoiceId, invoiceNo: invoiceNo || "", reason: "" });
+      return;
+    }
+
     await patchInvoice(invoiceId, { status: newStatus });
   };
 
@@ -440,7 +463,9 @@ export function AdminInvoicesTab({ showToast, scope = "internal" }: AdminInvoice
   const getStatusBadge = (status: string) => {
     const configs: Record<string, { cls: string; icon: string }> = {
       Paid: { cls: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20", icon: "fa-circle-check" },
+      Approved: { cls: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30", icon: "fa-check-double" },
       Pending: { cls: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20", icon: "fa-clock" },
+      Rejected: { cls: "bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-500/30", icon: "fa-ban" },
       Sent: { cls: "bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/20", icon: "fa-paper-plane" },
       Draft: { cls: "bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/20", icon: "fa-pen-ruler" },
       Overdue: { cls: "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20", icon: "fa-triangle-exclamation" },
@@ -687,7 +712,9 @@ export function AdminInvoicesTab({ showToast, scope = "internal" }: AdminInvoice
             {[
               { key: "All", label: "All", count: scopedInvoices.length },
               { key: "Pending", label: "Pending", count: scopedInvoices.filter(i => i.status === "Pending").length },
+              { key: "Approved", label: "Approved", count: scopedInvoices.filter(i => i.status === "Approved").length },
               { key: "Paid", label: "Paid", count: scopedInvoices.filter(i => i.status === "Paid").length },
+              { key: "Rejected", label: "Rejected", count: scopedInvoices.filter(i => i.status === "Rejected").length },
               { key: "Sent", label: "Sent", count: scopedInvoices.filter(i => i.status === "Sent").length },
               { key: "Draft", label: "Draft", count: scopedInvoices.filter(i => i.status === "Draft").length },
               { key: "Overdue", label: "Overdue", count: scopedInvoices.filter(i => i.status === "Overdue").length },
@@ -851,13 +878,24 @@ export function AdminInvoicesTab({ showToast, scope = "internal" }: AdminInvoice
                             <i className="fa-solid fa-file-pdf text-[10px]" /> PDF
                           </Button>
 
-                          {(can("approveInvoices") || isAdmin || isOPS) && (
+                          {(can("approveInvoices") || isAdmin || isOPS || user?.role === "HR") && (
                             <>
                               {inv.status === "Pending" && (
-                                <div
-                                  className="relative"
-                                  onClick={(e) => e.stopPropagation()}
-                                >
+                                <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    disabled={isUpdating}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      patchInvoice(invId, { status: "Approved" });
+                                    }}
+                                    className="gap-1 text-xs font-semibold h-7 px-2 cursor-pointer bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs"
+                                    title="Approve invoice and auto-approve attached timesheets"
+                                  >
+                                    <i className="fa-solid fa-check-double text-[10px]" /> Approve
+                                  </Button>
+
                                   <Button
                                     type="button"
                                     variant="outline"
@@ -865,51 +903,57 @@ export function AdminInvoicesTab({ showToast, scope = "internal" }: AdminInvoice
                                     disabled={isUpdating}
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      setQuickApproveOpen(quickApproveOpen === invId ? null : invId);
+                                      setRejectModal({ open: true, invoiceId: invId, invoiceNo: inv.invoiceNo, reason: "" });
                                     }}
-                                    className="gap-1 text-xs font-semibold h-7 px-2.5 cursor-pointer bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
+                                    className="gap-1 text-xs font-semibold h-7 px-2 cursor-pointer text-rose-600 dark:text-rose-400 border-rose-300 dark:border-rose-900/50 hover:bg-rose-50 dark:hover:bg-rose-950/30"
+                                    title="Reject with mandatory explanation"
                                   >
-                                    <i className="fa-solid fa-check text-[10px]" />
-                                    Approve
-                                    <i className={cn("fa-solid fa-chevron-down text-[8px] transition-transform duration-150", quickApproveOpen === invId && "rotate-180")} />
+                                    <i className="fa-solid fa-ban text-[10px]" /> Reject
                                   </Button>
+                                </div>
+                              )}
 
-                                  {/* Quick-approve dropdown — no modal needed for Bank/Cash */}
-                                  {quickApproveOpen === invId && (
-                                    <div className="absolute right-0 top-full mt-1 z-50 bg-card border border-border/80 rounded-xl shadow-2xl overflow-hidden w-48 animate-in fade-in zoom-in-95 duration-100">
-                                      <div className="px-3 pt-2.5 pb-1.5 border-b border-border/60">
-                                        <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Payment Method</p>
-                                      </div>
-                                      {(["Bank Transfer", "Cash", "UPI"] as PaymentMethod[]).map((method) => (
-                                        <button
-                                          key={method}
-                                          type="button"
-                                          disabled={isUpdating}
-                                          onClick={(e) => { e.stopPropagation(); quickApprove(invId, inv.invoiceNo, method); }}
-                                          className="flex items-center gap-2.5 w-full px-3 py-2.5 text-xs font-semibold text-foreground hover:bg-muted transition-colors cursor-pointer border-b border-border/40 last:border-b-0"
-                                        >
-                                          <span className={cn(
-                                            "w-6 h-6 rounded-lg flex items-center justify-center text-xs shrink-0",
-                                            method === "UPI" ? "bg-violet-500/10 text-violet-500" :
-                                            method === "Cash" ? "bg-emerald-500/10 text-emerald-500" :
-                                            "bg-sky-500/10 text-sky-500"
-                                          )}>
-                                            <i className={cn("fa-solid",
-                                              method === "UPI" ? "fa-qrcode" :
-                                              method === "Cash" ? "fa-money-bill-transfer" :
-                                              "fa-building-columns"
-                                            )} />
-                                          </span>
-                                          <span className="flex-1 text-left">{method}</span>
-                                          {method !== "UPI" ? (
-                                            <span className="text-[9px] font-bold text-emerald-500 bg-emerald-500/10 px-1.5 py-0.5 rounded-full">Quick</span>
-                                          ) : (
-                                            <i className="fa-solid fa-chevron-right text-[9px] text-muted-foreground/50" />
-                                          )}
-                                        </button>
-                                      ))}
-                                    </div>
+                              {inv.status === "Approved" && (
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  disabled={isUpdating}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleStatusChange(invId, "Paid", inv.invoiceNo);
+                                  }}
+                                  className="gap-1.5 text-xs font-bold h-7 px-2.5 cursor-pointer bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs"
+                                  title="Process payment disbursement"
+                                >
+                                  <i className="fa-solid fa-credit-card text-[10px]" /> Process Payment
+                                </Button>
+                              )}
+
+                              {inv.status === "Rejected" && (
+                                <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                                  {inv.rejectionReason && (
+                                    <span
+                                      className="text-[10px] text-rose-500 max-w-[120px] truncate"
+                                      title={`Reason: ${inv.rejectionReason}`}
+                                    >
+                                      <i className="fa-solid fa-circle-exclamation text-[9px] mr-1" />
+                                      {inv.rejectionReason}
+                                    </span>
                                   )}
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    disabled={isUpdating}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      patchInvoice(invId, { status: "Pending" });
+                                    }}
+                                    className="gap-1 text-xs font-semibold h-7 px-2 cursor-pointer text-amber-600 border-amber-300 hover:bg-amber-50"
+                                    title="Re-open for review"
+                                  >
+                                    <i className="fa-solid fa-rotate-left text-[10px]" /> Re-open
+                                  </Button>
                                 </div>
                               )}
 
@@ -920,7 +964,11 @@ export function AdminInvoicesTab({ showToast, scope = "internal" }: AdminInvoice
                                 className="h-7 px-2 text-[11px] bg-background border border-border/80 rounded-md text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer font-medium"
                               >
                                 <option value="Pending">Pending</option>
-                                <option value="Paid">Paid</option>
+                                <option value="Approved">Approved</option>
+                                <option value="Paid" disabled={inv.status !== "Approved"}>
+                                  {inv.status === "Approved" ? "Paid" : "Paid (Requires Approval)"}
+                                </option>
+                                <option value="Rejected">Rejected</option>
                                 <option value="Sent">Sent</option>
                                 <option value="Draft">Draft</option>
                                 <option value="Overdue">Overdue</option>
@@ -1313,6 +1361,68 @@ export function AdminInvoicesTab({ showToast, scope = "internal" }: AdminInvoice
                   ? <><i className="fa-solid fa-spinner fa-spin" /> Processing...</>
                   : <><i className="fa-solid fa-circle-check" /> Confirm {paymentMethod} Payment</>
                 }
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Rejection Modal with Mandatory Explanation */}
+      {rejectModal.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-card border border-border rounded-2xl max-w-md w-full shadow-2xl overflow-hidden flex flex-col">
+            <div className="px-5 py-4 border-b border-border flex items-center justify-between bg-rose-500/10">
+              <div className="flex items-center gap-2 text-rose-600 dark:text-rose-400 font-bold text-sm">
+                <i className="fa-solid fa-ban" />
+                Reject Invoice #{rejectModal.invoiceNo}
+              </div>
+              <button
+                type="button"
+                onClick={() => setRejectModal({ open: false, invoiceId: "", invoiceNo: "", reason: "" })}
+                className="w-7 h-7 rounded-lg hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground cursor-pointer"
+              >
+                <i className="fa-solid fa-xmark text-xs" />
+              </button>
+            </div>
+            <div className="p-5 space-y-3">
+              <p className="text-xs text-muted-foreground">
+                Please provide a mandatory explanation for rejecting this invoice. The employee will receive this feedback via in-app alert and official email so they can adjust their work log or invoice and resubmit.
+              </p>
+              <div>
+                <label className="text-xs font-bold text-foreground block mb-1">
+                  Rejection Reason <span className="text-rose-500">*</span>
+                </label>
+                <textarea
+                  value={rejectModal.reason}
+                  onChange={(e) => setRejectModal((prev) => ({ ...prev, reason: e.target.value }))}
+                  placeholder="e.g. Discrepancy in project hours or missing shift logs. Please update timesheet and resubmit."
+                  className="w-full h-24 p-2.5 text-xs bg-background border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-rose-500 resize-none font-medium"
+                />
+              </div>
+            </div>
+            <div className="px-5 py-3 border-t border-border bg-muted/20 flex items-center justify-end gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setRejectModal({ open: false, invoiceId: "", invoiceNo: "", reason: "" })}
+                className="h-8 px-3 font-semibold cursor-pointer"
+              >
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                disabled={!rejectModal.reason.trim() || Boolean(updatingId)}
+                onClick={async () => {
+                  if (!rejectModal.reason.trim()) return;
+                  await patchInvoice(rejectModal.invoiceId, {
+                    status: "Rejected",
+                    rejectionReason: rejectModal.reason.trim(),
+                  });
+                  setRejectModal({ open: false, invoiceId: "", invoiceNo: "", reason: "" });
+                }}
+                className="h-8 px-4 font-semibold bg-rose-600 hover:bg-rose-700 text-white cursor-pointer gap-1.5"
+              >
+                <i className="fa-solid fa-ban text-[11px]" /> Confirm Rejection
               </Button>
             </div>
           </div>

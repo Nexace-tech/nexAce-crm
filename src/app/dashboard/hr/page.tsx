@@ -14,6 +14,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { isSubAdminRole } from "@/lib/roles";
 import { HRTasksTab } from "@/components/hr/HRTasksTab";
 import { AccessRestricted } from "@/components/ui/AccessRestricted";
+import { AdminInvoicesTab } from "@/components/settings/AdminInvoicesTab";
 
 interface LeaveData {
   _id: string; userId: string; userName: string;
@@ -39,11 +40,11 @@ export default function HRPage() {
   const { user, loading: authLoading } = useAuth();
   const { can, isAdmin, isOPS, canAccessModule, loading: permLoading } = usePermissions();
   const [activeTab, setActiveTab] = useTabPersistence<
-    "directory" | "tasks" | "checklists" | "leaves" | "vault" | "cases" | "appraisals" | "probation" | "sandbox"
+    "directory" | "tasks" | "checklists" | "invoices" | "leaves" | "vault" | "cases" | "appraisals" | "probation" | "sandbox"
   >(
     "hr_active_tab_v2",
     "directory",
-    ["directory", "tasks", "checklists", "leaves", "vault", "cases", "appraisals", "probation", "sandbox"]
+    ["directory", "tasks", "checklists", "invoices", "leaves", "vault", "cases", "appraisals", "probation", "sandbox"]
   );
 
   const searchParams = useSearchParams();
@@ -1250,6 +1251,15 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
               <i className="fa-solid fa-list-check text-xs" /> Onboarding / Offboarding
             </button>
           )}
+          {/* Timesheet & Invoice Approvals — guarded */}
+          {(isManagerOrAdmin || user?.role === "HR" || can("approveInvoices") || can("approveTimesheets") || Boolean(user)) && (
+            <button onClick={() => setActiveTab("invoices")} className={cn(
+              "px-4 py-2 text-xs font-semibold rounded-lg transition-all flex items-center gap-2 cursor-pointer shrink-0",
+              activeTab === "invoices" ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+            )}>
+              <i className="fa-solid fa-file-invoice-dollar text-xs text-emerald-500" /> Timesheet &amp; Invoice Approvals
+            </button>
+          )}
           {/* Leave Management — guarded */}
           {(isManagerOrAdmin || can("applyLeave") || can("viewOwnLeaveStatus") || can("viewTeamLeave") || Boolean(user)) && (
             <button onClick={() => setActiveTab("leaves")} className={cn(
@@ -2161,6 +2171,16 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
               </div>
             );
           })()}
+        </div>
+      )}
+
+      {/* TAB: TIMESHEET & INVOICE APPROVALS — guarded */}
+      {activeTab === "invoices" && (isManagerOrAdmin || user?.role === "HR" || can("approveInvoices") || can("approveTimesheets") || Boolean(user)) && (
+        <div className="space-y-4">
+          <AdminInvoicesTab
+            showToast={showToast}
+            scope="internal"
+          />
         </div>
       )}
 

@@ -21,16 +21,17 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { TeamShiftOverviewCard } from "@/components/dashboard/TeamShiftOverviewCard";
+import { TeamAvailabilityTab } from "@/components/calendar/TeamAvailabilityTab";
 
 import { AccessRestricted } from "@/components/ui/AccessRestricted";
 
 function CalendarPageContent() {
   const { user: currentUser, loading: authLoading } = useAuth();
   const { can, canAccessModule, isAdmin, isOPS, loading: permLoading } = usePermissions();
-  const [activeTab, setActiveTab] = useTabPersistence<"calendar" | "sprints" | "timesheets" | "attendance">(
+  const [activeTab, setActiveTab] = useTabPersistence<"calendar" | "sprints" | "timesheets" | "attendance" | "availability">(
     "calendar_active_tab",
     "calendar",
-    ["calendar", "sprints", "timesheets", "attendance"]
+    ["calendar", "sprints", "timesheets", "attendance", "availability"]
   );
 
   const [loading, setLoading] = useState(true);
@@ -1434,6 +1435,21 @@ function CalendarPageContent() {
           )}
         >
           <i className="fa-solid fa-fingerprint text-sm" /> Shift Clock
+        </button>
+
+        <button
+          onClick={() => setActiveTab("availability")}
+          className={cn(
+            "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
+            activeTab === "availability"
+              ? "border-primary text-primary bg-primary/10 rounded-t-md font-semibold -mb-px"
+              : "border-transparent text-muted-foreground hover:text-foreground"
+          )}
+        >
+          <i className="fa-solid fa-user-clock text-sm" />{" "}
+          {isAdmin || isOPS || (currentUser?.role as string) === "HR"
+            ? "Team Availability"
+            : "My Availability"}
         </button>
       </div>
 
@@ -3562,6 +3578,16 @@ function CalendarPageContent() {
           {/* Organization Team Shift Roster & Employee Shift Attendance Board (Admin/OPS only) */}
           {(isAdmin || isOPS) && <TeamShiftOverviewCard />}
         </div>
+      )}
+
+      {/* Tab 5: Team & Worker Availability */}
+      {activeTab === "availability" && (
+        <TeamAvailabilityTab
+          currentUser={currentUser}
+          isAdmin={isAdmin}
+          isOPS={isOPS}
+          showToast={showToast}
+        />
       )}
 
       {/* Schedule Event Modal */}

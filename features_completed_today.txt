@@ -1,0 +1,60 @@
+================================================================================
+                    NEXACE CRM - FEATURES COMPLETED TODAY
+================================================================================
+
+1. HR PARTNER ASSIGNMENT & ONBOARDING ROUTING
+--------------------------------------------------------------------------------
+- Dynamic HR Assignment: Employees can be assigned a dedicated HR Partner
+  (hrId / hrName) during registration or profile management.
+- Intelligent Fallback to Workspace Admin: If no dedicated HR Partner is
+  assigned, onboarding document review, checklist management, and approvals
+  automatically route to the Workspace Admin.
+- Onboarding Document Submission & Review Hub: When new hires submit compliance,
+  identity, or NDA documents, the assigned HR Partner (or Admin fallback)
+  receives instantaneous in-app alerts and notifications with quick review links.
+- Enterprise HR Data Isolation: When 'isolateHRData' is enabled, HR Partners only
+  access and manage onboarding checklists, documents, timesheets, and invoices
+  for their assigned employees, while Admins retain tenant-wide visibility.
+
+2. DUAL-PORTAL TIMESHEET & INVOICE REVIEW & APPROVAL WORKFLOW
+--------------------------------------------------------------------------------
+- Dual Portal Access: Review and approval actions are accessible across:
+  a) HR Portal (/dashboard/hr) under the dedicated "Timesheet & Invoice Approvals" tab.
+  b) Admin Invoices / Finance Portal (/dashboard/settings?tab=invoices & /dashboard/finance).
+- Multi-Role Support: Both HR Partners (role="HR") and Workspace Admins have the
+  authority to review, approve, or reject employee invoices and timesheets.
+
+3. MANDATORY APPROVAL GATE BEFORE PAYMENT PROCESSING
+--------------------------------------------------------------------------------
+- Strict Backend Enforcement: /api/it/invoices/[id] and /api/finance/invoices/[id]
+  strictly reject payment requests (status="Paid") with HTTP 400 Bad Request
+  unless the invoice status is explicitly "Approved".
+- UI Guard Rails: "Process Payment" action is completely locked and hidden for
+  pending or unapproved invoices. It becomes available only once an HR Partner or
+  Admin formally approves the submission.
+- Separation of Approval & Payout: Review/Approval and Disbursement/Payment are
+  cleanly separated into two distinct stages in the workflow.
+
+4. AUTOMATIC LINKED TIMESHEET SYNCHRONIZATION
+--------------------------------------------------------------------------------
+- One-Click Auto-Approval: Approving an IT contractor or employee invoice
+  automatically transitions all associated pending timesheet records (TimeEntry)
+  for that billing period to "Approved", eliminating double-entry overhead.
+- Audit Stamping: Records approver identity (approvedBy), timestamp (approvedAt),
+  and organizational role (approverRole: "HR" | "Admin" | "OPS").
+
+5. FORMAL REJECTION SYSTEM WITH ACTIONABLE REASONS
+--------------------------------------------------------------------------------
+- Mandatory Rejection Reason: Rejection requires a mandatory explanation modal
+  detailing what needs correction.
+- Employee Self-Service Feedback: Rejected invoices prominently display the
+  rejection reason banner and reviewer details on employee self-service cards and
+  list views, guiding the user to revise their timesheet and resubmit.
+
+6. UI / UX & DESIGN SYSTEM ENHANCEMENTS
+--------------------------------------------------------------------------------
+- FontAwesome 6 Icon Compliance: Standardized across the approval and invoice
+  workflows using FA6 classes (fa-check-double, fa-ban, fa-file-invoice-dollar).
+- Mobile-First Responsiveness: All dialogs, status badges, action toolbars, and
+  feedback banners adapt seamlessly across mobile, tablet, and desktop screens.
+================================================================================

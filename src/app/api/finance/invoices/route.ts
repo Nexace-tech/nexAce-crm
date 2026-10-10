@@ -10,18 +10,26 @@ export async function GET() {
   try {
     const authResult = await requireTenantSession();
     if (isAuthError(authResult)) return authResult;
-    const { tenantObjectId, userObjectId } = authResult;
+    const { tenantObjectId, userObjectId, session } = authResult;
 
     await connectToDatabase();
 
-    const invoices = await FinanceInvoice.find({ tenantId: tenantObjectId })
+    const { getHRAccessScope } = await import("@/lib/hrIsolation");
+    const hrScope = await getHRAccessScope(session, tenantObjectId, userObjectId);
+
+    const invoiceQuery: any = { tenantId: tenantObjectId };
+    if (hrScope.isIsolated && hrScope.allowedUserIds) {
+      invoiceQuery.createdBy = { $in: hrScope.allowedUserIds };
+    }
+
+    const invoices = await FinanceInvoice.find(invoiceQuery)
       .populate("createdBy", "name email bankDetails upiId")
       .sort({ createdAt: -1 })
       .lean();
 
     // Fetch ITInvoices (Employee Invoices) as well
     const { ITInvoice } = await import("@/models/ITInvoice");
-    const itInvoices = await ITInvoice.find({ tenantId: tenantObjectId })
+    const itInvoices = await ITInvoice.find(invoiceQuery)
       .populate("createdBy", "name email bankDetails upiId")
       .sort({ createdAt: -1 })
       .lean();

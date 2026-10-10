@@ -37,7 +37,7 @@ interface Invoice {
   taxAmount: number;
   total: number;
   currency: string;
-  status: "Draft" | "Sent" | "Pending" | "Paid" | "Overdue" | "Archived" | "Cancelled";
+  status: "Draft" | "Sent" | "Pending" | "Approved" | "Rejected" | "Paid" | "Overdue" | "Archived" | "Cancelled";
   notes?: string;
   createdAt?: string;
   bankDetails?: {
@@ -58,6 +58,10 @@ interface Invoice {
   signatureUrl?: string;
   approvedBy?: string;
   approvedAt?: string;
+  approverRole?: string;
+  rejectionReason?: string;
+  rejectedBy?: string;
+  rejectedAt?: string;
 }
 
 function formatHoursMinutes(val: number): string {
@@ -1801,7 +1805,9 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
   const getStatusBadge = (status: string) => {
     const config: Record<string, { color: string; icon: string }> = {
       Paid: { color: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20", icon: "fa-circle-check" },
+      Approved: { color: "bg-teal-500/10 text-teal-600 dark:text-teal-400 border-teal-500/20", icon: "fa-check-double" },
       Pending: { color: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20", icon: "fa-clock" },
+      Rejected: { color: "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20", icon: "fa-ban" },
       Sent: { color: "bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/20", icon: "fa-paper-plane" },
       Draft: { color: "bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/20", icon: "fa-pen-ruler" },
       Overdue: { color: "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20", icon: "fa-triangle-exclamation" },
@@ -3266,6 +3272,8 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
               >
                 <option value="All">All Invoices ({myInvoices.length})</option>
                 <option value="Pending">Pending ({myInvoices.filter((i) => i.status === "Pending").length})</option>
+                <option value="Approved">Approved ({myInvoices.filter((i) => i.status === "Approved").length})</option>
+                <option value="Rejected">Rejected ({myInvoices.filter((i) => i.status === "Rejected").length})</option>
                 <option value="Paid">Paid ({myInvoices.filter((i) => i.status === "Paid").length})</option>
                 <option value="Sent">Sent ({myInvoices.filter((i) => i.status === "Sent").length})</option>
                 <option value="Draft">Draft ({myInvoices.filter((i) => i.status === "Draft").length})</option>
@@ -3492,6 +3500,42 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
                         </div>
                       )}
 
+                      {/* Approved notice if Approved */}
+                      {inv.status === "Approved" && (
+                        <div className="bg-teal-500/10 border border-teal-500/20 rounded-lg p-2.5 text-[10px] text-teal-700 dark:text-teal-400 space-y-1">
+                          <div className="flex items-center gap-1.5 font-bold">
+                            <i className="fa-solid fa-check-double text-teal-500" />
+                            <span>Approved &amp; Cleared for Payment</span>
+                          </div>
+                          <p className="text-[10px] text-muted-foreground leading-relaxed">
+                            {inv.approvedBy ? `Reviewed and approved by ${inv.approvedBy}${inv.approverRole ? ` (${inv.approverRole})` : ""}` : "Reviewed and approved"}. Payout processing will follow shortly.
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Rejected feedback banner if Rejected */}
+                      {inv.status === "Rejected" && (
+                        <div className="bg-rose-500/10 border border-rose-500/25 rounded-lg p-2.5 text-[10px] text-rose-700 dark:text-rose-400 space-y-1.5">
+                          <div className="flex items-center justify-between">
+                            <span className="font-bold flex items-center gap-1.5">
+                              <i className="fa-solid fa-triangle-exclamation text-rose-500" />
+                              <span>Action Required &mdash; Rejected</span>
+                            </span>
+                            {inv.rejectedBy && (
+                              <span className="text-[9px] text-muted-foreground font-medium">By {inv.rejectedBy}</span>
+                            )}
+                          </div>
+                          {inv.rejectionReason && (
+                            <p className="text-[10px] font-medium bg-rose-500/5 p-2 rounded border border-rose-500/10 text-foreground break-words leading-relaxed">
+                              &ldquo;{inv.rejectionReason}&rdquo;
+                            </p>
+                          )}
+                          <p className="text-[9px] text-muted-foreground">
+                            Please review the feedback above, revise your timesheet if needed, and regenerate your invoice.
+                          </p>
+                        </div>
+                      )}
+
                       {/* Card Action Buttons Footer */}
                       <div className="flex items-center gap-2 pt-2 border-t border-border/60">
                         <Button
@@ -3639,6 +3683,44 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
                               <i className="fa-solid fa-receipt text-[10px]" />
                               View Receipt
                             </a>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Approved strip */}
+                      {inv.status === "Approved" && (
+                        <div className="px-3 py-2 bg-teal-500/5 border-t border-teal-500/15 flex items-center justify-between gap-3 text-[11px] text-teal-700 dark:text-teal-400">
+                          <div className="flex items-center gap-2">
+                            <i className="fa-solid fa-check-double shrink-0 text-teal-500" />
+                            <span className="font-semibold">
+                              Approved &amp; Cleared for Payout
+                              {inv.approvedBy && (
+                                <span className="ml-1 text-muted-foreground font-normal">
+                                  by {inv.approvedBy}{inv.approverRole ? ` (${inv.approverRole})` : ""}
+                                </span>
+                              )}
+                            </span>
+                          </div>
+                          <span className="text-[10px] text-muted-foreground">Awaiting finance disbursement</span>
+                        </div>
+                      )}
+
+                      {/* Rejected strip */}
+                      {inv.status === "Rejected" && (
+                        <div className="px-3 py-2.5 bg-rose-500/5 border-t border-rose-500/20 text-[11px] text-rose-700 dark:text-rose-400 space-y-1">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-1.5 font-bold">
+                              <i className="fa-solid fa-triangle-exclamation text-rose-500 shrink-0" />
+                              <span>Rejected &mdash; Action Required</span>
+                            </div>
+                            {inv.rejectedBy && (
+                              <span className="text-[10px] text-muted-foreground">Reviewed by {inv.rejectedBy}</span>
+                            )}
+                          </div>
+                          {inv.rejectionReason && (
+                            <p className="text-[10px] font-medium text-foreground bg-rose-500/10 px-2 py-1 rounded border border-rose-500/15 break-words">
+                              &ldquo;{inv.rejectionReason}&rdquo;
+                            </p>
                           )}
                         </div>
                       )}

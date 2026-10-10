@@ -704,62 +704,90 @@ export function EmployeeDashboard({ user }: { user: any }) {
         </div>
       )}
 
-      {/* Employee Documents Section */}
-      <Card className="border-border shadow-xs overflow-hidden">
-        <CardHeader className="pb-3 border-b border-border/50 bg-muted/20">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-            <div>
-              <CardTitle className="text-base font-bold flex items-center gap-2">
-                <i className="fa-solid fa-folder-closed text-primary" /> My Required Documents &amp; Submissions
-              </CardTitle>
-              <CardDescription className="text-xs">
-                Documents requested by your HR partner for identity verification, payroll, and compliance.
-              </CardDescription>
-            </div>
-            <div className="flex items-center gap-2">
-              <Badge
-                className={cn(
-                  "text-xs px-2.5 py-0.5 font-bold",
-                  user?.documentsSubmitted
-                    ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30"
-                    : "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30"
-                )}
-              >
-                {user?.documentsSubmitted ? (
-                  <><i className="fa-solid fa-circle-check mr-1 text-emerald-500" /> Documents Verified by HR</>
-                ) : (
-                  <><i className="fa-solid fa-clock mr-1 text-amber-500" /> Pending HR Verification</>
-                )}
-              </Badge>
-              <Button asChild variant="outline" size="sm" className="h-7 text-xs">
-                <Link href="/dashboard/hr?tab=vault">
-                  <i className="fa-solid fa-vault mr-1 text-[10px]" /> Vault
-                </Link>
-              </Button>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="p-4 space-y-3">
-          {(() => {
-            const myDocs = employeeDocs.filter(
-              (d) =>
-                (d.targetUserId?._id || d.targetUserId) === user?._id ||
-                d.targetUserId === user?.id
-            );
+      {/* Employee Documents Section - Only shown if action is required (e.g. any document is Rejected or pending request) */}
+      {(() => {
+        const myDocs = employeeDocs.filter(
+          (d) =>
+            (d.targetUserId?._id || d.targetUserId) === user?._id ||
+            d.targetUserId === user?.id
+        );
 
-            if (myDocs.length === 0) {
-              return (
-                <div className="py-6 text-center text-xs text-muted-foreground space-y-1">
-                  <i className="fa-solid fa-file-circle-check text-muted-foreground/60 text-2xl" />
-                  <p className="font-semibold text-foreground">No specific document requests pending</p>
-                  <p className="text-[11px]">Your HR partner has not requested any additional documents at this time.</p>
+        const rejectedDocs = myDocs.filter((d: any) => d.status === "Rejected");
+        const pendingRequestedDocs = myDocs.filter((d: any) => d.status === "Requested" || !d.fileUrl);
+
+        // If any documents are rejected, ONLY show the rejected documents (not all).
+        // If user is not yet verified, show only pending requested documents.
+        // If all documents are verified or submitted, hide this section from top.
+        const docsToShow = rejectedDocs.length > 0
+          ? rejectedDocs
+          : (!user?.documentsSubmitted ? pendingRequestedDocs : []);
+
+        if (docsToShow.length === 0) return null;
+
+        const hasRejected = rejectedDocs.length > 0;
+
+        return (
+          <Card
+            className={cn(
+              "border shadow-xs overflow-hidden animate-in fade-in slide-in-from-top-1",
+              hasRejected ? "border-rose-500/30 bg-rose-500/[0.02]" : "border-amber-500/30 bg-amber-500/[0.02]"
+            )}
+          >
+            <CardHeader
+              className={cn(
+                "pb-3 border-b",
+                hasRejected ? "border-rose-500/20 bg-rose-500/10" : "border-amber-500/20 bg-amber-500/10"
+              )}
+            >
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <CardTitle className="text-base font-bold flex items-center gap-2">
+                    {hasRejected ? (
+                      <>
+                        <i className="fa-solid fa-circle-exclamation text-rose-500" /> Action Required: Document Re-upload
+                      </>
+                    ) : (
+                      <>
+                        <i className="fa-solid fa-clock text-amber-500" /> Pending Document Submissions
+                      </>
+                    )}
+                  </CardTitle>
+                  <CardDescription className="text-xs">
+                    {hasRejected
+                      ? `HR has rejected ${rejectedDocs.length} document${rejectedDocs.length > 1 ? "s" : ""}. Please review the rejection notes and re-upload.`
+                      : "Please submit the requested verification documents for HR compliance and approval."}
+                  </CardDescription>
                 </div>
-              );
-            }
-
-            return (
+                <div className="flex items-center gap-2">
+                  <Badge
+                    className={cn(
+                      "text-xs px-2.5 py-0.5 font-bold",
+                      hasRejected
+                        ? "bg-rose-500/15 text-rose-700 dark:text-rose-400 border-rose-500/30"
+                        : "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30"
+                    )}
+                  >
+                    {hasRejected ? (
+                      <>
+                        <i className="fa-solid fa-triangle-exclamation mr-1 text-rose-500" /> {rejectedDocs.length} Rejected
+                      </>
+                    ) : (
+                      <>
+                        <i className="fa-solid fa-clock mr-1 text-amber-500" /> {pendingRequestedDocs.length} Pending
+                      </>
+                    )}
+                  </Badge>
+                  <Button asChild variant="outline" size="sm" className="h-7 text-xs">
+                    <Link href="/dashboard/hr?tab=vault">
+                      <i className="fa-solid fa-vault mr-1 text-[10px]" /> Vault
+                    </Link>
+                  </Button>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="p-4 space-y-3">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {myDocs.map((doc: any) => {
+                {docsToShow.map((doc: any) => {
                   const statusColors: Record<string, string> = {
                     Requested: "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30",
                     Submitted: "bg-sky-500/15 text-sky-700 dark:text-sky-400 border-sky-500/30",
@@ -770,9 +798,14 @@ export function EmployeeDashboard({ user }: { user: any }) {
                   return (
                     <div
                       key={doc._id}
-                      className="p-3.5 rounded-xl border border-border bg-card/60 flex flex-col justify-between gap-3 hover:border-primary/40 transition-colors"
+                      className={cn(
+                        "p-3.5 rounded-xl border flex flex-col justify-between gap-3 transition-colors",
+                        doc.status === "Rejected"
+                          ? "border-rose-500/30 bg-rose-500/5 hover:border-rose-500/50"
+                          : "border-border bg-card/60 hover:border-primary/40"
+                      )}
                     >
-                      <div className="space-y-1">
+                      <div className="space-y-1.5">
                         <div className="flex items-center justify-between gap-2">
                           <span className="text-xs font-bold text-foreground truncate">{doc.title}</span>
                           <Badge className={cn("text-[10px] px-2 py-0 font-bold shrink-0", statusColors[doc.status || "Submitted"])}>
@@ -781,8 +814,29 @@ export function EmployeeDashboard({ user }: { user: any }) {
                         </div>
                         <p className="text-[11px] text-muted-foreground">
                           Category: <span className="font-medium text-foreground">{doc.category || "Document"}</span>
-                          {doc.notes && <span> &bull; Note: {doc.notes}</span>}
                         </p>
+                        {doc.notes && (
+                          <div
+                            className={cn(
+                              "p-2 rounded-lg text-xs flex items-start gap-1.5 mt-1",
+                              doc.status === "Rejected"
+                                ? "bg-rose-500/15 border border-rose-500/30 text-rose-700 dark:text-rose-300"
+                                : "bg-muted text-muted-foreground"
+                            )}
+                          >
+                            <i
+                              className={cn(
+                                "text-[11px] mt-0.5 shrink-0",
+                                doc.status === "Rejected"
+                                  ? "fa-solid fa-circle-exclamation text-rose-500"
+                                  : "fa-solid fa-note-sticky text-muted-foreground"
+                              )}
+                            />
+                            <span>
+                              <strong>{doc.status === "Rejected" ? "Rejection Reason:" : "Note:"}</strong> {doc.notes}
+                            </span>
+                          </div>
+                        )}
                         {doc.status === "Requested" && doc.requestedBy?.userName && (
                           <p className="text-[10px] text-amber-600 dark:text-amber-400 font-medium">
                             Requested by HR {doc.requestedBy.userName}
@@ -798,7 +852,7 @@ export function EmployeeDashboard({ user }: { user: any }) {
                             rel="noreferrer"
                             className="text-primary hover:underline font-semibold inline-flex items-center gap-1 text-[11px]"
                           >
-                            <i className="fa-solid fa-file text-[10px]" /> View Uploaded File
+                            <i className="fa-solid fa-file text-[10px]" /> View Previous File
                           </a>
                         ) : (
                           <span className="text-[11px] text-amber-600 dark:text-amber-400 italic">
@@ -820,8 +874,11 @@ export function EmployeeDashboard({ user }: { user: any }) {
                         ) : (
                           <Button
                             size="sm"
-                            variant="outline"
-                            className="h-7 px-2.5 text-xs font-semibold gap-1.5 cursor-pointer"
+                            variant={doc.status === "Rejected" ? "default" : "outline"}
+                            className={cn(
+                              "h-7 px-2.5 text-xs font-semibold gap-1.5 cursor-pointer",
+                              doc.status === "Rejected" && "bg-rose-600 hover:bg-rose-700 text-white"
+                            )}
                             onClick={() => {
                               setUploadModalDoc(doc);
                               setUploadDocFile(null);
@@ -835,10 +892,10 @@ export function EmployeeDashboard({ user }: { user: any }) {
                   );
                 })}
               </div>
-            );
-          })()}
-        </CardContent>
-      </Card>
+            </CardContent>
+          </Card>
+        );
+      })()}
 
       {/* Employee Personal KPI Metric Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">

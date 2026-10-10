@@ -301,9 +301,9 @@ export async function PUT(request: Request) {
       return NextResponse.json({ success: true, submittedCount: result.modifiedCount });
     }
 
-    // 2. Manager / Admin Approval & Rejection
-    const isManagerOrAdmin = session.role === "Admin" || session.role === "Manager";
-    if (!isManagerOrAdmin) {
+    // 2. HR / Manager / Admin Approval & Rejection
+    const canApprove = session.role === "Admin" || session.role === "Manager" || session.role === "HR" || session.role === "OPS";
+    if (!canApprove) {
       return NextResponse.json({ error: "Forbidden: Access denied" }, { status: 403 });
     }
 

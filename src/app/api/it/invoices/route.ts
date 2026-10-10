@@ -34,7 +34,14 @@ export async function GET() {
 
     const query: Record<string, any> = { tenantId: tenantObjectId };
 
-    if (!isPrivileged) {
+    const { getHRAccessScope } = await import("@/lib/hrIsolation");
+    const hrScope = await getHRAccessScope(session, tenantObjectId, userObjectId);
+
+    if (hrScope.isHR) {
+      if (hrScope.isIsolated && hrScope.allowedUserIds) {
+        query.createdBy = { $in: hrScope.allowedUserIds };
+      }
+    } else if (!isPrivileged) {
       const userDoc = await User.findById(userObjectId).select("name email").lean();
       const userEmail = (userDoc as { email?: string; name?: string } | null)?.email?.trim();
       const userName = (userDoc as { email?: string; name?: string } | null)?.name?.trim() || session.userName?.trim();

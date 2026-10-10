@@ -8,7 +8,7 @@ import { requireTenantSession, isAuthError } from "@/lib/auth-guard";
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const authResult = await requireTenantSession();
+    const authResult = await requireTenantSession(["Admin", "OPS", "Sub Admin", "Manager", "HR"]);
     if (isAuthError(authResult)) return authResult;
     const { tenantObjectId, userObjectId, session } = authResult;
     const { id } = await params;
@@ -22,11 +22,48 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
     }
 
+    // ── MANDATORY APPROVAL GATE BEFORE PAYMENT ───────────────────────────────
+    if (body.status === "Paid") {
+      if ((previousInvoice as any).status !== "Approved") {
+        return NextResponse.json(
+          {
+            error: "Approval Mandatory: This invoice must be approved by HR or Admin before payment can be processed.",
+          },
+          { status: 400 }
+        );
+      }
+    }
+
     // ── Stamp approver details & signature on approval ───────────────────────
     const updateBody: Record<string, unknown> = { ...body };
-    if (body.status === "Paid") {
+
+    if (body.status === "Approved") {
       updateBody.approvedBy = session.userName || "Admin";
       updateBody.approvedAt = new Date().toISOString();
+      updateBody.approverRole = session.role === "HR" ? "HR" : "Admin";
+      updateBody.rejectionReason = "";
+      updateBody.rejectedBy = "";
+      updateBody.rejectedAt = "";
+    }
+
+    if (body.status === "Rejected") {
+      if (!body.rejectionReason || !body.rejectionReason.trim()) {
+        return NextResponse.json(
+          { error: "Rejection feedback reason is mandatory" },
+          { status: 400 }
+        );
+      }
+      updateBody.rejectionReason = body.rejectionReason.trim();
+      updateBody.rejectedBy = session.userName || "Admin";
+      updateBody.rejectedAt = new Date().toISOString();
+      updateBody.approvedBy = "";
+      updateBody.approvedAt = "";
+      updateBody.approverRole = "";
+    }
+
+    if (body.status === "Paid" || body.status === "Approved") {
+      if (!updateBody.approvedBy) updateBody.approvedBy = session.userName || "Admin";
+      if (!updateBody.approvedAt) updateBody.approvedAt = new Date().toISOString();
 
       try {
         let effectiveSig = "";

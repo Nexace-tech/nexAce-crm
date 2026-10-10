@@ -43,7 +43,7 @@ export interface IITInvoice extends Document {
   taxAmount: number;
   total: number;
   currency: string;
-  status: "Draft" | "Sent" | "Pending" | "Paid" | "Overdue" | "Archived" | "Cancelled";
+  status: "Draft" | "Sent" | "Pending" | "Approved" | "Rejected" | "Paid" | "Overdue" | "Archived" | "Cancelled";
   paidDate?: string;
   notes?: string;
   // Payment confirmation details (captured when admin marks as Paid)
@@ -72,8 +72,12 @@ export interface IITInvoice extends Document {
     records: ITimesheetEntry[];
   };
   signatureUrl?: string;
-  approvedBy?: string;    // Name of user who approved (stamped at Paid time)
+  approvedBy?: string;    // Name of user who approved
   approvedAt?: string;    // ISO timestamp of approval
+  approverRole?: "HR" | "Admin" | "OPS";
+  rejectionReason?: string;
+  rejectedBy?: string;
+  rejectedAt?: string;
   createdBy: mongoose.Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
@@ -125,7 +129,7 @@ const ITInvoiceSchema = new Schema<IITInvoice>(
     currency: { type: String, default: "INR" },
     status: {
       type: String,
-      enum: ["Draft", "Sent", "Pending", "Paid", "Overdue", "Archived", "Cancelled"],
+      enum: ["Draft", "Sent", "Pending", "Approved", "Rejected", "Paid", "Overdue", "Archived", "Cancelled"],
       default: "Draft",
     },
     paidDate: { type: String, trim: true, default: "" },
@@ -156,6 +160,10 @@ const ITInvoiceSchema = new Schema<IITInvoice>(
     signatureUrl: { type: String, default: "" },
     approvedBy: { type: String, default: "" },
     approvedAt: { type: String, default: "" },
+    approverRole: { type: String, enum: ["HR", "Admin", "OPS", null], default: null },
+    rejectionReason: { type: String, default: "" },
+    rejectedBy: { type: String, default: "" },
+    rejectedAt: { type: String, default: "" },
     createdBy: { type: Schema.Types.ObjectId, ref: "User", required: true },
   },
   { timestamps: true }

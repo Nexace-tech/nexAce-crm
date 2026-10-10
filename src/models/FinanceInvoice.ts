@@ -7,7 +7,7 @@ export interface IFinanceInvoice extends Document {
   client: string;
   amount: number;
   currency: string;
-  status: "Draft" | "Pending" | "Paid" | "Overdue" | "Cancelled";
+  status: "Draft" | "Pending" | "Approved" | "Rejected" | "Paid" | "Overdue" | "Cancelled";
   issuedDate: string;
   dueDate: string;
   category: string;
@@ -22,6 +22,10 @@ export interface IFinanceInvoice extends Document {
   signatureUrl?: string;
   approvedBy?: string;
   approvedAt?: string;
+  approverRole?: string;
+  rejectionReason?: string;
+  rejectedBy?: string;
+  rejectedAt?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -36,7 +40,7 @@ const FinanceInvoiceSchema = new Schema<IFinanceInvoice>(
     currency: { type: String, default: "USD" },
     status: {
       type: String,
-      enum: ["Draft", "Pending", "Paid", "Overdue", "Cancelled"],
+      enum: ["Draft", "Pending", "Approved", "Rejected", "Paid", "Overdue", "Cancelled"],
       default: "Pending",
     },
     issuedDate: { type: String, required: true },
@@ -55,6 +59,10 @@ const FinanceInvoiceSchema = new Schema<IFinanceInvoice>(
     signatureUrl: { type: String, default: "" },
     approvedBy: { type: String, default: "" },
     approvedAt: { type: String, default: "" },
+    approverRole: { type: String, default: "" },
+    rejectionReason: { type: String, default: "" },
+    rejectedBy: { type: String, default: "" },
+    rejectedAt: { type: String, default: "" },
   },
   { timestamps: true }
 );

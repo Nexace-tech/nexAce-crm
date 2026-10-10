@@ -34,7 +34,7 @@ export interface InvoiceDetailsData {
   discount?: number;
   total: number;
   currency: string;
-  status: "Draft" | "Sent" | "Pending" | "Paid" | "Overdue" | "Archived" | "Cancelled";
+  status: "Draft" | "Sent" | "Pending" | "Approved" | "Rejected" | "Paid" | "Overdue" | "Archived" | "Cancelled";
   notes?: string;
   paymentTerms?: string;
   bankDetails?: {
@@ -78,6 +78,10 @@ export interface InvoiceDetailsData {
   signatureUrl?: string;
   approvedBy?: string;
   approvedAt?: string;
+  approverRole?: string;
+  rejectionReason?: string;
+  rejectedBy?: string;
+  rejectedAt?: string;
 }
 
 interface InvoiceDetailsViewProps {
@@ -806,30 +810,79 @@ export function InvoiceDetailsView({
 
         <div className="flex items-center gap-2 flex-wrap shrink-0">
           {onStatusChange && (
-            <div className="flex items-center gap-1.5">
-              <span className="text-[11px] font-semibold text-muted-foreground hidden sm:inline">Status:</span>
-              <select
-                disabled={isUpdatingStatus}
-                value={invoice.status}
-                onChange={(e) => {
-                  const newVal = e.target.value;
-                  if (newVal === "Paid" && onPaymentConfirm) {
-                    onPaymentConfirm();
-                  } else {
-                    onStatusChange(newVal);
-                  }
-                }}
-                className="h-8 px-2.5 text-xs bg-background border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer font-bold"
-              >
-                <option value="Draft">Draft</option>
-                <option value="Sent">Sent</option>
-                <option value="Pending">Pending</option>
-                <option value="Paid">Paid</option>
-                <option value="Overdue">Overdue</option>
-                <option value="Cancelled">Cancelled</option>
-                <option value="Archived">Archived</option>
-              </select>
-            </div>
+            <>
+              {invoice.status === "Pending" && (
+                <div className="flex items-center gap-1.5">
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled={isUpdatingStatus}
+                    onClick={() => onStatusChange("Approved")}
+                    className="gap-1.5 font-bold h-8 px-3 cursor-pointer bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs"
+                    title="Approve invoice and attached timesheets"
+                  >
+                    <i className="fa-solid fa-check-double text-[11px]" /> Approve
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={isUpdatingStatus}
+                    onClick={() => onStatusChange("Rejected")}
+                    className="gap-1.5 font-bold h-8 px-3 cursor-pointer text-rose-600 border-rose-300 hover:bg-rose-50 dark:hover:bg-rose-950/30"
+                    title="Reject with mandatory feedback"
+                  >
+                    <i className="fa-solid fa-ban text-[11px]" /> Reject
+                  </Button>
+                </div>
+              )}
+
+              {invoice.status === "Approved" && onPaymentConfirm && (
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={isUpdatingStatus}
+                  onClick={() => onPaymentConfirm()}
+                  className="gap-1.5 font-bold h-8 px-3.5 cursor-pointer bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs"
+                  title="Process payment disbursement"
+                >
+                  <i className="fa-solid fa-credit-card text-[11px]" /> Process Payment
+                </Button>
+              )}
+
+              <div className="flex items-center gap-1.5">
+                <span className="text-[11px] font-semibold text-muted-foreground hidden sm:inline">Status:</span>
+                <select
+                  disabled={isUpdatingStatus}
+                  value={invoice.status}
+                  onChange={(e) => {
+                    const newVal = e.target.value;
+                    if (newVal === "Paid") {
+                      if (invoice.status !== "Approved") {
+                        alert("Approval Mandatory: This invoice must be approved by an HR Partner or Admin before payment can be processed.");
+                        return;
+                      }
+                      if (onPaymentConfirm) onPaymentConfirm();
+                    } else {
+                      onStatusChange(newVal);
+                    }
+                  }}
+                  className="h-8 px-2.5 text-xs bg-background border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer font-bold"
+                >
+                  <option value="Draft">Draft</option>
+                  <option value="Sent">Sent</option>
+                  <option value="Pending">Pending</option>
+                  <option value="Approved">Approved</option>
+                  <option value="Paid" disabled={invoice.status !== "Approved"}>
+                    {invoice.status === "Approved" ? "Paid" : "Paid (Requires Approval)"}
+                  </option>
+                  <option value="Rejected">Rejected</option>
+                  <option value="Overdue">Overdue</option>
+                  <option value="Cancelled">Cancelled</option>
+                  <option value="Archived">Archived</option>
+                </select>
+              </div>
+            </>
           )}
 
           <Button
@@ -858,6 +911,31 @@ export function InvoiceDetailsView({
           </Button>
         </div>
       </div>
+
+      {/* ── Status Feedback Alerts ── */}
+      {invoice.status === "Rejected" && (
+        <div className="p-3.5 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-2xl flex items-start gap-2.5 text-xs text-rose-800 dark:text-rose-200 shadow-2xs">
+          <i className="fa-solid fa-circle-xmark text-rose-600 dark:text-rose-400 mt-0.5 text-sm shrink-0" />
+          <div className="space-y-0.5">
+            <p className="font-bold">Invoice Rejected {invoice.rejectedBy ? `by ${invoice.rejectedBy}` : ""}</p>
+            <p className="text-[11px] text-rose-700 dark:text-rose-300">
+              <strong>Reason:</strong> {invoice.rejectionReason || "No explanation provided."}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {invoice.status === "Approved" && (
+        <div className="p-3.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900 rounded-2xl flex items-start gap-2.5 text-xs text-emerald-800 dark:text-emerald-200 shadow-2xs">
+          <i className="fa-solid fa-check-double text-emerald-600 dark:text-emerald-400 mt-0.5 text-sm shrink-0" />
+          <div className="space-y-0.5">
+            <p className="font-bold">Authorized &amp; Approved for Payment</p>
+            <p className="text-[11px] text-emerald-700 dark:text-emerald-300">
+              Approved by <strong>{invoice.approvedBy || "HR/Admin"}</strong>{invoice.approverRole ? ` (${invoice.approverRole})` : ""} on {invoice.approvedAt ? new Date(invoice.approvedAt).toLocaleDateString("en-IN") : "recently"}. Attached timesheets are confirmed.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* ── Main Invoice Paper Card ── */}
       <div
