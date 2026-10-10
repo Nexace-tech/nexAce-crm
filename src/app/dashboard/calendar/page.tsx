@@ -1437,20 +1437,22 @@ function CalendarPageContent() {
           <i className="fa-solid fa-fingerprint text-sm" /> Shift Clock
         </button>
 
-        <button
-          onClick={() => setActiveTab("availability")}
-          className={cn(
-            "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
-            activeTab === "availability"
-              ? "border-primary text-primary bg-primary/10 rounded-t-md font-semibold -mb-px"
-              : "border-transparent text-muted-foreground hover:text-foreground"
-          )}
-        >
-          <i className="fa-solid fa-user-clock text-sm" />{" "}
-          {isAdmin || isOPS || (currentUser?.role as string) === "HR"
-            ? "Team Availability"
-            : "My Availability"}
-        </button>
+        {(isAdmin || isOPS || (currentUser?.role as string) === "HR" || can("viewTeamAvailability") || can("manageTeamAvailability") || can("logOwnAvailability")) && (
+          <button
+            onClick={() => setActiveTab("availability")}
+            className={cn(
+              "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
+              activeTab === "availability"
+                ? "border-primary text-primary bg-primary/10 rounded-t-md font-semibold -mb-px"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <i className="fa-solid fa-user-clock text-sm" />{" "}
+            {isAdmin || isOPS || (currentUser?.role as string) === "HR" || can("viewTeamAvailability") || can("manageTeamAvailability")
+              ? "Team Availability"
+              : "My Availability"}
+          </button>
+        )}
       </div>
 
       {/* Tab 1: Calendar */}

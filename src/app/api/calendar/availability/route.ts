@@ -3,6 +3,7 @@ import { requireTenantSession, isAuthError } from "@/lib/auth-guard";
 import { connectToDatabase } from "@/lib/db";
 import { Availability } from "@/models/Availability";
 import { User } from "@/models/User";
+import { RolePermission } from "@/models/RolePermission";
 import { isSubAdminRole, normalizeRoleKey } from "@/lib/roles";
 import mongoose from "mongoose";
 
@@ -22,10 +23,23 @@ export async function GET(request: Request) {
     }
 
     const roleKey = normalizeRoleKey(currentUser.role);
+
+    // Query tenant RBAC feature permissions
+    let hasElevatedPerm = false;
+    try {
+      const rolePerm = await RolePermission.findOne({ tenantId: tenantObjectId, role: roleKey }).lean();
+      if (rolePerm?.featurePermissions?.viewTeamAvailability || rolePerm?.featurePermissions?.manageTeamAvailability) {
+        hasElevatedPerm = true;
+      }
+    } catch (e) {
+      // Fallback to role defaults
+    }
+
     const isElevated =
       Boolean(currentUser.role && currentUser.role.trim().toLowerCase() === "admin") ||
       isSubAdminRole(currentUser.role) ||
-      roleKey === "HR";
+      roleKey === "HR" ||
+      hasElevatedPerm;
 
     const { searchParams } = new URL(request.url);
     const selectedUserId = searchParams.get("userId");
@@ -99,10 +113,34 @@ export async function POST(request: Request) {
     }
 
     const roleKey = normalizeRoleKey(currentUser.role);
+    let hasElevatedPerm = false;
+    let hasManagePerm = false;
+    let canLogOwn = true;
+    try {
+      const rolePerm = await RolePermission.findOne({ tenantId: tenantObjectId, role: roleKey }).lean();
+      if (rolePerm?.featurePermissions) {
+        if (rolePerm.featurePermissions.viewTeamAvailability) hasElevatedPerm = true;
+        if (rolePerm.featurePermissions.manageTeamAvailability) {
+          hasManagePerm = true;
+          hasElevatedPerm = true;
+        }
+        if (rolePerm.featurePermissions.logOwnAvailability !== undefined) {
+          canLogOwn = Boolean(rolePerm.featurePermissions.logOwnAvailability);
+        }
+      }
+    } catch (e) {}
+
     const isElevated =
       Boolean(currentUser.role && currentUser.role.trim().toLowerCase() === "admin") ||
       isSubAdminRole(currentUser.role) ||
-      roleKey === "HR";
+      roleKey === "HR" ||
+      hasElevatedPerm;
+
+    const canManageTeam =
+      Boolean(currentUser.role && currentUser.role.trim().toLowerCase() === "admin") ||
+      isSubAdminRole(currentUser.role) ||
+      roleKey === "HR" ||
+      hasManagePerm;
 
     const body = await request.json();
     const { dateString, dates, status, startTime, endTime, hours, notes, targetUserId } = body;
@@ -123,14 +161,17 @@ export async function POST(request: Request) {
 
     let finalUserId = userObjectId;
     if (targetUserId) {
-      if (!isElevated) {
+      if (!canManageTeam) {
         return NextResponse.json({ error: "Unauthorized to update availability for other users" }, { status: 403 });
       }
       finalUserId = new mongoose.Types.ObjectId(targetUserId);
     } else {
+      if (!canLogOwn && !canManageTeam) {
+        return NextResponse.json({ error: "You do not have permission to record work availability" }, { status: 403 });
+      }
       // Check if user is eligible (not full-time permanent)
       const isFullTime = FULL_TIME_TYPES.includes(currentUser.employmentType || "");
-      if (isFullTime && !isElevated) {
+      if (isFullTime && !canManageTeam) {
         return NextResponse.json({
           error: "Availability scheduling is only applicable for Part-Time, Freelance, Contractor, and flexible staff.",
         }, { status: 403 });
@@ -189,10 +230,19 @@ export async function DELETE(request: Request) {
     }
 
     const roleKey = normalizeRoleKey(currentUser.role);
-    const isElevated =
+    let hasManagePerm = false;
+    try {
+      const rolePerm = await RolePermission.findOne({ tenantId: tenantObjectId, role: roleKey }).lean();
+      if (rolePerm?.featurePermissions?.manageTeamAvailability) {
+        hasManagePerm = true;
+      }
+    } catch (e) {}
+
+    const canManageTeam =
       Boolean(currentUser.role && currentUser.role.trim().toLowerCase() === "admin") ||
       isSubAdminRole(currentUser.role) ||
-      roleKey === "HR";
+      roleKey === "HR" ||
+      hasManagePerm;
 
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");
@@ -204,14 +254,14 @@ export async function DELETE(request: Request) {
 
     if (id) {
       deleteFilter._id = new mongoose.Types.ObjectId(id);
-      if (!isElevated) {
+      if (!canManageTeam) {
         deleteFilter.userId = userObjectId;
       }
       await Availability.deleteOne(deleteFilter);
     } else if (datesParam) {
       const datesArray = datesParam.split(",").map((d) => d.trim()).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d));
       deleteFilter.dateString = { $in: datesArray };
-      if (targetUserId && isElevated) {
+      if (targetUserId && canManageTeam) {
         deleteFilter.userId = new mongoose.Types.ObjectId(targetUserId);
       } else {
         deleteFilter.userId = userObjectId;
@@ -219,7 +269,7 @@ export async function DELETE(request: Request) {
       await Availability.deleteMany(deleteFilter);
     } else if (dateString) {
       deleteFilter.dateString = dateString;
-      if (targetUserId && isElevated) {
+      if (targetUserId && canManageTeam) {
         deleteFilter.userId = new mongoose.Types.ObjectId(targetUserId);
       } else {
         deleteFilter.userId = userObjectId;

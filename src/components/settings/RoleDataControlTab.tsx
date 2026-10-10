@@ -88,6 +88,9 @@ export const FEATURE_ACTIONS: FeatureMeta[] = [
   { key: "manageShifts", name: "Manage Shift Schedules", category: "Calendar & Time", subGroup: "Shifts & Punch Clock", description: "Create, edit, and assign shift slots to employees", icon: "fa-solid fa-calendar-plus" },
   { key: "viewShiftCalendar", name: "View Team Shift Calendar", category: "Calendar & Time", subGroup: "Shifts & Punch Clock", description: "Access full team shift calendar and roster overview", icon: "fa-solid fa-calendar-days" },
   { key: "clockInOut", name: "Clock In & Clock Out Shift", category: "Calendar & Time", subGroup: "Shifts & Punch Clock", description: "Record daily shift punch-in and punch-out attendance", icon: "fa-solid fa-business-time" },
+  { key: "viewTeamAvailability", name: "View Team Availability Roster", category: "Calendar & Time", subGroup: "Availability & Scheduling", description: "Access team-wide work availability roster, filter staff by department, and inspect member schedules", icon: "fa-solid fa-user-clock" },
+  { key: "manageTeamAvailability", name: "Manage Team Work Availability", category: "Calendar & Time", subGroup: "Availability & Scheduling", description: "Record, edit, and coordinate work availability and shift hours for other team members and flexible staff", icon: "fa-solid fa-calendar-check" },
+  { key: "logOwnAvailability", name: "Record Own Work Availability", category: "Calendar & Time", subGroup: "Availability & Scheduling", description: "Mark personal available dates, partial shift hours, and offline rest days", icon: "fa-solid fa-calendar-plus" },
 
   // OPS Portal
   { key: "viewClients", name: "View OPS Retainers & Control", category: "OPS Portal", subGroup: "Operations Retainers", description: "Browse active client retainers, accounts, and health status", icon: "fa-solid fa-list-check" },
@@ -300,6 +303,7 @@ const PRESET_TEMPLATES: RolePresetTemplate[] = [
       "viewKpiWidgets", "viewShiftOverview", "viewRecentActivity", "viewAnnouncements",
       "viewTeamDirectory", "viewEmployeeProfiles", "viewOrgChart",
       "logOwnTimesheet", "editOwnTimesheet", "viewTeamTimesheets", "approveTimesheets", "exportTimesheets", "manageShifts", "viewShiftCalendar", "clockInOut",
+      "viewTeamAvailability", "manageTeamAvailability", "logOwnAvailability",
       "viewProjects", "createProjects", "deleteProjects", "assignTasksToOthers", "changeTaskStatus", "commentOnTasks", "deleteTaskComments", "manageProjectWiki", "viewProjectGantt", "exportProjectData",
       "createSprints", "moveBetweenSprints", "completeSprints", "deleteSprints",
       "viewDriveFiles", "uploadDriveFiles", "downloadDriveFiles", "shareDriveFiles", "deleteDriveFiles",
@@ -319,7 +323,7 @@ const PRESET_TEMPLATES: RolePresetTemplate[] = [
     modules: ["overview", "team", "calendar", "chat", "bd", "referrals", "notifications"],
     features: [
       "viewKpiWidgets", "viewAnnouncements", "viewTeamDirectory", "viewEmployeeProfiles", "viewOrgChart",
-      "logOwnTimesheet", "editOwnTimesheet", "clockInOut",
+      "logOwnTimesheet", "editOwnTimesheet", "clockInOut", "logOwnAvailability",
       "sendChatMessages", "viewMailCenter", "sendEmails", "viewWhatsAppPanel", "sendWhatsAppMessages", "startVirtualHuddles", "joinVirtualHuddles",
       "viewBD", "manageLeads", "deleteLeads", "manageProposals", "sendProposals", "manageExecutiveTargets", "exportBD",
       "submitReferral", "viewOwnReferrals", "viewNotifications",
@@ -353,7 +357,7 @@ const PRESET_TEMPLATES: RolePresetTemplate[] = [
     features: [
       "viewKpiWidgets", "viewShiftOverview", "viewAnnouncements",
       "viewTeamDirectory", "viewEmployeeProfiles", "viewOrgChart",
-      "logOwnTimesheet", "editOwnTimesheet", "clockInOut",
+      "logOwnTimesheet", "editOwnTimesheet", "clockInOut", "logOwnAvailability",
       "viewProjects", "changeTaskStatus", "commentOnTasks", "viewProjectWiki", "viewProjectGantt",
       "viewDriveFiles", "uploadDriveFiles", "downloadDriveFiles", "shareDriveFiles",
       "sendChatMessages", "viewMailCenter", "sendEmails", "joinVirtualHuddles",
@@ -374,7 +378,7 @@ const PRESET_TEMPLATES: RolePresetTemplate[] = [
     features: [
       "viewKpiWidgets", "viewShiftOverview", "viewRecentActivity", "viewAnnouncements",
       "viewTeamDirectory", "viewEmployeeProfiles", "viewSalaryData", "viewOrgChart",
-      "viewTeamTimesheets", "viewShiftCalendar",
+      "viewTeamTimesheets", "viewShiftCalendar", "viewTeamAvailability",
       "viewProjects", "viewProjectWiki", "viewProjectGantt", "exportProjectData",
       "viewDriveFiles", "downloadDriveFiles",
       "viewAllLeaves", "viewManagerReviews", "viewGoals",

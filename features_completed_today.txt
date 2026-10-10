@@ -57,4 +57,18 @@
   workflows using FA6 classes (fa-check-double, fa-ban, fa-file-invoice-dollar).
 - Mobile-First Responsiveness: All dialogs, status badges, action toolbars, and
   feedback banners adapt seamlessly across mobile, tablet, and desktop screens.
+
+7. TEAM AVAILABILITY RBAC PERMISSIONS IN SETTINGS
+--------------------------------------------------------------------------------
+- Granular Capability Controls: Integrated 3 new permissions under
+  "Calendar & Time > Availability & Scheduling" in Settings > Permissions:
+    * View Team Availability Roster (viewTeamAvailability)
+    * Manage Team Work Availability (manageTeamAvailability)
+    * Record Own Work Availability (logOwnAvailability)
+- Role Presets & Archetypes: Configured default permissions for OPS, Manager,
+  HR, and Employee roles, as well as role archetype templates.
+- Backend Enforcement: /api/calendar/availability (GET, POST, DELETE)
+  dynamically checks tenant RolePermission entries to govern roster access and
+  multi-user schedule management.
 ================================================================================
+
