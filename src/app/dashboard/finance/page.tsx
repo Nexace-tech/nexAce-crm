@@ -609,7 +609,7 @@ function FinancePageContent() {
         {/* Toast */}
         {toast && (
           <div className={cn(
-            "fixed top-5 right-5 z-[9999] flex items-center gap-3 px-4 py-3 rounded-xl shadow-2xl border text-sm font-semibold max-w-sm animate-in slide-in-from-right-5",
+            "fixed top-5 right-5 z-[99999] flex items-center gap-3 px-4 py-3 rounded-xl shadow-2xl border text-sm font-semibold max-w-sm animate-in slide-in-from-right-5",
             toast.type === "success"
               ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400"
               : "bg-rose-500/10 border-rose-500/30 text-rose-600 dark:text-rose-400"
@@ -642,7 +642,7 @@ function FinancePageContent() {
       {/* Toast */}
       {toast && (
         <div className={cn(
-          "fixed top-5 right-5 z-[9999] flex items-center gap-3 px-4 py-3 rounded-xl shadow-2xl border text-sm font-semibold max-w-sm animate-in slide-in-from-right-5",
+          "fixed top-5 right-5 z-[99999] flex items-center gap-3 px-4 py-3 rounded-xl shadow-2xl border text-sm font-semibold max-w-sm animate-in slide-in-from-right-5",
           toast.type === "success"
             ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400"
             : "bg-rose-500/10 border-rose-500/30 text-rose-600 dark:text-rose-400"

@@ -2230,7 +2230,7 @@ export function UserManagementTab() {
       {toast && (
         <div
           className={cn(
-            "fixed bottom-6 right-6 z-50 flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-2xl border text-xs font-semibold backdrop-blur-md animate-in fade-in slide-in-from-bottom-2 transition-all",
+            "fixed bottom-6 right-6 z-[99999] flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-2xl border text-xs font-semibold backdrop-blur-md animate-in fade-in slide-in-from-bottom-2 transition-all",
             toast.type === "success"
               ? "bg-emerald-950/95 text-emerald-300 border-emerald-500/40 shadow-emerald-950/50"
               : "bg-rose-950/95 text-rose-300 border-rose-500/40 shadow-rose-950/50"

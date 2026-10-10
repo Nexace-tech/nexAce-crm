@@ -89,5 +89,32 @@
     * /api/team/reassign supports dynamic RBAC for reassignReportingLine and reassignHRPartner
     * OrgChartNode enables drag-and-drop hierarchy reassignment for authorized roles
     * Quick Reassign button in Team Directory table rows and Edit Member drawer
+
+9. TOGGLE & ACTION NOTIFICATION TOAST Z-INDEX ELEVATION (z-[99999])
+--------------------------------------------------------------------------------
+- Elevated all toggle, status update, and action toast notification overlays across
+  the entire application to top-tier z-index `z-[99999]`.
+- Prevents toasts, confirmation banners, and toggle feedbacks (such as Multi-HR isolation,
+  preset template applied, team reassignment, shift changes, and delete confirmations)
+  from becoming obscured behind modals, popups, drawers, or backdrop scrims (`z-50`, `z-[60]`, `z-[120]`).
+- Standardized across:
+    * Settings & Platform Administration (src/app/dashboard/settings/page.tsx)
+    * User Management Tab (src/components/settings/UserManagementTab.tsx)
+    * HR & People Portal (src/app/dashboard/hr/page.tsx & HRTasksTab.tsx)
+    * Team & Directory (src/app/dashboard/team/page.tsx)
+    * Calendar & Sprints (src/app/dashboard/calendar/page.tsx)
+    * Goals & OKRs (src/app/dashboard/goals/page.tsx)
+    * Referrals Portal (src/app/dashboard/referrals/page.tsx)
+    * Clients & OPS Portal (src/app/dashboard/clients/page.tsx)
+    * IT Asset Management (src/app/dashboard/it/page.tsx)
+    * Finance & Invoicing Portal (src/app/dashboard/finance/page.tsx)
+    * Business Development (src/app/dashboard/bd/page.tsx)
+    * Sales Workdesk (src/app/dashboard/sales/page.tsx)
+    * Employee Workspace (src/components/dashboard/EmployeeDashboard.tsx)
+    * Contracts & Onboarding (src/components/operations/ContractsOnboardingTab.tsx)
+    * Projects & Drive Workspace (src/components/operations/ProjectsDriveWorkspace.tsx)
+    * Workspace Reports (src/components/operations/ReportsDashboard.tsx)
+    * Real-time Toast Notifications (src/components/layout/NotificationBell.tsx)
 ================================================================================
+
 

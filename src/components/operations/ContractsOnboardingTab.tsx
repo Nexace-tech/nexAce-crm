@@ -665,7 +665,7 @@ export function ContractsOnboardingTab() {
       {toast && (
         <div
           className={cn(
-            "fixed bottom-5 right-5 z-[200] flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-xl text-sm font-medium animate-in slide-in-from-bottom-3 border",
+            "fixed bottom-5 right-5 z-[99999] flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-xl text-sm font-medium animate-in slide-in-from-bottom-3 border",
             toast.type === "success"
               ? "bg-emerald-600 text-white border-emerald-500/30"
               : "bg-rose-600 text-white border-rose-500/30"

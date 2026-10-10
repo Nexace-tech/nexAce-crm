@@ -386,7 +386,7 @@ export function HRTasksTab() {
       {toast && (
         <div
           className={cn(
-            "fixed top-4 right-4 z-50 px-4 py-3 rounded-xl shadow-lg border text-sm font-medium flex items-center gap-3 animate-in fade-in slide-in-from-top-2",
+            "fixed top-4 right-4 z-[99999] px-4 py-3 rounded-xl shadow-lg border text-sm font-medium flex items-center gap-3 animate-in fade-in slide-in-from-top-2",
             toast.type === "success"
               ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400"
               : "bg-red-500/10 border-red-500/30 text-red-600 dark:text-red-400"

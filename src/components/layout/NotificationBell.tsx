@@ -89,6 +89,7 @@ export function NotificationBell({ onOpen }: NotificationBellProps = {}) {
 
   // Desktop notification permission state
   const [notifPermission, setNotifPermission] = useState<NotificationPermission | "unsupported">("unsupported");
+  const [bannerDismissed, setBannerDismissed] = useState(false);
 
   // Broadcast Modal State
   const [showBroadcastModal, setShowBroadcastModal] = useState(false);
@@ -199,8 +200,15 @@ export function NotificationBell({ onOpen }: NotificationBellProps = {}) {
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
 
-  // Sync permission state on mount and when panel opens
+  // Sync permission state and dismissal state on mount and when panel opens
   useEffect(() => {
+    if (typeof window !== "undefined") {
+      try {
+        if (localStorage.getItem("nexace_desktop_alert_dismissed") === "true") {
+          setBannerDismissed(true);
+        }
+      } catch { /* ignore */ }
+    }
     if (typeof window === "undefined" || !("Notification" in window)) {
       setNotifPermission("unsupported");
       return;
@@ -208,13 +216,39 @@ export function NotificationBell({ onOpen }: NotificationBellProps = {}) {
     setNotifPermission(window.Notification.permission);
   }, [open]);
 
+  const handleDismissBanner = () => {
+    setBannerDismissed(true);
+    try {
+      if (typeof window !== "undefined") {
+        localStorage.setItem("nexace_desktop_alert_dismissed", "true");
+      }
+    } catch { /* ignore */ }
+  };
+
   const handleRequestPermission = async () => {
     // Native Capacitor app uses its own push flow — skip browser API entirely
     if (typeof window === "undefined" || !("Notification" in window)) return;
     try {
-      const result = await window.Notification.requestPermission();
-      setNotifPermission(result);
-    } catch { /* ignore */ }
+      if (typeof window.Notification.requestPermission === "function") {
+        const maybePromise = window.Notification.requestPermission((res) => {
+          if (res) {
+            setNotifPermission(res);
+            if (res === "granted") {
+              handleDismissBanner();
+            }
+          }
+        });
+        if (maybePromise && typeof (maybePromise as any).then === "function") {
+          const result = await maybePromise;
+          setNotifPermission(result);
+          if (result === "granted") {
+            handleDismissBanner();
+          }
+        }
+      }
+    } catch {
+      handleDismissBanner();
+    }
   };
 
   const playChimeSound = () => {
@@ -486,8 +520,8 @@ export function NotificationBell({ onOpen }: NotificationBellProps = {}) {
             {unreadCount > 9 ? "9+" : unreadCount}
           </span>
         )}
-        {/* Subtle warning indicator when desktop notifications not enabled */}
-        {unreadCount === 0 && notifPermission === "default" && (
+        {/* Subtle warning indicator when desktop notifications not enabled and not dismissed */}
+        {unreadCount === 0 && !bannerDismissed && notifPermission === "default" && (
           <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-amber-400 rounded-full border border-background" title="Enable desktop alerts" />
         )}
       </Button>
@@ -518,7 +552,7 @@ export function NotificationBell({ onOpen }: NotificationBellProps = {}) {
 
       {/* ── Live Real-time Toast Banner ── */}
       {latestToast && (
-        <div className="fixed top-4 right-4 left-4 sm:left-auto sm:right-5 sm:top-5 z-[200] sm:max-w-sm bg-card border border-primary/30 text-foreground rounded-2xl shadow-2xl animate-in fade-in slide-in-from-top-3 overflow-hidden">
+        <div className="fixed top-4 right-4 left-4 sm:left-auto sm:right-5 sm:top-5 z-[99999] sm:max-w-sm bg-card border border-primary/30 text-foreground rounded-2xl shadow-2xl animate-in fade-in slide-in-from-top-3 overflow-hidden">
           {/* Progress bar */}
           <div
             className="h-0.5 bg-primary transition-all duration-[60ms] ease-linear"
@@ -637,8 +671,8 @@ export function NotificationBell({ onOpen }: NotificationBellProps = {}) {
               )}
             </div>
 
-            {/* ── Desktop Permission Banner (web only, permission not yet granted) ── */}
-            {notifPermission === "default" && (
+            {/* ── Desktop Permission Banner (web only, permission not yet granted and not dismissed) ── */}
+            {!bannerDismissed && notifPermission === "default" && (
               <div className="mx-3 my-2 p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-start gap-2.5 shrink-0 animate-in fade-in slide-in-from-top-2">
                 <div className="w-7 h-7 rounded-lg bg-amber-500/15 flex items-center justify-center shrink-0 mt-0.5">
                   <i className="fa-solid fa-bell text-amber-500 text-xs" />
@@ -646,30 +680,47 @@ export function NotificationBell({ onOpen }: NotificationBellProps = {}) {
                 <div className="flex-1 min-w-0">
                   <p className="text-xs font-bold text-slate-900 dark:text-white">Enable Desktop Alerts</p>
                   <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed">Get instant pop-ups for tasks, chats &amp; announcements even when this tab is in the background.</p>
-                  <button
-                    onClick={handleRequestPermission}
-                    className="mt-2 inline-flex items-center gap-1.5 text-[11px] font-bold text-amber-600 dark:text-amber-400 hover:underline cursor-pointer"
-                  >
-                    <i className="fa-solid fa-check text-[10px]" /> Allow Notifications
-                  </button>
+                  <div className="mt-2 flex items-center gap-3">
+                    <button
+                      onClick={handleRequestPermission}
+                      className="inline-flex items-center gap-1.5 text-[11px] font-bold text-amber-600 dark:text-amber-400 hover:underline cursor-pointer"
+                    >
+                      <i className="fa-solid fa-check text-[10px]" /> Allow Notifications
+                    </button>
+                    <button
+                      onClick={handleDismissBanner}
+                      className="text-[11px] font-medium text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                    >
+                      Don&apos;t ask again
+                    </button>
+                  </div>
                 </div>
                 <button
-                  onClick={() => setNotifPermission("denied")}
+                  onClick={handleDismissBanner}
                   className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-0.5 cursor-pointer shrink-0"
-                  title="Dismiss"
+                  title="Dismiss forever"
                 >
                   <i className="fa-solid fa-xmark text-xs" />
                 </button>
               </div>
             )}
 
-            {/* ── Denied State Banner ── */}
-            {notifPermission === "denied" && (
-              <div className="mx-3 my-2 p-3 rounded-xl bg-slate-100 dark:bg-[#1a222d] border border-slate-200 dark:border-[#232d3b] flex items-center gap-2.5 shrink-0">
-                <i className="fa-solid fa-bell-slash text-slate-400 text-sm shrink-0" />
-                <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
-                  Desktop alerts are blocked. To enable, click the <strong>🔒 lock icon</strong> in your browser address bar → Notifications → Allow.
-                </p>
+            {/* ── Denied State Banner (only if not dismissed) ── */}
+            {!bannerDismissed && notifPermission === "denied" && (
+              <div className="mx-3 my-2 p-3 rounded-xl bg-slate-100 dark:bg-[#1a222d] border border-slate-200 dark:border-[#232d3b] flex items-center justify-between gap-2.5 shrink-0">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <i className="fa-solid fa-bell-slash text-slate-400 text-sm shrink-0" />
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                    Desktop alerts blocked in browser. To enable, click <strong>🔒 lock icon</strong> in address bar → Allow.
+                  </p>
+                </div>
+                <button
+                  onClick={handleDismissBanner}
+                  className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-0.5 cursor-pointer shrink-0"
+                  title="Dismiss forever"
+                >
+                  <i className="fa-solid fa-xmark text-xs" />
+                </button>
               </div>
             )}
 

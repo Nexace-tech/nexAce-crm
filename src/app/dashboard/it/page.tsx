@@ -265,7 +265,7 @@ function Toast({ message, type, onClose }: { message: string; type: "success" | 
     info: { icon: "fa-solid fa-circle-info", cls: "text-blue-500", border: "border-blue-500/30 bg-blue-500/5" },
   }[type];
   return (
-    <div className={cn("fixed bottom-6 right-6 z-[70] flex items-center gap-3 px-4 py-3 rounded-xl border shadow-lg max-w-sm animate-in slide-in-from-bottom-2 duration-200 bg-card", cfg.border)}>
+    <div className={cn("fixed bottom-6 right-6 z-[99999] flex items-center gap-3 px-4 py-3 rounded-xl border shadow-lg max-w-sm animate-in slide-in-from-bottom-2 duration-200 bg-card", cfg.border)}>
       <i className={cn(cfg.icon, cfg.cls)} />
       <span className="text-xs font-medium text-foreground flex-1">{message}</span>
       <button onClick={onClose} className="text-muted-foreground hover:text-foreground cursor-pointer"><i className="fa-solid fa-xmark text-xs" /></button>

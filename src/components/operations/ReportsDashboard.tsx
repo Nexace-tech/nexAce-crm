@@ -499,7 +499,7 @@ export default function ReportsDashboard({ embedded = true }: ReportsDashboardPr
       {toast && (
         <div
           className={cn(
-            "fixed bottom-6 right-6 z-50 flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-2xl text-xs font-semibold animate-in fade-in slide-in-from-bottom-2",
+            "fixed bottom-6 right-6 z-[99999] flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-2xl text-xs font-semibold animate-in fade-in slide-in-from-bottom-2",
             toast.type === "success"
               ? "bg-emerald-950/90 text-emerald-300 border border-emerald-500/40 backdrop-blur-md"
               : "bg-rose-950/90 text-rose-300 border border-rose-500/40 backdrop-blur-md"
