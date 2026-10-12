@@ -106,11 +106,12 @@ function CalendarPageContent() {
 
   // Pagination, Date Filter & Export States for Attendance History
   const [attendancePage, setAttendancePage] = useState(1);
-  const [attendanceRowsPerPage, setAttendanceRowsPerPage] = useState(5);
+  const [attendanceRowsPerPage, setAttendanceRowsPerPage] = useState(10);
   const [showAllAttendance, setShowAllAttendance] = useState(false);
   const [selectedDateFilter, setSelectedDateFilter] = useState<string>("");
   const [attendanceSearch, setAttendanceSearch] = useState<string>("");
   const [attendanceStatusFilter, setAttendanceStatusFilter] = useState<string>("All");
+  const [attendanceLoading, setAttendanceLoading] = useState(false);
 
   // Login & Hours Summary States (Admin/OPS only)
   const getDefaultWeekFrom = () => {
@@ -503,6 +504,7 @@ function CalendarPageContent() {
 
   const fetchAttendance = async (loadAll: boolean = false) => {
     try {
+      setAttendanceLoading(true);
       const params = new URLSearchParams();
       if (loadAll) params.append("limit", "all");
       if (isAdmin || isOPS || can("viewTeamTimesheets")) params.append("allUsers", "true");
@@ -516,6 +518,8 @@ function CalendarPageContent() {
       }
     } catch (e) {
       console.error(e);
+    } finally {
+      setAttendanceLoading(false);
     }
   };
 
@@ -531,7 +535,12 @@ function CalendarPageContent() {
           await fetchAssignedTasks();
           await fetchTimesheets(projs);
         }
-        else if (activeTab === "attendance") await fetchAttendance();
+        else if (activeTab === "attendance") {
+          await fetchAttendance();
+          if (isAdmin || isOPS) {
+            await fetchLoginHoursSummary();
+          }
+        }
       } catch (err) {
         console.error("Error loading calendar tab data:", err);
       } finally {
@@ -2708,524 +2717,621 @@ function CalendarPageContent() {
           })()}
 
           {/* Enhanced Shift Attendance Logs & History Table */}
-          <Card className="border border-border/80 bg-gradient-to-b from-card/95 via-card/85 to-card/70 shadow-sm backdrop-blur-md rounded-2xl overflow-hidden space-y-0">
-            {/* Header Toolbar */}
-            <div className="p-5 sm:p-6 pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border/60">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary/20 via-primary/10 to-transparent text-primary flex items-center justify-center border border-primary/30 shadow-xs shrink-0">
-                  <i className="fa-solid fa-clock-rotate-left text-base" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <h3 className="text-base font-bold text-foreground">Shift Attendance Logs & History</h3>
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 font-semibold">
-                      Live Synced
-                    </span>
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    Daily check-in & check-out records, total shift hours, and overtime breakdown
-                  </p>
-                </div>
-              </div>
+          {(() => {
+            const mergedHistory = mergeAttendanceByISTDay(attendanceHistory);
+            const targetLogs = selectedDateFilter
+              ? mergedHistory.filter((log) => getISTDateString(new Date(log.date)) === selectedDateFilter)
+              : mergedHistory;
 
-              <div className="flex items-center gap-2 flex-wrap self-start sm:self-center">
-                <Button
-                  variant={showAllAttendance ? "default" : "outline"}
-                  size="sm"
-                  onClick={async () => {
-                    const nextState = !showAllAttendance;
-                    setShowAllAttendance(nextState);
-                    setAttendancePage(1);
-                    await fetchAttendance(nextState);
-                  }}
-                  className="gap-1.5 text-xs font-semibold h-8 rounded-lg cursor-pointer"
-                >
-                  <i className="fa-solid fa-database text-xs" />
-                  {showAllAttendance ? "Show Limited" : "Show All Records"}
-                </Button>
+            const totalStaff = targetLogs.length;
+            const totalRegHours = targetLogs.reduce((acc: number, log: any) => acc + getLogHours(log).reg, 0);
+            const totalOtHours = targetLogs.reduce((acc: number, log: any) => acc + getLogHours(log).ot, 0);
+            const activeNowCount = targetLogs.filter((log: any) => {
+              const isTodayRow = getISTDateString(new Date(log.date)) === getISTDateString();
+              return isTodayRow && !log.clockOut && Boolean(log.originalClockIn || log.clockIn);
+            }).length;
 
-                <Button
-                  size="sm"
-                  onClick={exportAttendanceToCSV}
-                  className="gap-1.5 text-xs font-semibold h-8 rounded-lg cursor-pointer bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs"
-                >
-                  <i className="fa-solid fa-file-excel text-xs" />
-                  Export to Excel (CSV)
-                </Button>
-              </div>
-            </div>
+            const filteredHistory = mergedHistory.filter((log) => {
+              if (selectedDateFilter && getISTDateString(new Date(log.date)) !== selectedDateFilter) {
+                return false;
+              }
+              if (attendanceStatusFilter !== "All" && log.status !== attendanceStatusFilter) {
+                return false;
+              }
+              if (attendanceSearch.trim()) {
+                const q = attendanceSearch.toLowerCase();
+                const empObj = typeof log.userId === "object" ? log.userId : null;
+                const nameMatch = empObj?.name?.toLowerCase().includes(q);
+                const emailMatch = empObj?.email?.toLowerCase().includes(q);
+                const deptMatch = empObj?.department?.toLowerCase().includes(q);
+                const dateMatch = new Date(log.date).toLocaleDateString().toLowerCase().includes(q);
+                const statusMatch = log.status?.toLowerCase().includes(q);
+                if (!nameMatch && !emailMatch && !deptMatch && !dateMatch && !statusMatch) return false;
+              }
+              return true;
+            });
 
-            {/* Filter & Metric Ribbon */}
-            <div className="p-4 sm:p-5 pt-4 space-y-4">
-              <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4 p-3.5 sm:p-4 rounded-xl bg-accent/20 border border-border/70 backdrop-blur-xs">
-                {/* Left: Day & Search Controls */}
-                <div className="flex flex-wrap items-center gap-2.5">
-                  {/* Date Input */}
-                  <div className="flex items-center gap-2 px-2.5 py-1 rounded-lg bg-background/90 border border-border/80 text-xs font-medium shadow-2xs">
-                    <i className="fa-solid fa-calendar-day text-primary text-xs" />
-                    <input
-                      type="date"
-                      value={selectedDateFilter}
-                      onChange={(e) => {
-                        setSelectedDateFilter(e.target.value);
-                        setAttendancePage(1);
-                      }}
-                      className="bg-transparent text-foreground outline-none cursor-pointer font-mono text-xs"
-                    />
-                  </div>
+            const totalItems = filteredHistory.length;
+            const totalPages = Math.ceil(totalItems / attendanceRowsPerPage) || 1;
+            const startIndex = (attendancePage - 1) * attendanceRowsPerPage;
+            const paginatedItems = filteredHistory.slice(startIndex, startIndex + attendanceRowsPerPage);
 
-                  {/* Quick Filters */}
-                  <div className="flex items-center gap-1.5">
-                    <Button
-                      size="sm"
-                      variant={selectedDateFilter === getISTDateString() ? "default" : "outline"}
-                      onClick={() => {
-                        setSelectedDateFilter(getISTDateString());
-                        setAttendancePage(1);
-                      }}
-                      className="h-8 px-2.5 text-xs cursor-pointer rounded-lg"
-                    >
-                      <i className="fa-solid fa-sun text-[10px] mr-1 opacity-70" />
-                      Today
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant={selectedDateFilter === getISTDateString(new Date(Date.now() - 86400000)) ? "default" : "outline"}
-                      onClick={() => {
-                        setSelectedDateFilter(getISTDateString(new Date(Date.now() - 86400000)));
-                        setAttendancePage(1);
-                      }}
-                      className="h-8 px-2.5 text-xs cursor-pointer rounded-lg"
-                    >
-                      Yesterday
-                    </Button>
-                    {selectedDateFilter && (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => {
-                          setSelectedDateFilter("");
-                          setAttendancePage(1);
-                        }}
-                        className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground cursor-pointer rounded-lg"
-                      >
-                        <i className="fa-solid fa-rotate-left mr-1" /> All Days
-                      </Button>
-                    )}
-                  </div>
-
-                  {/* Search Input */}
-                  <div className="relative min-w-[170px] sm:min-w-[210px]">
-                    <i className="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground/60 text-xs" />
-                    <input
-                      type="text"
-                      value={attendanceSearch}
-                      onChange={(e) => {
-                        setAttendanceSearch(e.target.value);
-                        setAttendancePage(1);
-                      }}
-                      placeholder="Search staff, dates..."
-                      className="h-8 w-full pl-8 pr-7 text-xs bg-background/90 border border-border/80 rounded-lg text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary/60 transition-colors shadow-2xs"
-                    />
-                    {attendanceSearch && (
-                      <button
-                        onClick={() => setAttendanceSearch("")}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground text-xs"
-                      >
-                        <i className="fa-solid fa-xmark" />
-                      </button>
-                    )}
-                  </div>
-
-                  {/* Status Filter */}
-                  <select
-                    value={attendanceStatusFilter}
-                    onChange={(e) => {
-                      setAttendanceStatusFilter(e.target.value);
-                      setAttendancePage(1);
-                    }}
-                    className="h-8 px-2.5 text-xs bg-background/90 border border-border/80 rounded-lg text-foreground outline-none cursor-pointer font-medium shadow-2xs"
-                  >
-                    <option value="All">All Statuses</option>
-                    <option value="Present">Present</option>
-                    <option value="Late">Late</option>
-                    <option value="Half Day">Half Day</option>
-                  </select>
-                </div>
-
-                {/* Right: Aggregated Day KPI Chips */}
-                {(() => {
-                  const mergedHistory = mergeAttendanceByISTDay(attendanceHistory);
-                  const targetLogs = selectedDateFilter
-                    ? mergedHistory.filter((log) => getISTDateString(new Date(log.date)) === selectedDateFilter)
-                    : mergedHistory;
-
-                  const totalStaff = targetLogs.length;
-                  const totalRegHours = targetLogs.reduce((acc: number, log: any) => acc + getLogHours(log).reg, 0);
-                  const totalOtHours = targetLogs.reduce((acc: number, log: any) => acc + getLogHours(log).ot, 0);
-
-                  return (
-                    <div className="flex items-center gap-2.5 text-xs flex-wrap self-start lg:self-center">
-                      <div className="px-3 py-1.5 rounded-lg bg-card/90 border border-border/70 flex items-center gap-2 shadow-2xs">
-                        <div className="w-5 h-5 rounded-md bg-primary/10 text-primary flex items-center justify-center text-[10px]">
-                          <i className="fa-solid fa-users" />
-                        </div>
-                        <span className="text-muted-foreground">Staff Logs:</span>
-                        <strong className="text-foreground font-bold font-mono">{totalStaff}</strong>
-                      </div>
-                      <div className="px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/25 text-emerald-600 dark:text-emerald-400 flex items-center gap-2 shadow-2xs">
-                        <div className="w-5 h-5 rounded-md bg-emerald-500/20 flex items-center justify-center text-[10px]">
-                          <i className="fa-solid fa-clock" />
-                        </div>
-                        <span>Day Hours:</span>
-                        <strong className="font-bold font-mono">{totalRegHours.toFixed(1)} hrs</strong>
-                      </div>
-                      <div className="px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/25 text-amber-600 dark:text-amber-400 flex items-center gap-2 shadow-2xs">
-                        <div className="w-5 h-5 rounded-md bg-amber-500/20 flex items-center justify-center text-[10px]">
-                          <i className="fa-solid fa-fire" />
-                        </div>
-                        <span>Overtime:</span>
-                        <strong className="font-bold font-mono">+{totalOtHours.toFixed(1)} hrs</strong>
-                      </div>
+            return (
+              <Card className="border border-border/80 bg-gradient-to-b from-card/95 via-card/85 to-card/75 shadow-sm backdrop-blur-md rounded-2xl overflow-hidden space-y-0">
+                {/* Header Toolbar */}
+                <div className="p-5 sm:p-6 pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border/60">
+                  <div className="flex items-center gap-3.5">
+                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary/20 via-primary/10 to-transparent text-primary flex items-center justify-center border border-primary/30 shadow-xs shrink-0">
+                      <i className="fa-solid fa-clock-rotate-left text-base" />
                     </div>
-                  );
-                })()}
-              </div>
-
-              {/* Table Body & Pagination */}
-              {(() => {
-                const mergedHistory = mergeAttendanceByISTDay(attendanceHistory);
-                const filteredHistory = mergedHistory.filter((log) => {
-                  if (selectedDateFilter && getISTDateString(new Date(log.date)) !== selectedDateFilter) {
-                    return false;
-                  }
-                  if (attendanceStatusFilter !== "All" && log.status !== attendanceStatusFilter) {
-                    return false;
-                  }
-                  if (attendanceSearch.trim()) {
-                    const q = attendanceSearch.toLowerCase();
-                    const empObj = typeof log.userId === "object" ? log.userId : null;
-                    const nameMatch = empObj?.name?.toLowerCase().includes(q);
-                    const emailMatch = empObj?.email?.toLowerCase().includes(q);
-                    const dateMatch = new Date(log.date).toLocaleDateString().toLowerCase().includes(q);
-                    const statusMatch = log.status?.toLowerCase().includes(q);
-                    if (!nameMatch && !emailMatch && !dateMatch && !statusMatch) return false;
-                  }
-                  return true;
-                });
-
-                const totalItems = filteredHistory.length;
-                const totalPages = Math.ceil(totalItems / attendanceRowsPerPage) || 1;
-                const startIndex = (attendancePage - 1) * attendanceRowsPerPage;
-                const paginatedItems = filteredHistory.slice(startIndex, startIndex + attendanceRowsPerPage);
-
-                return (
-                  <>
-                    <div className="rounded-xl border border-border/70 overflow-hidden shadow-inner bg-card/40">
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-xs text-left border-collapse">
-                          <thead>
-                            <tr className="bg-muted/40 border-b border-border/70 text-muted-foreground font-semibold text-[10px] uppercase tracking-wider">
-                              {(isAdmin || isOPS) && <th className="py-3 px-4">Employee</th>}
-                              <th className="py-3 px-4">Date</th>
-                              <th className="py-3 px-4 text-center">Status</th>
-                              <th className="py-3 px-4">Clock In</th>
-                              <th className="py-3 px-4">Clock Out</th>
-                              <th className="py-3 px-4 text-right">Regular Hrs</th>
-                              <th className="py-3 px-4 text-right">Overtime</th>
-                              <th className="py-3 px-4 text-center">Action</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-border/60">
-                            {paginatedItems.length === 0 ? (
-                              <tr>
-                                <td colSpan={(isAdmin || isOPS) ? 8 : 7} className="py-12 text-center text-muted-foreground">
-                                  <div className="flex flex-col items-center justify-center gap-2">
-                                    <div className="w-10 h-10 rounded-full bg-muted/60 flex items-center justify-center text-muted-foreground/60">
-                                      <i className="fa-solid fa-inbox text-base" />
-                                    </div>
-                                    <span className="font-medium text-xs">No shift logs found matching the selected filters.</span>
-                                    {(selectedDateFilter || attendanceSearch || attendanceStatusFilter !== "All") && (
-                                      <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => {
-                                          setSelectedDateFilter("");
-                                          setAttendanceSearch("");
-                                          setAttendanceStatusFilter("All");
-                                          setAttendancePage(1);
-                                        }}
-                                        className="text-xs h-7 mt-1 gap-1.5 cursor-pointer"
-                                      >
-                                        <i className="fa-solid fa-rotate-left text-[10px]" /> Reset Filters
-                                      </Button>
-                                    )}
-                                  </div>
-                                </td>
-                              </tr>
-                            ) : (
-                              paginatedItems.map((log) => {
-                                const isSelected = selectedAttendanceLog?._id === log._id;
-                                const empObj = typeof log.userId === "object" ? log.userId : null;
-                                const isTodayRow = getISTDateString(new Date(log.date)) === getISTDateString();
-                                const isYesterdayRow = getISTDateString(new Date(log.date)) === getISTDateString(new Date(Date.now() - 86400000));
-                                const resolvedClockOut = getLogClockOutDate(log);
-                                const isLiveRow = !log.clockOut && attendanceToday &&
-                                  String(log._id) === String(attendanceToday._id);
-                                const { reg, ot } = getLogHours(log);
-                                const liveHrs = isLiveRow && totalSecondsWorked > 0 ? Math.min(totalSecondsWorked / 3600, 8) : reg;
-                                const liveOt = isLiveRow && totalSecondsWorked > 0 ? Math.max(0, totalSecondsWorked / 3600 - 8) : ot;
-
-                                return (
-                                  <tr
-                                    key={log._id}
-                                    onClick={() => setSelectedAttendanceLog(log)}
-                                    className={cn(
-                                      "transition-all cursor-pointer group",
-                                      isSelected
-                                        ? "bg-primary/15 border-l-3 border-l-primary"
-                                        : isTodayRow
-                                        ? "bg-primary/[0.03] hover:bg-primary/[0.08]"
-                                        : "hover:bg-accent/30"
-                                    )}
-                                  >
-                                    {(isAdmin || isOPS) && (
-                                      <td className="py-3 px-4 font-semibold text-foreground">
-                                        {empObj ? (
-                                          <div className="flex items-center gap-2.5 min-w-[140px]">
-                                            <div className="w-7 h-7 rounded-full bg-primary/10 text-primary font-bold flex items-center justify-center text-[10px] border border-primary/20 shrink-0">
-                                              {empObj.name?.[0] || "U"}
-                                            </div>
-                                            <div className="min-w-0">
-                                              <div className="font-bold text-xs truncate leading-tight text-foreground">{empObj.name}</div>
-                                              <div className="text-[10px] text-muted-foreground font-normal truncate">{empObj.role || "Employee"}</div>
-                                            </div>
-                                          </div>
-                                        ) : (
-                                          <div className="flex items-center gap-2.5 min-w-[140px]">
-                                            <div className="w-7 h-7 rounded-full bg-muted/60 text-muted-foreground font-bold flex items-center justify-center text-[10px] border border-border shrink-0">
-                                              <i className="fa-solid fa-user-slash text-[9px]" />
-                                            </div>
-                                            <div className="min-w-0">
-                                              <div className="font-semibold text-xs text-foreground/80">Former Member</div>
-                                              <div className="text-[9px] text-muted-foreground/60 font-mono">Archived</div>
-                                            </div>
-                                          </div>
-                                        )}
-                                      </td>
-                                    )}
-
-                                    {/* Date */}
-                                    <td className="py-3 px-4">
-                                      <div className="flex items-center gap-2.5 whitespace-nowrap">
-                                        <div className={cn(
-                                          "w-7 h-7 rounded-lg flex items-center justify-center text-xs shrink-0 border transition-colors",
-                                          isTodayRow
-                                            ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/30"
-                                            : "bg-muted/60 text-muted-foreground border-border/70"
-                                        )}>
-                                          <i className="fa-solid fa-calendar-day text-[11px]" />
-                                        </div>
-                                        <div>
-                                          <div className="font-bold text-xs text-foreground">
-                                            {new Date(log.date).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
-                                          </div>
-                                          {isTodayRow ? (
-                                            <span className="text-[10px] font-semibold text-emerald-500">Today</span>
-                                          ) : isYesterdayRow ? (
-                                            <span className="text-[10px] font-medium text-muted-foreground">Yesterday</span>
-                                          ) : null}
-                                        </div>
-                                      </div>
-                                    </td>
-
-                                    {/* Status */}
-                                    <td className="py-3 px-4 text-center">
-                                      <span className={cn(
-                                        "inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold border whitespace-nowrap shadow-2xs",
-                                        log.status === "Present"
-                                          ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/25"
-                                          : log.status === "Late"
-                                          ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/25"
-                                          : "bg-muted/60 text-muted-foreground border-border/70"
-                                      )}>
-                                        <span className={cn(
-                                          "w-1.5 h-1.5 rounded-full",
-                                          log.status === "Present" ? "bg-emerald-500" : log.status === "Late" ? "bg-amber-500" : "bg-muted-foreground"
-                                        )} />
-                                        {log.status || "Present"}
-                                      </span>
-                                    </td>
-
-                                    {/* Clock In */}
-                                    <td className="py-3 px-4 whitespace-nowrap">
-                                      <div className="flex items-center gap-2">
-                                        <div className="w-6 h-6 rounded-md bg-emerald-500/10 text-emerald-500 flex items-center justify-center text-[10px] shrink-0 border border-emerald-500/20">
-                                          <i className="fa-solid fa-arrow-right-to-bracket" />
-                                        </div>
-                                        <span className="font-mono font-bold text-xs text-foreground">
-                                          {(log.originalClockIn || log.clockIn)
-                                            ? new Date(log.originalClockIn ?? log.clockIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })
-                                            : "--"}
-                                        </span>
-                                      </div>
-                                    </td>
-
-                                    {/* Clock Out */}
-                                    <td className="py-3 px-4 whitespace-nowrap">
-                                      {resolvedClockOut ? (
-                                        <div className="flex items-center gap-2">
-                                          <div className="w-6 h-6 rounded-md bg-rose-500/10 text-rose-500 flex items-center justify-center text-[10px] shrink-0 border border-rose-500/20">
-                                            <i className="fa-solid fa-arrow-right-from-bracket" />
-                                          </div>
-                                          <span className="font-mono font-medium text-xs text-muted-foreground">
-                                            {resolvedClockOut.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}
-                                          </span>
-                                        </div>
-                                      ) : (isTodayRow && (log.originalClockIn || log.clockIn)) ? (
-                                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-500/15 text-emerald-500 border border-emerald-500/30 shadow-xs">
-                                          <span className="relative flex h-2 w-2">
-                                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                                            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                                          </span>
-                                          Active
-                                        </span>
-                                      ) : (
-                                        <span className="font-mono text-muted-foreground/40 text-xs">--</span>
-                                      )}
-                                    </td>
-
-                                    {/* Regular Hours */}
-                                    <td className="py-3 px-4 text-right whitespace-nowrap">
-                                      <div className="flex flex-col items-end gap-1">
-                                        {isLiveRow && totalSecondsWorked > 0 ? (
-                                          <span className="font-mono font-bold text-xs text-primary flex items-center gap-1 animate-pulse">
-                                            <i className="fa-solid fa-bolt text-[10px]" />
-                                            {liveHrs.toFixed(1)} hrs
-                                          </span>
-                                        ) : (
-                                          <span className="font-mono font-bold text-xs text-foreground">
-                                            {reg.toFixed(1)} hrs
-                                          </span>
-                                        )}
-                                        <div className="w-16 h-1 rounded-full bg-muted/60 overflow-hidden">
-                                          <div
-                                            className={cn(
-                                              "h-full rounded-full transition-all",
-                                              isLiveRow ? "bg-primary animate-pulse" : "bg-emerald-500"
-                                            )}
-                                            style={{ width: `${Math.min(100, (isLiveRow ? liveHrs : reg) / 8 * 100)}%` }}
-                                          />
-                                        </div>
-                                      </div>
-                                    </td>
-
-                                    {/* Overtime */}
-                                    <td className="py-3 px-4 text-right whitespace-nowrap">
-                                      {liveOt > 0 ? (
-                                        <span className={cn(
-                                          "inline-flex items-center gap-1 font-mono font-bold text-xs px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-500 border border-amber-500/25 shadow-xs",
-                                          isLiveRow && "animate-pulse"
-                                        )}>
-                                          <i className="fa-solid fa-fire text-[10px]" />
-                                          +{liveOt.toFixed(1)} hrs
-                                        </span>
-                                      ) : (
-                                        <span className="font-mono text-xs text-muted-foreground/50">
-                                          0 hrs
-                                        </span>
-                                      )}
-                                    </td>
-
-                                    {/* Action Button */}
-                                    <td className="py-3 px-4 text-center whitespace-nowrap">
-                                      <button
-                                        type="button"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          setSelectedAttendanceLog(log);
-                                        }}
-                                        className="p-1.5 rounded-lg text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors text-xs font-semibold inline-flex items-center gap-1 group-hover:text-primary"
-                                        title="View Full Breakdown"
-                                      >
-                                        <span className="hidden sm:inline text-[11px]">View</span>
-                                        <i className="fa-solid fa-chevron-right text-[10px] group-hover:translate-x-0.5 transition-transform" />
-                                      </button>
-                                    </td>
-                                  </tr>
-                                );
-                              })
-                            )}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-
-                    {/* Pagination Toolbar */}
-                    <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2 text-xs text-muted-foreground">
-                      <div className="flex items-center gap-2">
-                        <span className="px-2.5 py-1 rounded-md bg-muted/50 border border-border/60 text-foreground font-semibold">
-                          Showing {totalItems > 0 ? startIndex + 1 : 0} to {Math.min(startIndex + attendanceRowsPerPage, totalItems)} of {totalItems}
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className="text-base font-bold text-foreground">Shift Attendance Logs & History</h3>
+                        <span className="text-[10px] font-mono px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/25 font-semibold inline-flex items-center gap-1.5 shadow-2xs">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                          Live Synced
                         </span>
-                        {totalItems > 0 && (
-                          <span className="text-muted-foreground/70 hidden md:inline">
-                            (Page {attendancePage} of {totalPages})
-                          </span>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Daily check-in & check-out records, total shift hours, and overtime breakdown
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 flex-wrap self-start sm:self-center">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={attendanceLoading}
+                      onClick={async () => {
+                        await fetchAttendance(showAllAttendance);
+                      }}
+                      className="h-8.5 px-2.5 rounded-lg text-xs font-semibold cursor-pointer text-muted-foreground hover:text-foreground transition-all"
+                      title="Refresh shift records"
+                    >
+                      <i className={cn("fa-solid fa-arrows-rotate text-xs", attendanceLoading && "animate-spin")} />
+                      <span className="hidden sm:inline ml-1.5">Refresh</span>
+                    </Button>
+
+                    <Button
+                      variant={showAllAttendance ? "default" : "outline"}
+                      size="sm"
+                      onClick={async () => {
+                        const nextState = !showAllAttendance;
+                        setShowAllAttendance(nextState);
+                        setAttendancePage(1);
+                        await fetchAttendance(nextState);
+                      }}
+                      className="gap-1.5 text-xs font-semibold h-8.5 rounded-lg cursor-pointer transition-all"
+                    >
+                      <i className="fa-solid fa-database text-xs" />
+                      {showAllAttendance ? "Recent (30 Days)" : "Show All Records"}
+                    </Button>
+
+                    <Button
+                      size="sm"
+                      onClick={exportAttendanceToCSV}
+                      className="gap-1.5 text-xs font-semibold h-8.5 rounded-lg cursor-pointer bg-emerald-600 hover:bg-emerald-500 text-white shadow-xs transition-all"
+                    >
+                      <i className="fa-solid fa-file-excel text-xs" />
+                      Export to Excel (CSV)
+                    </Button>
+                  </div>
+                </div>
+
+                {/* 4-Stat Metric Cards */}
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 p-4 sm:p-6 pb-2">
+                  <div className="p-3.5 rounded-xl bg-card/80 border border-border/70 flex items-center gap-3 shadow-2xs">
+                    <div className="w-9 h-9 rounded-xl bg-primary/10 text-primary flex items-center justify-center text-sm border border-primary/20 shrink-0">
+                      <i className="fa-solid fa-users" />
+                    </div>
+                    <div className="min-w-0">
+                      <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider block">Staff Logs</span>
+                      <div className="flex items-baseline gap-1.5">
+                        <strong className="text-lg font-black font-mono text-foreground">{totalStaff}</strong>
+                        <span className="text-[10px] text-muted-foreground truncate">{selectedDateFilter ? "Selected day" : "Loaded"}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="p-3.5 rounded-xl bg-emerald-500/5 border border-emerald-500/20 flex items-center gap-3 shadow-2xs">
+                    <div className="w-9 h-9 rounded-xl bg-emerald-500/15 text-emerald-500 flex items-center justify-center text-sm border border-emerald-500/25 shrink-0">
+                      <i className="fa-solid fa-signal" />
+                    </div>
+                    <div className="min-w-0">
+                      <span className="text-[10px] uppercase font-bold text-emerald-600 dark:text-emerald-400 tracking-wider block">Active On Duty</span>
+                      <div className="flex items-baseline gap-1.5">
+                        <strong className="text-lg font-black font-mono text-emerald-600 dark:text-emerald-400">{activeNowCount}</strong>
+                        <span className="text-[10px] text-muted-foreground truncate">Working now</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="p-3.5 rounded-xl bg-sky-500/5 border border-sky-500/20 flex items-center gap-3 shadow-2xs">
+                    <div className="w-9 h-9 rounded-xl bg-sky-500/15 text-sky-500 flex items-center justify-center text-sm border border-sky-500/25 shrink-0">
+                      <i className="fa-solid fa-clock" />
+                    </div>
+                    <div className="min-w-0">
+                      <span className="text-[10px] uppercase font-bold text-sky-600 dark:text-sky-400 tracking-wider block">Day Shift Hours</span>
+                      <div className="flex items-baseline gap-1">
+                        <strong className="text-lg font-black font-mono text-foreground">{totalRegHours.toFixed(1)}</strong>
+                        <span className="text-xs text-muted-foreground font-mono">hrs</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="p-3.5 rounded-xl bg-amber-500/5 border border-amber-500/20 flex items-center gap-3 shadow-2xs">
+                    <div className="w-9 h-9 rounded-xl bg-amber-500/15 text-amber-500 flex items-center justify-center text-sm border border-amber-500/25 shrink-0">
+                      <i className="fa-solid fa-fire" />
+                    </div>
+                    <div className="min-w-0">
+                      <span className="text-[10px] uppercase font-bold text-amber-600 dark:text-amber-400 tracking-wider block">Overtime Logged</span>
+                      <div className="flex items-baseline gap-1">
+                        <strong className="text-lg font-black font-mono text-amber-600 dark:text-amber-400">+{totalOtHours.toFixed(1)}</strong>
+                        <span className="text-xs text-muted-foreground font-mono">hrs</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Filter & Search Toolbar */}
+                <div className="p-4 sm:p-6 pt-2 space-y-4">
+                  <div className="p-3 sm:p-3.5 rounded-xl bg-accent/20 border border-border/70 backdrop-blur-xs flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+                    {/* Left: Quick Date Presets & Custom Date Picker */}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="inline-flex items-center p-0.5 rounded-lg bg-background/90 border border-border/80 shadow-2xs">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedDateFilter(getISTDateString());
+                            setAttendancePage(1);
+                          }}
+                          className={cn(
+                            "px-3 py-1.5 rounded-md text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer",
+                            selectedDateFilter === getISTDateString()
+                              ? "bg-primary text-primary-foreground shadow-xs"
+                              : "text-muted-foreground hover:text-foreground"
+                          )}
+                        >
+                          <i className="fa-solid fa-sun text-[10px]" />
+                          Today
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedDateFilter(getISTDateString(new Date(Date.now() - 86400000)));
+                            setAttendancePage(1);
+                          }}
+                          className={cn(
+                            "px-3 py-1.5 rounded-md text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer",
+                            selectedDateFilter === getISTDateString(new Date(Date.now() - 86400000))
+                              ? "bg-primary text-primary-foreground shadow-xs"
+                              : "text-muted-foreground hover:text-foreground"
+                          )}
+                        >
+                          Yesterday
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedDateFilter("");
+                            setAttendancePage(1);
+                          }}
+                          className={cn(
+                            "px-3 py-1.5 rounded-md text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer",
+                            !selectedDateFilter
+                              ? "bg-primary text-primary-foreground shadow-xs"
+                              : "text-muted-foreground hover:text-foreground"
+                          )}
+                        >
+                          All Days
+                        </button>
+                      </div>
+
+                      {/* Custom Date Input */}
+                      <div className={cn(
+                        "flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-medium transition-all shadow-2xs",
+                        selectedDateFilter && selectedDateFilter !== getISTDateString() && selectedDateFilter !== getISTDateString(new Date(Date.now() - 86400000))
+                          ? "bg-primary/10 border-primary/40 text-primary font-semibold"
+                          : "bg-background/90 border-border/80 text-foreground"
+                      )}>
+                        <i className="fa-solid fa-calendar-day text-xs text-primary/80" />
+                        <input
+                          type="date"
+                          value={selectedDateFilter}
+                          onChange={(e) => {
+                            setSelectedDateFilter(e.target.value);
+                            setAttendancePage(1);
+                          }}
+                          className="bg-transparent text-foreground outline-none cursor-pointer font-mono text-xs w-[125px]"
+                          title="Filter by specific date"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Right: Status Dropdown & Search Bar */}
+                    <div className="flex flex-wrap sm:flex-nowrap items-center gap-2.5">
+                      {/* Status Filter */}
+                      <div className="relative">
+                        <select
+                          value={attendanceStatusFilter}
+                          onChange={(e) => {
+                            setAttendanceStatusFilter(e.target.value);
+                            setAttendancePage(1);
+                          }}
+                          className="h-8.5 pl-3 pr-8 text-xs bg-background/90 border border-border/80 rounded-lg text-foreground font-semibold outline-none cursor-pointer shadow-2xs appearance-none focus:border-primary/60"
+                        >
+                          <option value="All">All Statuses</option>
+                          <option value="Present">Present</option>
+                          <option value="Late">Late</option>
+                          <option value="Half Day">Half Day</option>
+                        </select>
+                        <i className="fa-solid fa-chevron-down absolute right-2.5 top-1/2 -translate-y-1/2 text-[9px] text-muted-foreground pointer-events-none" />
+                      </div>
+
+                      {/* Search Bar */}
+                      <div className="relative flex-1 sm:w-60">
+                        <i className="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground/60 text-xs" />
+                        <input
+                          type="text"
+                          value={attendanceSearch}
+                          onChange={(e) => {
+                            setAttendanceSearch(e.target.value);
+                            setAttendancePage(1);
+                          }}
+                          placeholder="Search staff, role, email..."
+                          className="h-8.5 w-full pl-8 pr-7 text-xs bg-background/90 border border-border/80 rounded-lg text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary/60 transition-colors shadow-2xs"
+                        />
+                        {attendanceSearch && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setAttendanceSearch("");
+                              setAttendancePage(1);
+                            }}
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground text-xs"
+                          >
+                            <i className="fa-solid fa-xmark" />
+                          </button>
                         )}
                       </div>
 
-                      <div className="flex items-center gap-2.5">
-                        <div className="flex items-center gap-1.5 mr-1">
-                          <span className="text-[11px]">Rows per page:</span>
-                          <select
-                            value={attendanceRowsPerPage}
-                            onChange={(e) => {
-                              setAttendanceRowsPerPage(Number(e.target.value));
-                              setAttendancePage(1);
-                            }}
-                            className="h-8 px-2 bg-background border border-border/80 rounded-lg text-foreground focus:outline-none text-xs font-semibold cursor-pointer shadow-2xs"
-                          >
-                            <option value={5}>5</option>
-                            <option value={10}>10</option>
-                            <option value={20}>20</option>
-                            <option value={50}>50</option>
-                          </select>
+                      {/* Reset All Filters Button */}
+                      {(selectedDateFilter || attendanceSearch || attendanceStatusFilter !== "All") && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setSelectedDateFilter("");
+                            setAttendanceSearch("");
+                            setAttendanceStatusFilter("All");
+                            setAttendancePage(1);
+                          }}
+                          className="h-8.5 px-2.5 text-xs text-muted-foreground hover:text-foreground rounded-lg cursor-pointer shrink-0"
+                          title="Reset all filters"
+                        >
+                          <i className="fa-solid fa-rotate-left mr-1" />
+                          Reset
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Table Body & Pagination */}
+                  <div className="rounded-xl border border-border/70 overflow-hidden shadow-inner bg-card/40">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs text-left border-collapse">
+                        <thead>
+                          <tr className="bg-muted/40 border-b border-border/70 text-muted-foreground font-semibold text-[10px] uppercase tracking-wider">
+                            {(isAdmin || isOPS) && <th className="py-3 px-4">Employee</th>}
+                            <th className="py-3 px-4">Date</th>
+                            <th className="py-3 px-4 text-center">Status</th>
+                            <th className="py-3 px-4">Clock In</th>
+                            <th className="py-3 px-4">Clock Out</th>
+                            <th className="py-3 px-4 text-right">Regular Hrs</th>
+                            <th className="py-3 px-4 text-right">Overtime</th>
+                            <th className="py-3 px-4 text-center">Action</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-border/60">
+                          {paginatedItems.length === 0 ? (
+                            <tr>
+                              <td colSpan={(isAdmin || isOPS) ? 8 : 7} className="py-14 text-center text-muted-foreground">
+                                <div className="flex flex-col items-center justify-center gap-2.5">
+                                  <div className="w-12 h-12 rounded-2xl bg-muted/60 flex items-center justify-center text-muted-foreground/60 border border-border/60">
+                                    <i className="fa-solid fa-inbox text-lg" />
+                                  </div>
+                                  <span className="font-semibold text-xs text-foreground">No shift logs found matching the selected filters.</span>
+                                  <span className="text-[11px] text-muted-foreground max-w-sm">Try choosing a different date preset, resetting search queries, or expanding status filter.</span>
+                                  {(selectedDateFilter || attendanceSearch || attendanceStatusFilter !== "All") && (
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => {
+                                        setSelectedDateFilter("");
+                                        setAttendanceSearch("");
+                                        setAttendanceStatusFilter("All");
+                                        setAttendancePage(1);
+                                      }}
+                                      className="text-xs h-8 mt-1 gap-1.5 cursor-pointer rounded-lg font-semibold"
+                                    >
+                                      <i className="fa-solid fa-rotate-left text-[10px]" /> Reset All Filters
+                                    </Button>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          ) : (
+                            paginatedItems.map((log) => {
+                              const isSelected = selectedAttendanceLog?._id === log._id;
+                              const empObj = typeof log.userId === "object" ? log.userId : null;
+                              const isTodayRow = getISTDateString(new Date(log.date)) === getISTDateString();
+                              const isYesterdayRow = getISTDateString(new Date(log.date)) === getISTDateString(new Date(Date.now() - 86400000));
+                              const resolvedClockOut = getLogClockOutDate(log);
+                              const isLiveRow = !log.clockOut && attendanceToday &&
+                                String(log._id) === String(attendanceToday._id);
+                              const { reg, ot } = getLogHours(log);
+                              const liveHrs = isLiveRow && totalSecondsWorked > 0 ? Math.min(totalSecondsWorked / 3600, 8) : reg;
+                              const liveOt = isLiveRow && totalSecondsWorked > 0 ? Math.max(0, totalSecondsWorked / 3600 - 8) : ot;
+
+                              return (
+                                <tr
+                                  key={log._id}
+                                  onClick={() => setSelectedAttendanceLog(log)}
+                                  className={cn(
+                                    "transition-colors cursor-pointer group",
+                                    isSelected
+                                      ? "bg-primary/15 border-l-3 border-l-primary"
+                                      : isTodayRow
+                                      ? "bg-primary/[0.03] hover:bg-primary/[0.08]"
+                                      : "hover:bg-accent/30"
+                                  )}
+                                >
+                                  {(isAdmin || isOPS) && (
+                                    <td className="py-3 px-4 font-semibold text-foreground">
+                                      {empObj ? (
+                                        <div className="flex items-center gap-2.5 min-w-[150px]">
+                                          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary/25 via-primary/10 to-indigo-500/20 text-primary font-bold flex items-center justify-center text-xs border border-primary/30 shadow-2xs shrink-0">
+                                            {empObj.name?.[0]?.toUpperCase() || "U"}
+                                          </div>
+                                          <div className="min-w-0">
+                                            <div className="font-bold text-xs truncate leading-tight text-foreground group-hover:text-primary transition-colors">
+                                              {empObj.name}
+                                            </div>
+                                            <div className="text-[10px] text-muted-foreground font-normal truncate mt-0.5">
+                                              {empObj.role || "Employee"} {empObj.department ? `• ${empObj.department}` : ""}
+                                            </div>
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        <div className="flex items-center gap-2.5 min-w-[150px]">
+                                          <div className="w-8 h-8 rounded-full bg-muted/60 text-muted-foreground font-bold flex items-center justify-center text-xs border border-border shrink-0">
+                                            <i className="fa-solid fa-user-slash text-[10px]" />
+                                          </div>
+                                          <div className="min-w-0">
+                                            <div className="font-semibold text-xs text-foreground/80">Former Member</div>
+                                            <div className="text-[9px] text-muted-foreground/60 font-mono">Archived</div>
+                                          </div>
+                                        </div>
+                                      )}
+                                    </td>
+                                  )}
+
+                                  {/* Date */}
+                                  <td className="py-3 px-4">
+                                    <div className="flex items-center gap-2.5 whitespace-nowrap">
+                                      <div className={cn(
+                                        "w-7 h-7 rounded-lg flex items-center justify-center text-xs shrink-0 border transition-colors",
+                                        isTodayRow
+                                          ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/30 shadow-2xs"
+                                          : "bg-muted/60 text-muted-foreground border-border/70"
+                                      )}>
+                                        <i className="fa-solid fa-calendar-day text-[11px]" />
+                                      </div>
+                                      <div>
+                                        <div className="font-bold text-xs text-foreground">
+                                          {new Date(log.date).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
+                                        </div>
+                                        {isTodayRow ? (
+                                          <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-500">
+                                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> Today
+                                          </span>
+                                        ) : isYesterdayRow ? (
+                                          <span className="text-[10px] font-medium text-muted-foreground">Yesterday</span>
+                                        ) : null}
+                                      </div>
+                                    </div>
+                                  </td>
+
+                                  {/* Status */}
+                                  <td className="py-3 px-4 text-center">
+                                    <span className={cn(
+                                      "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border whitespace-nowrap shadow-2xs",
+                                      log.status === "Present" || !log.status
+                                        ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/25"
+                                        : log.status === "Late"
+                                        ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/25"
+                                        : "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/25"
+                                    )}>
+                                      <span className={cn(
+                                        "w-1.5 h-1.5 rounded-full",
+                                        log.status === "Late" ? "bg-amber-500" : log.status === "Half Day" ? "bg-indigo-500" : "bg-emerald-500"
+                                      )} />
+                                      {log.status || "Present"}
+                                    </span>
+                                  </td>
+
+                                  {/* Clock In */}
+                                  <td className="py-3 px-4 whitespace-nowrap">
+                                    <div className="flex items-center gap-2">
+                                      <div className="w-6 h-6 rounded-md bg-emerald-500/10 text-emerald-500 flex items-center justify-center text-[10px] shrink-0 border border-emerald-500/20">
+                                        <i className="fa-solid fa-arrow-right-to-bracket" />
+                                      </div>
+                                      <span className="font-mono font-bold text-xs text-foreground">
+                                        {(log.originalClockIn || log.clockIn)
+                                          ? new Date(log.originalClockIn ?? log.clockIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })
+                                          : "--:--"}
+                                      </span>
+                                    </div>
+                                  </td>
+
+                                  {/* Clock Out */}
+                                  <td className="py-3 px-4 whitespace-nowrap">
+                                    {resolvedClockOut ? (
+                                      <div className="flex items-center gap-2">
+                                        <div className="w-6 h-6 rounded-md bg-rose-500/10 text-rose-500 flex items-center justify-center text-[10px] shrink-0 border border-rose-500/20">
+                                          <i className="fa-solid fa-arrow-right-from-bracket" />
+                                        </div>
+                                        <span className="font-mono font-medium text-xs text-muted-foreground">
+                                          {resolvedClockOut.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}
+                                        </span>
+                                      </div>
+                                    ) : (isTodayRow && (log.originalClockIn || log.clockIn)) ? (
+                                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 shadow-2xs">
+                                        <span className="relative flex h-2 w-2">
+                                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                          <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                                        </span>
+                                        In Progress
+                                      </span>
+                                    ) : (
+                                      <span className="font-mono text-muted-foreground/40 text-xs">--:--</span>
+                                    )}
+                                  </td>
+
+                                  {/* Regular Hours */}
+                                  <td className="py-3 px-4 text-right whitespace-nowrap">
+                                    <div className="flex flex-col items-end gap-1.5">
+                                      {isLiveRow && totalSecondsWorked > 0 ? (
+                                        <span className="font-mono font-bold text-xs text-primary flex items-center gap-1 animate-pulse">
+                                          <i className="fa-solid fa-bolt text-[10px]" />
+                                          {liveHrs.toFixed(1)} hrs
+                                        </span>
+                                      ) : (
+                                        <span className="font-mono font-bold text-xs text-foreground">
+                                          {reg.toFixed(1)} hrs
+                                        </span>
+                                      )}
+                                      <div className="w-20 h-1.5 rounded-full bg-muted/60 overflow-hidden border border-border/40">
+                                        <div
+                                          className={cn(
+                                            "h-full rounded-full transition-all duration-300",
+                                            isLiveRow ? "bg-primary animate-pulse" : "bg-gradient-to-r from-emerald-500 to-teal-400"
+                                          )}
+                                          style={{ width: `${Math.min(100, Math.round(((isLiveRow ? liveHrs : reg) / 8) * 100))}%` }}
+                                        />
+                                      </div>
+                                    </div>
+                                  </td>
+
+                                  {/* Overtime */}
+                                  <td className="py-3 px-4 text-right whitespace-nowrap">
+                                    {liveOt > 0 ? (
+                                      <span className={cn(
+                                        "inline-flex items-center gap-1 font-mono font-bold text-xs px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-500 border border-amber-500/25 shadow-xs",
+                                        isLiveRow && "animate-pulse"
+                                      )}>
+                                        <i className="fa-solid fa-fire text-[10px]" />
+                                        +{liveOt.toFixed(1)} hrs
+                                      </span>
+                                    ) : (
+                                      <span className="font-mono text-xs text-muted-foreground/40 font-medium">
+                                        0.0 hrs
+                                      </span>
+                                    )}
+                                  </td>
+
+                                  {/* Action Button */}
+                                  <td className="py-3 px-4 text-center whitespace-nowrap">
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setSelectedAttendanceLog(log);
+                                      }}
+                                      className="h-7 px-2.5 rounded-lg text-xs font-semibold text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors inline-flex items-center gap-1 cursor-pointer"
+                                      title="View Shift Breakdown"
+                                    >
+                                      <span>View</span>
+                                      <i className="fa-solid fa-chevron-right text-[10px] group-hover:translate-x-0.5 transition-transform" />
+                                    </Button>
+                                  </td>
+                                </tr>
+                              );
+                            })
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  {/* Pagination Toolbar */}
+                  <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2 text-xs text-muted-foreground">
+                    <div className="flex items-center gap-2">
+                      <span className="px-2.5 py-1 rounded-md bg-muted/50 border border-border/60 text-foreground font-semibold">
+                        Showing {totalItems > 0 ? startIndex + 1 : 0}–{Math.min(startIndex + attendanceRowsPerPage, totalItems)} of {totalItems} records
+                      </span>
+                      {totalItems > 0 && (
+                        <span className="text-muted-foreground/70 hidden md:inline">
+                          (Page {attendancePage} of {totalPages})
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-2.5">
+                      <div className="flex items-center gap-1.5 mr-1">
+                        <span className="text-[11px] font-medium">Rows per page:</span>
+                        <select
+                          value={attendanceRowsPerPage}
+                          onChange={(e) => {
+                            setAttendanceRowsPerPage(Number(e.target.value));
+                            setAttendancePage(1);
+                          }}
+                          className="h-8 px-2 bg-background border border-border/80 rounded-lg text-foreground focus:outline-none text-xs font-semibold cursor-pointer shadow-2xs"
+                        >
+                          <option value={5}>5</option>
+                          <option value={10}>10</option>
+                          <option value={20}>20</option>
+                          <option value={50}>50</option>
+                        </select>
+                      </div>
+
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={attendancePage <= 1}
+                          onClick={() => setAttendancePage((p) => Math.max(p - 1, 1))}
+                          className="h-8 px-3 text-xs rounded-lg gap-1.5 cursor-pointer"
+                        >
+                          <i className="fa-solid fa-chevron-left text-[10px]" />
+                          Previous
+                        </Button>
+
+                        <div className="px-2.5 py-1 font-mono font-bold text-foreground text-xs rounded-md bg-muted/40 border border-border/60">
+                          {attendancePage} / {totalPages}
                         </div>
 
-                        <div className="flex items-center gap-1">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            disabled={attendancePage <= 1}
-                            onClick={() => setAttendancePage((p) => Math.max(p - 1, 1))}
-                            className="h-8 px-3 text-xs rounded-lg gap-1.5 cursor-pointer"
-                          >
-                            <i className="fa-solid fa-chevron-left text-[10px]" />
-                            Previous
-                          </Button>
-
-                          <div className="px-2 font-mono font-bold text-foreground text-xs">
-                            {attendancePage} / {totalPages}
-                          </div>
-
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            disabled={attendancePage >= totalPages}
-                            onClick={() => setAttendancePage((p) => Math.min(p + 1, totalPages))}
-                            className="h-8 px-3 text-xs rounded-lg gap-1.5 cursor-pointer"
-                          >
-                            Next
-                            <i className="fa-solid fa-chevron-right text-[10px]" />
-                          </Button>
-                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={attendancePage >= totalPages}
+                          onClick={() => setAttendancePage((p) => Math.min(p + 1, totalPages))}
+                          className="h-8 px-3 text-xs rounded-lg gap-1.5 cursor-pointer"
+                        >
+                          Next
+                          <i className="fa-solid fa-chevron-right text-[10px]" />
+                        </Button>
                       </div>
                     </div>
-                  </>
-                );
-              })()}
-            </div>
-          </Card>
+                  </div>
+                </div>
+              </Card>
+            );
+          })()}
 
           {/* ─── Login & Hours Summary (Admin/OPS only) ─── */}
           {(isAdmin || isOPS) && (

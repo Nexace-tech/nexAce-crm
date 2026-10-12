@@ -7,6 +7,7 @@ import { ThemeToggle } from "@/components/layout/ThemeToggle";
 
 export default function Home() {
   const [currentUser, setCurrentUser] = useState<{ name: string; role?: string } | null>(null);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     fetch("/api/auth/me")
@@ -18,6 +19,23 @@ export default function Home() {
       })
       .catch(() => {});
   }, []);
+
+  // Prevent background scroll and allow ESC key closing when mobile drawer is open
+  useEffect(() => {
+    if (mobileMenuOpen) {
+      document.body.style.overflow = "hidden";
+      const handleKeyDown = (e: KeyboardEvent) => {
+        if (e.key === "Escape") setMobileMenuOpen(false);
+      };
+      window.addEventListener("keydown", handleKeyDown);
+      return () => {
+        document.body.style.overflow = "";
+        window.removeEventListener("keydown", handleKeyDown);
+      };
+    } else {
+      document.body.style.overflow = "";
+    }
+  }, [mobileMenuOpen]);
 
   return (
     <div className={styles.container}>
@@ -36,31 +54,201 @@ export default function Home() {
           <span className={styles.logoText}>NexAce <span className={styles.logoCRM}>CRM</span></span>
         </div>
         <nav className={styles.nav}>
-          <ThemeToggle />
-          <Link href="/guide" className={styles.navLink}>
-            <i className="fa-solid fa-book-open" /> User Guide
-          </Link>
-          {currentUser ? (
-            <>
-              <span className={styles.userBadge}>
-                <i className="fa-solid fa-circle-user" /> {currentUser.name}
-              </span>
-              <Link href="/dashboard" className={styles.btnPrimary}>
-                <i className="fa-solid fa-gauge-high" /> Enter Dashboard
-              </Link>
-            </>
-          ) : (
-            <>
-              <Link href="/login" className={styles.navLink}>
-                <i className="fa-solid fa-right-to-bracket" /> Sign In
-              </Link>
-              <Link href="/dashboard" className={styles.btnPrimary}>
-                <i className="fa-solid fa-rocket" /> Enter Dashboard
-              </Link>
-            </>
-          )}
+          {/* Desktop Navigation Links */}
+          <div className={styles.desktopNavGroup}>
+            <ThemeToggle />
+            <Link href="/guide" className={styles.navLink}>
+              <i className="fa-solid fa-book-open" /> User Guide
+            </Link>
+            {currentUser ? (
+              <>
+                <span className={styles.userBadge} title={currentUser.name}>
+                  <i className="fa-solid fa-circle-user" />
+                  <span className={styles.userBadgeText}>{currentUser.name}</span>
+                </span>
+                <Link href="/dashboard" className={styles.btnPrimary}>
+                  <i className="fa-solid fa-gauge-high" /> Enter Dashboard
+                </Link>
+              </>
+            ) : (
+              <>
+                <Link href="/login" className={styles.navLink}>
+                  <i className="fa-solid fa-right-to-bracket" /> Sign In
+                </Link>
+                <Link href="/dashboard" className={styles.btnPrimary}>
+                  <i className="fa-solid fa-rocket" /> Enter Dashboard
+                </Link>
+              </>
+            )}
+          </div>
+
+          {/* Mobile Navigation Header Controls (Theme & Menu Toggle) */}
+          <div className={styles.mobileNavHeaderGroup}>
+            <ThemeToggle />
+            <button
+              type="button"
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className={styles.menuToggleBtn}
+              aria-label={mobileMenuOpen ? "Close navigation menu" : "Open navigation menu"}
+              title="Toggle Navigation Menu"
+            >
+              <i className={mobileMenuOpen ? "fa-solid fa-xmark" : "fa-solid fa-bars"} />
+            </button>
+          </div>
         </nav>
       </header>
+
+      {/* ── Mobile Navigation Dropdown Drawer ── */}
+      {mobileMenuOpen && (
+        <div className={styles.mobileDrawerOverlay} onClick={() => setMobileMenuOpen(false)}>
+          <div className={styles.mobileDrawer} onClick={(e) => e.stopPropagation()}>
+            <div className={styles.mobileDrawerScrollable}>
+              {/* Primary Action Hero Card */}
+              <Link
+                href="/dashboard"
+                className={styles.mobilePrimaryCta}
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                <div className={styles.mobilePrimaryCtaLeft}>
+                  <div className={styles.mobilePrimaryCtaIcon}>
+                    <i className="fa-solid fa-gauge-high" />
+                  </div>
+                  <div className={styles.mobilePrimaryCtaText}>
+                    <span className={styles.mobilePrimaryCtaTitle}>Enter Dashboard</span>
+                    <span className={styles.mobilePrimaryCtaSubtitle}>
+                      {currentUser ? "Continue active workspace session" : "Launch demo & executive view"}
+                    </span>
+                  </div>
+                </div>
+                <div className={styles.mobilePrimaryCtaArrow}>
+                  <i className="fa-solid fa-arrow-right" />
+                </div>
+              </Link>
+
+              {/* Navigation Menu Section */}
+              <div className={styles.mobileNavSection}>
+                <div className={styles.mobileNavSectionHeader}>Navigation & Resources</div>
+                <div className={styles.mobileNavList}>
+                  <Link
+                    href="/guide"
+                    className={styles.mobileNavItem}
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    <div className={styles.mobileNavItemLeft}>
+                      <span className={`${styles.mobileNavIconWrap} ${styles.iconGuide}`}>
+                        <i className="fa-solid fa-book-open" />
+                      </span>
+                      <div className={styles.mobileNavItemText}>
+                        <span className={styles.mobileNavItemLabel}>User Guide & Documentation</span>
+                        <span className={styles.mobileNavItemDesc}>Workflows, keyboard shortcuts & tips</span>
+                      </div>
+                    </div>
+                    <i className={`fa-solid fa-chevron-right ${styles.mobileNavChevron}`} />
+                  </Link>
+
+                  <Link
+                    href="/register"
+                    className={styles.mobileNavItem}
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    <div className={styles.mobileNavItemLeft}>
+                      <span className={`${styles.mobileNavIconWrap} ${styles.iconRegister}`}>
+                        <i className="fa-solid fa-building-user" />
+                      </span>
+                      <div className={styles.mobileNavItemText}>
+                        <span className={styles.mobileNavItemLabel}>Register Workspace</span>
+                        <span className={styles.mobileNavItemDesc}>Set up new company or department</span>
+                      </div>
+                    </div>
+                    <i className={`fa-solid fa-chevron-right ${styles.mobileNavChevron}`} />
+                  </Link>
+
+                  {!currentUser && (
+                    <Link
+                      href="/login"
+                      className={styles.mobileNavItem}
+                      onClick={() => setMobileMenuOpen(false)}
+                    >
+                      <div className={styles.mobileNavItemLeft}>
+                        <span className={`${styles.mobileNavIconWrap} ${styles.iconLogin}`}>
+                          <i className="fa-solid fa-right-to-bracket" />
+                        </span>
+                        <div className={styles.mobileNavItemText}>
+                          <span className={styles.mobileNavItemLabel}>Sign In</span>
+                          <span className={styles.mobileNavItemDesc}>Access your existing account</span>
+                        </div>
+                      </div>
+                      <i className={`fa-solid fa-chevron-right ${styles.mobileNavChevron}`} />
+                    </Link>
+                  )}
+                </div>
+              </div>
+
+              {/* Quick Metrics Trust Bar */}
+              <div className={styles.mobileTrustStrip}>
+                <div className={styles.mobileTrustPill}>
+                  <i className="fa-solid fa-users" />
+                  <span>10k+ Managed</span>
+                </div>
+                <div className={styles.mobileTrustPill}>
+                  <i className="fa-solid fa-layer-group" />
+                  <span>500+ Orgs</span>
+                </div>
+                <div className={styles.mobileTrustPill}>
+                  <i className="fa-solid fa-star" />
+                  <span>4.9 / 5 Rating</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Bottom Docked Profile & System Status */}
+            <div className={styles.mobileDrawerBottom}>
+              {currentUser && (
+                <div className={styles.mobileUserDock}>
+                  <div className={styles.mobileUserDockAvatar}>
+                    <i className="fa-solid fa-circle-user" />
+                  </div>
+                  <div className={styles.mobileUserDockInfo}>
+                    <div className={styles.mobileUserDockName}>{currentUser.name}</div>
+                    <div className={styles.mobileUserDockMeta}>
+                      <span className={styles.statusDot} />
+                      <span>Online</span>
+                      <span className={styles.metaDivider}>·</span>
+                      <span className={styles.roleTag}>{currentUser.role || "Member"}</span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      await fetch("/api/auth/logout", { method: "POST" }).catch(() => {});
+                      setCurrentUser(null);
+                      setMobileMenuOpen(false);
+                      window.location.reload();
+                    }}
+                    className={styles.mobileLogoutLink}
+                    title="Sign Out"
+                    aria-label="Sign Out"
+                  >
+                    <i className="fa-solid fa-arrow-right-from-bracket" />
+                    <span>Logout</span>
+                  </button>
+                </div>
+              )}
+
+              <div className={styles.mobileDrawerFooterBar}>
+                <div className={styles.mobileFooterBrand}>
+                  <i className="fa-solid fa-layer-group" />
+                  <span>NexAce CRM Enterprise</span>
+                </div>
+                <div className={styles.mobileFooterStatus}>
+                  <span className={styles.footerStatusDot} />
+                  <span>Cloud Operational</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Hero ── */}
       <main className={styles.hero}>
@@ -121,8 +309,8 @@ export default function Home() {
           {[
             {
               icon: "fa-chart-line",
-              color: "#6366f1",
-              glow: "rgba(99,102,241,0.18)",
+              color: "#00c5a0",
+              glow: "rgba(0,197,160,0.18)",
               title: "Goals & Analytics",
               desc: "Distinct OKRs and KPIs per team. Executive dashboards, trend charts, and automated performance alerts.",
             },
@@ -197,7 +385,7 @@ export default function Home() {
                 icon: "fa-envelope-open-text",
                 title: "Check Your Email",
                 desc: "Your administrator sent a welcome email with a temporary password for your account.",
-                color: "#6366f1",
+                color: "#00c5a0",
               },
               {
                 n: "02",
