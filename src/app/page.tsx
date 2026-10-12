@@ -2,8 +2,11 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
+import { motion } from "framer-motion";
 import styles from "./page.module.css";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
+import { CrmMotionShowcase } from "@/components/landing/CrmMotionShowcase";
+import { HeroDataFlowEngine } from "@/components/landing/HeroDataFlowEngine";
 
 export default function Home() {
   const [currentUser, setCurrentUser] = useState<{ name: string; role?: string } | null>(null);
@@ -267,6 +270,9 @@ export default function Home() {
           client relationships, and team communications without the tool sprawl.
         </p>
 
+        {/* ── Animated Universal Flow Engine: Inbound Sources -> NexAce CRM -> Gaining Sales ── */}
+        <HeroDataFlowEngine />
+
         <div className={styles.ctaGroup}>
           <Link href="/dashboard" className={styles.btnHero}>
             <i className="fa-solid fa-bolt" /> Get Started Free
@@ -274,26 +280,63 @@ export default function Home() {
           <Link href="/guide" className={styles.btnGhost}>
             <i className="fa-solid fa-book-bookmark" /> Explore Feature Guide
           </Link>
-          <Link href="/register" className={styles.btnGhost}>
-            <i className="fa-solid fa-building" /> Register Workspace
-          </Link>
         </div>
 
-        {/* ── Stat Pills ── */}
-        <div className={styles.stats}>
-          {[
-            { icon: "fa-users", value: "10k+", label: "Employees Managed" },
-            { icon: "fa-layer-group", value: "500+", label: "Workspaces Active" },
-            { icon: "fa-star", value: "4.9", label: "Avg. Rating" },
-          ].map((s) => (
-            <div key={s.label} className={styles.statPill}>
-              <i className={`fa-solid ${s.icon}`} />
-              <strong>{s.value}</strong>
-              <span>{s.label}</span>
-            </div>
-          ))}
+        {/* ── Minimal Trust Stats Bar ── */}
+        <div className={styles.statsBar}>
+          <div className={styles.statItem}>
+            <i className="fa-solid fa-users" />
+            <strong>10k+</strong>
+            <span>Employees Managed</span>
+          </div>
+          <span className={styles.statDivider} />
+          <div className={styles.statItem}>
+            <i className="fa-solid fa-layer-group" />
+            <strong>500+</strong>
+            <span>Active Workspaces</span>
+          </div>
+          <span className={styles.statDivider} />
+          <div className={styles.statItem}>
+            <i className="fa-solid fa-star" />
+            <strong>4.9 / 5</strong>
+            <span>Rating</span>
+          </div>
         </div>
       </main>
+
+      {/* ── Interactive CRM Live Motion Showcase ── */}
+      <section className={styles.showcaseSection}>
+        <div className={styles.showcaseBadge}>
+          <span className={styles.showcaseBadgeDot} />
+          <i className="fa-solid fa-desktop" /> Interactive Workspace Tour
+        </div>
+
+        <h2 className={styles.sectionTitle}>
+          Experience the Platform <span className={styles.titleHighlight}>in Action</span>
+        </h2>
+
+        <p className={styles.sectionSubtitle}>
+          Toggle across live pipeline stages, agile sprint tracking, timesheets, and real-time team collaboration.
+        </p>
+
+        {/* Quick Module Tags */}
+        <div className={styles.showcaseModulesPills}>
+          <div className={styles.moduleChip}>
+            <i className="fa-solid fa-handshake" /> Deals Pipeline
+          </div>
+          <div className={styles.moduleChip}>
+            <i className="fa-solid fa-folder-tree" /> Sprint Kanban
+          </div>
+          <div className={styles.moduleChip}>
+            <i className="fa-solid fa-user-clock" /> Timesheets &amp; HR
+          </div>
+          <div className={styles.moduleChip}>
+            <i className="fa-solid fa-bolt" /> Activity Stream
+          </div>
+        </div>
+
+        <CrmMotionShowcase />
+      </section>
 
       {/* ── Feature Cards ── */}
       <section className={styles.featuresSection}>
@@ -349,15 +392,23 @@ export default function Home() {
               title: "Roles & Security",
               desc: "Fine-grained RBAC, SSO support, audit logs, and per-workspace data isolation.",
             },
-          ].map((f) => (
-            <div key={f.title} className={styles.card} style={{ "--card-glow": f.glow } as React.CSSProperties}>
+          ].map((f, i) => (
+            <motion.div
+              key={f.title}
+              initial={{ opacity: 0, y: 22 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-40px" }}
+              transition={{ duration: 0.45, delay: i * 0.06, ease: [0.16, 1, 0.3, 1] }}
+              className={styles.card}
+              style={{ "--card-glow": f.glow } as React.CSSProperties}
+            >
               <div className={styles.cardIconWrap} style={{ background: f.glow }}>
                 <i className={`fa-solid ${f.icon}`} style={{ color: f.color }} />
               </div>
               <h3 className={styles.cardTitle}>{f.title}</h3>
               <p className={styles.cardDesc}>{f.desc}</p>
               <div className={styles.cardAccent} style={{ background: f.color }} />
-            </div>
+            </motion.div>
           ))}
         </div>
       </section>
@@ -410,7 +461,14 @@ export default function Home() {
                 color: "#f59e0b",
               },
             ].map((step, i) => (
-              <div key={step.n} className={styles.stepCard}>
+              <motion.div
+                key={step.n}
+                initial={{ opacity: 0, y: 22 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, margin: "-40px" }}
+                transition={{ duration: 0.45, delay: i * 0.08, ease: [0.16, 1, 0.3, 1] }}
+                className={styles.stepCard}
+              >
                 <div className={styles.stepNum} style={{ color: step.color, borderColor: step.color + "33", background: step.color + "11" }}>
                   {step.n}
                 </div>
@@ -425,7 +483,7 @@ export default function Home() {
                   </Link>
                 )}
                 {i < 3 && <div className={styles.stepConnector} aria-hidden />}
-              </div>
+              </motion.div>
             ))}
           </div>
 
