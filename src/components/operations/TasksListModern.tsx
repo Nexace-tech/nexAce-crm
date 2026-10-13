@@ -517,18 +517,22 @@ export function TasksListModern({
 
                   const assigneeName = task.assignee?.name || "Unassigned";
                   const assigneeInitials = getInitials(assigneeName);
+                  const isMenuOpen = activeMenuId === task._id;
+                  const isStatusOpen = statusDropdownTaskId === task._id;
+                  const isDropdownActive = isMenuOpen || isStatusOpen;
 
                   return (
                     <div
                       key={task._id}
                       onClick={() => onSelectTaskPreview(task)}
                       className={cn(
-                        "group relative flex items-center justify-between gap-2.5 sm:gap-3 p-3 sm:px-4 sm:py-3.5 rounded-xl border border-border/80 bg-card hover:bg-muted/30 transition-all duration-150 cursor-pointer shadow-2xs overflow-hidden",
+                        "group relative flex items-center justify-between gap-2.5 sm:gap-3 p-3 sm:px-4 sm:py-3.5 rounded-xl border border-border/80 bg-card hover:bg-muted/30 transition-all duration-150 cursor-pointer shadow-2xs",
+                        isDropdownActive ? "z-30" : "z-0",
                         isDone && "opacity-75 bg-muted/20"
                       )}
                     >
                       {/* Left Colored Stripe */}
-                      <div className={cn("absolute left-0 top-0 bottom-0 w-1", stripeColor)} />
+                      <div className={cn("absolute left-0 top-0 bottom-0 w-1 rounded-l-xl", stripeColor)} />
 
                       {/* Left Block: Grip, Checkbox, Title, Badges */}
                       <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1 pl-1 sm:pl-1.5">
@@ -607,7 +611,7 @@ export function TasksListModern({
 
                           {statusDropdownTaskId === task._id && (
                             <div
-                              className="absolute left-0 mt-1 w-32 rounded-xl bg-card border border-border shadow-xl z-50 py-1 text-xs animate-in fade-in zoom-in-95"
+                              className="absolute left-0 top-full mt-1 w-32 rounded-xl bg-card border border-border shadow-xl z-50 py-1 text-xs animate-in fade-in zoom-in-95"
                               onClick={(e) => e.stopPropagation()}
                             >
                               {["To Do", "In Progress", "Review", "Done"].map((st) => (
@@ -673,7 +677,7 @@ export function TasksListModern({
 
                           {activeMenuId === task._id && (
                             <div
-                              className="absolute right-0 mt-1 w-40 rounded-xl bg-card border border-border shadow-xl z-50 py-1.5 text-xs animate-in fade-in zoom-in-95"
+                              className="absolute right-0 top-full mt-1 w-40 rounded-xl bg-card border border-border shadow-xl z-50 py-1.5 text-xs animate-in fade-in zoom-in-95"
                               onClick={(e) => e.stopPropagation()}
                             >
                               <button

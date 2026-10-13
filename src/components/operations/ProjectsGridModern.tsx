@@ -612,11 +612,15 @@ export function ProjectsGridModern({
 
                 // Assigned members list
                 const assignedList = p.members && p.members.length > 0 ? p.members : [];
+                const isMenuOpen = activeMenuId === p._id;
 
                 return (
                   <div
                     key={p._id}
-                    className="group relative flex flex-col justify-between rounded-2xl bg-card border border-border/80 p-4 sm:p-5 shadow-xs hover:shadow-lg hover:border-primary/40 transition-all duration-200 min-w-0 w-full overflow-hidden"
+                    className={cn(
+                      "group relative flex flex-col justify-between rounded-2xl bg-card border border-border/80 p-4 sm:p-5 shadow-xs hover:shadow-lg hover:border-primary/40 transition-all duration-200 min-w-0 w-full",
+                      isMenuOpen ? "z-30" : "z-0"
+                    )}
                   >
                     <div>
                       {/* Card Top Badges Row */}
@@ -697,7 +701,7 @@ export function ProjectsGridModern({
 
                           {activeMenuId === p._id && (
                             <div
-                              className="absolute right-0 mt-1 w-44 rounded-xl bg-card border border-border shadow-xl z-50 py-1.5 text-xs animate-in fade-in zoom-in-95"
+                              className="absolute right-0 top-full mt-1 w-44 rounded-xl bg-card border border-border shadow-xl z-50 py-1.5 text-xs animate-in fade-in zoom-in-95"
                               onClick={(e) => e.stopPropagation()}
                             >
                               <button
