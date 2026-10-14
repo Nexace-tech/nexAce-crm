@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Preloader } from "@/components/ui/Preloader";
 import { cn } from "@/lib/utils";
+import { isSubAdminRole, normalizeRoleKey } from "@/lib/roles";
 
 interface WorkerUser {
   _id: string;
@@ -28,6 +29,8 @@ interface AvailabilityRecord {
   endTime?: string;
   hours?: number;
   notes?: string;
+  confirmed?: boolean;
+  confirmedAt?: string;
 }
 
 interface TeamAvailabilityTabProps {
@@ -133,8 +136,31 @@ export function TeamAvailabilityTab({
   // Day inspection drawer/modal for team view
   const [inspectedDay, setInspectedDay] = useState<string | null>(null);
 
+  // Monthly Confirmation & Prompt States
+  const [confirmations, setConfirmations] = useState<Record<string, { confirmed: boolean; confirmedAt?: string }>>({});
+  const [isMonthConfirmed, setIsMonthConfirmed] = useState(false);
+  const [showMonthlyPrompt, setShowMonthlyPrompt] = useState(false);
+  const [confirmingMonth, setConfirmingMonth] = useState(false);
+
   const currentYear = currentDate.getFullYear();
   const currentMonth = currentDate.getMonth();
+  const monthKey = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}`;
+
+  const userRoleKey = currentUser?.role ? normalizeRoleKey(currentUser.role) : "";
+  const isPrivilegedRole =
+    isAdmin ||
+    isOPS ||
+    userRoleKey === "Admin" ||
+    userRoleKey === "OPS" ||
+    userRoleKey === "HR" ||
+    isSubAdminRole(currentUser?.role);
+
+  const currentUserId = String(currentUser?._id || currentUser?.id || "");
+  const isViewingSelf = !isElevated || selectedWorkerId === currentUserId;
+
+  // Admin, Sub-admin, and HR cannot update user availability.
+  // Availability is strictly self-managed by eligible individual workers viewing their own schedule.
+  const canEditAvailability = !isPrivilegedRole && isEligibleWorker && isViewingSelf;
 
   const fetchAvailability = async () => {
     try {
@@ -155,6 +181,15 @@ export function TeamAvailabilityTab({
         }
         setIsElevated(Boolean(data.isElevated));
         setIsEligibleWorker(Boolean(data.isEligibleWorker));
+        setConfirmations(data.confirmations || {});
+        const confirmed = Boolean(data.isMonthConfirmed);
+        setIsMonthConfirmed(confirmed);
+
+        // Check if user dismissed prompt for this month (only non-privileged eligible workers)
+        const isDismissed = typeof window !== "undefined" && localStorage.getItem(`dismissed_avail_prompt_${monthKey}`);
+        if (!confirmed && !isDismissed && data.isEligibleWorker && !data.isElevated && !isPrivilegedRole) {
+          setShowMonthlyPrompt(true);
+        }
       } else {
         const err = await res.json();
         showToast(err.error || "Failed to load availability", "error");
@@ -276,6 +311,18 @@ export function TeamAvailabilityTab({
     return map;
   }, [availabilities, statusFilter]);
 
+  // Breakdown of month days (working vs Sundays)
+  const monthDayBreakdown = useMemo(() => {
+    const currentMonthDays = calendarDays.filter((d) => d.isCurrentMonth);
+    let sundaysCount = 0;
+    let workingDaysCount = 0;
+    for (const d of currentMonthDays) {
+      if (d.date.getDay() === 0) sundaysCount++;
+      else workingDaysCount++;
+    }
+    return { sundaysCount, workingDaysCount, totalDays: currentMonthDays.length };
+  }, [calendarDays]);
+
   // Quick stats for the viewed month
   const stats = useMemo(() => {
     let availableCount = 0;
@@ -288,13 +335,31 @@ export function TeamAvailabilityTab({
       else if (record.status === "Unavailable") unavailableCount++;
     }
 
+    // In single worker mode, add working days (Mon-Sat) without records as Available by default
+    const isSingleWorker = !isElevated || selectedWorkerId !== "All";
+    let defaultAvailableCount = 0;
+    if (isSingleWorker) {
+      for (const d of calendarDays) {
+        if (d.isCurrentMonth && d.date.getDay() !== 0) {
+          const recs = availabilityByDate[d.dateString] || [];
+          if (recs.length === 0) {
+            defaultAvailableCount++;
+          }
+        }
+      }
+    }
+
     return {
-      available: availableCount,
+      available: availableCount + defaultAvailableCount,
+      explicitAvailable: availableCount,
+      defaultAvailable: defaultAvailableCount,
       partial: partialCount,
       unavailable: unavailableCount,
       totalEntries: availabilities.length,
+      sundays: monthDayBreakdown.sundaysCount,
+      workingDays: monthDayBreakdown.workingDaysCount,
     };
-  }, [availabilities]);
+  }, [availabilities, isElevated, selectedWorkerId, calendarDays, availabilityByDate, monthDayBreakdown]);
 
   const handlePrevMonth = () => {
     setCurrentDate((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1));
@@ -335,9 +400,12 @@ export function TeamAvailabilityTab({
     setIsMultiSelectMode(true);
   };
 
+  // Exclude Sundays from entire month selection!
   const selectEntireMonth = () => {
-    const all = calendarDays.filter((d) => d.isCurrentMonth).map((d) => d.dateString);
-    setSelectedDates(all);
+    const workingDays = calendarDays
+      .filter((d) => d.isCurrentMonth && d.date.getDay() !== 0) // Exclude Sundays
+      .map((d) => d.dateString);
+    setSelectedDates(workingDays);
     setIsMultiSelectMode(true);
   };
 
@@ -345,8 +413,48 @@ export function TeamAvailabilityTab({
     setSelectedDates([]);
   };
 
+  const handleConfirmMonth = async () => {
+    if (!canEditAvailability) {
+      showToast("Admin, Sub-admin, and HR cannot update or confirm user availability.", "error");
+      return;
+    }
+    try {
+      setConfirmingMonth(true);
+      const res = await fetch("/api/calendar/availability", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "confirm-month",
+          monthKey,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to confirm availability");
+      setIsMonthConfirmed(true);
+      setShowMonthlyPrompt(false);
+      showToast(`Availability confirmed for ${MONTH_NAMES[currentMonth]} ${currentYear}!`, "success");
+      fetchAvailability();
+    } catch (err: any) {
+      showToast(err.message || "Failed to confirm", "error");
+    } finally {
+      setConfirmingMonth(false);
+    }
+  };
+
+  const handleUpdateLater = () => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem(`dismissed_avail_prompt_${monthKey}`, "true");
+    }
+    setShowMonthlyPrompt(false);
+    showToast("You can update your availability anytime.", "success");
+  };
+
   // Open modal with single or multiple dates
   const openAddModal = (dateStrings: string[] | string, existingRecord?: AvailabilityRecord) => {
+    if (!canEditAvailability) {
+      showToast("Availability is self-managed by each user. Admin, Sub-admin, and HR have view-only access.", "error");
+      return;
+    }
     const datesArray = Array.isArray(dateStrings) ? dateStrings : [dateStrings];
     setModalDates(datesArray);
     setShowDateAdder(datesArray.length > 1);
@@ -354,7 +462,7 @@ export function TeamAvailabilityTab({
 
     if (existingRecord) {
       setModalRecordId(existingRecord._id);
-      setModalTargetUserId(existingRecord.userId?._id || "");
+      setModalTargetUserId(currentUserId);
       setModalStatus(existingRecord.status);
       setModalStartTime(existingRecord.startTime || "09:00 AM");
       setModalEndTime(existingRecord.endTime || "05:00 PM");
@@ -362,11 +470,7 @@ export function TeamAvailabilityTab({
       setModalNotes(existingRecord.notes || "");
     } else {
       setModalRecordId(null);
-      setModalTargetUserId(
-        isElevated && selectedWorkerId !== "All"
-          ? selectedWorkerId
-          : currentUser?._id || currentUser?.id || ""
-      );
+      setModalTargetUserId(currentUserId);
       setModalStatus("Available");
       setModalStartTime("09:00 AM");
       setModalEndTime("05:00 PM");
@@ -392,7 +496,7 @@ export function TeamAvailabilityTab({
 
   // Quick 1-click batch update from bottom bar
   const handleQuickBatchSubmit = async (status: "Available" | "Unavailable") => {
-    if (selectedDates.length === 0) return;
+    if (!canEditAvailability || selectedDates.length === 0) return;
     try {
       setBatchActionLoading(true);
       const res = await fetch("/api/calendar/availability", {
@@ -401,7 +505,6 @@ export function TeamAvailabilityTab({
         body: JSON.stringify({
           dates: selectedDates,
           status,
-          targetUserId: isElevated && selectedWorkerId !== "All" ? selectedWorkerId : undefined,
         }),
       });
 
@@ -420,14 +523,11 @@ export function TeamAvailabilityTab({
 
   // Quick 1-click batch delete
   const handleQuickBatchDelete = async () => {
-    if (selectedDates.length === 0) return;
+    if (!canEditAvailability || selectedDates.length === 0) return;
     try {
       setBatchActionLoading(true);
       const url = new URL("/api/calendar/availability", window.location.origin);
       url.searchParams.set("dates", selectedDates.join(","));
-      if (isElevated && selectedWorkerId !== "All") {
-        url.searchParams.set("userId", selectedWorkerId);
-      }
 
       const res = await fetch(url.toString(), { method: "DELETE" });
       const data = await res.json();
@@ -446,6 +546,10 @@ export function TeamAvailabilityTab({
   // Modal Form Submission (handles single or multi-date batch)
   const handleSaveAvailability = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canEditAvailability) {
+      showToast("Availability is self-managed by each user. Admin, Sub-admin, and HR have view-only access.", "error");
+      return;
+    }
     if (modalDates.length === 0) {
       showToast("Please select at least one date", "error");
       return;
@@ -463,7 +567,6 @@ export function TeamAvailabilityTab({
           endTime: modalStatus === "Partial" ? modalEndTime : "",
           hours: modalStatus === "Partial" ? Number(modalHours) : modalStatus === "Available" ? 8 : 0,
           notes: modalNotes,
-          targetUserId: isElevated && modalTargetUserId ? modalTargetUserId : undefined,
         }),
       });
 
@@ -484,7 +587,7 @@ export function TeamAvailabilityTab({
   };
 
   const handleDeleteSingleModal = async () => {
-    if (!modalRecordId && modalDates.length === 0) return;
+    if (!canEditAvailability || (!modalRecordId && modalDates.length === 0)) return;
     try {
       setSaving(true);
       const url = new URL("/api/calendar/availability", window.location.origin);
@@ -492,9 +595,6 @@ export function TeamAvailabilityTab({
         url.searchParams.set("id", modalRecordId);
       } else {
         url.searchParams.set("dates", modalDates.join(","));
-        if (isElevated && modalTargetUserId) {
-          url.searchParams.set("userId", modalTargetUserId);
-        }
       }
 
       const res = await fetch(url.toString(), { method: "DELETE" });
@@ -528,7 +628,9 @@ export function TeamAvailabilityTab({
                 <span
                   className={cn(
                     "inline-flex items-center gap-1.5 text-xs px-2.5 py-0.5 rounded-full font-semibold border",
-                    isElevated
+                    isPrivilegedRole
+                      ? "bg-primary/10 text-primary border-primary/25"
+                      : isElevated
                       ? "bg-primary/10 text-primary border-primary/25"
                       : "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/25"
                   )}
@@ -536,16 +638,49 @@ export function TeamAvailabilityTab({
                   <span
                     className={cn(
                       "w-1.5 h-1.5 rounded-full",
-                      isElevated ? "bg-primary" : "bg-emerald-500"
+                      isPrivilegedRole || isElevated ? "bg-primary" : "bg-emerald-500"
                     )}
                   />
-                  {isElevated
-                    ? "HR & Admin Full Access"
+                  {isPrivilegedRole
+                    ? `${userRoleKey === "HR" ? "HR" : isOPS ? "Sub-Admin" : "Admin"} View-Only Access`
+                    : isElevated
+                    ? "Team Overview"
                     : currentUser?.employmentType || "Contractor / Freelancer"}
                 </span>
+
+                {isPrivilegedRole && (
+                  <span
+                    className="inline-flex items-center gap-1.5 text-xs px-2.5 py-0.5 rounded-full font-semibold border bg-muted/60 text-muted-foreground border-border/80"
+                    title="Admin, Sub-admin, and HR cannot modify availability. Schedules are self-managed by each user."
+                  >
+                    <i className="fa-solid fa-lock text-[10px]" />
+                    Self-Managed by Workers
+                  </span>
+                )}
+
+                {/* Monthly Confirmation Dot Indicator Badge */}
+                {isMonthConfirmed ? (
+                  <span
+                    className="inline-flex items-center gap-1.5 text-xs px-2.5 py-0.5 rounded-full font-semibold border bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30"
+                    title="Availability confirmed for this month"
+                  >
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-emerald-500/30 animate-pulse" />
+                    Confirmed (Green Dot)
+                  </span>
+                ) : (
+                  <span
+                    className="inline-flex items-center gap-1.5 text-xs px-2.5 py-0.5 rounded-full font-semibold border bg-slate-400/10 text-slate-600 dark:text-slate-400 border-slate-400/25"
+                    title="Availability not yet confirmed by user (defaults to Available)"
+                  >
+                    <span className="w-2 h-2 rounded-full bg-slate-400 dark:bg-slate-500 ring-2 ring-slate-400/20" />
+                    Unconfirmed (Grey Dot)
+                  </span>
+                )}
               </div>
               <CardDescription className="text-xs leading-relaxed max-w-2xl text-muted-foreground">
-                {isElevated
+                {isPrivilegedRole
+                  ? "Track, inspect, and coordinate working availability across team members. Availability is self-managed by individual workers; Admin, Sub-admin, and HR have view-only access."
+                  : isElevated
                   ? "Track, inspect, and coordinate working availability for Part-Time, Freelance, Contractor, and flexible staff."
                   : "Mark your available dates, flexible hours, and planned offline days so your HR partner and team leads can schedule shifts and task assignments accordingly."}
               </CardDescription>
@@ -584,43 +719,52 @@ export function TeamAvailabilityTab({
                   </button>
                 </div>
 
-                {/* Multi-Select Toggle Button */}
-                <Button
-                  variant={isMultiSelectMode ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => {
-                    const next = !isMultiSelectMode;
-                    setIsMultiSelectMode(next);
-                    if (!next) setSelectedDates([]);
-                  }}
-                  className={cn(
-                    "h-9 sm:h-8 text-xs gap-1.5 font-semibold cursor-pointer transition-all flex-1 sm:flex-initial justify-center rounded-xl",
-                    isMultiSelectMode
-                      ? "bg-primary text-primary-foreground shadow-xs ring-2 ring-primary/30"
-                      : "border-border/80 hover:bg-muted/60 text-foreground"
-                  )}
-                >
-                  <i
+                {/* Multi-Select Toggle Button (Workers only) */}
+                {canEditAvailability && (
+                  <Button
+                    variant={isMultiSelectMode ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => {
+                      const next = !isMultiSelectMode;
+                      setIsMultiSelectMode(next);
+                      if (!next) setSelectedDates([]);
+                    }}
                     className={cn(
-                      "text-[11px]",
-                      isMultiSelectMode ? "fa-solid fa-square-check" : "fa-solid fa-calendar-check"
+                      "h-9 sm:h-8 text-xs gap-1.5 font-semibold cursor-pointer transition-all flex-1 sm:flex-initial justify-center rounded-xl",
+                      isMultiSelectMode
+                        ? "bg-primary text-primary-foreground shadow-xs ring-2 ring-primary/30"
+                        : "border-border/80 hover:bg-muted/60 text-foreground"
                     )}
-                  />
-                  <span>
-                    {isMultiSelectMode ? `Selected (${selectedDates.length})` : "Multi-Select"}
-                  </span>
-                </Button>
+                  >
+                    <i
+                      className={cn(
+                        "text-[11px]",
+                        isMultiSelectMode ? "fa-solid fa-square-check" : "fa-solid fa-calendar-check"
+                      )}
+                    />
+                    <span>
+                      {isMultiSelectMode ? `Selected (${selectedDates.length})` : "Multi-Select"}
+                    </span>
+                  </Button>
+                )}
               </div>
 
-              {/* Set Availability CTA */}
-              <Button
-                size="sm"
-                onClick={() => openAddModal(selectedDates.length > 0 ? selectedDates : [todayStr])}
-                className="h-9 sm:h-8 text-xs font-semibold gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground shadow-xs cursor-pointer transition-all rounded-xl w-full sm:w-auto justify-center"
-              >
-                <i className="fa-solid fa-plus text-xs" />
-                <span>{selectedDates.length > 0 ? `Set ${selectedDates.length} Dates` : "Set Availability"}</span>
-              </Button>
+              {canEditAvailability ? (
+                /* Set Availability CTA */
+                <Button
+                  size="sm"
+                  onClick={() => openAddModal(selectedDates.length > 0 ? selectedDates : [todayStr])}
+                  className="h-9 sm:h-8 text-xs font-semibold gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground shadow-xs cursor-pointer transition-all rounded-xl w-full sm:w-auto justify-center"
+                >
+                  <i className="fa-solid fa-plus text-xs" />
+                  <span>{selectedDates.length > 0 ? `Set ${selectedDates.length} Dates` : "Set Availability"}</span>
+                </Button>
+              ) : (
+                <div className="inline-flex items-center justify-center gap-1.5 h-9 sm:h-8 px-3 rounded-xl border border-border/80 bg-muted/40 text-muted-foreground text-xs font-semibold select-none">
+                  <i className="fa-solid fa-lock text-[11px] text-muted-foreground/70" />
+                  <span>View Only (Workers Self-Manage)</span>
+                </div>
+              )}
             </div>
           </div>
         </CardHeader>
@@ -639,7 +783,11 @@ export function TeamAvailabilityTab({
                 <div className="text-xl sm:text-2xl font-bold font-mono tracking-tight text-foreground">
                   {stats.available}
                 </div>
-                <p className="text-[9px] sm:text-[10px] text-muted-foreground truncate">Full-day scheduled</p>
+                <p className="text-[9px] sm:text-[10px] text-muted-foreground truncate">
+                  {stats.defaultAvailable > 0
+                    ? `${stats.explicitAvailable} marked + ${stats.defaultAvailable} default`
+                    : "Full-day scheduled"}
+                </p>
               </div>
               <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-lg sm:rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 flex items-center justify-center text-xs sm:text-sm shrink-0 transition-transform group-hover:scale-105 ml-1.5">
                 <i className="fa-solid fa-circle-check" />
@@ -663,20 +811,25 @@ export function TeamAvailabilityTab({
               </div>
             </div>
 
-            {/* 3. Offline / Off */}
-            <div className="p-2.5 sm:p-3.5 rounded-xl border border-border/80 bg-background/80 hover:border-rose-500/40 hover:shadow-xs transition-all flex items-center justify-between group">
+            {/* 3. Sundays Off (Excluded) */}
+            <div className="p-2.5 sm:p-3.5 rounded-xl border border-rose-500/30 bg-rose-500/[0.03] hover:border-rose-500/50 hover:shadow-xs transition-all flex items-center justify-between group">
               <div className="space-y-0.5 min-w-0">
-                <span className="text-[10px] sm:text-[11px] font-semibold text-muted-foreground flex items-center gap-1.5 truncate">
+                <span className="text-[10px] sm:text-[11px] font-semibold text-rose-600 dark:text-rose-400 flex items-center gap-1.5 truncate">
                   <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0" />
-                  Offline / Off
+                  Sundays Off (Excluded)
                 </span>
-                <div className="text-xl sm:text-2xl font-bold font-mono tracking-tight text-foreground">
-                  {stats.unavailable}
+                <div className="text-xl sm:text-2xl font-bold font-mono tracking-tight text-foreground flex items-baseline gap-1.5">
+                  <span>{stats.sundays}</span>
+                  {stats.unavailable > 0 && (
+                    <span className="text-xs text-rose-500 font-semibold font-sans">
+                      +{stats.unavailable} off
+                    </span>
+                  )}
                 </div>
-                <p className="text-[9px] sm:text-[10px] text-muted-foreground truncate">Planned leave & rest</p>
+                <p className="text-[9px] sm:text-[10px] text-muted-foreground truncate">Weekly rest excluded</p>
               </div>
               <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-lg sm:rounded-xl bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20 flex items-center justify-center text-xs sm:text-sm shrink-0 transition-transform group-hover:scale-105 ml-1.5">
-                <i className="fa-solid fa-circle-xmark" />
+                <i className="fa-solid fa-mug-hot" />
               </div>
             </div>
 
@@ -685,13 +838,13 @@ export function TeamAvailabilityTab({
               <div className="space-y-0.5 min-w-0">
                 <span className="text-[10px] sm:text-[11px] font-semibold text-muted-foreground flex items-center gap-1.5 truncate">
                   <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />
-                  {isElevated ? "Flexible Staff" : "Total Logged"}
+                  {isElevated ? "Flexible Staff" : "Total Working Days"}
                 </span>
                 <div className="text-xl sm:text-2xl font-bold font-mono tracking-tight text-foreground">
-                  {isElevated ? eligibleWorkers.length : stats.totalEntries}
+                  {isElevated ? eligibleWorkers.length : stats.workingDays}
                 </div>
                 <p className="text-[9px] sm:text-[10px] text-muted-foreground truncate">
-                  {isElevated ? "Active roster" : "Entries this month"}
+                  {isElevated ? "Active roster" : "Mon–Sat scheduled"}
                 </p>
               </div>
               <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-lg sm:rounded-xl bg-primary/10 text-primary border border-primary/20 flex items-center justify-center text-xs sm:text-sm shrink-0 transition-transform group-hover:scale-105 ml-1.5">
@@ -739,18 +892,21 @@ export function TeamAvailabilityTab({
             {/* Elevated Filters: Worker Dropdown + Status Pill Filters */}
             <div className="flex items-center gap-2 w-full sm:w-auto">
               {isElevated && (
-                <div className="relative flex-1 sm:w-44">
+                <div className="relative flex-1 sm:w-48">
                   <select
                     value={selectedWorkerId}
                     onChange={(e) => setSelectedWorkerId(e.target.value)}
                     className="w-full h-9 sm:h-8 pl-8 pr-7 text-xs rounded-xl border border-border bg-background font-semibold text-foreground hover:border-primary/50 focus:ring-1 focus:ring-primary appearance-none cursor-pointer"
                   >
                     <option value="All">All Staff ({eligibleWorkers.length})</option>
-                    {eligibleWorkers.map((w) => (
-                      <option key={w._id} value={w._id}>
-                        {w.name} ({w.employmentType || "Staff"})
-                      </option>
-                    ))}
+                    {eligibleWorkers.map((w) => {
+                      const isWorkerConfirmed = Boolean(confirmations[w._id]?.confirmed);
+                      return (
+                        <option key={w._id} value={w._id}>
+                          {isWorkerConfirmed ? "● " : "○ "} {w.name} ({w.employmentType || "Staff"}) {isWorkerConfirmed ? "— Confirmed" : "— Unconfirmed"}
+                        </option>
+                      );
+                    })}
                   </select>
                   <i className="fa-solid fa-user absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground pointer-events-none" />
                   <i className="fa-solid fa-chevron-down absolute right-2.5 top-1/2 -translate-y-1/2 text-[9px] text-muted-foreground pointer-events-none" />
@@ -806,7 +962,8 @@ export function TeamAvailabilityTab({
                   onClick={selectEntireMonth}
                   className="h-7 text-[11px] px-2.5 rounded-lg hover:border-primary/60 font-semibold shrink-0 cursor-pointer"
                 >
-                  Entire Month
+                  <i className="fa-solid fa-calendar-day text-[10px] mr-1 text-primary" />
+                  Working Days (Excl. Sun)
                 </Button>
                 {selectedDates.length > 0 && (
                   <Button
@@ -829,6 +986,67 @@ export function TeamAvailabilityTab({
         </CardContent>
       </Card>
 
+      {/* Unconfirmed Month Prompt Banner (with Quick Confirm & Update Later) */}
+      {!isMonthConfirmed && canEditAvailability && (
+        <div className="p-3.5 sm:p-4 rounded-2xl border border-amber-500/30 bg-amber-500/5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs shadow-xs animate-in fade-in">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/25 flex items-center justify-center shrink-0">
+              <i className="fa-solid fa-bell text-sm" />
+            </div>
+            <div>
+              <div className="font-bold text-foreground flex items-center gap-2 flex-wrap">
+                <span>Availability for {MONTH_NAMES[currentMonth]} {currentYear}</span>
+                <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-slate-400/15 text-slate-600 dark:text-slate-400 font-semibold border border-slate-400/25">
+                  <span className="w-1.5 h-1.5 rounded-full bg-slate-400 dark:bg-slate-500" /> Grey Dot: Unconfirmed
+                </span>
+              </div>
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                Sundays are excluded as weekly off. Working days (Mon–Sat) default to Available. You can confirm now or update anytime later.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 w-full sm:w-auto shrink-0">
+            <Button
+              size="sm"
+              onClick={handleConfirmMonth}
+              disabled={confirmingMonth}
+              className="h-8 px-3 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5 rounded-xl cursor-pointer shadow-xs flex-1 sm:flex-initial"
+            >
+              <i className="fa-solid fa-circle-check text-xs" />
+              {confirmingMonth ? "Confirming..." : "Confirm Month"}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleUpdateLater}
+              className="h-8 px-3 text-xs font-semibold rounded-xl text-muted-foreground hover:text-foreground cursor-pointer flex-1 sm:flex-initial"
+            >
+              <i className="fa-solid fa-clock mr-1" /> Update Later
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Confirmed Month Badge Strip */}
+      {isMonthConfirmed && canEditAvailability && (
+        <div className="px-3.5 py-2.5 rounded-xl border border-emerald-500/30 bg-emerald-500/5 flex items-center justify-between gap-3 text-xs animate-in fade-in">
+          <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-300 font-medium">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-emerald-500/30 animate-pulse shrink-0" />
+            <span>
+              Availability for <strong>{MONTH_NAMES[currentMonth]} {currentYear}</strong> is confirmed by you. Working days default to Available (Green Dot).
+            </span>
+          </div>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => openAddModal(todayStr)}
+            className="h-7 px-2.5 text-[11px] font-semibold text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/10 rounded-lg cursor-pointer shrink-0"
+          >
+            <i className="fa-solid fa-pen-to-square mr-1" /> Update Dates
+          </Button>
+        </div>
+      )}
+
       {/* Main Content: Calendar View vs List View */}
       {loading ? (
         <div className="py-20 flex flex-col items-center justify-center space-y-3">
@@ -838,12 +1056,23 @@ export function TeamAvailabilityTab({
         <Card className="border border-border/80 shadow-xs overflow-hidden bg-card rounded-2xl w-full">
           {/* Day of Week Header (Adaptive for Mobile Viewports) */}
           <div className="grid grid-cols-7 border-b border-border/80 bg-muted/30 text-center font-semibold text-[10px] sm:text-[11px] py-2 sm:py-2.5 text-muted-foreground tracking-wider uppercase">
-            {WEEKDAYS.map((wd) => (
-              <div key={wd}>
-                <span className="hidden sm:inline">{wd}</span>
-                <span className="sm:hidden">{wd.slice(0, 2)}</span>
-              </div>
-            ))}
+            {WEEKDAYS.map((wd, wdIdx) => {
+              const isSun = wdIdx === 0 || wd === "Sun";
+              return (
+                <div
+                  key={wd}
+                  className={cn(
+                    "py-0.5 transition-colors",
+                    isSun && "text-rose-600 dark:text-rose-400 font-bold bg-rose-500/10 rounded-t-lg border-b-2 border-rose-500/40"
+                  )}
+                >
+                  <span className="hidden sm:inline">
+                    {wd} {isSun && <span className="text-[9px] lowercase font-normal">(off)</span>}
+                  </span>
+                  <span className="sm:hidden">{wd.slice(0, 2)}</span>
+                </div>
+              );
+            })}
           </div>
 
           {/* Calendar Day Grid */}
@@ -852,29 +1081,32 @@ export function TeamAvailabilityTab({
               const records = availabilityByDate[day.dateString] || [];
               const isToday = day.dateString === todayStr;
               const isSelected = selectedDates.includes(day.dateString);
-              const isWeekend = day.date.getDay() === 0 || day.date.getDay() === 6;
+              const isSunday = day.date.getDay() === 0;
+              const isSaturday = day.date.getDay() === 6;
+              const isWeekend = isSunday || isSaturday;
 
               return (
                 <div
                   key={day.dateString}
                   onClick={() => {
-                    if (isMultiSelectMode) {
+                    if (isMultiSelectMode && canEditAvailability) {
                       toggleDateSelection(day.dateString);
-                    } else if (isElevated && records.length > 0) {
+                    } else if (records.length > 0) {
                       setInspectedDay(day.dateString);
-                    } else if (records.length === 1) {
-                      openAddModal(day.dateString, records[0]);
-                    } else {
+                    } else if (canEditAvailability) {
                       openAddModal(day.dateString);
+                    } else {
+                      setInspectedDay(day.dateString);
                     }
                   }}
                   className={cn(
                     "min-h-[68px] sm:min-h-[110px] p-1 sm:p-2 flex flex-col justify-between transition-colors cursor-pointer group relative select-none overflow-hidden",
                     !day.isCurrentMonth && "bg-muted/10 text-muted-foreground/40",
-                    isWeekend && day.isCurrentMonth && "bg-muted/5",
+                    isSunday && day.isCurrentMonth && "bg-rose-500/[0.04] dark:bg-rose-500/[0.08] border-rose-500/20",
+                    !isSunday && isSaturday && day.isCurrentMonth && "bg-muted/5",
                     isToday && "bg-primary/[0.03] ring-1.5 ring-primary/40 ring-inset",
                     isSelected && "bg-primary/10 ring-2 ring-primary ring-inset font-bold",
-                    day.isCurrentMonth && !isSelected && "hover:bg-primary/[0.02]"
+                    day.isCurrentMonth && !isSelected && !isSunday && "hover:bg-primary/[0.02]"
                   )}
                 >
                   {/* Date Header inside Day Cell */}
@@ -886,6 +1118,8 @@ export function TeamAvailabilityTab({
                           ? "bg-primary text-primary-foreground shadow-xs font-bold scale-105"
                           : isToday
                           ? "bg-primary text-primary-foreground font-bold shadow-xs"
+                          : isSunday && day.isCurrentMonth
+                          ? "text-rose-600 dark:text-rose-400 font-bold bg-rose-500/10"
                           : day.isCurrentMonth
                           ? "text-foreground font-semibold group-hover:bg-muted/60"
                           : "text-muted-foreground/35 font-normal"
@@ -895,7 +1129,7 @@ export function TeamAvailabilityTab({
                     </span>
 
                     {/* Multi-select checkbox indicator */}
-                    {isMultiSelectMode ? (
+                    {isMultiSelectMode && canEditAvailability ? (
                       <div
                         onClick={(e) => {
                           e.stopPropagation();
@@ -910,7 +1144,7 @@ export function TeamAvailabilityTab({
                       >
                         {isSelected && <i className="fa-solid fa-check" />}
                       </div>
-                    ) : (
+                    ) : canEditAvailability ? (
                       /* Quick single-add icon hover (desktop only) */
                       <button
                         type="button"
@@ -923,16 +1157,29 @@ export function TeamAvailabilityTab({
                       >
                         <i className="fa-solid fa-plus" />
                       </button>
-                    )}
+                    ) : null}
                   </div>
 
                   {/* Availability Badges inside Cell (Responsive for mobile & desktop) */}
                   <div className="space-y-0.5 sm:space-y-1 my-0.5 sm:my-1 min-w-0">
-                    {/* On Mobile: Show at most 2 badges + '+N'; On Desktop: Show up to 3 + '+N' */}
+                    {/* 1. Sunday weekly off badge */}
+                    {isSunday && day.isCurrentMonth && records.length === 0 && (
+                      <div className="px-1 sm:px-2 py-0.5 rounded-md text-[8.5px] sm:text-[10px] font-semibold bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/25 flex items-center justify-between gap-1 shadow-2xs">
+                        <span className="flex items-center gap-1 truncate font-medium">
+                          <i className="fa-solid fa-mug-hot text-[8px] text-rose-500 shrink-0" />
+                          <span className="hidden sm:inline">Sunday Off</span>
+                          <span className="sm:hidden">Off</span>
+                        </span>
+                        <span className="text-[8px] font-normal opacity-70 hidden lg:inline">Weekly Rest</span>
+                      </div>
+                    )}
+
+                    {/* 2. Explicit Records */}
                     {records.slice(0, 3).map((rec, rIdx) => {
                       const isAvail = rec.status === "Available";
                       const isPartial = rec.status === "Partial";
                       const isUnavail = rec.status === "Unavailable";
+                      const isConfirmed = rec.confirmed || Boolean(confirmations[rec.userId?._id]?.confirmed) || isMonthConfirmed;
 
                       return (
                         <div
@@ -940,7 +1187,11 @@ export function TeamAvailabilityTab({
                           onClick={(e) => {
                             if (!isMultiSelectMode) {
                               e.stopPropagation();
-                              openAddModal(day.dateString, rec);
+                              if (canEditAvailability) {
+                                openAddModal(day.dateString, rec);
+                              } else {
+                                setInspectedDay(day.dateString);
+                              }
                             }
                           }}
                           className={cn(
@@ -952,11 +1203,17 @@ export function TeamAvailabilityTab({
                           )}
                           title={`${rec.userId?.name || "Staff"}: ${rec.status} ${
                             rec.hours ? `(${rec.hours} hrs)` : ""
-                          } ${rec.notes ? `- ${rec.notes}` : ""}`}
+                          } ${rec.notes ? `- ${rec.notes}` : ""} (${isConfirmed ? "Confirmed - Green Dot" : "Unconfirmed - Grey Dot"})`}
                         >
                           {/* Desktop Full View */}
                           <div className="hidden sm:flex items-center justify-between w-full min-w-0">
                             <span className="truncate flex items-center gap-1.5 min-w-0">
+                              {/* Confirmation Dot Indicator: Green if confirmed, Grey if not */}
+                              {isConfirmed ? (
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 ring-2 ring-emerald-500/30 shrink-0 inline-block" title="Confirmed availability (Green Dot)" />
+                              ) : (
+                                <span className="w-1.5 h-1.5 rounded-full bg-slate-400 dark:bg-slate-500 ring-2 ring-slate-400/30 shrink-0 inline-block" title="Unconfirmed availability (Grey Dot)" />
+                              )}
                               <i
                                 className={cn(
                                   "text-[8px] shrink-0",
@@ -980,20 +1237,22 @@ export function TeamAvailabilityTab({
                           </div>
 
                           {/* Mobile Compact View (Optimized for 45-55px column width) */}
-                          <div className="flex sm:hidden items-center justify-center w-full min-w-0">
+                          <div className="flex sm:hidden items-center justify-center gap-1 w-full min-w-0">
+                            {isConfirmed ? (
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0 inline-block" />
+                            ) : (
+                              <span className="w-1.5 h-1.5 rounded-full bg-slate-400 dark:bg-slate-500 shrink-0 inline-block" />
+                            )}
                             {isAvail ? (
                               <span className="text-[8.5px] font-bold text-emerald-700 dark:text-emerald-300 flex items-center gap-0.5 truncate">
-                                <i className="fa-solid fa-circle-check text-[7px]" />
                                 <span className="truncate">Full</span>
                               </span>
                             ) : isPartial ? (
                               <span className="text-[8.5px] font-bold text-amber-700 dark:text-amber-300 flex items-center gap-0.5 font-mono truncate">
-                                <i className="fa-solid fa-clock text-[7px]" />
                                 <span>{rec.hours ? `${rec.hours}h` : "Part"}</span>
                               </span>
                             ) : (
                               <span className="text-[8.5px] font-bold text-rose-700 dark:text-rose-300 flex items-center gap-0.5 truncate">
-                                <i className="fa-solid fa-circle-xmark text-[7px]" />
                                 <span className="truncate">Off</span>
                               </span>
                             )}
@@ -1001,6 +1260,35 @@ export function TeamAvailabilityTab({
                         </div>
                       );
                     })}
+
+                    {/* 3. Default Available Badge for Mon-Sat days with no explicit record */}
+                    {!isSunday && day.isCurrentMonth && records.length === 0 && (
+                      <div
+                        onClick={(e) => {
+                          if (!isMultiSelectMode) {
+                            e.stopPropagation();
+                            if (canEditAvailability) {
+                              openAddModal(day.dateString);
+                            } else {
+                              setInspectedDay(day.dateString);
+                            }
+                          }
+                        }}
+                        className="px-1 sm:px-2 py-0.5 rounded-md text-[8.5px] sm:text-[10px] font-semibold flex items-center justify-between gap-1 truncate shadow-2xs border bg-emerald-500/5 text-emerald-700 dark:text-emerald-300 border-emerald-500/20 hover:bg-emerald-500/10 transition-colors cursor-pointer"
+                        title={isMonthConfirmed ? "Available (Default - Confirmed by employee)" : "Available (Default - Unconfirmed by employee)"}
+                      >
+                        <span className="truncate flex items-center gap-1.5 min-w-0">
+                          {isMonthConfirmed ? (
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 ring-2 ring-emerald-500/30 shrink-0 inline-block" title="Confirmed (Green Dot)" />
+                          ) : (
+                            <span className="w-1.5 h-1.5 rounded-full bg-slate-400 dark:bg-slate-500 ring-2 ring-slate-400/30 shrink-0 inline-block" title="Unconfirmed (Grey Dot)" />
+                          )}
+                          <span className="truncate font-semibold hidden sm:inline">Available (Default)</span>
+                          <span className="truncate font-semibold sm:hidden">Avail</span>
+                        </span>
+                        <span className="text-[8px] text-muted-foreground hidden lg:inline font-mono">09:00-17:00</span>
+                      </div>
+                    )}
 
                     {/* Mobile overflow indicator for >2 records */}
                     {records.length > 2 && (
@@ -1033,10 +1321,10 @@ export function TeamAvailabilityTab({
                     )}
                   </div>
 
-                  {/* Empty cell placeholder hint */}
-                  {records.length === 0 && day.isCurrentMonth && (
+                  {/* Empty cell placeholder hint for non-current month */}
+                  {records.length === 0 && !day.isCurrentMonth && (
                     <div className="text-[10px] text-muted-foreground/30 text-center font-medium opacity-0 group-hover:opacity-100 transition-opacity">
-                      {isMultiSelectMode ? (isSelected ? "Selected" : "Click to select") : "Click to mark"}
+                      {isMultiSelectMode ? (isSelected ? "Selected" : "Click to select") : ""}
                     </div>
                   )}
                 </div>
@@ -1068,6 +1356,7 @@ export function TeamAvailabilityTab({
                     const isAvail = rec.status === "Available";
                     const isPartial = rec.status === "Partial";
                     const isUnavail = rec.status === "Unavailable";
+                    const isRecConfirmed = rec.confirmed || Boolean(confirmations[rec.userId?._id]?.confirmed) || isMonthConfirmed;
 
                     return (
                       <div key={rec._id} className="p-3 space-y-2 hover:bg-muted/30 transition-colors">
@@ -1086,24 +1375,31 @@ export function TeamAvailabilityTab({
                             </div>
                           </div>
 
-                          <Badge
-                            className={cn(
-                              "text-[10px] px-2 py-0.5 font-bold shrink-0",
-                              isAvail && "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30",
-                              isPartial && "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30",
-                              isUnavail && "bg-rose-500/15 text-rose-700 dark:text-rose-400 border-rose-500/30"
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            {isRecConfirmed ? (
+                              <span className="w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-emerald-500/25 shrink-0" title="Confirmed availability (Green Dot)" />
+                            ) : (
+                              <span className="w-2 h-2 rounded-full bg-slate-400 dark:bg-slate-500 ring-2 ring-slate-400/20 shrink-0" title="Unconfirmed (Grey Dot)" />
                             )}
-                          >
-                            <i
+                            <Badge
                               className={cn(
-                                "mr-1 text-[9px]",
-                                isAvail && "fa-solid fa-circle-check text-emerald-500",
-                                isPartial && "fa-solid fa-business-time text-amber-500",
-                                isUnavail && "fa-solid fa-circle-xmark text-rose-500"
+                                "text-[10px] px-2 py-0.5 font-bold shrink-0",
+                                isAvail && "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30",
+                                isPartial && "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30",
+                                isUnavail && "bg-rose-500/15 text-rose-700 dark:text-rose-400 border-rose-500/30"
                               )}
-                            />
-                            {rec.status}
-                          </Badge>
+                            >
+                              <i
+                                className={cn(
+                                  "mr-1 text-[9px]",
+                                  isAvail && "fa-solid fa-circle-check text-emerald-500",
+                                  isPartial && "fa-solid fa-business-time text-amber-500",
+                                  isUnavail && "fa-solid fa-circle-xmark text-rose-500"
+                                )}
+                              />
+                              {rec.status}
+                            </Badge>
+                          </div>
                         </div>
 
                         <div className="flex items-center justify-between text-xs pt-0.5">
@@ -1136,16 +1432,29 @@ export function TeamAvailabilityTab({
                           </p>
                         )}
 
-                        <div className="flex justify-end pt-1">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-8 px-3 text-xs gap-1.5 font-semibold hover:border-primary/50 cursor-pointer rounded-lg w-full justify-center"
-                            onClick={() => openAddModal([rec.dateString], rec)}
-                          >
-                            <i className="fa-solid fa-pen-to-square text-[11px]" /> Edit Entry
-                          </Button>
-                        </div>
+                        {canEditAvailability ? (
+                          <div className="flex justify-end pt-1">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-8 px-3 text-xs gap-1.5 font-semibold hover:border-primary/50 cursor-pointer rounded-lg w-full justify-center"
+                              onClick={() => openAddModal([rec.dateString], rec)}
+                            >
+                              <i className="fa-solid fa-pen-to-square text-[11px]" /> Edit Entry
+                            </Button>
+                          </div>
+                        ) : (
+                          <div className="flex justify-end pt-1">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 px-3 text-xs gap-1.5 font-semibold text-muted-foreground hover:text-foreground cursor-pointer rounded-lg w-full justify-center"
+                              onClick={() => setInspectedDay(rec.dateString)}
+                            >
+                              <i className="fa-solid fa-eye text-[11px]" /> View Day Details
+                            </Button>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -1169,6 +1478,7 @@ export function TeamAvailabilityTab({
                         const isAvail = rec.status === "Available";
                         const isPartial = rec.status === "Partial";
                         const isUnavail = rec.status === "Unavailable";
+                        const isRecConfirmed = rec.confirmed || Boolean(confirmations[rec.userId?._id]?.confirmed) || isMonthConfirmed;
 
                         return (
                           <tr key={rec._id} className="hover:bg-muted/30 transition-colors">
@@ -1187,24 +1497,31 @@ export function TeamAvailabilityTab({
                               {rec.dateString}
                             </td>
                             <td className="p-3">
-                              <Badge
-                                className={cn(
-                                  "text-[10px] px-2 py-0.5 font-bold",
-                                  isAvail && "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30",
-                                  isPartial && "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30",
-                                  isUnavail && "bg-rose-500/15 text-rose-700 dark:text-rose-400 border-rose-500/30"
+                              <div className="flex items-center gap-1.5">
+                                {isRecConfirmed ? (
+                                  <span className="w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-emerald-500/25 shrink-0" title="Confirmed availability (Green Dot)" />
+                                ) : (
+                                  <span className="w-2 h-2 rounded-full bg-slate-400 dark:bg-slate-500 ring-2 ring-slate-400/20 shrink-0" title="Unconfirmed availability (Grey Dot)" />
                                 )}
-                              >
-                                <i
+                                <Badge
                                   className={cn(
-                                    "mr-1 text-[9px]",
-                                    isAvail && "fa-solid fa-circle-check text-emerald-500",
-                                    isPartial && "fa-solid fa-business-time text-amber-500",
-                                    isUnavail && "fa-solid fa-circle-xmark text-rose-500"
+                                    "text-[10px] px-2 py-0.5 font-bold",
+                                    isAvail && "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30",
+                                    isPartial && "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30",
+                                    isUnavail && "bg-rose-500/15 text-rose-700 dark:text-rose-400 border-rose-500/30"
                                   )}
-                                />
-                                {rec.status}
-                              </Badge>
+                                >
+                                  <i
+                                    className={cn(
+                                      "mr-1 text-[9px]",
+                                      isAvail && "fa-solid fa-circle-check text-emerald-500",
+                                      isPartial && "fa-solid fa-business-time text-amber-500",
+                                      isUnavail && "fa-solid fa-circle-xmark text-rose-500"
+                                    )}
+                                  />
+                                  {rec.status}
+                                </Badge>
+                              </div>
                             </td>
                             <td className="p-3 text-muted-foreground">
                               {isPartial ? (
@@ -1226,14 +1543,25 @@ export function TeamAvailabilityTab({
                               {rec.notes ? `"${rec.notes}"` : "-"}
                             </td>
                             <td className="p-3 text-right">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="h-7 px-2.5 text-xs gap-1 font-semibold hover:border-primary/50 cursor-pointer"
-                                onClick={() => openAddModal([rec.dateString], rec)}
-                              >
-                                <i className="fa-solid fa-pen-to-square text-[10px]" /> Edit
-                              </Button>
+                              {canEditAvailability ? (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-7 px-2.5 text-xs gap-1 font-semibold hover:border-primary/50 cursor-pointer"
+                                  onClick={() => openAddModal([rec.dateString], rec)}
+                                >
+                                  <i className="fa-solid fa-pen-to-square text-[10px]" /> Edit
+                                </Button>
+                              ) : (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-7 px-2.5 text-xs gap-1 font-semibold text-muted-foreground hover:text-foreground cursor-pointer"
+                                  onClick={() => setInspectedDay(rec.dateString)}
+                                >
+                                  <i className="fa-solid fa-eye text-[10px]" /> View
+                                </Button>
+                              )}
                             </td>
                           </tr>
                         );
@@ -1248,7 +1576,7 @@ export function TeamAvailabilityTab({
       )}
 
       {/* Floating Multi-Select Quick Action Bar (Adaptive Mobile Safe Insets) */}
-      {selectedDates.length > 0 && (
+      {selectedDates.length > 0 && canEditAvailability && (
         <div className="fixed bottom-3 sm:bottom-6 inset-x-3.5 sm:inset-x-auto sm:left-1/2 sm:-translate-x-1/2 z-40 sm:max-w-2xl sm:w-[92%] bg-card/95 border-2 border-primary/50 shadow-2xl rounded-2xl p-3 sm:p-4 backdrop-blur-xl animate-in slide-in-from-bottom-5 duration-300">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3">
             <div className="flex items-center justify-between sm:justify-start gap-2.5">
@@ -1391,17 +1719,19 @@ export function TeamAvailabilityTab({
                       )}
                     </div>
 
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-8 text-xs px-2.5 cursor-pointer rounded-lg shrink-0"
-                      onClick={() => {
-                        setInspectedDay(null);
-                        openAddModal([inspectedDay], rec);
-                      }}
-                    >
-                      <i className="fa-solid fa-pen text-[10px]" />
-                    </Button>
+                    {canEditAvailability && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-8 text-xs px-2.5 cursor-pointer rounded-lg shrink-0"
+                        onClick={() => {
+                          setInspectedDay(null);
+                          openAddModal([inspectedDay], rec);
+                        }}
+                      >
+                        <i className="fa-solid fa-pen text-[10px]" />
+                      </Button>
+                    )}
                   </div>
                 );
               })}
@@ -1416,17 +1746,19 @@ export function TeamAvailabilityTab({
               >
                 Close
               </Button>
-              <Button
-                size="sm"
-                className="text-xs h-9 sm:h-8 gap-1.5 bg-primary cursor-pointer rounded-xl px-3"
-                onClick={() => {
-                  const day = inspectedDay;
-                  setInspectedDay(null);
-                  openAddModal([day]);
-                }}
-              >
-                <i className="fa-solid fa-plus text-[10px]" /> Add Worker
-              </Button>
+              {canEditAvailability && (
+                <Button
+                  size="sm"
+                  className="text-xs h-9 sm:h-8 gap-1.5 bg-primary cursor-pointer rounded-xl px-3"
+                  onClick={() => {
+                    const day = inspectedDay;
+                    setInspectedDay(null);
+                    openAddModal([day]);
+                  }}
+                >
+                  <i className="fa-solid fa-plus text-[10px]" /> Add Record
+                </Button>
+              )}
             </div>
           </div>
         </div>
@@ -1484,27 +1816,6 @@ export function TeamAvailabilityTab({
             <form onSubmit={handleSaveAvailability} className="flex flex-col flex-1 min-h-0 overflow-hidden">
               {/* Scrollable Modal Body */}
               <div className="flex-1 overflow-y-auto p-3.5 sm:p-5 space-y-3.5 text-xs overscroll-contain">
-                {/* Target Worker Selector (Elevated Users only) */}
-                {isElevated && (
-                  <div className="space-y-1">
-                    <label className="font-semibold text-foreground flex items-center gap-1.5 text-xs">
-                      <i className="fa-solid fa-user text-primary text-[10px]" /> Select Staff Member:
-                    </label>
-                    <select
-                      value={modalTargetUserId}
-                      onChange={(e) => setModalTargetUserId(e.target.value)}
-                      required
-                      className="w-full h-9 rounded-xl border border-border bg-background px-3 py-1 text-xs text-foreground focus:ring-1 focus:ring-primary font-medium"
-                    >
-                      <option value="">-- Choose Worker --</option>
-                      {eligibleWorkers.map((w) => (
-                        <option key={w._id} value={w._id}>
-                          {w.name} ({w.employmentType || "Staff"}) - {w.department || "General"}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
 
                 {/* Target Dates Section - Clean & Compact */}
                 {modalDates.length === 1 && !showDateAdder ? (
@@ -1795,6 +2106,170 @@ export function TeamAvailabilityTab({
                 </div>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Monthly Availability Confirmation Modal (Prompt when new/next month starts) */}
+      {showMonthlyPrompt && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !confirmingMonth) setShowMonthlyPrompt(false);
+          }}
+          className="fixed inset-0 z-50 bg-black/65 backdrop-blur-xs flex items-center justify-center p-3.5 sm:p-4 animate-in fade-in duration-200"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-card border border-border rounded-2xl max-w-lg w-full shadow-2xl overflow-hidden animate-in zoom-in-95 flex flex-col max-h-[90vh]"
+          >
+            {/* Modal Header */}
+            <div className="p-4 sm:p-5 border-b border-border bg-gradient-to-r from-primary/10 via-background to-emerald-500/10 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 flex items-center justify-center text-base shadow-xs shrink-0">
+                  <i className="fa-solid fa-calendar-check" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base text-foreground flex items-center gap-2">
+                    <span>Monthly Availability Check</span>
+                    <span className="text-xs px-2 py-0.5 rounded-full font-semibold bg-primary/10 text-primary border border-primary/20">
+                      {MONTH_NAMES[currentMonth]} {currentYear}
+                    </span>
+                  </h3>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    Review and confirm your schedule for the month
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleUpdateLater}
+                className="w-8 h-8 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground flex items-center justify-center cursor-pointer"
+                title="Dismiss and update later"
+              >
+                <i className="fa-solid fa-xmark text-sm" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-4 sm:p-5 space-y-4 overflow-y-auto">
+              {/* Highlight Box explaining default availability and excluded Sundays */}
+              <div className="p-3.5 rounded-xl border border-border bg-muted/20 space-y-2 text-xs leading-relaxed">
+                <div className="flex items-start gap-2.5">
+                  <i className="fa-solid fa-circle-info text-primary text-sm mt-0.5 shrink-0" />
+                  <div>
+                    <p className="font-bold text-foreground">
+                      Default Schedule Policy
+                    </p>
+                    <p className="text-muted-foreground text-[11px] mt-0.5">
+                      Your schedule is set to <strong>Available</strong> by default for all Monday to Saturday work days. <strong>Sundays are highlighted and excluded</strong> as standard weekly off.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* 3 Overview Metric Cards */}
+              <div className="grid grid-cols-3 gap-2 sm:gap-2.5 text-center">
+                {/* 1. Working Days */}
+                <div className="p-2.5 rounded-xl border border-emerald-500/30 bg-emerald-500/5 space-y-1">
+                  <div className="text-xs text-muted-foreground font-semibold flex items-center justify-center gap-1">
+                    <i className="fa-solid fa-briefcase text-[10px] text-emerald-600 dark:text-emerald-400" />
+                    <span>Mon – Sat</span>
+                  </div>
+                  <div className="text-lg sm:text-xl font-bold font-mono text-emerald-600 dark:text-emerald-400">
+                    {stats.workingDays} Days
+                  </div>
+                  <span className="text-[9.5px] font-semibold text-emerald-700 dark:text-emerald-300">
+                    Default Available
+                  </span>
+                </div>
+
+                {/* 2. Sundays Excluded */}
+                <div className="p-2.5 rounded-xl border border-rose-500/30 bg-rose-500/5 space-y-1">
+                  <div className="text-xs text-rose-600 dark:text-rose-400 font-semibold flex items-center justify-center gap-1">
+                    <i className="fa-solid fa-mug-hot text-[10px]" />
+                    <span>Sundays</span>
+                  </div>
+                  <div className="text-lg sm:text-xl font-bold font-mono text-rose-600 dark:text-rose-400">
+                    {stats.sundays} Days
+                  </div>
+                  <span className="text-[9.5px] font-semibold text-rose-600 dark:text-rose-400">
+                    Excluded (Off)
+                  </span>
+                </div>
+
+                {/* 3. Confirmation Status Indicator */}
+                <div className="p-2.5 rounded-xl border border-border bg-muted/40 space-y-1">
+                  <div className="text-xs text-muted-foreground font-semibold flex items-center justify-center gap-1">
+                    <i className="fa-solid fa-circle-dot text-[10px]" />
+                    <span>Status</span>
+                  </div>
+                  <div className="text-sm sm:text-base font-bold text-foreground flex items-center justify-center gap-1 mt-1">
+                    {isMonthConfirmed ? (
+                      <>
+                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-emerald-500/30 animate-pulse" />
+                        <span className="text-emerald-600 dark:text-emerald-400 text-xs sm:text-sm">Confirmed</span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="w-2.5 h-2.5 rounded-full bg-slate-400 dark:bg-slate-500 ring-2 ring-slate-400/20" />
+                        <span className="text-slate-600 dark:text-slate-400 text-xs sm:text-sm">Unconfirmed</span>
+                      </>
+                    )}
+                  </div>
+                  <span className="text-[9.5px] text-muted-foreground">
+                    {isMonthConfirmed ? "Green Dot Active" : "Grey Dot Active"}
+                  </span>
+                </div>
+              </div>
+
+              {/* Status explanation */}
+              <div className="flex items-center gap-2 p-2.5 rounded-xl border border-border/80 bg-background text-[11px] text-muted-foreground">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+                <span>Confirming marks your schedule with a <strong>Green Dot</strong>. Unconfirmed months display a <strong>Grey Dot</strong>.</span>
+              </div>
+            </div>
+
+            {/* Modal Footer with Actions */}
+            <div className="p-3.5 sm:p-4 border-t border-border bg-muted/20 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 shrink-0">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleUpdateLater}
+                className="h-9 sm:h-8 text-xs font-semibold rounded-xl text-muted-foreground hover:text-foreground cursor-pointer order-3 sm:order-1"
+              >
+                <i className="fa-solid fa-clock mr-1.5" /> Update Later
+              </Button>
+
+              <div className="flex items-center gap-2 w-full sm:w-auto order-1 sm:order-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setShowMonthlyPrompt(false);
+                    setViewMode("calendar");
+                  }}
+                  className="h-9 sm:h-8 text-xs font-semibold rounded-xl flex-1 sm:flex-initial cursor-pointer"
+                >
+                  <i className="fa-solid fa-sliders text-xs mr-1.5 text-primary" />
+                  Customize Dates
+                </Button>
+
+                <Button
+                  type="button"
+                  onClick={handleConfirmMonth}
+                  disabled={confirmingMonth}
+                  className="h-9 sm:h-8 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5 rounded-xl cursor-pointer shadow-xs flex-1 sm:flex-initial"
+                >
+                  {confirmingMonth ? (
+                    <><i className="fa-solid fa-spinner fa-spin" /> Confirming...</>
+                  ) : (
+                    <><i className="fa-solid fa-circle-check text-xs" /> Confirm Availability</>
+                  )}
+                </Button>
+              </div>
+            </div>
           </div>
         </div>
       )}

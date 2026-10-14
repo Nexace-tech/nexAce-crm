@@ -14,6 +14,8 @@ export interface IAvailability extends Document {
   endTime?: string;   // e.g. "02:00 PM" or "14:00"
   hours?: number;     // e.g. 4
   notes?: string;
+  confirmed?: boolean;
+  confirmedAt?: Date;
   createdBy: mongoose.Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
@@ -35,6 +37,8 @@ const AvailabilitySchema = new Schema<IAvailability>(
     endTime: { type: String, default: "" },
     hours: { type: Number, default: 0 },
     notes: { type: String, default: "", trim: true },
+    confirmed: { type: Boolean, default: false },
+    confirmedAt: { type: Date },
     createdBy: { type: Schema.Types.ObjectId, ref: "User" },
   },
   { timestamps: true }

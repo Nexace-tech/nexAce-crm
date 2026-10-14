@@ -2,12 +2,11 @@ import { NextResponse } from "next/server";
 import { requireTenantSession, isAuthError } from "@/lib/auth-guard";
 import { connectToDatabase } from "@/lib/db";
 import { Availability } from "@/models/Availability";
+import { AvailabilityConfirmation } from "@/models/AvailabilityConfirmation";
 import { User } from "@/models/User";
 import { RolePermission } from "@/models/RolePermission";
 import { isSubAdminRole, normalizeRoleKey } from "@/lib/roles";
 import mongoose from "mongoose";
-
-const FULL_TIME_TYPES = ["Permanent", "Full-Time", "full-time", "permanent", "Full Time", "full time"];
 
 export async function GET(request: Request) {
   try {
@@ -46,13 +45,13 @@ export async function GET(request: Request) {
     const month = searchParams.get("month"); // 0-11
     const year = searchParams.get("year");   // e.g. 2026
 
-    // Find all users who are NOT full-time (Freelancer, Part-Time, Contractor, Intern, etc.)
+    // Find all active employees in the tenant (excluding Admin, Sub-Admin, and HR)
     const eligibleWorkers = await User.find({
       tenantId: tenantObjectId,
       status: { $ne: "Suspended" },
-      employmentType: { $nin: FULL_TIME_TYPES },
+      role: { $nin: ["Admin", "admin", "OPS", "ops", "Sub-Admin", "sub-admin", "SubAdmin", "subadmin", "HR", "hr"] },
     })
-      .select("name email role employmentType photoUrl department")
+      .select("name email role employmentType photoUrl department shiftName shiftTime")
       .sort({ name: 1 })
       .lean();
 
@@ -62,9 +61,11 @@ export async function GET(request: Request) {
       if (selectedUserId && selectedUserId !== "All") {
         query.userId = new mongoose.Types.ObjectId(selectedUserId);
       } else {
-        // By default, query all eligible non-full-time users
+        // By default, query all non-privileged employee availability records
         const workerIds = eligibleWorkers.map((w: any) => w._id);
-        query.userId = { $in: workerIds };
+        if (workerIds.length > 0) {
+          query.userId = { $in: workerIds };
+        }
       }
     } else {
       // Regular workers can strictly only view their own availability
@@ -72,9 +73,10 @@ export async function GET(request: Request) {
     }
 
     // Filter by year/month if provided (dateString starts with YYYY-MM)
+    let monthPrefix = "";
     if (year && month !== null && month !== undefined && month !== "") {
       const monthPadded = String(Number(month) + 1).padStart(2, "0");
-      const monthPrefix = `${year}-${monthPadded}`;
+      monthPrefix = `${year}-${monthPadded}`;
       query.dateString = { $regex: `^${monthPrefix}` };
     } else if (year) {
       query.dateString = { $regex: `^${year}` };
@@ -85,13 +87,54 @@ export async function GET(request: Request) {
       .sort({ dateString: 1 })
       .lean();
 
+    // Fetch monthly confirmation status for queried users
+    const confirmationsMap: Record<string, { confirmed: boolean; confirmedAt?: string }> = {};
+    if (monthPrefix) {
+      const userIdsToQuery = isElevated
+        ? (selectedUserId && selectedUserId !== "All"
+            ? [new mongoose.Types.ObjectId(selectedUserId)]
+            : eligibleWorkers.map((w: any) => w._id))
+        : [userObjectId];
+
+      const confirmationDocs = await AvailabilityConfirmation.find({
+        tenantId: tenantObjectId,
+        monthKey: monthPrefix,
+        userId: { $in: userIdsToQuery },
+      }).lean();
+
+      for (const doc of confirmationDocs) {
+        confirmationsMap[String(doc.userId)] = {
+          confirmed: Boolean(doc.confirmed),
+          confirmedAt: doc.confirmedAt ? doc.confirmedAt.toISOString() : undefined,
+        };
+      }
+    }
+
+    const targetUserIdKey = isElevated && selectedUserId && selectedUserId !== "All"
+      ? selectedUserId
+      : String(userObjectId);
+
+    const isMonthConfirmed = Boolean(confirmationsMap[targetUserIdKey]?.confirmed);
+
+    const isRestrictedAdminOrHR =
+      Boolean(currentUser.role && currentUser.role.trim().toLowerCase() === "admin") ||
+      isSubAdminRole(currentUser.role) ||
+      roleKey === "HR" ||
+      roleKey === "Admin" ||
+      roleKey === "OPS";
+
     return NextResponse.json({
       success: true,
       availabilities,
-      eligibleWorkers: isElevated ? eligibleWorkers : [],
+      eligibleWorkers,
       isElevated,
+      isRestrictedAdminOrHR,
+      canEditAvailability: !isRestrictedAdminOrHR,
+      confirmations: confirmationsMap,
+      isMonthConfirmed,
+      monthKey: monthPrefix,
       currentUserEmploymentType: currentUser.employmentType || "",
-      isEligibleWorker: !FULL_TIME_TYPES.includes(currentUser.employmentType || ""),
+      isEligibleWorker: !isRestrictedAdminOrHR,
     });
   } catch (err: any) {
     console.error("GET /api/calendar/availability error:", err);
@@ -113,37 +156,82 @@ export async function POST(request: Request) {
     }
 
     const roleKey = normalizeRoleKey(currentUser.role);
-    let hasElevatedPerm = false;
-    let hasManagePerm = false;
+    const isRestrictedAdminOrHR =
+      Boolean(currentUser.role && currentUser.role.trim().toLowerCase() === "admin") ||
+      isSubAdminRole(currentUser.role) ||
+      roleKey === "HR" ||
+      roleKey === "Admin" ||
+      roleKey === "OPS";
+
+    // Admin, Sub-admin, and HR cannot update user availability
+    if (isRestrictedAdminOrHR) {
+      return NextResponse.json(
+        { error: "Forbidden: Admin, Sub-admin, and HR cannot update user availability. Availability is strictly self-managed by each user." },
+        { status: 403 }
+      );
+    }
+
     let canLogOwn = true;
     try {
       const rolePerm = await RolePermission.findOne({ tenantId: tenantObjectId, role: roleKey }).lean();
-      if (rolePerm?.featurePermissions) {
-        if (rolePerm.featurePermissions.viewTeamAvailability) hasElevatedPerm = true;
-        if (rolePerm.featurePermissions.manageTeamAvailability) {
-          hasManagePerm = true;
-          hasElevatedPerm = true;
-        }
-        if (rolePerm.featurePermissions.logOwnAvailability !== undefined) {
-          canLogOwn = Boolean(rolePerm.featurePermissions.logOwnAvailability);
-        }
+      if (rolePerm?.featurePermissions && rolePerm.featurePermissions.logOwnAvailability !== undefined) {
+        canLogOwn = Boolean(rolePerm.featurePermissions.logOwnAvailability);
       }
     } catch (e) {}
 
-    const isElevated =
-      Boolean(currentUser.role && currentUser.role.trim().toLowerCase() === "admin") ||
-      isSubAdminRole(currentUser.role) ||
-      roleKey === "HR" ||
-      hasElevatedPerm;
-
-    const canManageTeam =
-      Boolean(currentUser.role && currentUser.role.trim().toLowerCase() === "admin") ||
-      isSubAdminRole(currentUser.role) ||
-      roleKey === "HR" ||
-      hasManagePerm;
+    if (!canLogOwn) {
+      return NextResponse.json({ error: "You do not have permission to record work availability" }, { status: 403 });
+    }
 
     const body = await request.json();
-    const { dateString, dates, status, startTime, endTime, hours, notes, targetUserId } = body;
+
+    // Special Action: Monthly Confirmation
+    if (body.action === "confirm-month" || body.action === "unconfirm-month") {
+      const { monthKey, targetUserId, notes } = body;
+      if (!monthKey || !/^\d{4}-\d{2}$/.test(monthKey)) {
+        return NextResponse.json({ error: "Invalid monthKey. Must be YYYY-MM" }, { status: 400 });
+      }
+
+      if (targetUserId && String(targetUserId) !== String(userObjectId)) {
+        return NextResponse.json({ error: "Forbidden: You can only confirm your own availability." }, { status: 403 });
+      }
+
+      const finalUserId = userObjectId;
+      const isConfirm = body.action === "confirm-month";
+      const confirmationDoc = await AvailabilityConfirmation.findOneAndUpdate(
+        { tenantId: tenantObjectId, userId: finalUserId, monthKey },
+        {
+          $set: {
+            tenantId: tenantObjectId,
+            userId: finalUserId,
+            monthKey,
+            confirmed: isConfirm,
+            confirmedAt: isConfirm ? new Date() : undefined,
+            notes: notes ? String(notes).trim() : "",
+          },
+        },
+        { upsert: true, new: true }
+      );
+
+      // Also set confirmed flag on all availability records for this month
+      await Availability.updateMany(
+        { tenantId: tenantObjectId, userId: finalUserId, dateString: { $regex: `^${monthKey}` } },
+        { $set: { confirmed: isConfirm, confirmedAt: isConfirm ? new Date() : undefined } }
+      );
+
+      return NextResponse.json({
+        success: true,
+        confirmed: isConfirm,
+        monthKey,
+        confirmedAt: confirmationDoc.confirmedAt,
+      });
+    }
+
+    const { dateString, dates, status, startTime, endTime, hours, notes, targetUserId, confirmed } = body;
+
+    if (targetUserId && String(targetUserId) !== String(userObjectId)) {
+      return NextResponse.json({ error: "Forbidden: You can only update your own availability." }, { status: 403 });
+    }
 
     const targetDates: string[] = Array.isArray(dates) && dates.length > 0
       ? dates.filter((d: string) => /^\d{4}-\d{2}-\d{2}$/.test(d))
@@ -159,26 +247,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid status. Must be Available, Partial, or Unavailable" }, { status: 400 });
     }
 
-    let finalUserId = userObjectId;
-    if (targetUserId) {
-      if (!canManageTeam) {
-        return NextResponse.json({ error: "Unauthorized to update availability for other users" }, { status: 403 });
-      }
-      finalUserId = new mongoose.Types.ObjectId(targetUserId);
-    } else {
-      if (!canLogOwn && !canManageTeam) {
-        return NextResponse.json({ error: "You do not have permission to record work availability" }, { status: 403 });
-      }
-      // Check if user is eligible (not full-time permanent)
-      const isFullTime = FULL_TIME_TYPES.includes(currentUser.employmentType || "");
-      if (isFullTime && !canManageTeam) {
-        return NextResponse.json({
-          error: "Availability scheduling is only applicable for Part-Time, Freelance, Contractor, and flexible staff.",
-        }, { status: 403 });
-      }
-    }
+    const finalUserId = userObjectId;
 
     // Bulk upsert all selected dates
+    const isRecordConfirmed = confirmed !== undefined ? Boolean(confirmed) : true;
     const bulkOps = targetDates.map((dStr) => {
       const dateObj = new Date(dStr + "T00:00:00.000Z");
       return {
@@ -195,6 +267,8 @@ export async function POST(request: Request) {
               endTime: endTime ? String(endTime).trim() : "",
               hours: Number(hours) || 0,
               notes: notes ? String(notes).trim() : "",
+              confirmed: isRecordConfirmed,
+              confirmedAt: isRecordConfirmed ? new Date() : undefined,
               createdBy: userObjectId,
             },
           },
@@ -230,50 +304,40 @@ export async function DELETE(request: Request) {
     }
 
     const roleKey = normalizeRoleKey(currentUser.role);
-    let hasManagePerm = false;
-    try {
-      const rolePerm = await RolePermission.findOne({ tenantId: tenantObjectId, role: roleKey }).lean();
-      if (rolePerm?.featurePermissions?.manageTeamAvailability) {
-        hasManagePerm = true;
-      }
-    } catch (e) {}
-
-    const canManageTeam =
+    const isRestrictedAdminOrHR =
       Boolean(currentUser.role && currentUser.role.trim().toLowerCase() === "admin") ||
       isSubAdminRole(currentUser.role) ||
       roleKey === "HR" ||
-      hasManagePerm;
+      roleKey === "Admin" ||
+      roleKey === "OPS";
+
+    // Admin, Sub-admin, and HR cannot delete or clear user availability
+    if (isRestrictedAdminOrHR) {
+      return NextResponse.json(
+        { error: "Forbidden: Admin, Sub-admin, and HR cannot delete or clear user availability. Availability is strictly self-managed by each user." },
+        { status: 403 }
+      );
+    }
 
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");
     const dateString = searchParams.get("dateString");
     const datesParam = searchParams.get("dates");
-    const targetUserId = searchParams.get("userId");
 
-    const deleteFilter: any = { tenantId: tenantObjectId };
+    const deleteFilter: any = {
+      tenantId: tenantObjectId,
+      userId: userObjectId,
+    };
 
     if (id) {
       deleteFilter._id = new mongoose.Types.ObjectId(id);
-      if (!canManageTeam) {
-        deleteFilter.userId = userObjectId;
-      }
       await Availability.deleteOne(deleteFilter);
     } else if (datesParam) {
       const datesArray = datesParam.split(",").map((d) => d.trim()).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d));
       deleteFilter.dateString = { $in: datesArray };
-      if (targetUserId && canManageTeam) {
-        deleteFilter.userId = new mongoose.Types.ObjectId(targetUserId);
-      } else {
-        deleteFilter.userId = userObjectId;
-      }
       await Availability.deleteMany(deleteFilter);
     } else if (dateString) {
       deleteFilter.dateString = dateString;
-      if (targetUserId && canManageTeam) {
-        deleteFilter.userId = new mongoose.Types.ObjectId(targetUserId);
-      } else {
-        deleteFilter.userId = userObjectId;
-      }
       await Availability.deleteOne(deleteFilter);
     } else {
       return NextResponse.json({ error: "Missing id, dateString, or dates" }, { status: 400 });

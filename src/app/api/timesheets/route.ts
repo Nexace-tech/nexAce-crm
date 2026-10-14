@@ -5,6 +5,7 @@ import { TimeEntry } from "@/models/TimeEntry";
 import { User } from "@/models/User";
 import { getUserDataScope } from "@/lib/dataScope";
 import { notify, notifyAdmins } from "@/lib/notify";
+import { normalizeRoleKey } from "@/lib/roles";
 import mongoose from "mongoose";
 
 /**
@@ -29,8 +30,10 @@ export async function GET(request: Request) {
 
     const dataScope = await getUserDataScope(session);
 
+    const roleKey = normalizeRoleKey(session.role);
+    const isPrivileged = session.role === "Admin" || session.role === "OPS" || session.role === "HR" || roleKey === "HR" || dataScope.scope === "all";
+
     if (pending) {
-      const isPrivileged = session.role === "Admin" || session.role === "OPS" || dataScope.scope === "all";
       if (!isPrivileged && !dataScope.canViewFeature("approveTimesheets") && session.role !== "Manager") {
         return NextResponse.json({ error: "Forbidden: Timesheet approval permission required" }, { status: 403 });
       }
@@ -70,9 +73,13 @@ export async function GET(request: Request) {
     };
 
     const isTeamQuery = searchParams.get("team") === "true";
-    const isPrivileged = session.role === "Admin" || session.role === "OPS" || dataScope.scope === "all";
+    const userIdParam = searchParams.get("userId");
+    const statusParam = searchParams.get("status");
 
-    if (isTeamQuery && (isPrivileged || dataScope.canViewFeature("viewTeamTimesheets") || session.role === "Manager")) {
+    if (userIdParam && (isPrivileged || dataScope.canViewFeature("viewTeamTimesheets") || session.role === "Manager")) {
+      // Privileged roles (Admin, OPS, HR) or managers can query a specific user's timesheet
+      query.userId = new mongoose.Types.ObjectId(userIdParam);
+    } else if (isTeamQuery && (isPrivileged || dataScope.canViewFeature("viewTeamTimesheets") || session.role === "Manager")) {
       if (dataScope.scope === "department") {
         const loggedUser = await User.findById(session.userId).lean();
         const userDept = loggedUser?.department;
@@ -100,8 +107,12 @@ export async function GET(request: Request) {
       query.date = { $gte: startDateObj, $lte: endDateObj };
     }
 
+    if (statusParam && statusParam !== "All") {
+      query.status = statusParam;
+    }
+
     const entries = await TimeEntry.find(query)
-      .populate("userId", "name role department photoUrl")
+      .populate("userId", "name role department photoUrl email")
       .sort({ date: -1 })
       .lean();
 
@@ -302,7 +313,9 @@ export async function PUT(request: Request) {
     }
 
     // 2. HR / Manager / Admin Approval & Rejection
-    const canApprove = session.role === "Admin" || session.role === "Manager" || session.role === "HR" || session.role === "OPS";
+    const dataScope = await getUserDataScope(session);
+    const roleKey = normalizeRoleKey(session.role);
+    const canApprove = session.role === "Admin" || session.role === "Manager" || session.role === "HR" || session.role === "OPS" || roleKey === "HR" || dataScope.canViewFeature("approveTimesheets");
     if (!canApprove) {
       return NextResponse.json({ error: "Forbidden: Access denied" }, { status: 403 });
     }
@@ -385,8 +398,9 @@ export async function DELETE(request: Request) {
       tenantId: new mongoose.Types.ObjectId(session.tenantId),
     };
 
-    // Non-admin / non-ops can only delete their own entries
-    const isPrivileged = session.role === "Admin" || session.role === "OPS";
+    // Non-admin / non-ops / non-hr can only delete their own entries
+    const roleKey = normalizeRoleKey(session.role);
+    const isPrivileged = session.role === "Admin" || session.role === "OPS" || session.role === "HR" || roleKey === "HR";
     if (!isPrivileged) {
       query.userId = new mongoose.Types.ObjectId(session.userId);
     }

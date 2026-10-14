@@ -95,6 +95,13 @@ function CalendarPageContent() {
   const [timesheetRowToDelete, setTimesheetRowToDelete] = useState<{ index: number; project: string; taskName: string } | null>(null);
   const [deletingTimesheetRow, setDeletingTimesheetRow] = useState<boolean>(false);
 
+  // Elevated Timesheet States (HR, Admin, OPS, Manager)
+  const [selectedTimesheetUser, setSelectedTimesheetUser] = useState<string>("myself");
+  const [teamMembersList, setTeamMembersList] = useState<any[]>([]);
+  const [teamTimesheetEntries, setTeamTimesheetEntries] = useState<any[]>([]);
+  const [teamTimesheetSearch, setTeamTimesheetSearch] = useState<string>("");
+  const [teamTimesheetStatusFilter, setTeamTimesheetStatusFilter] = useState<string>("All");
+
   // Attendance States
   const [attendanceToday, setAttendanceToday] = useState<any>(null);
   const [attendanceHistory, setAttendanceHistory] = useState<any[]>([]);
@@ -375,9 +382,22 @@ function CalendarPageContent() {
     currentUser?.role === "Admin" ||
     currentUser?.role === "OPS" ||
     currentUser?.role === "Manager" ||
+    currentUser?.role === "HR" ||
     can("approveTimesheets") ||
     can("viewTeamTimesheets")
   );
+
+  const fetchTeamMembers = async () => {
+    try {
+      const res = await fetch("/api/team?activeOnly=true");
+      if (res.ok) {
+        const data = await res.json();
+        setTeamMembersList(data.users || data.team || []);
+      }
+    } catch (e) {
+      console.error("Failed to load team members for timesheets:", e);
+    }
+  };
 
   const fetchEvents = async () => {
     try {
@@ -439,7 +459,7 @@ function CalendarPageContent() {
     return [];
   };
 
-  const fetchTimesheets = async (passedProjects?: string[]) => {
+  const fetchTimesheets = async (passedProjects?: string[], targetUser: string = selectedTimesheetUser) => {
     try {
       const activeProjects = passedProjects !== undefined ? passedProjects : projectsList;
       const startStr = timesheetWeekStart.toISOString();
@@ -447,50 +467,63 @@ function CalendarPageContent() {
       end.setDate(end.getDate() + 6);
       const endStr = end.toISOString();
 
-      const res = await fetch(`/api/timesheets?start=${startStr}&end=${endStr}`);
-      if (res.ok) {
-        const data = await res.json();
-        setTimesheetEntries(data.entries || []);
+      if (targetUser === "all") {
+        const res = await fetch(`/api/timesheets?team=true&start=${startStr}&end=${endStr}`);
+        if (res.ok) {
+          const data = await res.json();
+          setTeamTimesheetEntries(data.entries || []);
+        }
+      } else {
+        const userParam = targetUser !== "myself" ? `&userId=${targetUser}` : "";
+        const res = await fetch(`/api/timesheets?start=${startStr}&end=${endStr}${userParam}`);
+        if (res.ok) {
+          const data = await res.json();
+          setTimesheetEntries(data.entries || []);
 
-        if (data.entries && data.entries.length > 0) {
-          const rowsMap: { [key: string]: any } = {};
-          data.entries.forEach((entry: any) => {
-            const key = `${entry.project}-${entry.taskName}`;
-            const entryDate = new Date(entry.date);
-            const dayIndex = (entryDate.getDay() + 6) % 7;
-            
-            if (!rowsMap[key]) {
-              rowsMap[key] = {
-                project: entry.project,
-                taskName: entry.taskName,
-                comment: entry.comment || "",
-                mon: 0, tue: 0, wed: 0, thu: 0, fri: 0, sat: 0,
-                isBillable: entry.isBillable !== false,
-                status: entry.status || "Draft"
-              };
-            } else if (!rowsMap[key].comment && entry.comment) {
-              rowsMap[key].comment = entry.comment;
-            }
-            
-            if (dayIndex === 0) rowsMap[key].mon = entry.hours;
-            else if (dayIndex === 1) rowsMap[key].tue = entry.hours;
-            else if (dayIndex === 2) rowsMap[key].wed = entry.hours;
-            else if (dayIndex === 3) rowsMap[key].thu = entry.hours;
-            else if (dayIndex === 4) rowsMap[key].fri = entry.hours;
-            else if (dayIndex === 5) rowsMap[key].sat = entry.hours;
-          });
-          setTimesheetRows(Object.values(rowsMap));
-        } else {
-          if (activeProjects.length > 0) {
-            setTimesheetRows([
-              { project: activeProjects[0], taskName: "", comment: "", mon: 0, tue: 0, wed: 0, thu: 0, fri: 0, sat: 0, isBillable: true },
-            ]);
+          if (data.entries && data.entries.length > 0) {
+            const rowsMap: { [key: string]: any } = {};
+            data.entries.forEach((entry: any) => {
+              const key = `${entry.project}-${entry.taskName}`;
+              const entryDate = new Date(entry.date);
+              const dayIndex = (entryDate.getDay() + 6) % 7;
+              
+              if (!rowsMap[key]) {
+                rowsMap[key] = {
+                  project: entry.project,
+                  taskName: entry.taskName,
+                  comment: entry.comment || "",
+                  mon: 0, tue: 0, wed: 0, thu: 0, fri: 0, sat: 0,
+                  isBillable: entry.isBillable !== false,
+                  status: entry.status || "Draft",
+                  entryIds: [entry._id],
+                };
+              } else {
+                if (!rowsMap[key].comment && entry.comment) {
+                  rowsMap[key].comment = entry.comment;
+                }
+                rowsMap[key].entryIds = [...(rowsMap[key].entryIds || []), entry._id];
+              }
+              
+              if (dayIndex === 0) rowsMap[key].mon = entry.hours;
+              else if (dayIndex === 1) rowsMap[key].tue = entry.hours;
+              else if (dayIndex === 2) rowsMap[key].wed = entry.hours;
+              else if (dayIndex === 3) rowsMap[key].thu = entry.hours;
+              else if (dayIndex === 4) rowsMap[key].fri = entry.hours;
+              else if (dayIndex === 5) rowsMap[key].sat = entry.hours;
+            });
+            setTimesheetRows(Object.values(rowsMap));
           } else {
-            setTimesheetRows([]);
+            if (targetUser === "myself" && activeProjects.length > 0) {
+              setTimesheetRows([
+                { project: activeProjects[0], taskName: "", comment: "", mon: 0, tue: 0, wed: 0, thu: 0, fri: 0, sat: 0, isBillable: true },
+              ]);
+            } else {
+              setTimesheetRows([]);
+            }
           }
         }
       }  
-      if (can("approveTimesheets") || isOPS || isAdmin || currentUser?.role === "Admin" || currentUser?.role === "OPS" || currentUser?.role === "Manager" || can("viewTeamTimesheets")) {
+      if (can("approveTimesheets") || isOPS || isAdmin || currentUser?.role === "Admin" || currentUser?.role === "OPS" || currentUser?.role === "Manager" || currentUser?.role === "HR" || can("viewTeamTimesheets")) {
         const pendingRes = await fetch("/api/timesheets?pending=true");
         if (pendingRes.ok) {
           const pendingData = await pendingRes.json();
@@ -533,7 +566,10 @@ function CalendarPageContent() {
         else if (activeTab === "timesheets") {
           const projs = await fetchProjects();
           await fetchAssignedTasks();
-          await fetchTimesheets(projs);
+          if (isManagerOrAdmin) {
+            await fetchTeamMembers();
+          }
+          await fetchTimesheets(projs, selectedTimesheetUser);
         }
         else if (activeTab === "attendance") {
           await fetchAttendance();
@@ -548,7 +584,7 @@ function CalendarPageContent() {
       }
     };
     loadData();
-  }, [activeTab, timesheetWeekStart, mounted, isAdmin, isOPS, currentUser?.role]);
+  }, [activeTab, timesheetWeekStart, selectedTimesheetUser, mounted, isAdmin, isOPS, currentUser?.role, isManagerOrAdmin]);
 
   useEffect(() => {
     if (!mounted) return;
@@ -974,6 +1010,26 @@ function CalendarPageContent() {
     }
   };
 
+  const handleBulkTimesheetApproval = async (entryIds: string[], status: "Approved" | "Rejected") => {
+    if (!entryIds || entryIds.length === 0) return;
+    try {
+      const res = await fetch("/api/timesheets", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ entryIds, status }),
+      });
+      if (res.ok) {
+        await fetchTimesheets();
+        showToast(`${entryIds.length} timesheet entry(ies) ${status.toLowerCase()}!`, "success");
+      } else {
+        showToast(await readApiError(res, "Failed to process timesheet entries."), "error");
+      }
+    } catch (err) {
+      console.error(err);
+      showToast("Failed to process timesheet entries.", "error");
+    }
+  };
+
   const handleDuplicateTimesheetRow = (idx: number) => {
     const row = timesheetRows[idx];
     if (!row) return;
@@ -1013,6 +1069,31 @@ function CalendarPageContent() {
   };
 
   const exportTimesheetToCSV = () => {
+    if (selectedTimesheetUser === "all") {
+      if (teamTimesheetSummary.length === 0) {
+        showToast("No team timesheet data to export.", "error");
+        return;
+      }
+      const weekLabel = timesheetWeekStart.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+      let csv = `Team Timesheets Summary - Week of ${weekLabel}\n`;
+      csv += `Employee,Role,Department,Mon,Tue,Wed,Thu,Fri,Sat,Total Hours,Billable,Non-Billable,Status\n`;
+      teamTimesheetSummary.forEach((item) => {
+        const escapeCsv = (val: string) => `"${(val || "").replace(/"/g, '""')}"`;
+        csv += `${escapeCsv(item.user?.name || "Unknown")},${escapeCsv(item.user?.role || "")},${escapeCsv(item.user?.department || "")},${item.mon},${item.tue},${item.wed},${item.thu},${item.fri},${item.sat},${item.total},${item.billable},${item.nonBillable},${item.status}\n`;
+      });
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.setAttribute("href", url);
+      link.setAttribute("download", `team_timesheets_${timesheetWeekStart.toISOString().split("T")[0]}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      showToast("Team timesheet summary exported to CSV successfully!", "success");
+      return;
+    }
+
     if (timesheetRows.length === 0) {
       showToast("No timesheet entries to export.", "error");
       return;
@@ -1070,6 +1151,122 @@ function CalendarPageContent() {
     });
     return totals;
   }, [timesheetRows]);
+
+  const teamTimesheetSummary = useMemo(() => {
+    if (selectedTimesheetUser !== "all") return [];
+    
+    const userMap = new Map<string, {
+      userId: string;
+      user: any;
+      entries: any[];
+      mon: number;
+      tue: number;
+      wed: number;
+      thu: number;
+      fri: number;
+      sat: number;
+      total: number;
+      billable: number;
+      nonBillable: number;
+      status: string;
+      entryIds: string[];
+      pendingIds: string[];
+    }>();
+
+    teamMembersList.forEach((member: any) => {
+      userMap.set(String(member._id), {
+        userId: String(member._id),
+        user: member,
+        entries: [],
+        mon: 0,
+        tue: 0,
+        wed: 0,
+        thu: 0,
+        fri: 0,
+        sat: 0,
+        total: 0,
+        billable: 0,
+        nonBillable: 0,
+        status: "Not Logged",
+        entryIds: [],
+        pendingIds: [],
+      });
+    });
+
+    teamTimesheetEntries.forEach((entry: any) => {
+      const uId = String(entry.userId?._id || entry.userId);
+      let record = userMap.get(uId);
+      if (!record) {
+        record = {
+          userId: uId,
+          user: entry.userId || { name: "Unknown", role: "Employee" },
+          entries: [],
+          mon: 0,
+          tue: 0,
+          wed: 0,
+          thu: 0,
+          fri: 0,
+          sat: 0,
+          total: 0,
+          billable: 0,
+          nonBillable: 0,
+          status: "Not Logged",
+          entryIds: [],
+          pendingIds: [],
+        };
+        userMap.set(uId, record);
+      }
+      record.entries.push(entry);
+      record.entryIds.push(entry._id);
+      if (entry.status === "Pending" || entry.status === "Submitted") {
+        record.pendingIds.push(entry._id);
+      }
+
+      const hrs = Number(entry.hours) || 0;
+      record.total += hrs;
+      if (entry.isBillable !== false) record.billable += hrs;
+      else record.nonBillable += hrs;
+
+      const entryDate = new Date(entry.date);
+      const dayIndex = (entryDate.getDay() + 6) % 7;
+      if (dayIndex === 0) record.mon += hrs;
+      else if (dayIndex === 1) record.tue += hrs;
+      else if (dayIndex === 2) record.wed += hrs;
+      else if (dayIndex === 3) record.thu += hrs;
+      else if (dayIndex === 4) record.fri += hrs;
+      else if (dayIndex === 5) record.sat += hrs;
+    });
+
+    const list = Array.from(userMap.values()).map((item) => {
+      if (item.entries.length === 0) {
+        item.status = "Not Logged";
+      } else if (item.entries.some((e: any) => e.status === "Pending" || e.status === "Submitted")) {
+        item.status = "Pending";
+      } else if (item.entries.every((e: any) => e.status === "Approved")) {
+        item.status = "Approved";
+      } else if (item.entries.some((e: any) => e.status === "Rejected")) {
+        item.status = "Rejected";
+      } else {
+        item.status = "Draft";
+      }
+      return item;
+    });
+
+    return list.filter((item) => {
+      const nameMatch = !teamTimesheetSearch ||
+        (item.user?.name || "").toLowerCase().includes(teamTimesheetSearch.toLowerCase()) ||
+        (item.user?.email || "").toLowerCase().includes(teamTimesheetSearch.toLowerCase()) ||
+        (item.user?.department || "").toLowerCase().includes(teamTimesheetSearch.toLowerCase());
+      
+      const statusMatch = teamTimesheetStatusFilter === "All" || item.status === teamTimesheetStatusFilter;
+      return nameMatch && statusMatch;
+    });
+  }, [selectedTimesheetUser, teamMembersList, teamTimesheetEntries, teamTimesheetSearch, teamTimesheetStatusFilter]);
+
+  const selectedMemberObj = useMemo(() => {
+    if (!selectedTimesheetUser || selectedTimesheetUser === "myself" || selectedTimesheetUser === "all") return null;
+    return teamMembersList.find((m: any) => String(m._id) === selectedTimesheetUser) || null;
+  }, [teamMembersList, selectedTimesheetUser]);
 
 
   const getDaysInMonth = () => {
@@ -2045,30 +2242,70 @@ function CalendarPageContent() {
                 <div className="space-y-1">
                   <div className="flex items-center gap-2.5 flex-wrap">
                     <CardTitle className="text-lg font-bold flex items-center gap-2">
-                      <i className="fa-solid fa-file-csv text-primary text-base" /> Log Weekly Hours
+                      <i className="fa-solid fa-file-csv text-primary text-base" />
+                      {selectedTimesheetUser === "all"
+                        ? "All Team Timesheets"
+                        : selectedTimesheetUser !== "myself"
+                        ? `${selectedMemberObj?.name || "Employee"}'s Timesheet`
+                        : "Log Weekly Hours"}
                     </CardTitle>
                     {/* Week Status Badge */}
-                    <span
-                      className={cn(
-                        "text-[11px] font-semibold px-2.5 py-0.5 rounded-full border inline-flex items-center gap-1.5",
-                        currentWeekStatus === "Approved" && "bg-emerald-500/10 text-emerald-500 border-emerald-500/20",
-                        currentWeekStatus === "Pending" && "bg-amber-500/10 text-amber-500 border-amber-500/20",
-                        currentWeekStatus === "Rejected" && "bg-rose-500/10 text-rose-500 border-rose-500/20",
-                        currentWeekStatus === "Draft" && "bg-muted text-muted-foreground border-border"
-                      )}
-                    >
-                      {currentWeekStatus === "Approved" && <i className="fa-solid fa-circle-check text-[10px]" />}
-                      {currentWeekStatus === "Pending" && <i className="fa-solid fa-clock-rotate-left text-[10px]" />}
-                      {currentWeekStatus === "Rejected" && <i className="fa-solid fa-circle-xmark text-[10px]" />}
-                      {currentWeekStatus === "Draft" && <i className="fa-solid fa-pen-ruler text-[10px]" />}
-                      {currentWeekStatus === "Pending" ? "Pending Approval" : currentWeekStatus}
-                    </span>
+                    {selectedTimesheetUser !== "all" && (
+                      <span
+                        className={cn(
+                          "text-[11px] font-semibold px-2.5 py-0.5 rounded-full border inline-flex items-center gap-1.5",
+                          currentWeekStatus === "Approved" && "bg-emerald-500/10 text-emerald-500 border-emerald-500/20",
+                          currentWeekStatus === "Pending" && "bg-amber-500/10 text-amber-500 border-amber-500/20",
+                          currentWeekStatus === "Rejected" && "bg-rose-500/10 text-rose-500 border-rose-500/20",
+                          currentWeekStatus === "Draft" && "bg-muted text-muted-foreground border-border"
+                        )}
+                      >
+                        {currentWeekStatus === "Approved" && <i className="fa-solid fa-circle-check text-[10px]" />}
+                        {currentWeekStatus === "Pending" && <i className="fa-solid fa-clock-rotate-left text-[10px]" />}
+                        {currentWeekStatus === "Rejected" && <i className="fa-solid fa-circle-xmark text-[10px]" />}
+                        {currentWeekStatus === "Draft" && <i className="fa-solid fa-pen-ruler text-[10px]" />}
+                        {currentWeekStatus === "Pending" ? "Pending Approval" : currentWeekStatus}
+                      </span>
+                    )}
                   </div>
-                  <CardDescription>Record daily project hours with billable tracking and approvals</CardDescription>
+                  <CardDescription>
+                    {selectedTimesheetUser === "all"
+                      ? "Weekly aggregated hours and submission review for all team members"
+                      : selectedTimesheetUser !== "myself"
+                      ? `Review project hours and approval status for ${selectedMemberObj?.name || "team member"}`
+                      : "Record daily project hours with billable tracking and approvals"}
+                  </CardDescription>
                 </div>
                 
                 {/* Week Selector & Quick Tools */}
                 <div className="flex items-center gap-2 flex-wrap">
+                  {isManagerOrAdmin && (
+                    <div className="flex items-center gap-1.5 bg-muted/40 px-2.5 py-1 rounded-lg border border-border">
+                      <i className="fa-solid fa-users text-primary text-xs" />
+                      <select
+                        value={selectedTimesheetUser}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setSelectedTimesheetUser(val);
+                          fetchTimesheets(undefined, val);
+                        }}
+                        className="bg-transparent text-xs font-semibold text-foreground focus:outline-none cursor-pointer max-w-[200px] truncate"
+                        title="Select whose timesheet to view"
+                      >
+                        <option value="myself">👤 My Timesheet (Self)</option>
+                        <option value="all">👥 All Team Members (Weekly Overview)</option>
+                        {teamMembersList.length > 0 && (
+                          <optgroup label="── Individual Team Members ──">
+                            {teamMembersList.map((m) => (
+                              <option key={m._id} value={m._id}>
+                                {m.name} ({m.role}{m.department ? ` • ${m.department}` : ""})
+                              </option>
+                            ))}
+                          </optgroup>
+                        )}
+                      </select>
+                    </div>
+                  )}
                   <Button
                     variant="outline"
                     size="sm"
@@ -2121,7 +2358,7 @@ function CalendarPageContent() {
                     size="sm"
                     onClick={exportTimesheetToCSV}
                     className="text-xs h-8 gap-1.5"
-                    title="Download Week Timesheet as CSV"
+                    title={selectedTimesheetUser === "all" ? "Download Team Timesheets as CSV" : "Download Week Timesheet as CSV"}
                   >
                     <i className="fa-solid fa-file-csv text-primary text-xs" /> CSV
                   </Button>
@@ -2133,160 +2370,436 @@ function CalendarPageContent() {
                     <i className="fa-solid fa-circle-notch fa-spin text-2xl text-primary" />
                     <span className="text-xs font-medium">Loading timesheets...</span>
                   </div>
-                ) : projectsList.length === 0 && timesheetRows.length === 0 ? (
-                  <div className="p-8 text-center bg-muted/20 border border-dashed border-border rounded-xl space-y-3">
-                    <div className="w-12 h-12 rounded-full bg-primary/10 text-primary flex items-center justify-center mx-auto text-xl">
-                      <i className="fa-solid fa-folder-closed" />
+                ) : selectedTimesheetUser === "all" ? (
+                  <div className="space-y-4">
+                    {/* Filter & Search Bar */}
+                    <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-muted/20 p-3 rounded-lg border border-border">
+                      <div className="flex items-center gap-2 w-full sm:w-auto">
+                        <i className="fa-solid fa-magnifying-glass text-muted-foreground text-xs" />
+                        <Input
+                          placeholder="Filter by employee name, role or dept..."
+                          value={teamTimesheetSearch}
+                          onChange={(e) => setTeamTimesheetSearch(e.target.value)}
+                          className="w-full sm:w-64 h-8 text-xs"
+                        />
+                      </div>
+                      <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                        <span className="text-xs text-muted-foreground">Status:</span>
+                        <select
+                          value={teamTimesheetStatusFilter}
+                          onChange={(e) => setTeamTimesheetStatusFilter(e.target.value)}
+                          className="h-8 px-2.5 text-xs bg-background border border-border rounded-md text-foreground cursor-pointer"
+                        >
+                          <option value="All">All Statuses</option>
+                          <option value="Approved">Approved</option>
+                          <option value="Pending">Pending Approval</option>
+                          <option value="Draft">Draft</option>
+                          <option value="Not Logged">Not Logged</option>
+                        </select>
+                      </div>
                     </div>
-                    <h4 className="font-bold text-base text-foreground">No Projects Assigned</h4>
-                    <p className="text-xs text-muted-foreground max-w-md mx-auto">
-                      For data privacy, employees and freelancers can only view and log timesheets for projects and tasks assigned to them. Once you are assigned to a project or task by your manager or administrator, you will be able to log your hours here.
-                    </p>
+
+                    {/* Team Summary KPI row */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      <div className="p-3 rounded-lg border border-border bg-card">
+                        <p className="text-[11px] text-muted-foreground">Total Team Hours</p>
+                        <p className="text-lg font-bold text-foreground font-mono">
+                          {teamTimesheetSummary.reduce((acc, curr) => acc + curr.total, 0)} hrs
+                        </p>
+                      </div>
+                      <div className="p-3 rounded-lg border border-border bg-card">
+                        <p className="text-[11px] text-muted-foreground">Billable Hours</p>
+                        <p className="text-lg font-bold text-emerald-500 font-mono">
+                          {teamTimesheetSummary.reduce((acc, curr) => acc + curr.billable, 0)} hrs
+                        </p>
+                      </div>
+                      <div className="p-3 rounded-lg border border-border bg-card">
+                        <p className="text-[11px] text-muted-foreground">Pending Approvals</p>
+                        <p className="text-lg font-bold text-amber-500 font-mono">
+                          {teamTimesheetSummary.filter((t) => t.status === "Pending").length}
+                        </p>
+                      </div>
+                      <div className="p-3 rounded-lg border border-border bg-card">
+                        <p className="text-[11px] text-muted-foreground">Active Submissions</p>
+                        <p className="text-lg font-bold text-primary font-mono">
+                          {teamTimesheetSummary.filter((t) => t.total > 0).length} / {teamTimesheetSummary.length}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Responsive Table */}
+                    <div className="overflow-x-auto rounded-lg border border-border">
+                      <table className="w-full text-xs text-left border-collapse">
+                        <thead>
+                          <tr className="bg-muted/40 border-b border-border text-muted-foreground font-semibold uppercase">
+                            <th className="py-2.5 px-3">Team Member</th>
+                            <th className="py-2.5 px-1.5 text-center w-10">Mon</th>
+                            <th className="py-2.5 px-1.5 text-center w-10">Tue</th>
+                            <th className="py-2.5 px-1.5 text-center w-10">Wed</th>
+                            <th className="py-2.5 px-1.5 text-center w-10">Thu</th>
+                            <th className="py-2.5 px-1.5 text-center w-10">Fri</th>
+                            <th className="py-2.5 px-1.5 text-center w-10">Sat</th>
+                            <th className="py-2.5 px-2 text-center w-14 font-bold">Total</th>
+                            <th className="py-2.5 px-2 text-center w-24">Status</th>
+                            <th className="py-2.5 px-3 text-right">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-border">
+                          {teamTimesheetSummary.length === 0 ? (
+                            <tr>
+                              <td colSpan={10} className="py-8 text-center text-muted-foreground">
+                                No team members match the search or filter.
+                              </td>
+                            </tr>
+                          ) : (
+                            teamTimesheetSummary.map((item) => (
+                              <tr key={item.userId} className="hover:bg-accent/10 transition-colors">
+                                <td className="py-2.5 px-3">
+                                  <div className="flex items-center gap-2">
+                                    <div className="w-7 h-7 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-xs shrink-0">
+                                      {item.user?.photoUrl ? (
+                                        <img src={item.user.photoUrl} alt="" className="w-7 h-7 rounded-full object-cover" />
+                                      ) : (
+                                        item.user?.name?.charAt(0) || "U"
+                                      )}
+                                    </div>
+                                    <div>
+                                      <p className="font-semibold text-foreground text-xs leading-tight">{item.user?.name || "Unknown"}</p>
+                                      <p className="text-[10px] text-muted-foreground">{item.user?.role || "Employee"}{item.user?.department ? ` • ${item.user.department}` : ""}</p>
+                                    </div>
+                                  </div>
+                                </td>
+                                <td className="py-2.5 px-1.5 text-center text-muted-foreground font-mono">{item.mon || "—"}</td>
+                                <td className="py-2.5 px-1.5 text-center text-muted-foreground font-mono">{item.tue || "—"}</td>
+                                <td className="py-2.5 px-1.5 text-center text-muted-foreground font-mono">{item.wed || "—"}</td>
+                                <td className="py-2.5 px-1.5 text-center text-muted-foreground font-mono">{item.thu || "—"}</td>
+                                <td className="py-2.5 px-1.5 text-center text-muted-foreground font-mono">{item.fri || "—"}</td>
+                                <td className="py-2.5 px-1.5 text-center text-muted-foreground font-mono">{item.sat || "—"}</td>
+                                <td className="py-2.5 px-2 text-center">
+                                  <span className={cn(
+                                    "font-bold font-mono px-1.5 py-0.5 rounded text-[11px]",
+                                    item.total > 0 ? "bg-primary/10 text-primary" : "text-muted-foreground"
+                                  )}>
+                                    {item.total > 0 ? `${item.total}h` : "0h"}
+                                  </span>
+                                </td>
+                                <td className="py-2.5 px-2 text-center">
+                                  <span className={cn(
+                                    "text-[10px] font-semibold px-2 py-0.5 rounded-full border inline-flex items-center gap-1",
+                                    item.status === "Approved" && "bg-emerald-500/10 text-emerald-500 border-emerald-500/20",
+                                    item.status === "Pending" && "bg-amber-500/10 text-amber-500 border-amber-500/20",
+                                    item.status === "Rejected" && "bg-rose-500/10 text-rose-500 border-rose-500/20",
+                                    item.status === "Draft" && "bg-muted text-muted-foreground border-border",
+                                    item.status === "Not Logged" && "bg-muted/50 text-muted-foreground/70 border-border/50"
+                                  )}>
+                                    {item.status}
+                                  </span>
+                                </td>
+                                <td className="py-2.5 px-3 text-right">
+                                  <div className="flex items-center justify-end gap-1.5">
+                                    {item.total > 0 && (
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        className="h-7 text-[11px] px-2 gap-1"
+                                        onClick={() => {
+                                          setSelectedTimesheetUser(item.userId);
+                                          fetchTimesheets(undefined, item.userId);
+                                        }}
+                                        title="View Detailed Timesheet"
+                                      >
+                                        <i className="fa-solid fa-eye text-xs" /> View
+                                      </Button>
+                                    )}
+                                    {item.pendingIds.length > 0 && (
+                                      <Button
+                                        size="sm"
+                                        color="primary"
+                                        className="h-7 text-[11px] px-2 gap-1"
+                                        onClick={() => handleBulkTimesheetApproval(item.pendingIds, "Approved")}
+                                        title="Approve Week"
+                                      >
+                                        <i className="fa-solid fa-check text-xs" /> Approve
+                                      </Button>
+                                    )}
+                                  </div>
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
                 ) : (
                   <>
-                    <div className="overflow-x-auto">
-                    <table className="w-full text-sm text-left border-collapse">
-                      <thead>
-                        <tr className="border-b border-border text-muted-foreground text-xs font-semibold uppercase">
-                          <th className="py-2.5 pr-2 min-w-[140px]">Project</th>
-                          <th className="py-2.5 px-1.5 min-w-[120px]">Task Description</th>
-                          <th className="py-2.5 px-1.5 min-w-[130px]">Comment / Notes</th>
-                          <th className="py-2.5 px-1 text-center w-12">Mon</th>
-                          <th className="py-2.5 px-1 text-center w-12">Tue</th>
-                          <th className="py-2.5 px-1 text-center w-12">Wed</th>
-                          <th className="py-2.5 px-1 text-center w-12">Thu</th>
-                          <th className="py-2.5 px-1 text-center w-12">Fri</th>
-                          <th className="py-2.5 px-1 text-center w-12">Sat</th>
-                          <th className="py-2.5 px-1 text-center w-14">Total</th>
-                          <th className="py-2.5 px-1 text-center w-14">Billable</th>
-                          <th className="py-2.5 pl-1 pr-1 text-center w-14">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-border/60">
-                        {timesheetRows.map((row, idx) => {
-                          const rowTotal = (Number(row.mon) || 0) + (Number(row.tue) || 0) + (Number(row.wed) || 0) + (Number(row.thu) || 0) + (Number(row.fri) || 0) + (Number(row.sat) || 0);
-                          return (
-                            <tr key={idx} className="hover:bg-accent/10 transition-colors">
-                              <td className="py-3 pr-2">
-                                <select
-                                  value={row.project}
-                                  onChange={(e) => handleRowChange(idx, "project", e.target.value)}
-                                  className="w-full h-9 px-2 text-xs bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-                                >
-                                  {!row.project && <option value="">Select assigned project...</option>}
-                                  {row.project && !projectsList.includes(row.project) && (
-                                    <option value={row.project}>{row.project}</option>
-                                  )}
-                                  {Array.from(new Set(projectsList)).map((proj, pIdx) => (
-                                    <option key={`${proj}-${pIdx}`} value={proj}>{proj}</option>
-                                  ))}
-                                </select>
-                              </td>
-                              <td className="py-3 px-1.5">
-                                <Input
-                                  value={row.taskName}
-                                  onChange={(e) => handleRowChange(idx, "taskName", e.target.value)}
-                                  placeholder="e.g. Code Review"
-                                  list={`assigned-tasks-list-${idx}`}
-                                  className="h-9 text-xs"
-                                />
-                                <datalist id={`assigned-tasks-list-${idx}`}>
-                                  {assignedTasks
-                                    .filter((t) => !row.project || (t.projectId?.name || "").trim().toLowerCase() === (row.project || "").trim().toLowerCase())
-                                    .map((t, tIdx) => (
-                                      <option key={`${t._id || tIdx}`} value={t.title}>
-                                        {t.title} ({t.status || "To Do"})
-                                      </option>
-                                    ))}
-                                </datalist>
-                              </td>
-                            <td className="py-3 px-1.5">
-                              <Input
-                                value={row.comment || ""}
-                                onChange={(e) => handleRowChange(idx, "comment", e.target.value)}
-                                placeholder="Add work notes / comment..."
-                                className="h-9 text-xs"
-                              />
-                            </td>
-                            {["mon", "tue", "wed", "thu", "fri", "sat"].map((day) => (
-                              <td key={day} className="py-3 px-1">
-                                <Input
-                                  type="number"
-                                  min="0"
-                                  max="24"
-                                  step="0.5"
-                                  placeholder="0"
-                                  value={row[day] || ""}
-                                  onChange={(e) => {
-                                    const val = parseFloat(e.target.value);
-                                    handleRowChange(idx, day, isNaN(val) ? 0 : val);
-                                  }}
-                                  className="h-9 w-12 text-center text-xs p-1 no-spinner font-medium"
-                                />
-                              </td>
-                            ))}
-                            <td className="py-3 px-1 text-center">
-                              <span className={cn(
-                                "text-xs font-semibold px-1.5 py-0.5 rounded border inline-block",
-                                rowTotal > 0 ? "bg-primary/10 text-primary border-primary/20" : "text-muted-foreground border-transparent"
-                              )}>
-                                {rowTotal > 0 ? `${rowTotal}h` : "—"}
-                              </span>
-                            </td>
-                            <td className="py-3 px-1 text-center">
-                              <input
-                                type="checkbox"
-                                checked={row.isBillable}
-                                onChange={(e) => handleRowChange(idx, "isBillable", e.target.checked)}
-                                className="rounded border-border text-primary w-4 h-4 cursor-pointer"
-                                title={row.isBillable ? "Billable task" : "Non-billable internal task"}
-                              />
-                            </td>
-                            <td className="py-3 pl-1 pr-1 text-center">
-                              <div className="flex items-center justify-center gap-1">
-                                <button
-                                  type="button"
-                                  onClick={() => handleDuplicateTimesheetRow(idx)}
-                                  className="text-muted-foreground hover:text-primary transition-colors p-1"
-                                  title="Duplicate Row"
-                                >
-                                  <i className="fa-solid fa-copy text-xs" />
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteTimesheetRow(idx)}
-                                  className="text-muted-foreground hover:text-destructive transition-colors p-1"
-                                  title="Delete Row"
-                                >
-                                  <i className="fa-solid fa-trash-can text-xs" />
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
+                    {/* Elevated Review Banner when viewing an employee's timesheet */}
+                    {selectedTimesheetUser !== "myself" && (
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 bg-primary/10 border border-primary/20 rounded-lg text-xs mb-3">
+                        <div className="flex items-center gap-2">
+                          <i className="fa-solid fa-user-clock text-primary text-base" />
+                          <div>
+                            <span className="font-bold text-foreground">
+                              Reviewing {selectedMemberObj?.name || "Team Member"}&apos;s Timesheet
+                            </span>
+                            <span className="text-muted-foreground ml-2">
+                              ({selectedMemberObj?.role || "Employee"}{selectedMemberObj?.department ? ` • ${selectedMemberObj.department}` : ""})
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {timesheetEntries.some((e: any) => e.status === "Pending" || e.status === "Submitted") && (
+                            <>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 text-xs text-destructive hover:bg-destructive/10 border-destructive/20 gap-1"
+                                onClick={() => {
+                                  const pendingIds = timesheetEntries
+                                    .filter((e: any) => e.status === "Pending" || e.status === "Submitted")
+                                    .map((e: any) => e._id);
+                                  handleBulkTimesheetApproval(pendingIds, "Rejected");
+                                }}
+                              >
+                                <i className="fa-solid fa-xmark" /> Reject Week
+                              </Button>
+                              <Button
+                                size="sm"
+                                color="primary"
+                                className="h-7 text-xs gap-1"
+                                onClick={() => {
+                                  const pendingIds = timesheetEntries
+                                    .filter((e: any) => e.status === "Pending" || e.status === "Submitted")
+                                    .map((e: any) => e._id);
+                                  handleBulkTimesheetApproval(pendingIds, "Approved");
+                                }}
+                              >
+                                <i className="fa-solid fa-check" /> Approve Week
+                              </Button>
+                            </>
+                          )}
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 text-xs text-muted-foreground hover:text-foreground gap-1"
+                            onClick={() => {
+                              setSelectedTimesheetUser("myself");
+                              fetchTimesheets(undefined, "myself");
+                            }}
+                          >
+                            <i className="fa-solid fa-arrow-left" /> Back to My Timesheet
+                          </Button>
+                        </div>
+                      </div>
+                    )}
 
-                <div className="flex flex-col sm:flex-row justify-between items-center gap-4 pt-4 border-t border-border/65">
-                  <div className="flex items-center gap-2 w-full sm:w-auto">
-                    <Button variant="outline" size="sm" onClick={handleAddTimesheetRow} className="gap-1.5">
-                      <i className="fa-solid fa-plus text-xs" /> Add New Entry
-                    </Button>
-                  </div>
-                  <div className="flex gap-2 w-full sm:w-auto justify-end">
-                    <Button variant="outline" size="sm" onClick={() => handleSaveTimesheet("Draft")} className="gap-1.5">
-                      <i className="fa-solid fa-floppy-disk text-xs" /> Save Draft
-                    </Button>
-                    <Button color="primary" size="sm" onClick={() => handleSaveTimesheet("Pending")} className="gap-1.5 font-semibold">
-                      <i className="fa-solid fa-paper-plane text-xs" /> Submit Timesheet
-                    </Button>
-                  </div>
-                </div>
-              </>
-            )}
+                    {selectedTimesheetUser === "myself" && projectsList.length === 0 && timesheetRows.length === 0 ? (
+                      <div className="p-8 text-center bg-muted/20 border border-dashed border-border rounded-xl space-y-3">
+                        <div className="w-12 h-12 rounded-full bg-primary/10 text-primary flex items-center justify-center mx-auto text-xl">
+                          <i className="fa-solid fa-folder-closed" />
+                        </div>
+                        <h4 className="font-bold text-base text-foreground">No Projects Assigned</h4>
+                        <p className="text-xs text-muted-foreground max-w-md mx-auto">
+                          For data privacy, employees and freelancers can only view and log timesheets for projects and tasks assigned to them. Once you are assigned to a project or task by your manager or administrator, you will be able to log your hours here.
+                        </p>
+                      </div>
+                    ) : selectedTimesheetUser !== "myself" && timesheetRows.length === 0 ? (
+                      <div className="p-8 text-center bg-muted/20 border border-dashed border-border rounded-xl space-y-3">
+                        <div className="w-12 h-12 rounded-full bg-muted text-muted-foreground flex items-center justify-center mx-auto text-xl">
+                          <i className="fa-solid fa-calendar-xmark" />
+                        </div>
+                        <h4 className="font-bold text-base text-foreground">No Timesheet Entries Logged</h4>
+                        <p className="text-xs text-muted-foreground max-w-md mx-auto">
+                          {selectedMemberObj?.name || "This employee"} has not logged any project hours for this week yet.
+                        </p>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="overflow-x-auto">
+                        <table className="w-full text-sm text-left border-collapse">
+                          <thead>
+                            <tr className="border-b border-border text-muted-foreground text-xs font-semibold uppercase">
+                              <th className="py-2.5 pr-2 min-w-[140px]">Project</th>
+                              <th className="py-2.5 px-1.5 min-w-[120px]">Task Description</th>
+                              <th className="py-2.5 px-1.5 min-w-[130px]">Comment / Notes</th>
+                              <th className="py-2.5 px-1 text-center w-12">Mon</th>
+                              <th className="py-2.5 px-1 text-center w-12">Tue</th>
+                              <th className="py-2.5 px-1 text-center w-12">Wed</th>
+                              <th className="py-2.5 px-1 text-center w-12">Thu</th>
+                              <th className="py-2.5 px-1 text-center w-12">Fri</th>
+                              <th className="py-2.5 px-1 text-center w-12">Sat</th>
+                              <th className="py-2.5 px-1 text-center w-14">Total</th>
+                              <th className="py-2.5 px-1 text-center w-14">Billable</th>
+                              <th className="py-2.5 pl-1 pr-1 text-center w-14">Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-border/60">
+                            {timesheetRows.map((row, idx) => {
+                              const rowTotal = (Number(row.mon) || 0) + (Number(row.tue) || 0) + (Number(row.wed) || 0) + (Number(row.thu) || 0) + (Number(row.fri) || 0) + (Number(row.sat) || 0);
+                              return (
+                                <tr key={idx} className="hover:bg-accent/10 transition-colors">
+                                  <td className="py-3 pr-2">
+                                    <select
+                                      value={row.project}
+                                      onChange={(e) => handleRowChange(idx, "project", e.target.value)}
+                                      disabled={selectedTimesheetUser !== "myself"}
+                                      className="w-full h-9 px-2 text-xs bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-80 disabled:cursor-not-allowed"
+                                    >
+                                      {!row.project && <option value="">Select assigned project...</option>}
+                                      {row.project && !projectsList.includes(row.project) && (
+                                        <option value={row.project}>{row.project}</option>
+                                      )}
+                                      {Array.from(new Set(projectsList)).map((proj, pIdx) => (
+                                        <option key={`${proj}-${pIdx}`} value={proj}>{proj}</option>
+                                      ))}
+                                    </select>
+                                  </td>
+                                  <td className="py-3 px-1.5">
+                                    <Input
+                                      value={row.taskName}
+                                      onChange={(e) => handleRowChange(idx, "taskName", e.target.value)}
+                                      readOnly={selectedTimesheetUser !== "myself"}
+                                      placeholder="e.g. Code Review"
+                                      list={`assigned-tasks-list-${idx}`}
+                                      className="h-9 text-xs"
+                                    />
+                                    <datalist id={`assigned-tasks-list-${idx}`}>
+                                      {assignedTasks
+                                        .filter((t) => !row.project || (t.projectId?.name || "").trim().toLowerCase() === (row.project || "").trim().toLowerCase())
+                                        .map((t, tIdx) => (
+                                          <option key={`${t._id || tIdx}`} value={t.title}>
+                                            {t.title} ({t.status || "To Do"})
+                                          </option>
+                                        ))}
+                                    </datalist>
+                                  </td>
+                                  <td className="py-3 px-1.5">
+                                    <Input
+                                      value={row.comment || ""}
+                                      onChange={(e) => handleRowChange(idx, "comment", e.target.value)}
+                                      readOnly={selectedTimesheetUser !== "myself"}
+                                      placeholder="Add work notes / comment..."
+                                      className="h-9 text-xs"
+                                    />
+                                  </td>
+                                  {["mon", "tue", "wed", "thu", "fri", "sat"].map((day) => (
+                                    <td key={day} className="py-3 px-1">
+                                      <Input
+                                        type="number"
+                                        min="0"
+                                        max="24"
+                                        step="0.5"
+                                        placeholder="0"
+                                        readOnly={selectedTimesheetUser !== "myself"}
+                                        value={row[day] || ""}
+                                        onChange={(e) => {
+                                          const val = parseFloat(e.target.value);
+                                          handleRowChange(idx, day, isNaN(val) ? 0 : val);
+                                        }}
+                                        className="h-9 w-12 text-center text-xs p-1 no-spinner font-medium"
+                                      />
+                                    </td>
+                                  ))}
+                                  <td className="py-3 px-1 text-center">
+                                    <span className={cn(
+                                      "text-xs font-semibold px-1.5 py-0.5 rounded border inline-block",
+                                      rowTotal > 0 ? "bg-primary/10 text-primary border-primary/20" : "text-muted-foreground border-transparent"
+                                    )}>
+                                      {rowTotal > 0 ? `${rowTotal}h` : "—"}
+                                    </span>
+                                  </td>
+                                  <td className="py-3 px-1 text-center">
+                                    <input
+                                      type="checkbox"
+                                      checked={row.isBillable}
+                                      disabled={selectedTimesheetUser !== "myself"}
+                                      onChange={(e) => handleRowChange(idx, "isBillable", e.target.checked)}
+                                      className="rounded border-border text-primary w-4 h-4 cursor-pointer disabled:cursor-not-allowed"
+                                      title={row.isBillable ? "Billable task" : "Non-billable internal task"}
+                                    />
+                                  </td>
+                                  <td className="py-3 pl-1 pr-1 text-center">
+                                    <div className="flex items-center justify-center gap-1">
+                                      {selectedTimesheetUser === "myself" ? (
+                                        <>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleDuplicateTimesheetRow(idx)}
+                                            className="text-muted-foreground hover:text-primary transition-colors p-1"
+                                            title="Duplicate Row"
+                                          >
+                                            <i className="fa-solid fa-copy text-xs" />
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleDeleteTimesheetRow(idx)}
+                                            className="text-muted-foreground hover:text-destructive transition-colors p-1"
+                                            title="Delete Row"
+                                          >
+                                            <i className="fa-solid fa-trash-can text-xs" />
+                                          </button>
+                                        </>
+                                      ) : (
+                                        <span className={cn(
+                                          "text-[10px] font-semibold px-1.5 py-0.5 rounded",
+                                          row.status === "Approved" ? "text-emerald-500 bg-emerald-500/10" :
+                                          row.status === "Pending" ? "text-amber-500 bg-amber-500/10" :
+                                          "text-muted-foreground bg-muted"
+                                        )}>
+                                          {row.status || "Logged"}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      <div className="flex flex-col sm:flex-row justify-between items-center gap-4 pt-4 border-t border-border/65">
+                        <div className="flex items-center gap-2 w-full sm:w-auto">
+                          {selectedTimesheetUser === "myself" ? (
+                            <Button variant="outline" size="sm" onClick={handleAddTimesheetRow} className="gap-1.5">
+                              <i className="fa-solid fa-plus text-xs" /> Add New Entry
+                            </Button>
+                          ) : (
+                            <span className="text-xs text-muted-foreground flex items-center gap-1.5">
+                              <i className="fa-solid fa-circle-info text-primary text-xs" />
+                              Viewing timesheet entries for <strong>{selectedMemberObj?.name || "employee"}</strong>
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex gap-2 w-full sm:w-auto justify-end">
+                          {selectedTimesheetUser === "myself" ? (
+                            <>
+                              <Button variant="outline" size="sm" onClick={() => handleSaveTimesheet("Draft")} className="gap-1.5">
+                                <i className="fa-solid fa-floppy-disk text-xs" /> Save Draft
+                              </Button>
+                              <Button color="primary" size="sm" onClick={() => handleSaveTimesheet("Pending")} className="gap-1.5 font-semibold">
+                                <i className="fa-solid fa-paper-plane text-xs" /> Submit Timesheet
+                              </Button>
+                            </>
+                          ) : (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setSelectedTimesheetUser("myself");
+                                fetchTimesheets(undefined, "myself");
+                              }}
+                              className="gap-1.5"
+                            >
+                              <i className="fa-solid fa-user text-xs" /> Return to My Timesheet
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </>
+              )}
           </CardContent>
             </Card>
 
@@ -2296,86 +2809,139 @@ function CalendarPageContent() {
               <Card>
                 <CardHeader className="pb-3">
                   <CardTitle className="text-base font-bold flex items-center justify-between">
-                    <span>Week Summary</span>
+                    <span>{selectedTimesheetUser === "all" ? "Team Summary" : "Week Summary"}</span>
                     <span className="text-xs font-mono text-muted-foreground">
-                      {timesheetDailyTotals.grand} / 40 hrs
+                      {selectedTimesheetUser === "all"
+                        ? `${teamTimesheetSummary.reduce((acc, curr) => acc + curr.total, 0)} hrs`
+                        : `${timesheetDailyTotals.grand} / 40 hrs`}
                     </span>
                   </CardTitle>
-                  <CardDescription>Track weekly target and billable allocations</CardDescription>
+                  <CardDescription>
+                    {selectedTimesheetUser === "all"
+                      ? "Weekly aggregate statistics across team"
+                      : "Track weekly target and billable allocations"}
+                  </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4 text-sm">
-                  {/* Progress Bar towards 40 hrs target */}
-                  <div className="space-y-1.5 p-3 rounded-lg bg-muted/30 border border-border/50">
-                    <div className="flex justify-between text-xs font-semibold">
-                      <span className="text-foreground">Weekly Target (40 hrs)</span>
-                      <span className={cn(
-                        timesheetDailyTotals.grand >= 40 ? "text-emerald-500 font-bold" : "text-primary"
-                      )}>
-                        {Math.min(100, Math.round((timesheetDailyTotals.grand / 40) * 100))}%
-                      </span>
+                  {selectedTimesheetUser === "all" ? (
+                    <div className="divide-y divide-border/50">
+                      <div className="flex justify-between py-2">
+                        <span className="text-muted-foreground flex items-center gap-1.5">
+                          <i className="fa-solid fa-users text-xs text-primary" /> Total Team Members
+                        </span>
+                        <span className="font-bold text-foreground font-mono">
+                          {teamTimesheetSummary.length} members
+                        </span>
+                      </div>
+                      <div className="flex justify-between py-2">
+                        <span className="text-muted-foreground flex items-center gap-1.5">
+                          <i className="fa-solid fa-clock text-xs text-primary" /> Total Logged Hours
+                        </span>
+                        <span className="font-bold text-foreground font-mono">
+                          {teamTimesheetSummary.reduce((acc, curr) => acc + curr.total, 0)} hrs
+                        </span>
+                      </div>
+                      <div className="flex justify-between py-2">
+                        <span className="text-muted-foreground flex items-center gap-1.5">
+                          <i className="fa-solid fa-sack-dollar text-xs text-emerald-500" /> Billable Hours
+                        </span>
+                        <span className="font-semibold text-emerald-500 font-mono">
+                          {teamTimesheetSummary.reduce((acc, curr) => acc + curr.billable, 0)} hrs
+                        </span>
+                      </div>
+                      <div className="flex justify-between py-2">
+                        <span className="text-muted-foreground flex items-center gap-1.5">
+                          <i className="fa-solid fa-briefcase text-xs text-amber-500" /> Non-Billable Hours
+                        </span>
+                        <span className="font-semibold text-amber-500 font-mono">
+                          {teamTimesheetSummary.reduce((acc, curr) => acc + curr.nonBillable, 0)} hrs
+                        </span>
+                      </div>
+                      <div className="flex justify-between py-2">
+                        <span className="text-muted-foreground flex items-center gap-1.5">
+                          <i className="fa-solid fa-clock-rotate-left text-xs text-amber-500" /> Pending Approvals
+                        </span>
+                        <span className="font-semibold text-amber-500 font-mono">
+                          {teamTimesheetSummary.filter((t) => t.status === "Pending").length}
+                        </span>
+                      </div>
                     </div>
-                    <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
-                      <div
-                        className={cn(
-                          "h-full transition-all duration-300 rounded-full",
-                          timesheetDailyTotals.grand >= 40
-                            ? "bg-emerald-500"
-                            : timesheetDailyTotals.grand >= 20
-                            ? "bg-primary"
-                            : "bg-amber-500"
-                        )}
-                        style={{ width: `${Math.min(100, (timesheetDailyTotals.grand / 40) * 100)}%` }}
-                      />
-                    </div>
-                    <div className="flex justify-between text-[11px] text-muted-foreground pt-0.5">
-                      <span>
-                        {timesheetDailyTotals.grand >= 40
-                          ? "Target reached!"
-                          : `${(40 - timesheetDailyTotals.grand).toFixed(1)}h remaining`}
-                      </span>
-                      <span>Avg: {(timesheetDailyTotals.grand / 5).toFixed(1)}h/day</span>
-                    </div>
-                  </div>
-
-                  <div className="divide-y divide-border/50">
-                    <div className="flex justify-between py-2">
-                      <span className="text-muted-foreground flex items-center gap-1.5">
-                        <i className="fa-solid fa-clock text-xs text-primary" /> Total Hours Logged
-                      </span>
-                      <span className="font-bold text-foreground font-mono">
-                        {timesheetDailyTotals.grand} hrs
-                      </span>
-                    </div>
-                    <div className="flex justify-between py-2">
-                      <span className="text-muted-foreground flex items-center gap-1.5">
-                        <i className="fa-solid fa-sack-dollar text-xs text-emerald-500" /> Billable Hours
-                      </span>
-                      <span className="font-semibold text-emerald-500 font-mono">
-                        {timesheetDailyTotals.billable} hrs
-                        {timesheetDailyTotals.grand > 0 && (
-                          <span className="text-[10px] text-muted-foreground ml-1">
-                            ({Math.round((timesheetDailyTotals.billable / timesheetDailyTotals.grand) * 100)}%)
+                  ) : (
+                    <>
+                      {/* Progress Bar towards 40 hrs target */}
+                      <div className="space-y-1.5 p-3 rounded-lg bg-muted/30 border border-border/50">
+                        <div className="flex justify-between text-xs font-semibold">
+                          <span className="text-foreground">Weekly Target (40 hrs)</span>
+                          <span className={cn(
+                            timesheetDailyTotals.grand >= 40 ? "text-emerald-500 font-bold" : "text-primary"
+                          )}>
+                            {Math.min(100, Math.round((timesheetDailyTotals.grand / 40) * 100))}%
                           </span>
-                        )}
-                      </span>
-                    </div>
-                    <div className="flex justify-between py-2">
-                      <span className="text-muted-foreground flex items-center gap-1.5">
-                        <i className="fa-solid fa-briefcase text-xs text-amber-500" /> Non-Billable Hours
-                      </span>
-                      <span className="font-semibold text-amber-500 font-mono">
-                        {timesheetDailyTotals.nonBillable} hrs
-                      </span>
-                    </div>
-                    <div className="flex justify-between py-2">
-                      <span className="text-muted-foreground flex items-center gap-1.5">
-                        <i className="fa-solid fa-list-check text-xs text-muted-foreground" /> Active Task Rows
-                      </span>
-                      <span className="font-semibold text-foreground font-mono">
-                        {timesheetRows.filter((r) => r.taskName || r.mon > 0 || r.tue > 0).length} tasks
-                      </span>
-                    </div>
-                  </div>
+                        </div>
+                        <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
+                          <div
+                            className={cn(
+                              "h-full transition-all duration-300 rounded-full",
+                              timesheetDailyTotals.grand >= 40
+                                ? "bg-emerald-500"
+                                : timesheetDailyTotals.grand >= 20
+                                ? "bg-primary"
+                                : "bg-amber-500"
+                            )}
+                            style={{ width: `${Math.min(100, (timesheetDailyTotals.grand / 40) * 100)}%` }}
+                          />
+                        </div>
+                        <div className="flex justify-between text-[11px] text-muted-foreground pt-0.5">
+                          <span>
+                            {timesheetDailyTotals.grand >= 40
+                              ? "Target reached!"
+                              : `${(40 - timesheetDailyTotals.grand).toFixed(1)}h remaining`}
+                          </span>
+                          <span>Avg: {(timesheetDailyTotals.grand / 5).toFixed(1)}h/day</span>
+                        </div>
+                      </div>
+
+                      <div className="divide-y divide-border/50">
+                        <div className="flex justify-between py-2">
+                          <span className="text-muted-foreground flex items-center gap-1.5">
+                            <i className="fa-solid fa-clock text-xs text-primary" /> Total Hours Logged
+                          </span>
+                          <span className="font-bold text-foreground font-mono">
+                            {timesheetDailyTotals.grand} hrs
+                          </span>
+                        </div>
+                        <div className="flex justify-between py-2">
+                          <span className="text-muted-foreground flex items-center gap-1.5">
+                            <i className="fa-solid fa-sack-dollar text-xs text-emerald-500" /> Billable Hours
+                          </span>
+                          <span className="font-semibold text-emerald-500 font-mono">
+                            {timesheetDailyTotals.billable} hrs
+                            {timesheetDailyTotals.grand > 0 && (
+                              <span className="text-[10px] text-muted-foreground ml-1">
+                                ({Math.round((timesheetDailyTotals.billable / timesheetDailyTotals.grand) * 100)}%)
+                              </span>
+                            )}
+                          </span>
+                        </div>
+                        <div className="flex justify-between py-2">
+                          <span className="text-muted-foreground flex items-center gap-1.5">
+                            <i className="fa-solid fa-briefcase text-xs text-amber-500" /> Non-Billable Hours
+                          </span>
+                          <span className="font-semibold text-amber-500 font-mono">
+                            {timesheetDailyTotals.nonBillable} hrs
+                          </span>
+                        </div>
+                        <div className="flex justify-between py-2">
+                          <span className="text-muted-foreground flex items-center gap-1.5">
+                            <i className="fa-solid fa-list-check text-xs text-muted-foreground" /> Active Task Rows
+                          </span>
+                          <span className="font-semibold text-foreground font-mono">
+                            {timesheetRows.filter((r) => r.taskName || r.mon > 0 || r.tue > 0).length} tasks
+                          </span>
+                        </div>
+                      </div>
+                    </>
+                  )}
                 </CardContent>
               </Card>
 
