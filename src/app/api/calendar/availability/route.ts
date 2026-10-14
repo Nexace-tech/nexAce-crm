@@ -192,6 +192,16 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "Invalid monthKey. Must be YYYY-MM" }, { status: 400 });
       }
 
+      // Past months cannot be confirmed or modified
+      const now = new Date();
+      const currentMonthPrefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+      if (monthKey < currentMonthPrefix) {
+        return NextResponse.json(
+          { error: "Past months availability is locked and cannot be confirmed or modified." },
+          { status: 400 }
+        );
+      }
+
       if (targetUserId && String(targetUserId) !== String(userObjectId)) {
         return NextResponse.json({ error: "Forbidden: You can only confirm your own availability." }, { status: 403 });
       }
@@ -241,6 +251,17 @@ export async function POST(request: Request) {
 
     if (targetDates.length === 0) {
       return NextResponse.json({ error: "Please provide valid date(s) in YYYY-MM-DD format" }, { status: 400 });
+    }
+
+    // Past months dates cannot be edited
+    const now = new Date();
+    const currentMonthPrefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    const hasPastMonthDates = targetDates.some((dStr) => dStr.slice(0, 7) < currentMonthPrefix);
+    if (hasPastMonthDates) {
+      return NextResponse.json(
+        { error: "Past months availability is locked and cannot be modified." },
+        { status: 400 }
+      );
     }
 
     if (!["Available", "Partial", "Unavailable"].includes(status)) {

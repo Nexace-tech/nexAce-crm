@@ -143,6 +143,7 @@ export function TeamAvailabilityTab({
   const [isMonthConfirmed, setIsMonthConfirmed] = useState(false);
   const [showMonthlyPrompt, setShowMonthlyPrompt] = useState(false);
   const [confirmingMonth, setConfirmingMonth] = useState(false);
+  const [skipCount, setSkipCount] = useState<number>(0);
 
   const currentYear = currentDate.getFullYear();
   const currentMonth = currentDate.getMonth();
@@ -187,10 +188,40 @@ export function TeamAvailabilityTab({
         const confirmed = Boolean(data.isMonthConfirmed);
         setIsMonthConfirmed(confirmed);
 
-        // Check if user dismissed prompt for this month (only non-privileged eligible workers)
-        const isDismissed = typeof window !== "undefined" && localStorage.getItem(`dismissed_avail_prompt_${monthKey}`);
-        if (!confirmed && !isDismissed && data.isEligibleWorker && !data.isElevated && !isPrivilegedRole) {
-          setShowMonthlyPrompt(true);
+        // Daily Reminder Logic: Up to 3 Days with Maximum 2 Skips
+        const storageKey = `avail_snooze_${currentUserId}_${monthKey}`;
+        let currentSnooze = { skipCount: 0, lastSnoozedAt: 0, lastSnoozedDateStr: "" };
+        if (typeof window !== "undefined") {
+          try {
+            const raw = localStorage.getItem(storageKey);
+            if (raw) currentSnooze = JSON.parse(raw);
+          } catch (e) {}
+        }
+
+        const effectiveSkipCount = Number(currentSnooze.skipCount || 0);
+        setSkipCount(effectiveSkipCount);
+
+        const now = Date.now();
+        const isNextDayOr24h =
+          !currentSnooze.lastSnoozedAt ||
+          now - currentSnooze.lastSnoozedAt >= 24 * 60 * 60 * 1000 ||
+          todayStr !== currentSnooze.lastSnoozedDateStr;
+
+        if (!confirmed && data.isEligibleWorker && !data.isElevated && !isPrivilegedRole) {
+          if (effectiveSkipCount === 0) {
+            // Day 1: Fresh prompt
+            setShowMonthlyPrompt(true);
+          } else if (effectiveSkipCount === 1) {
+            // Day 2 (1 skip used): Show if 24 hours or next day has arrived
+            if (isNextDayOr24h) {
+              setShowMonthlyPrompt(true);
+            }
+          } else {
+            // Day 3 (2 skips used): Skips exhausted; mandatory prompt if next day has arrived
+            if (isNextDayOr24h) {
+              setShowMonthlyPrompt(true);
+            }
+          }
         }
       } else {
         const err = await res.json();
@@ -599,6 +630,11 @@ export function TeamAvailabilityTab({
       if (!res.ok) throw new Error(data.error || "Failed to confirm availability");
       setIsMonthConfirmed(true);
       setShowMonthlyPrompt(false);
+      setSkipCount(0);
+      if (typeof window !== "undefined") {
+        localStorage.removeItem(`avail_snooze_${currentUserId}_${monthKey}`);
+        localStorage.removeItem(`dismissed_avail_prompt_${monthKey}`);
+      }
       showToast(`Availability confirmed for ${MONTH_NAMES[currentMonth]} ${currentYear}!`, "success");
       fetchAvailability();
     } catch (err: any) {
@@ -609,11 +645,30 @@ export function TeamAvailabilityTab({
   };
 
   const handleUpdateLater = () => {
-    if (typeof window !== "undefined") {
-      localStorage.setItem(`dismissed_avail_prompt_${monthKey}`, "true");
+    if (skipCount >= 2) {
+      showToast("Maximum 2 skips reached. Please confirm your availability schedule.", "error");
+      return;
     }
+
+    const nextSkipCount = skipCount + 1;
+    const storageKey = `avail_snooze_${currentUserId}_${monthKey}`;
+    const snoozePayload = {
+      skipCount: nextSkipCount,
+      lastSnoozedAt: Date.now(),
+      lastSnoozedDateStr: todayStr,
+    };
+
+    if (typeof window !== "undefined") {
+      localStorage.setItem(storageKey, JSON.stringify(snoozePayload));
+    }
+    setSkipCount(nextSkipCount);
     setShowMonthlyPrompt(false);
-    showToast("You can update your availability anytime.", "success");
+
+    if (nextSkipCount === 1) {
+      showToast("Snoozed for 24 hours. (1 of 2 skips used — Day 1 of 3)", "success");
+    } else if (nextSkipCount === 2) {
+      showToast("Final skip used. (Day 2 of 3 — Confirmation will be mandatory tomorrow)", "error");
+    }
   };
 
   // Open modal with single or multiple dates
@@ -1166,9 +1221,20 @@ export function TeamAvailabilityTab({
                 <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-slate-400/15 text-slate-600 dark:text-slate-400 font-semibold border border-slate-400/25">
                   <span className="w-1.5 h-1.5 rounded-full bg-slate-400 dark:bg-slate-500" /> Grey Dot: Unconfirmed
                 </span>
+                {skipCount >= 2 ? (
+                  <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-rose-500/15 text-rose-700 dark:text-rose-400 font-bold border border-rose-500/30">
+                    <i className="fa-solid fa-triangle-exclamation text-[9px]" /> Day 3: Skips Exhausted
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-400 font-semibold border border-amber-500/30">
+                    <i className="fa-solid fa-clock-rotate-left text-[9px]" /> {2 - skipCount} skip{2 - skipCount === 1 ? "" : "s"} left (Day {skipCount + 1} of 3)
+                  </span>
+                )}
               </div>
               <p className="text-[11px] text-muted-foreground mt-0.5">
-                Sundays are excluded as weekly off. Working days (Mon–Sat) default to Available. You can confirm now or update anytime later.
+                {skipCount >= 2
+                  ? "Maximum skips reached. Confirmation is required. Working days (Mon–Sat) default to Available (8h); Sundays are excluded."
+                  : "Sundays are excluded as weekly off. Working days (Mon–Sat) default to Available. You can confirm now or update anytime later."}
               </p>
             </div>
           </div>
@@ -1182,14 +1248,16 @@ export function TeamAvailabilityTab({
               <i className="fa-solid fa-circle-check text-xs" />
               {confirmingMonth ? "Confirming..." : "Confirm Month"}
             </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={handleUpdateLater}
-              className="h-8 px-3 text-xs font-semibold rounded-xl text-muted-foreground hover:text-foreground cursor-pointer flex-1 sm:flex-initial"
-            >
-              <i className="fa-solid fa-clock mr-1" /> Update Later
-            </Button>
+            {skipCount < 2 && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleUpdateLater}
+                className="h-8 px-3 text-xs font-semibold rounded-xl text-muted-foreground hover:text-foreground cursor-pointer flex-1 sm:flex-initial"
+              >
+                <i className="fa-solid fa-clock mr-1" /> Update Later ({2 - skipCount} left)
+              </Button>
+            )}
           </div>
         </div>
       )}
@@ -2579,13 +2647,19 @@ export function TeamAvailabilityTab({
         </div>
       )}
 
-      {/* Monthly Availability Confirmation Modal (Prompt when new/next month starts) */}
+      {/* Monthly Availability Confirmation Modal (Daily prompt up to 3 days, max 2 skips) */}
       {showMonthlyPrompt && (
         <div
           role="dialog"
           aria-modal="true"
           onClick={(e) => {
-            if (e.target === e.currentTarget && !confirmingMonth) setShowMonthlyPrompt(false);
+            if (e.target === e.currentTarget && !confirmingMonth) {
+              if (skipCount < 2) {
+                handleUpdateLater();
+              } else {
+                showToast("Maximum 2 skips reached. Please confirm your availability schedule.", "error");
+              }
+            }
           }}
           className="fixed inset-0 z-50 bg-black/65 backdrop-blur-xs flex items-center justify-center p-3.5 sm:p-4 animate-in fade-in duration-200"
         >
@@ -2595,34 +2669,72 @@ export function TeamAvailabilityTab({
           >
             {/* Modal Header */}
             <div className="p-4 sm:p-5 border-b border-border bg-gradient-to-r from-primary/10 via-background to-emerald-500/10 flex items-center justify-between shrink-0">
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 min-w-0">
                 <div className="w-10 h-10 rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 flex items-center justify-center text-base shadow-xs shrink-0">
                   <i className="fa-solid fa-calendar-check" />
                 </div>
-                <div>
-                  <h3 className="font-bold text-base text-foreground flex items-center gap-2">
-                    <span>Monthly Availability Check</span>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="font-bold text-base text-foreground">
+                      Monthly Availability Check
+                    </h3>
                     <span className="text-xs px-2 py-0.5 rounded-full font-semibold bg-primary/10 text-primary border border-primary/20">
                       {MONTH_NAMES[currentMonth]} {currentYear}
                     </span>
-                  </h3>
+                    {skipCount >= 2 ? (
+                      <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-rose-500/15 text-rose-700 dark:text-rose-400 font-bold border border-rose-500/30">
+                        <i className="fa-solid fa-triangle-exclamation text-[9px]" /> Day 3 (Final) • Skips Exhausted
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-400 font-semibold border border-amber-500/30">
+                        <i className="fa-solid fa-clock-rotate-left text-[9px]" /> Day {skipCount + 1} of 3 ({2 - skipCount} skip{2 - skipCount === 1 ? "" : "s"} left)
+                      </span>
+                    )}
+                  </div>
                   <p className="text-[11px] text-muted-foreground mt-0.5">
-                    Review and confirm your schedule for the month
+                    {skipCount >= 2
+                      ? "Daily skips exhausted. Please confirm your availability schedule."
+                      : "Review and confirm your schedule for the month."}
                   </p>
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={handleUpdateLater}
-                className="w-8 h-8 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground flex items-center justify-center cursor-pointer"
-                title="Dismiss and update later"
-              >
-                <i className="fa-solid fa-xmark text-sm" />
-              </button>
+              {skipCount < 2 && (
+                <button
+                  type="button"
+                  onClick={handleUpdateLater}
+                  className="w-8 h-8 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground flex items-center justify-center cursor-pointer shrink-0 transition-colors"
+                  title={`Snooze for 24h (${2 - skipCount} skips remaining)`}
+                >
+                  <i className="fa-solid fa-xmark text-sm" />
+                </button>
+              )}
             </div>
 
             {/* Modal Body */}
-            <div className="p-4 sm:p-5 space-y-4 overflow-y-auto">
+            <div className="p-4 sm:p-5 space-y-3.5 overflow-y-auto">
+              {/* Daily Reminder & Skips Tracker Notice */}
+              {skipCount >= 2 ? (
+                <div className="p-3.5 rounded-xl border border-rose-500/35 bg-rose-500/10 text-xs text-rose-700 dark:text-rose-300 space-y-1">
+                  <div className="flex items-center gap-2 font-bold text-rose-800 dark:text-rose-200">
+                    <i className="fa-solid fa-triangle-exclamation text-rose-600 dark:text-rose-400 text-sm" />
+                    <span>Confirmation Required (2 Skips Exhausted)</span>
+                  </div>
+                  <p className="text-[11px] leading-relaxed text-muted-foreground">
+                    You have taken both of your allowed 24-hour skips for this month. The &ldquo;Update Later&rdquo; option is now disabled. Please confirm your availability to proceed.
+                  </p>
+                </div>
+              ) : (
+                <div className="p-2.5 rounded-xl border border-amber-500/30 bg-amber-500/5 flex items-center justify-between text-xs text-amber-800 dark:text-amber-300 gap-2">
+                  <span className="flex items-center gap-1.5 font-semibold">
+                    <i className="fa-solid fa-clock-rotate-left text-[11px]" />
+                    Daily Reminder: Day {skipCount + 1} of 3
+                  </span>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/25">
+                    {2 - skipCount} of 2 skips remaining
+                  </span>
+                </div>
+              )}
+
               {/* Highlight Box explaining default availability and excluded Sundays */}
               <div className="p-3.5 rounded-xl border border-border bg-muted/20 space-y-2 text-xs leading-relaxed">
                 <div className="flex items-start gap-2.5">
@@ -2702,14 +2814,21 @@ export function TeamAvailabilityTab({
 
             {/* Modal Footer with Actions */}
             <div className="p-3.5 sm:p-4 border-t border-border bg-muted/20 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 shrink-0">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={handleUpdateLater}
-                className="h-9 sm:h-8 text-xs font-semibold rounded-xl text-muted-foreground hover:text-foreground cursor-pointer order-3 sm:order-1"
-              >
-                <i className="fa-solid fa-clock mr-1.5" /> Update Later
-              </Button>
+              {skipCount < 2 ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleUpdateLater}
+                  className="h-9 sm:h-8 text-xs font-semibold rounded-xl text-muted-foreground hover:text-foreground cursor-pointer order-3 sm:order-1"
+                >
+                  <i className="fa-solid fa-clock mr-1.5" /> Update Later ({2 - skipCount} skip{2 - skipCount === 1 ? "" : "s"} left)
+                </Button>
+              ) : (
+                <div className="text-[11px] font-semibold text-rose-600 dark:text-rose-400 flex items-center gap-1.5 order-3 sm:order-1">
+                  <i className="fa-solid fa-lock text-xs" />
+                  <span>Confirmation mandatory (No skips left)</span>
+                </div>
+              )}
 
               <div className="flex items-center gap-2 w-full sm:w-auto order-1 sm:order-2">
                 <Button
