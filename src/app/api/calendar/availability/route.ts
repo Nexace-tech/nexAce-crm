@@ -345,19 +345,44 @@ export async function DELETE(request: Request) {
     const dateString = searchParams.get("dateString");
     const datesParam = searchParams.get("dates");
 
+    const now = new Date();
+    const currentMonthPrefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+
     const deleteFilter: any = {
       tenantId: tenantObjectId,
       userId: userObjectId,
     };
 
     if (id) {
+      const existingDoc = await Availability.findOne({ _id: new mongoose.Types.ObjectId(id), tenantId: tenantObjectId, userId: userObjectId }).lean();
+      if (!existingDoc) {
+        return NextResponse.json({ error: "Record not found" }, { status: 404 });
+      }
+      if (existingDoc.dateString && existingDoc.dateString.slice(0, 7) < currentMonthPrefix) {
+        return NextResponse.json(
+          { error: "Past months availability is locked and cannot be deleted or cleared." },
+          { status: 400 }
+        );
+      }
       deleteFilter._id = new mongoose.Types.ObjectId(id);
       await Availability.deleteOne(deleteFilter);
     } else if (datesParam) {
       const datesArray = datesParam.split(",").map((d) => d.trim()).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d));
+      if (datesArray.some((d) => d.slice(0, 7) < currentMonthPrefix)) {
+        return NextResponse.json(
+          { error: "Past months availability is locked and cannot be deleted or cleared." },
+          { status: 400 }
+        );
+      }
       deleteFilter.dateString = { $in: datesArray };
       await Availability.deleteMany(deleteFilter);
     } else if (dateString) {
+      if (dateString.slice(0, 7) < currentMonthPrefix) {
+        return NextResponse.json(
+          { error: "Past months availability is locked and cannot be deleted or cleared." },
+          { status: 400 }
+        );
+      }
       deleteFilter.dateString = dateString;
       await Availability.deleteOne(deleteFilter);
     } else {

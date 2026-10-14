@@ -149,6 +149,16 @@ export function TeamAvailabilityTab({
   const currentMonth = currentDate.getMonth();
   const monthKey = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}`;
 
+  // Current real-world month key (YYYY-MM) for locking past months
+  const realNow = new Date();
+  const realCurrentMonthKey = `${realNow.getFullYear()}-${String(realNow.getMonth() + 1).padStart(2, "0")}`;
+  const isPastMonth = monthKey < realCurrentMonthKey;
+
+  const isDateInPastMonth = (dStr: string | null | undefined) => {
+    if (!dStr) return false;
+    return dStr.slice(0, 7) < realCurrentMonthKey;
+  };
+
   const userRoleKey = currentUser?.role ? normalizeRoleKey(currentUser.role) : "";
   const isPrivilegedRole =
     isAdmin ||
@@ -163,7 +173,8 @@ export function TeamAvailabilityTab({
 
   // Admin, Sub-admin, and HR cannot update user availability.
   // Availability is strictly self-managed by eligible individual workers viewing their own schedule.
-  const canEditAvailability = !isPrivilegedRole && isEligibleWorker && isViewingSelf;
+  // Past months availability is locked and cannot be edited.
+  const canEditAvailability = !isPrivilegedRole && isEligibleWorker && isViewingSelf && !isPastMonth;
 
   const fetchAvailability = async () => {
     try {
@@ -207,7 +218,7 @@ export function TeamAvailabilityTab({
           now - currentSnooze.lastSnoozedAt >= 24 * 60 * 60 * 1000 ||
           todayStr !== currentSnooze.lastSnoozedDateStr;
 
-        if (!confirmed && data.isEligibleWorker && !data.isElevated && !isPrivilegedRole) {
+        if (!confirmed && data.isEligibleWorker && !data.isElevated && !isPrivilegedRole && !isPastMonth) {
           if (effectiveSkipCount === 0) {
             // Day 1: Fresh prompt
             setShowMonthlyPrompt(true);
@@ -222,6 +233,8 @@ export function TeamAvailabilityTab({
               setShowMonthlyPrompt(true);
             }
           }
+        } else {
+          setShowMonthlyPrompt(false);
         }
       } else {
         const err = await res.json();
@@ -489,7 +502,7 @@ export function TeamAvailabilityTab({
       );
 
       const isSelf = String(worker._id) === currentUserId;
-      const canEdit = canEditAvailability && isSelf;
+      const canEdit = canEditAvailability && isSelf && !isDateInPastMonth(inspectedDay);
 
       if (explicitRec) {
         return {
@@ -577,31 +590,47 @@ export function TeamAvailabilityTab({
 
   // Multi-select toggle helpers
   const toggleDateSelection = (dateStr: string) => {
+    if (isDateInPastMonth(dateStr)) {
+      showToast("Past months availability is locked and cannot be edited.", "error");
+      return;
+    }
     setSelectedDates((prev) =>
       prev.includes(dateStr) ? prev.filter((d) => d !== dateStr) : [...prev, dateStr].sort()
     );
   };
 
   const selectAllWeekdays = () => {
+    if (isPastMonth) {
+      showToast("Past months availability is locked.", "error");
+      return;
+    }
     const weekdays = calendarDays
-      .filter((d) => d.isCurrentMonth && d.date.getDay() !== 0 && d.date.getDay() !== 6)
+      .filter((d) => d.isCurrentMonth && d.date.getDay() !== 0 && d.date.getDay() !== 6 && !isDateInPastMonth(d.dateString))
       .map((d) => d.dateString);
     setSelectedDates(weekdays);
     setIsMultiSelectMode(true);
   };
 
   const selectAllWeekends = () => {
+    if (isPastMonth) {
+      showToast("Past months availability is locked.", "error");
+      return;
+    }
     const weekends = calendarDays
-      .filter((d) => d.isCurrentMonth && (d.date.getDay() === 0 || d.date.getDay() === 6))
+      .filter((d) => d.isCurrentMonth && (d.date.getDay() === 0 || d.date.getDay() === 6) && !isDateInPastMonth(d.dateString))
       .map((d) => d.dateString);
     setSelectedDates(weekends);
     setIsMultiSelectMode(true);
   };
 
-  // Exclude Sundays from entire month selection!
+  // Exclude Sundays and past dates from entire month selection!
   const selectEntireMonth = () => {
+    if (isPastMonth) {
+      showToast("Past months availability is locked.", "error");
+      return;
+    }
     const workingDays = calendarDays
-      .filter((d) => d.isCurrentMonth && d.date.getDay() !== 0) // Exclude Sundays
+      .filter((d) => d.isCurrentMonth && d.date.getDay() !== 0 && !isDateInPastMonth(d.dateString)) // Exclude Sundays & past dates
       .map((d) => d.dateString);
     setSelectedDates(workingDays);
     setIsMultiSelectMode(true);
@@ -612,6 +641,10 @@ export function TeamAvailabilityTab({
   };
 
   const handleConfirmMonth = async () => {
+    if (isPastMonth) {
+      showToast("Past months availability is locked and cannot be confirmed or modified.", "error");
+      return;
+    }
     if (!canEditAvailability) {
       showToast("Admin, Sub-admin, and HR cannot update or confirm user availability.", "error");
       return;
@@ -673,11 +706,20 @@ export function TeamAvailabilityTab({
 
   // Open modal with single or multiple dates
   const openAddModal = (dateStrings: string[] | string, existingRecord?: AvailabilityRecord) => {
-    if (!canEditAvailability) {
-      showToast("Availability is self-managed by each user. Admin, Sub-admin, and HR have view-only access.", "error");
+    if (!canEditAvailability || isPastMonth) {
+      showToast(
+        isPastMonth
+          ? "Past months availability is locked and cannot be edited."
+          : "Availability is self-managed by each user. Admin, Sub-admin, and HR have view-only access.",
+        "error"
+      );
       return;
     }
     const datesArray = Array.isArray(dateStrings) ? dateStrings : [dateStrings];
+    if (datesArray.some((d) => isDateInPastMonth(d))) {
+      showToast("Past months availability is locked and cannot be edited.", "error");
+      return;
+    }
     setModalDates(datesArray);
     setShowDateAdder(datesArray.length > 1);
     setNewDatePickerValue("");
@@ -705,6 +747,10 @@ export function TeamAvailabilityTab({
   // Add an extra date into the modal's multi-select list
   const addDateToModal = (dateStr: string) => {
     if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return;
+    if (isDateInPastMonth(dateStr)) {
+      showToast("Cannot add dates from past months. Past months are locked.", "error");
+      return;
+    }
     if (!modalDates.includes(dateStr)) {
       setModalDates((prev) => [...prev, dateStr].sort());
     }
@@ -719,6 +765,10 @@ export function TeamAvailabilityTab({
   // Quick 1-click batch update from bottom bar
   const handleQuickBatchSubmit = async (status: "Available" | "Unavailable") => {
     if (!canEditAvailability || selectedDates.length === 0) return;
+    if (selectedDates.some((d) => isDateInPastMonth(d))) {
+      showToast("Cannot modify dates in past months. Availability is locked.", "error");
+      return;
+    }
     try {
       setBatchActionLoading(true);
       const res = await fetch("/api/calendar/availability", {
@@ -746,6 +796,10 @@ export function TeamAvailabilityTab({
   // Quick 1-click batch delete
   const handleQuickBatchDelete = async () => {
     if (!canEditAvailability || selectedDates.length === 0) return;
+    if (selectedDates.some((d) => isDateInPastMonth(d))) {
+      showToast("Cannot delete or clear dates in past months. Availability is locked.", "error");
+      return;
+    }
     try {
       setBatchActionLoading(true);
       const url = new URL("/api/calendar/availability", window.location.origin);
@@ -769,11 +823,20 @@ export function TeamAvailabilityTab({
   const handleSaveAvailability = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!canEditAvailability) {
-      showToast("Availability is self-managed by each user. Admin, Sub-admin, and HR have view-only access.", "error");
+      showToast(
+        isPastMonth
+          ? "Past months availability is locked and cannot be edited."
+          : "Availability is self-managed by each user. Admin, Sub-admin, and HR have view-only access.",
+        "error"
+      );
       return;
     }
     if (modalDates.length === 0) {
       showToast("Please select at least one date", "error");
+      return;
+    }
+    if (modalDates.some((d) => isDateInPastMonth(d))) {
+      showToast("Past months availability is locked and cannot be modified.", "error");
       return;
     }
 
@@ -810,6 +873,10 @@ export function TeamAvailabilityTab({
 
   const handleDeleteSingleModal = async () => {
     if (!canEditAvailability || (!modalRecordId && modalDates.length === 0)) return;
+    if (modalDates.some((d) => isDateInPastMonth(d))) {
+      showToast("Past months availability is locked and cannot be deleted.", "error");
+      return;
+    }
     try {
       setSaving(true);
       const url = new URL("/api/calendar/availability", window.location.origin);
@@ -981,6 +1048,11 @@ export function TeamAvailabilityTab({
                   <i className="fa-solid fa-plus text-xs" />
                   <span>{selectedDates.length > 0 ? `Set ${selectedDates.length} Dates` : "Set Availability"}</span>
                 </Button>
+              ) : isPastMonth ? (
+                <div className="inline-flex items-center justify-center gap-1.5 h-9 sm:h-8 px-3 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400 text-xs font-semibold select-none">
+                  <i className="fa-solid fa-lock text-[11px]" />
+                  <span>Past Month (Locked)</span>
+                </div>
               ) : (
                 <div className="inline-flex items-center justify-center gap-1.5 h-9 sm:h-8 px-3 rounded-xl border border-border/80 bg-muted/40 text-muted-foreground text-xs font-semibold select-none">
                   <i className="fa-solid fa-lock text-[11px] text-muted-foreground/70" />
@@ -1208,6 +1280,36 @@ export function TeamAvailabilityTab({
         </CardContent>
       </Card>
 
+      {/* Past Month Locked Notice Banner */}
+      {isPastMonth && (
+        <div className="p-3.5 sm:p-4 rounded-2xl border border-amber-500/30 bg-amber-500/5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs shadow-xs animate-in fade-in">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/25 flex items-center justify-center shrink-0">
+              <i className="fa-solid fa-lock text-sm" />
+            </div>
+            <div>
+              <div className="font-bold text-foreground flex items-center gap-2 flex-wrap">
+                <span>Past Month ({MONTH_NAMES[currentMonth]} {currentYear}) &bull; Locked</span>
+                <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-400 font-semibold border border-amber-500/30">
+                  <i className="fa-solid fa-clock-rotate-left text-[9px]" /> Read-Only History
+                </span>
+              </div>
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                Past months availability cannot be edited, confirmed, or cleared. Records are locked for audit and payroll consistency.
+              </p>
+            </div>
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setCurrentDate(new Date())}
+            className="h-8 px-3 text-xs font-semibold rounded-xl text-primary border-primary/30 hover:bg-primary/10 cursor-pointer w-full sm:w-auto shrink-0"
+          >
+            <i className="fa-solid fa-calendar-day mr-1.5" /> Jump to Current Month
+          </Button>
+        </div>
+      )}
+
       {/* Unconfirmed Month Prompt Banner (with Quick Confirm & Update Later) */}
       {!isMonthConfirmed && canEditAvailability && (
         <div className="p-3.5 sm:p-4 rounded-2xl border border-amber-500/30 bg-amber-500/5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs shadow-xs animate-in fade-in">
@@ -1354,7 +1456,7 @@ export function TeamAvailabilityTab({
                 <div
                   key={day.dateString}
                   onClick={() => {
-                    if (isMultiSelectMode && canEditAvailability) {
+                    if (isMultiSelectMode && canEditAvailability && !isDateInPastMonth(day.dateString)) {
                       toggleDateSelection(day.dateString);
                     } else {
                       // By default, open the Day Inspector and show the Available employees list
@@ -1393,7 +1495,7 @@ export function TeamAvailabilityTab({
                     </span>
 
                     {/* Multi-select checkbox indicator */}
-                    {isMultiSelectMode && canEditAvailability ? (
+                    {isMultiSelectMode && canEditAvailability && !isDateInPastMonth(day.dateString) ? (
                       <div
                         onClick={(e) => {
                           e.stopPropagation();
@@ -1408,7 +1510,7 @@ export function TeamAvailabilityTab({
                       >
                         {isSelected && <i className="fa-solid fa-check" />}
                       </div>
-                    ) : canEditAvailability ? (
+                    ) : canEditAvailability && !isDateInPastMonth(day.dateString) ? (
                       /* Quick single-add icon hover (desktop only) */
                       <button
                         type="button"
@@ -1421,6 +1523,10 @@ export function TeamAvailabilityTab({
                       >
                         <i className="fa-solid fa-plus" />
                       </button>
+                    ) : isDateInPastMonth(day.dateString) && day.isCurrentMonth ? (
+                      <span className="text-[9px] text-muted-foreground/35 hidden sm:inline-block" title="Past month locked">
+                        <i className="fa-solid fa-lock text-[9px]" />
+                      </span>
                     ) : null}
                   </div>
 
@@ -1697,7 +1803,7 @@ export function TeamAvailabilityTab({
                           </p>
                         )}
 
-                        {canEditAvailability ? (
+                        {canEditAvailability && !isDateInPastMonth(rec.dateString) ? (
                           <div className="flex justify-end pt-1">
                             <Button
                               variant="outline"
@@ -1716,7 +1822,15 @@ export function TeamAvailabilityTab({
                               className="h-8 px-3 text-xs gap-1.5 font-semibold text-muted-foreground hover:text-foreground cursor-pointer rounded-lg w-full justify-center"
                               onClick={() => setInspectedDay(rec.dateString)}
                             >
-                              <i className="fa-solid fa-eye text-[11px]" /> View Day Details
+                              {isDateInPastMonth(rec.dateString) ? (
+                                <>
+                                  <i className="fa-solid fa-lock text-[11px] text-amber-500" /> View Locked Details
+                                </>
+                              ) : (
+                                <>
+                                  <i className="fa-solid fa-eye text-[11px]" /> View Day Details
+                                </>
+                              )}
                             </Button>
                           </div>
                         )}
@@ -1808,7 +1922,7 @@ export function TeamAvailabilityTab({
                               {rec.notes ? `"${rec.notes}"` : "-"}
                             </td>
                             <td className="p-3 text-right">
-                              {canEditAvailability ? (
+                              {canEditAvailability && !isDateInPastMonth(rec.dateString) ? (
                                 <Button
                                   variant="outline"
                                   size="sm"
@@ -1824,7 +1938,15 @@ export function TeamAvailabilityTab({
                                   className="h-7 px-2.5 text-xs gap-1 font-semibold text-muted-foreground hover:text-foreground cursor-pointer"
                                   onClick={() => setInspectedDay(rec.dateString)}
                                 >
-                                  <i className="fa-solid fa-eye text-[10px]" /> View
+                                  {isDateInPastMonth(rec.dateString) ? (
+                                    <>
+                                      <i className="fa-solid fa-lock text-[10px] text-amber-500" /> View
+                                    </>
+                                  ) : (
+                                    <>
+                                      <i className="fa-solid fa-eye text-[10px]" /> View
+                                    </>
+                                  )}
                                 </Button>
                               )}
                             </td>
@@ -2279,7 +2401,7 @@ export function TeamAvailabilityTab({
                 >
                   Close
                 </Button>
-                {canEditAvailability && (
+                {canEditAvailability && !isDateInPastMonth(inspectedDay) && (
                   <Button
                     size="sm"
                     className="text-xs h-9 sm:h-8 gap-1.5 bg-primary cursor-pointer rounded-xl px-3.5 shadow-xs"
@@ -2294,6 +2416,12 @@ export function TeamAvailabilityTab({
                   >
                     <i className="fa-solid fa-plus text-[10px]" /> Update My Availability
                   </Button>
+                )}
+                {isDateInPastMonth(inspectedDay) && (
+                  <div className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/25">
+                    <i className="fa-solid fa-lock text-[10px]" />
+                    <span>Past Month (Locked)</span>
+                  </div>
                 )}
               </div>
             </div>
@@ -2648,7 +2776,7 @@ export function TeamAvailabilityTab({
       )}
 
       {/* Monthly Availability Confirmation Modal (Daily prompt up to 3 days, max 2 skips) */}
-      {showMonthlyPrompt && (
+      {showMonthlyPrompt && !isPastMonth && (
         <div
           role="dialog"
           aria-modal="true"
