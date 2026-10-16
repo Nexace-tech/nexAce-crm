@@ -257,7 +257,7 @@ export default function TeamDashboardPage() {
   const fetchTeam = async () => {
     setLoading(true);
     try {
-      const response = await fetch(`/api/team?department=${departmentFilter}&search=${searchQuery}&_t=${Date.now()}`, {
+      const response = await fetch(`/api/team?includeInactive=true&department=${departmentFilter}&search=${searchQuery}&_t=${Date.now()}`, {
         cache: "no-store"
       });
       if (response.ok) {

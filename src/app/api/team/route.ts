@@ -36,12 +36,14 @@ export async function GET(request: Request) {
     const statusParam = searchParams.get("status");
     const activeOnly = searchParams.get("activeOnly") === "true";
     const includeInactive = searchParams.get("includeInactive") === "true";
+    const isAdmin = Boolean(session.role && session.role.trim().toLowerCase() === "admin");
+    const canManageTeam = isAdmin || isSubAdminRole(session.role) || dataScope.canViewFeature("manageUsers");
 
     if (activeOnly) {
       query.status = "Active";
     } else if (statusParam) {
       query.status = statusParam;
-    } else if (!includeInactive) {
+    } else if (!includeInactive && !canManageTeam) {
       query.status = { $ne: "Suspended" };
     }
 

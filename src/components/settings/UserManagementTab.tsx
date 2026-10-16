@@ -186,7 +186,7 @@ export function UserManagementTab() {
     try {
       setLoading(true);
       const [teamRes, permRes, deptRes, hrIsoRes] = await Promise.all([
-        fetch(`/api/team?_t=${Date.now()}`, { cache: "no-store" }),
+        fetch(`/api/team?includeInactive=true&_t=${Date.now()}`, { cache: "no-store" }),
         fetch("/api/settings/permissions", { cache: "no-store" }),
         fetch("/api/departments", { cache: "no-store" }),
         fetch("/api/settings/hr-isolation", { cache: "no-store" }).catch(() => null),

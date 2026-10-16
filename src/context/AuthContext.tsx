@@ -80,7 +80,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const reason = errData?.error === "Account suspended" ? "suspended" : "account_removed";
           setUser(null);
           if (typeof window !== "undefined" && window.location.pathname.startsWith("/dashboard")) {
-            window.location.href = `/api/auth/logout?reason=${reason}`;
+            window.location.href = `/login?error=${reason}`;
             return;
           }
         }
@@ -92,7 +92,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         setUser(null);
         if (typeof window !== "undefined" && window.location.pathname.startsWith("/dashboard")) {
-          window.location.href = "/api/auth/logout?reason=account_removed";
+          window.location.href = "/login?error=account_removed";
           return;
         }
       } catch (error) {
