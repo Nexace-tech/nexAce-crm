@@ -79,10 +79,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const errData = await response.json().catch(() => ({}));
           const reason = errData?.error === "Account suspended" ? "suspended" : "account_removed";
           setUser(null);
-          // Purge session cookie in background
-          fetch("/api/auth/logout", { method: "POST" }).catch(() => {});
           if (typeof window !== "undefined" && window.location.pathname.startsWith("/dashboard")) {
-            window.location.href = `/login?error=${reason}`;
+            window.location.href = `/api/auth/logout?reason=${reason}`;
             return;
           }
         }
@@ -93,10 +91,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
 
         setUser(null);
-        // Purge session cookie in background
-        fetch("/api/auth/logout", { method: "POST" }).catch(() => {});
         if (typeof window !== "undefined" && window.location.pathname.startsWith("/dashboard")) {
-          window.location.href = "/login?error=account_removed";
+          window.location.href = "/api/auth/logout?reason=account_removed";
           return;
         }
       } catch (error) {

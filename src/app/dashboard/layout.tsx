@@ -49,8 +49,8 @@ export default async function DashboardLayout({ children }: DashboardLayoutProps
   if (!dbUser) {
     if (!dbError) {
       // User was explicitly not found in DB (e.g. employee was removed from CRM)
-      // Redirect directly to login page with reason parameter to prevent App Router 404
-      redirect("/login?error=account_removed");
+      // Redirecting via /api/auth/logout route handler cleanly purges session cookies without Server Component mutation errors
+      redirect("/api/auth/logout?reason=account_removed");
     }
     // On transient DB connection error, fallback to session info rather than logging the user out
     dbUser = {
@@ -63,7 +63,7 @@ export default async function DashboardLayout({ children }: DashboardLayoutProps
 
   // Restrict suspended users immediately from accessing Dashboard
   if (dbUser.status === "Suspended") {
-    redirect("/login?error=suspended");
+    redirect("/api/auth/logout?reason=suspended");
   }
 
   const role = dbUser.role || session.role;
