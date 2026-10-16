@@ -7,8 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { usePermissions } from "@/hooks/usePermissions";
 import { cn, formatISTDate, formatISTTime, getISTDateString } from "@/lib/utils";
-import { generateAndDownloadPDF } from "@/lib/pdfReportGenerator";
 import { NativeService } from "@/lib/native/nativeService";
+import { CombinedPdfExportModal } from "@/components/dashboard/CombinedPdfExportModal";
 
 export function EmployeeDashboard({ user }: { user: any }) {
   const { can } = usePermissions();
@@ -33,6 +33,7 @@ export function EmployeeDashboard({ user }: { user: any }) {
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
   const [exportingReport, setExportingReport] = useState<string | null>(null);
   const [showExportMenu, setShowExportMenu] = useState(false);
+  const [showPdfExportModal, setShowPdfExportModal] = useState(false);
   const exportMenuRef = useRef<HTMLDivElement>(null);
 
   const showToast = (message: string, type: "success" | "error" = "success") => {
@@ -458,51 +459,7 @@ export function EmployeeDashboard({ user }: { user: any }) {
     }
   };
 
-  // Export 4: Unified Combined PDF Report (Direct File Download)
-  const handleExportCombinedPDFReport = async () => {
-    setExportingReport("pdf");
-    try {
-      // Fetch latest datasets in parallel
-      const [tsRes, attRes] = await Promise.all([
-        fetch("/api/timesheets"),
-        fetch("/api/attendance?limit=all"),
-      ]);
 
-      const tsData = tsRes.ok ? await tsRes.json() : { entries: [] };
-      const attData = attRes.ok ? await attRes.json() : { history: [] };
-
-      const currentTasks = tasks || [];
-      const currentTimesheets = tsData.entries || timesheets || [];
-      const currentShiftLogs = attData.history || (attData.attendance ? [attData.attendance] : []);
-
-      generateAndDownloadPDF({
-        user: {
-          name: user?.name,
-          role: user?.role,
-          department: user?.department,
-          shiftName: user?.shiftName,
-          shiftTime: user?.shiftTime,
-          tenantName: user?.tenantId?.name,
-        },
-        tasks: currentTasks,
-        timesheets: currentTimesheets,
-        shiftLogs: currentShiftLogs,
-        includeKpis: true,
-        includeTasks: true,
-        includeTimesheets: true,
-        includeShifts: true,
-        includeSignoff: true,
-      });
-
-      showToast("Downloaded Comprehensive PDF Report successfully!", "success");
-    } catch (err) {
-      console.error("Failed to generate combined PDF report:", err);
-      showToast("Failed to download PDF report.", "error");
-    } finally {
-      setExportingReport(null);
-      setShowExportMenu(false);
-    }
-  };
 
   // ✅ Performance: memoized — only recalculates when timesheets changes
   const totalLoggedHours = useMemo(
@@ -572,7 +529,10 @@ export function EmployeeDashboard({ user }: { user: any }) {
 
                 {/* Combined PDF Button */}
                 <button
-                  onClick={handleExportCombinedPDFReport}
+                  onClick={() => {
+                    setShowExportMenu(false);
+                    setShowPdfExportModal(true);
+                  }}
                   disabled={Boolean(exportingReport)}
                   className="w-full text-left px-3 py-2.5 rounded-lg text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 transition-colors flex items-center gap-2.5 cursor-pointer disabled:opacity-50 shadow-xs mb-1"
                 >
@@ -581,7 +541,7 @@ export function EmployeeDashboard({ user }: { user: any }) {
                   </div>
                   <div>
                     <p className="font-bold text-white">Download Combined PDF</p>
-                    <p className="text-[10px] text-rose-100">Direct PDF file download</p>
+                    <p className="text-[10px] text-rose-100">Configure time period &amp; filters</p>
                   </div>
                 </button>
 
@@ -1412,6 +1372,16 @@ export function EmployeeDashboard({ user }: { user: any }) {
           </div>
         </div>
       )}
+
+      {/* Combined PDF Export Filters Modal */}
+      <CombinedPdfExportModal
+        isOpen={showPdfExportModal}
+        onClose={() => setShowPdfExportModal(false)}
+        user={user}
+        initialTasks={tasks}
+        initialTimesheets={timesheets}
+        onSuccessToast={(msg) => showToast(msg, "success")}
+      />
     </div>
   );
 }

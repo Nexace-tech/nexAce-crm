@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useActionState, useState, Suspense } from "react";
+import React, { useActionState, useState, useEffect, Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { loginAction } from "@/app/actions/auth";
@@ -17,6 +17,13 @@ function LoginForm() {
 
   const [state, formAction, isPending] = useActionState(loginAction, undefined);
   const [showPassword, setShowPassword] = useState(false);
+
+  // Proactively clear stale session cookies if redirected due to suspension or account removal
+  useEffect(() => {
+    if (errorParam) {
+      fetch("/api/auth/logout", { method: "POST" }).catch(() => {});
+    }
+  }, [errorParam]);
 
   return (
     <div className="min-h-screen w-full flex items-center justify-center p-4 bg-background relative overflow-hidden">
