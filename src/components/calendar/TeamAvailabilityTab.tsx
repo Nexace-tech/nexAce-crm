@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -135,8 +135,50 @@ export function TeamAvailabilityTab({
 
   // Day inspection drawer/modal for team view
   const [inspectedDay, setInspectedDay] = useState<string | null>(null);
-  const [dayDrawerTab, setDayDrawerTab] = useState<"Available" | "All" | "Partial" | "Unavailable">("Available");
+  const [dayDrawerTab, setDayDrawerTab] = useState<"All" | "Confirmed" | "Unconfirmed" | "Partial" | "Unavailable" | "Available">("All");
   const [dayDrawerSearch, setDayDrawerSearch] = useState<string>("");
+  const dayTabRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+  const dayTabsContainerRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll the active tab into view whenever it changes or when the Day Inspector opens
+  useEffect(() => {
+    if (inspectedDay && dayTabRefs.current[dayDrawerTab]) {
+      const activeBtn = dayTabRefs.current[dayDrawerTab];
+      const timer = setTimeout(() => {
+        activeBtn?.scrollIntoView({
+          behavior: "smooth",
+          block: "nearest",
+          inline: "center",
+        });
+      }, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [dayDrawerTab, inspectedDay]);
+
+  const selectDayTab = (
+    tab: "All" | "Confirmed" | "Unconfirmed" | "Partial" | "Unavailable" | "Available",
+    targetEl?: HTMLButtonElement | null
+  ) => {
+    setDayDrawerTab(tab);
+    if (targetEl) {
+      targetEl.scrollIntoView({
+        behavior: "smooth",
+        block: "nearest",
+        inline: "center",
+      });
+    }
+  };
+
+  const navigateInspectedDay = (direction: -1 | 1) => {
+    if (!inspectedDay) return;
+    const parts = inspectedDay.split("-").map(Number);
+    const target = new Date(parts[0], parts[1] - 1, parts[2] + direction);
+    const nextStr = `${target.getFullYear()}-${String(target.getMonth() + 1).padStart(2, "0")}-${String(target.getDate()).padStart(2, "0")}`;
+    setInspectedDay(nextStr);
+    if (target.getMonth() !== currentMonth || target.getFullYear() !== currentYear) {
+      setCurrentDate(target);
+    }
+  };
 
   // Monthly Confirmation & Prompt States
   const [confirmations, setConfirmations] = useState<Record<string, { confirmed: boolean; confirmedAt?: string }>>({});
@@ -160,21 +202,18 @@ export function TeamAvailabilityTab({
   };
 
   const userRoleKey = currentUser?.role ? normalizeRoleKey(currentUser.role) : "";
-  const isPrivilegedRole =
+  const isAdminRole =
     isAdmin ||
-    isOPS ||
     userRoleKey === "Admin" ||
-    userRoleKey === "OPS" ||
-    userRoleKey === "HR" ||
-    isSubAdminRole(currentUser?.role);
+    Boolean(currentUser?.role && currentUser.role.trim().toLowerCase() === "admin");
 
   const currentUserId = String(currentUser?._id || currentUser?.id || "");
   const isViewingSelf = !isElevated || selectedWorkerId === currentUserId;
 
-  // Admin, Sub-admin, and HR cannot update user availability.
-  // Availability is strictly self-managed by eligible individual workers viewing their own schedule.
+  // Only Admin is exempt from filling availability schedules.
+  // Everyone else (OPS/SubAdmin, HR, Manager, Employees, etc.) records their own availability.
   // Past months availability is locked and cannot be edited.
-  const canEditAvailability = !isPrivilegedRole && isEligibleWorker && isViewingSelf && !isPastMonth;
+  const canEditAvailability = !isAdminRole && isEligibleWorker && isViewingSelf && !isPastMonth;
 
   const fetchAvailability = async () => {
     try {
@@ -196,7 +235,7 @@ export function TeamAvailabilityTab({
         setIsElevated(Boolean(data.isElevated));
         setIsEligibleWorker(Boolean(data.isEligibleWorker));
         setConfirmations(data.confirmations || {});
-        const confirmed = Boolean(data.isMonthConfirmed);
+        const confirmed = Boolean(data.isCurrentUserConfirmed !== undefined ? data.isCurrentUserConfirmed : data.isMonthConfirmed);
         setIsMonthConfirmed(confirmed);
 
         // Daily Reminder Logic: Up to 3 Days with Maximum 2 Skips
@@ -218,7 +257,7 @@ export function TeamAvailabilityTab({
           now - currentSnooze.lastSnoozedAt >= 24 * 60 * 60 * 1000 ||
           todayStr !== currentSnooze.lastSnoozedDateStr;
 
-        if (!confirmed && data.isEligibleWorker && !data.isElevated && !isPrivilegedRole && !isPastMonth) {
+        if (!confirmed && data.isEligibleWorker && !isAdminRole && !isPastMonth) {
           if (effectiveSkipCount === 0) {
             // Day 1: Fresh prompt
             setShowMonthlyPrompt(true);
@@ -502,7 +541,7 @@ export function TeamAvailabilityTab({
       );
 
       const isSelf = String(worker._id) === currentUserId;
-      const canEdit = canEditAvailability && isSelf && !isDateInPastMonth(inspectedDay);
+      const canEdit = !isAdminRole && isEligibleWorker && isSelf && !isDateInPastMonth(inspectedDay);
 
       if (explicitRec) {
         return {
@@ -565,6 +604,11 @@ export function TeamAvailabilityTab({
     const available = roster.filter((w) => w.status === "Available");
     const partial = roster.filter((w) => w.status === "Partial");
     const unavailable = roster.filter((w) => w.status === "Unavailable");
+    const confirmed = roster.filter((w) => w.confirmed);
+    const unconfirmed = roster.filter((w) => !w.confirmed);
+    const confirmedCount = confirmed.length;
+    const totalCount = roster.length;
+    const confirmedPercent = totalCount > 0 ? Math.round((confirmedCount / totalCount) * 100) : 0;
 
     return {
       dateString: inspectedDay,
@@ -574,6 +618,11 @@ export function TeamAvailabilityTab({
       available,
       partial,
       unavailable,
+      confirmed,
+      unconfirmed,
+      confirmedCount,
+      totalCount,
+      confirmedPercent,
     };
   }, [
     inspectedDay,
@@ -645,8 +694,8 @@ export function TeamAvailabilityTab({
       showToast("Past months availability is locked and cannot be confirmed or modified.", "error");
       return;
     }
-    if (!canEditAvailability) {
-      showToast("Admin, Sub-admin, and HR cannot update or confirm user availability.", "error");
+    if (isAdminRole || !isEligibleWorker) {
+      showToast("Admin is exempt from recording or confirming availability schedules.", "error");
       return;
     }
     try {
@@ -706,11 +755,15 @@ export function TeamAvailabilityTab({
 
   // Open modal with single or multiple dates
   const openAddModal = (dateStrings: string[] | string, existingRecord?: AvailabilityRecord) => {
+    if (isAdminRole || !isEligibleWorker) {
+      showToast("Admin is exempt from recording availability schedules.", "error");
+      return;
+    }
     if (!canEditAvailability || isPastMonth) {
       showToast(
         isPastMonth
           ? "Past months availability is locked and cannot be edited."
-          : "Availability is self-managed by each user. Admin, Sub-admin, and HR have view-only access.",
+          : "Please select your own schedule to edit availability.",
         "error"
       );
       return;
@@ -822,11 +875,15 @@ export function TeamAvailabilityTab({
   // Modal Form Submission (handles single or multi-date batch)
   const handleSaveAvailability = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isAdminRole || !isEligibleWorker) {
+      showToast("Admin is exempt from recording availability schedules.", "error");
+      return;
+    }
     if (!canEditAvailability) {
       showToast(
         isPastMonth
           ? "Past months availability is locked and cannot be edited."
-          : "Availability is self-managed by each user. Admin, Sub-admin, and HR have view-only access.",
+          : "Please select your own schedule to edit availability.",
         "error"
       );
       return;
@@ -917,7 +974,7 @@ export function TeamAvailabilityTab({
                 <span
                   className={cn(
                     "inline-flex items-center gap-1.5 text-xs px-2.5 py-0.5 rounded-full font-semibold border",
-                    isPrivilegedRole
+                    isAdminRole
                       ? "bg-primary/10 text-primary border-primary/25"
                       : isElevated
                       ? "bg-primary/10 text-primary border-primary/25"
@@ -927,50 +984,54 @@ export function TeamAvailabilityTab({
                   <span
                     className={cn(
                       "w-1.5 h-1.5 rounded-full",
-                      isPrivilegedRole || isElevated ? "bg-primary" : "bg-emerald-500"
+                      isAdminRole || isElevated ? "bg-primary" : "bg-emerald-500"
                     )}
                   />
-                  {isPrivilegedRole
-                    ? `${userRoleKey === "HR" ? "HR" : isOPS ? "Sub-Admin" : "Admin"} View-Only Access`
+                  {isAdminRole
+                    ? "Admin (Exempt from Availability)"
                     : isElevated
-                    ? "Team Overview"
-                    : currentUser?.employmentType || "Contractor / Freelancer"}
+                    ? selectedWorkerId === currentUserId
+                      ? "My Work Availability"
+                      : "Team Overview"
+                    : currentUser?.employmentType || "Staff Availability"}
                 </span>
 
-                {isPrivilegedRole && (
+                {isAdminRole && (
                   <span
                     className="inline-flex items-center gap-1.5 text-xs px-2.5 py-0.5 rounded-full font-semibold border bg-muted/60 text-muted-foreground border-border/80"
-                    title="Admin, Sub-admin, and HR cannot modify availability. Schedules are self-managed by each user."
+                    title="Admin is exempt from recording availability schedules. All team members record their own availability."
                   >
-                    <i className="fa-solid fa-lock text-[10px]" />
-                    Self-Managed by Workers
+                    <i className="fa-solid fa-shield-halved text-[10px]" />
+                    Admin Oversight
                   </span>
                 )}
 
                 {/* Monthly Confirmation Dot Indicator Badge */}
-                {isMonthConfirmed ? (
-                  <span
-                    className="inline-flex items-center gap-1.5 text-xs px-2.5 py-0.5 rounded-full font-semibold border bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30"
-                    title="Availability confirmed for this month"
-                  >
-                    <span className="w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-emerald-500/30 animate-pulse" />
-                    Confirmed (Green Dot)
-                  </span>
-                ) : (
-                  <span
-                    className="inline-flex items-center gap-1.5 text-xs px-2.5 py-0.5 rounded-full font-semibold border bg-slate-400/10 text-slate-600 dark:text-slate-400 border-slate-400/25"
-                    title="Availability not yet confirmed by user (defaults to Available)"
-                  >
-                    <span className="w-2 h-2 rounded-full bg-slate-400 dark:bg-slate-500 ring-2 ring-slate-400/20" />
-                    Unconfirmed (Grey Dot)
-                  </span>
+                {!isAdminRole && (
+                  isMonthConfirmed ? (
+                    <span
+                      className="inline-flex items-center gap-1.5 text-xs px-2.5 py-0.5 rounded-full font-semibold border bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30"
+                      title="Availability confirmed for this month"
+                    >
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-emerald-500/30 animate-pulse" />
+                      Confirmed (Green Dot)
+                    </span>
+                  ) : (
+                    <span
+                      className="inline-flex items-center gap-1.5 text-xs px-2.5 py-0.5 rounded-full font-semibold border bg-slate-400/10 text-slate-600 dark:text-slate-400 border-slate-400/25"
+                      title="Availability not yet confirmed by user (defaults to Available)"
+                    >
+                      <span className="w-2 h-2 rounded-full bg-slate-400 dark:bg-slate-500 ring-2 ring-slate-400/20" />
+                      Unconfirmed (Grey Dot)
+                    </span>
+                  )
                 )}
               </div>
               <CardDescription className="text-xs leading-relaxed max-w-2xl text-muted-foreground">
-                {isPrivilegedRole
-                  ? "Track, inspect, and coordinate working availability across team members. Availability is self-managed by individual workers; Admin, Sub-admin, and HR have view-only access."
-                  : isElevated
-                  ? "Track, inspect, and coordinate working availability for Part-Time, Freelance, Contractor, and flexible staff."
+                {isAdminRole
+                  ? "Admin workspace oversight: inspect and coordinate working availability across team members. All team members except Admin record and manage their own availability."
+                  : isElevated && selectedWorkerId !== currentUserId
+                  ? "Track and inspect team availability roster, or switch to your personal schedule to record and confirm your own monthly availability."
                   : "Mark your available dates, flexible hours, and planned offline days so your HR partner and team leads can schedule shifts and task assignments accordingly."}
               </CardDescription>
             </div>
@@ -1052,6 +1113,22 @@ export function TeamAvailabilityTab({
                 <div className="inline-flex items-center justify-center gap-1.5 h-9 sm:h-8 px-3 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400 text-xs font-semibold select-none">
                   <i className="fa-solid fa-lock text-[11px]" />
                   <span>Past Month (Locked)</span>
+                </div>
+              ) : isElevated && selectedWorkerId === "All" && isEligibleWorker && !isAdminRole ? (
+                /* Elevated workers (OPS, HR, Managers) prompt to switch to own schedule */
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setSelectedWorkerId(currentUserId)}
+                  className="h-9 sm:h-8 text-xs font-semibold gap-1.5 border-primary/40 text-primary hover:bg-primary/10 shadow-xs cursor-pointer transition-all rounded-xl w-full sm:w-auto justify-center"
+                >
+                  <i className="fa-solid fa-user-pen text-xs" />
+                  <span>Fill My Availability</span>
+                </Button>
+              ) : isAdminRole ? (
+                <div className="inline-flex items-center justify-center gap-1.5 h-9 sm:h-8 px-3 rounded-xl border border-border/80 bg-muted/40 text-muted-foreground text-xs font-semibold select-none">
+                  <i className="fa-solid fa-shield-halved text-[11px] text-muted-foreground/70" />
+                  <span>Admin Oversight (Exempt)</span>
                 </div>
               ) : (
                 <div className="inline-flex items-center justify-center gap-1.5 h-9 sm:h-8 px-3 rounded-xl border border-border/80 bg-muted/40 text-muted-foreground text-xs font-semibold select-none">
@@ -1186,25 +1263,62 @@ export function TeamAvailabilityTab({
             {/* Elevated Filters: Worker Dropdown + Status Pill Filters */}
             <div className="flex items-center gap-2 w-full sm:w-auto">
               {isElevated && (
-                <div className="relative flex-1 sm:w-48">
-                  <select
-                    value={selectedWorkerId}
-                    onChange={(e) => setSelectedWorkerId(e.target.value)}
-                    className="w-full h-9 sm:h-8 pl-8 pr-7 text-xs rounded-xl border border-border bg-background font-semibold text-foreground hover:border-primary/50 focus:ring-1 focus:ring-primary appearance-none cursor-pointer"
-                  >
-                    <option value="All">All Staff ({eligibleWorkers.length})</option>
-                    {eligibleWorkers.map((w) => {
-                      const isWorkerConfirmed = Boolean(confirmations[w._id]?.confirmed);
-                      return (
-                        <option key={w._id} value={w._id}>
-                          {isWorkerConfirmed ? "● " : "○ "} {w.name} ({w.employmentType || "Staff"}) {isWorkerConfirmed ? "— Confirmed" : "— Unconfirmed"}
+                <>
+                  <div className="relative flex-1 sm:w-52">
+                    <select
+                      value={selectedWorkerId}
+                      onChange={(e) => setSelectedWorkerId(e.target.value)}
+                      className="w-full h-9 sm:h-8 pl-8 pr-7 text-xs rounded-xl border border-border bg-background font-semibold text-foreground hover:border-primary/50 focus:ring-1 focus:ring-primary appearance-none cursor-pointer"
+                    >
+                      <option value="All">All Staff Roster ({eligibleWorkers.length})</option>
+                      {!isAdminRole && isEligibleWorker && (
+                        <option value={currentUserId}>
+                          {confirmations[currentUserId]?.confirmed || isMonthConfirmed ? "● " : "○ "} Myself: {currentUser?.name || "You"} {confirmations[currentUserId]?.confirmed || isMonthConfirmed ? "— Confirmed" : "— Unconfirmed"}
                         </option>
-                      );
-                    })}
-                  </select>
-                  <i className="fa-solid fa-user absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground pointer-events-none" />
-                  <i className="fa-solid fa-chevron-down absolute right-2.5 top-1/2 -translate-y-1/2 text-[9px] text-muted-foreground pointer-events-none" />
-                </div>
+                      )}
+                      {eligibleWorkers
+                        .filter((w) => w._id !== currentUserId)
+                        .map((w) => {
+                          const isWorkerConfirmed = Boolean(confirmations[w._id]?.confirmed);
+                          return (
+                            <option key={w._id} value={w._id}>
+                              {isWorkerConfirmed ? "● " : "○ "} {w.name} ({w.role || w.employmentType || "Staff"}) {isWorkerConfirmed ? "— Confirmed" : "— Unconfirmed"}
+                            </option>
+                          );
+                        })}
+                    </select>
+                    <i className="fa-solid fa-user absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground pointer-events-none" />
+                    <i className="fa-solid fa-chevron-down absolute right-2.5 top-1/2 -translate-y-1/2 text-[9px] text-muted-foreground pointer-events-none" />
+                  </div>
+
+                  {!isAdminRole && isEligibleWorker && (
+                    selectedWorkerId === "All" ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setSelectedWorkerId(currentUserId)}
+                        className="h-9 sm:h-8 text-xs font-semibold px-2.5 rounded-xl border-primary/30 text-primary hover:bg-primary/10 cursor-pointer shrink-0"
+                        title="Switch to your personal availability schedule"
+                      >
+                        <i className="fa-solid fa-user-clock text-xs sm:mr-1.5" />
+                        <span className="hidden sm:inline">My Availability</span>
+                      </Button>
+                    ) : (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setSelectedWorkerId("All")}
+                        className="h-9 sm:h-8 text-xs font-semibold px-2.5 rounded-xl border-border hover:bg-muted cursor-pointer shrink-0"
+                        title="Switch to all staff roster overview"
+                      >
+                        <i className="fa-solid fa-users text-xs text-primary sm:mr-1.5" />
+                        <span className="hidden sm:inline">Team Roster</span>
+                      </Button>
+                    )
+                  )}
+                </>
               )}
 
               <div className="relative flex-1 sm:w-40">
@@ -1311,7 +1425,7 @@ export function TeamAvailabilityTab({
       )}
 
       {/* Unconfirmed Month Prompt Banner (with Quick Confirm & Update Later) */}
-      {!isMonthConfirmed && canEditAvailability && (
+      {!isMonthConfirmed && !isAdminRole && isEligibleWorker && !isPastMonth && (
         <div className="p-3.5 sm:p-4 rounded-2xl border border-amber-500/30 bg-amber-500/5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs shadow-xs animate-in fade-in">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/25 flex items-center justify-center shrink-0">
@@ -1341,6 +1455,16 @@ export function TeamAvailabilityTab({
             </div>
           </div>
           <div className="flex items-center gap-2 w-full sm:w-auto shrink-0">
+            {selectedWorkerId !== currentUserId && isElevated && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setSelectedWorkerId(currentUserId)}
+                className="h-8 px-3 text-xs font-semibold rounded-xl border-primary/30 text-primary hover:bg-primary/10 cursor-pointer flex-1 sm:flex-initial"
+              >
+                <i className="fa-solid fa-calendar-days mr-1.5" /> View My Schedule
+              </Button>
+            )}
             <Button
               size="sm"
               onClick={handleConfirmMonth}
@@ -1365,7 +1489,7 @@ export function TeamAvailabilityTab({
       )}
 
       {/* Confirmed Month Badge Strip */}
-      {isMonthConfirmed && canEditAvailability && (
+      {isMonthConfirmed && !isAdminRole && isEligibleWorker && (
         <div className="px-3.5 py-2.5 rounded-xl border border-emerald-500/30 bg-emerald-500/5 flex items-center justify-between gap-3 text-xs animate-in fade-in">
           <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-300 font-medium">
             <span className="w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-emerald-500/30 animate-pulse shrink-0" />
@@ -1376,7 +1500,12 @@ export function TeamAvailabilityTab({
           <Button
             size="sm"
             variant="ghost"
-            onClick={() => openAddModal(todayStr)}
+            onClick={() => {
+              if (selectedWorkerId !== currentUserId && isElevated) {
+                setSelectedWorkerId(currentUserId);
+              }
+              openAddModal(todayStr);
+            }}
             className="h-7 px-2.5 text-[11px] font-semibold text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/10 rounded-lg cursor-pointer shrink-0"
           >
             <i className="fa-solid fa-pen-to-square mr-1" /> Update Dates
@@ -1459,8 +1588,8 @@ export function TeamAvailabilityTab({
                     if (isMultiSelectMode && canEditAvailability && !isDateInPastMonth(day.dateString)) {
                       toggleDateSelection(day.dateString);
                     } else {
-                      // By default, open the Day Inspector and show the Available employees list
-                      setDayDrawerTab("Available");
+                      // By default, open the Day Inspector and show All staff with Confirmed first
+                      setDayDrawerTab("All");
                       setDayDrawerSearch("");
                       setInspectedDay(day.dateString);
                     }
@@ -1803,7 +1932,7 @@ export function TeamAvailabilityTab({
                           </p>
                         )}
 
-                        {canEditAvailability && !isDateInPastMonth(rec.dateString) ? (
+                        {((canEditAvailability || String(typeof rec.userId === "object" ? rec.userId?._id : rec.userId) === currentUserId) && !isAdminRole && isEligibleWorker && !isDateInPastMonth(rec.dateString)) ? (
                           <div className="flex justify-end pt-1">
                             <Button
                               variant="outline"
@@ -1922,7 +2051,7 @@ export function TeamAvailabilityTab({
                               {rec.notes ? `"${rec.notes}"` : "-"}
                             </td>
                             <td className="p-3 text-right">
-                              {canEditAvailability && !isDateInPastMonth(rec.dateString) ? (
+                              {((canEditAvailability || String(typeof rec.userId === "object" ? rec.userId?._id : rec.userId) === currentUserId) && !isAdminRole && isEligibleWorker && !isDateInPastMonth(rec.dateString)) ? (
                                 <Button
                                   variant="outline"
                                   size="sm"
@@ -2062,74 +2191,111 @@ export function TeamAvailabilityTab({
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="bg-card border border-border/80 rounded-2xl max-w-lg w-full shadow-2xl overflow-hidden animate-in zoom-in-95 max-h-[88vh] flex flex-col"
+            className="bg-card border border-border/80 rounded-2xl max-w-lg sm:max-w-xl w-full shadow-2xl overflow-hidden animate-in zoom-in-95 max-h-[88vh] flex flex-col"
           >
             {/* Header */}
-            <div className="p-3.5 sm:p-4 border-b border-border bg-muted/30 flex items-center justify-between shrink-0">
-              <div className="min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <h3 className="font-bold text-sm sm:text-base text-foreground flex items-center gap-2">
-                    <i className="fa-solid fa-calendar-day text-primary" />
-                    <span>
-                      {MONTH_NAMES[inspectedDayData.dateObj.getMonth()]} {inspectedDayData.dateObj.getDate()},{" "}
-                      {inspectedDayData.dateObj.getFullYear()}
-                    </span>
-                  </h3>
-                  {inspectedDayData.isSunday ? (
-                    <Badge className="bg-rose-500/15 text-rose-700 dark:text-rose-400 border-rose-500/30 text-[10px] font-bold">
-                      <i className="fa-solid fa-mug-hot mr-1 text-[9px]" /> Sunday Off
-                    </Badge>
-                  ) : (
-                    <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30 text-[10px] font-bold">
-                      <i className="fa-solid fa-briefcase mr-1 text-[9px]" /> Working Day
-                    </Badge>
-                  )}
+            <div className="p-3.5 sm:px-4 sm:py-3.5 border-b border-border bg-muted/30 shrink-0">
+              <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="font-bold text-sm sm:text-base text-foreground flex items-center gap-2">
+                      <i className="fa-solid fa-calendar-day text-primary" />
+                      <span>
+                        {MONTH_NAMES[inspectedDayData.dateObj.getMonth()]} {inspectedDayData.dateObj.getDate()},{" "}
+                        {inspectedDayData.dateObj.getFullYear()}
+                      </span>
+                    </h3>
+                    {inspectedDayData.isSunday ? (
+                      <Badge className="bg-rose-500/15 text-rose-700 dark:text-rose-400 border-rose-500/30 text-[10px] font-bold">
+                        <i className="fa-solid fa-mug-hot mr-1 text-[9px]" /> Sunday Off
+                      </Badge>
+                    ) : (
+                      <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30 text-[10px] font-bold">
+                        <i className="fa-solid fa-briefcase mr-1 text-[9px]" /> Working Day
+                      </Badge>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-muted-foreground mt-0.5 truncate">
+                    {WEEKDAYS[inspectedDayData.dateObj.getDay()]}, {inspectedDayData.dateString} &bull;{" "}
+                    {inspectedDayData.roster.length} employee(s) tracked
+                  </p>
                 </div>
-                <p className="text-[11px] text-muted-foreground mt-0.5 truncate">
-                  {WEEKDAYS[inspectedDayData.dateObj.getDay()]}, {inspectedDayData.dateString} &bull;{" "}
-                  {inspectedDayData.roster.length} employee(s) tracked
-                </p>
+
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => navigateInspectedDay(-1)}
+                    title="Previous Day"
+                    className="w-8 h-8 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground flex items-center justify-center cursor-pointer transition-colors"
+                  >
+                    <i className="fa-solid fa-chevron-left text-xs" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => navigateInspectedDay(1)}
+                    title="Next Day"
+                    className="w-8 h-8 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground flex items-center justify-center cursor-pointer transition-colors"
+                  >
+                    <i className="fa-solid fa-chevron-right text-xs" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setInspectedDay(null)}
+                    title="Close"
+                    className="w-8 h-8 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground flex items-center justify-center cursor-pointer transition-colors ml-1"
+                  >
+                    <i className="fa-solid fa-xmark text-sm" />
+                  </button>
+                </div>
               </div>
 
-              <button
-                type="button"
-                onClick={() => setInspectedDay(null)}
-                className="w-8 h-8 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground flex items-center justify-center cursor-pointer transition-colors shrink-0"
-              >
-                <i className="fa-solid fa-xmark text-sm" />
-              </button>
+              {/* Daily Confirmation Progress Bar */}
+              <div className="mt-2.5 pt-2 border-t border-border/40">
+                <div className="flex items-center justify-between text-[11px] mb-1">
+                  <span className="font-semibold text-muted-foreground flex items-center gap-1.5">
+                    <i className="fa-solid fa-circle-check text-emerald-500 text-[10px]" />
+                    <span>Daily Confirmation</span>
+                  </span>
+                  <span className="font-mono font-bold text-foreground">
+                    {inspectedDayData.confirmedCount} / {inspectedDayData.totalCount} confirmed ({inspectedDayData.confirmedPercent}%)
+                  </span>
+                </div>
+                <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
+                  <div
+                    className={cn(
+                      "h-full rounded-full transition-all duration-300",
+                      inspectedDayData.confirmedPercent === 100
+                        ? "bg-emerald-500"
+                        : inspectedDayData.confirmedPercent > 0
+                        ? "bg-emerald-600"
+                        : "bg-muted-foreground/30"
+                    )}
+                    style={{ width: `${inspectedDayData.confirmedPercent}%` }}
+                  />
+                </div>
+              </div>
             </div>
 
-            {/* Filter Tabs Bar (Available is DEFAULT active tab) */}
-            <div className="px-3.5 sm:px-4 pt-3 pb-2 border-b border-border/60 bg-muted/15 space-y-2.5 shrink-0">
-              <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+            {/* Filter Tabs Bar */}
+            <div className="pt-2.5 pb-2 border-b border-border/60 bg-muted/15 space-y-2 shrink-0">
+              <div
+                ref={dayTabsContainerRef}
+                onWheel={(e) => {
+                  if (e.deltaY !== 0 && dayTabsContainerRef.current) {
+                    dayTabsContainerRef.current.scrollLeft += e.deltaY;
+                  }
+                }}
+                className="flex items-center gap-2 overflow-x-auto no-scrollbar scroll-smooth overscroll-x-contain touch-pan-x px-3.5 sm:px-4 py-0.5 scroll-px-3.5 sm:scroll-px-4"
+              >
+                {/* 1. All Staff */}
                 <button
+                  ref={(el) => {
+                    dayTabRefs.current["All"] = el;
+                  }}
                   type="button"
-                  onClick={() => setDayDrawerTab("Available")}
+                  onClick={(e) => selectDayTab("All", e.currentTarget)}
                   className={cn(
-                    "px-3 py-1.5 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 shrink-0 cursor-pointer shadow-2xs",
-                    dayDrawerTab === "Available"
-                      ? "bg-emerald-600 text-white shadow-xs ring-2 ring-emerald-600/30"
-                      : "bg-background text-muted-foreground hover:text-foreground hover:bg-muted border border-border/80"
-                  )}
-                >
-                  <i className="fa-solid fa-circle-check text-[11px]" />
-                  <span>Available</span>
-                  <span
-                    className={cn(
-                      "text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold",
-                      dayDrawerTab === "Available" ? "bg-white/25 text-white" : "bg-muted text-foreground"
-                    )}
-                  >
-                    {inspectedDayData.available.length}
-                  </span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setDayDrawerTab("All")}
-                  className={cn(
-                    "px-3 py-1.5 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 shrink-0 cursor-pointer shadow-2xs",
+                    "px-3 py-1.5 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap cursor-pointer shadow-2xs select-none",
                     dayDrawerTab === "All"
                       ? "bg-primary text-primary-foreground shadow-xs ring-2 ring-primary/30"
                       : "bg-background text-muted-foreground hover:text-foreground hover:bg-muted border border-border/80"
@@ -2147,17 +2313,73 @@ export function TeamAvailabilityTab({
                   </span>
                 </button>
 
+                {/* 2. Confirmed */}
                 <button
+                  ref={(el) => {
+                    dayTabRefs.current["Confirmed"] = el;
+                  }}
                   type="button"
-                  onClick={() => setDayDrawerTab("Partial")}
+                  onClick={(e) => selectDayTab("Confirmed", e.currentTarget)}
                   className={cn(
-                    "px-3 py-1.5 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 shrink-0 cursor-pointer shadow-2xs",
-                    dayDrawerTab === "Partial"
+                    "px-3 py-1.5 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap cursor-pointer shadow-2xs select-none",
+                    dayDrawerTab === "Confirmed"
+                      ? "bg-emerald-600 text-white shadow-xs ring-2 ring-emerald-600/30"
+                      : "bg-background text-muted-foreground hover:text-foreground hover:bg-muted border border-border/80"
+                  )}
+                >
+                  <i className="fa-solid fa-circle-check text-[11px]" />
+                  <span>Confirmed</span>
+                  <span
+                    className={cn(
+                      "text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold",
+                      dayDrawerTab === "Confirmed" ? "bg-white/25 text-white" : "bg-muted text-foreground"
+                    )}
+                  >
+                    {inspectedDayData.confirmed.length}
+                  </span>
+                </button>
+
+                {/* 3. Unconfirmed */}
+                <button
+                  ref={(el) => {
+                    dayTabRefs.current["Unconfirmed"] = el;
+                  }}
+                  type="button"
+                  onClick={(e) => selectDayTab("Unconfirmed", e.currentTarget)}
+                  className={cn(
+                    "px-3 py-1.5 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap cursor-pointer shadow-2xs select-none",
+                    dayDrawerTab === "Unconfirmed"
                       ? "bg-amber-600 text-white shadow-xs ring-2 ring-amber-600/30"
                       : "bg-background text-muted-foreground hover:text-foreground hover:bg-muted border border-border/80"
                   )}
                 >
                   <i className="fa-solid fa-clock text-[11px]" />
+                  <span>Unconfirmed</span>
+                  <span
+                    className={cn(
+                      "text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold",
+                      dayDrawerTab === "Unconfirmed" ? "bg-white/25 text-white" : "bg-muted text-foreground"
+                    )}
+                  >
+                    {inspectedDayData.unconfirmed.length}
+                  </span>
+                </button>
+
+                {/* 4. Partial */}
+                <button
+                  ref={(el) => {
+                    dayTabRefs.current["Partial"] = el;
+                  }}
+                  type="button"
+                  onClick={(e) => selectDayTab("Partial", e.currentTarget)}
+                  className={cn(
+                    "px-3 py-1.5 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap cursor-pointer shadow-2xs select-none",
+                    dayDrawerTab === "Partial"
+                      ? "bg-indigo-600 text-white shadow-xs ring-2 ring-indigo-600/30"
+                      : "bg-background text-muted-foreground hover:text-foreground hover:bg-muted border border-border/80"
+                  )}
+                >
+                  <i className="fa-solid fa-business-time text-[11px]" />
                   <span>Partial</span>
                   <span
                     className={cn(
@@ -2169,11 +2391,15 @@ export function TeamAvailabilityTab({
                   </span>
                 </button>
 
+                {/* 5. Unavailable / Off */}
                 <button
+                  ref={(el) => {
+                    dayTabRefs.current["Unavailable"] = el;
+                  }}
                   type="button"
-                  onClick={() => setDayDrawerTab("Unavailable")}
+                  onClick={(e) => selectDayTab("Unavailable", e.currentTarget)}
                   className={cn(
-                    "px-3 py-1.5 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 shrink-0 cursor-pointer shadow-2xs",
+                    "px-3 py-1.5 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap cursor-pointer shadow-2xs select-none",
                     dayDrawerTab === "Unavailable"
                       ? "bg-rose-600 text-white shadow-xs ring-2 ring-rose-600/30"
                       : "bg-background text-muted-foreground hover:text-foreground hover:bg-muted border border-border/80"
@@ -2193,23 +2419,25 @@ export function TeamAvailabilityTab({
               </div>
 
               {/* Search input for employee name/role/dept */}
-              <div className="relative">
-                <i className="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-xs pointer-events-none" />
-                <Input
-                  value={dayDrawerSearch}
-                  onChange={(e) => setDayDrawerSearch(e.target.value)}
-                  placeholder="Filter by name, department, or role..."
-                  className="pl-8 text-xs h-8 rounded-xl bg-background border-border/80"
-                />
-                {dayDrawerSearch && (
-                  <button
-                    type="button"
-                    onClick={() => setDayDrawerSearch("")}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground text-xs"
-                  >
-                    <i className="fa-solid fa-xmark" />
-                  </button>
-                )}
+              <div className="px-3.5 sm:px-4">
+                <div className="relative">
+                  <i className="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-xs pointer-events-none" />
+                  <Input
+                    value={dayDrawerSearch}
+                    onChange={(e) => setDayDrawerSearch(e.target.value)}
+                    placeholder="Filter by name, department, or role..."
+                    className="pl-8 text-xs h-8 rounded-xl bg-background border-border/80"
+                  />
+                  {dayDrawerSearch && (
+                    <button
+                      type="button"
+                      onClick={() => setDayDrawerSearch("")}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground text-xs"
+                    >
+                      <i className="fa-solid fa-xmark" />
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -2217,36 +2445,52 @@ export function TeamAvailabilityTab({
             <div className="p-3.5 sm:p-4 space-y-2.5 flex-1 overflow-y-auto overscroll-contain">
               {(() => {
                 const baseList =
-                  dayDrawerTab === "Available"
-                    ? inspectedDayData.available
+                  dayDrawerTab === "Confirmed"
+                    ? inspectedDayData.confirmed
+                    : dayDrawerTab === "Unconfirmed"
+                    ? inspectedDayData.unconfirmed
                     : dayDrawerTab === "Partial"
                     ? inspectedDayData.partial
                     : dayDrawerTab === "Unavailable"
                     ? inspectedDayData.unavailable
+                    : dayDrawerTab === "Available"
+                    ? inspectedDayData.available
                     : inspectedDayData.roster;
+
+                // Sort: Confirmed employees first, then unconfirmed, alphabetical within each group
+                const sortedList = [...baseList].sort((a, b) => {
+                  if (a.confirmed !== b.confirmed) {
+                    return a.confirmed ? -1 : 1;
+                  }
+                  return a.name.localeCompare(b.name);
+                });
 
                 const q = dayDrawerSearch.trim().toLowerCase();
                 const filtered = q
-                  ? baseList.filter(
+                  ? sortedList.filter(
                       (w) =>
                         w.name.toLowerCase().includes(q) ||
                         (w.department && w.department.toLowerCase().includes(q)) ||
                         (w.role && w.role.toLowerCase().includes(q)) ||
                         (w.employmentType && w.employmentType.toLowerCase().includes(q))
                     )
-                  : baseList;
+                  : sortedList;
 
                 if (filtered.length === 0) {
                   return (
                     <div className="py-12 text-center text-xs text-muted-foreground space-y-2">
                       <i className="fa-solid fa-user-slash text-3xl opacity-30" />
                       <p className="font-semibold text-foreground">
-                        {dayDrawerTab === "Available"
-                          ? "No employees available on this date"
+                        {dayDrawerTab === "Confirmed"
+                          ? "No employees have confirmed their availability yet"
+                          : dayDrawerTab === "Unconfirmed"
+                          ? "All employees have confirmed their availability!"
                           : dayDrawerTab === "Partial"
                           ? "No partial shifts recorded on this date"
                           : dayDrawerTab === "Unavailable"
                           ? "No employees marked as unavailable"
+                          : dayDrawerTab === "Available"
+                          ? "No employees available on this date"
                           : "No matching staff members"}
                       </p>
                       {inspectedDayData.isSunday && dayDrawerTab === "Available" && (
@@ -2284,22 +2528,12 @@ export function TeamAvailabilityTab({
                         <div className="min-w-0 space-y-0.5">
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="font-bold text-xs text-foreground truncate">{worker.name}</span>
-                            {/* Confirmation Dot */}
-                            {worker.confirmed ? (
+                            {worker.isDefault === false && (
                               <span
-                                className="inline-flex items-center gap-1 text-[9px] px-1.5 py-0.2 rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 font-semibold border border-emerald-500/20"
-                                title="Confirmed by employee"
+                                className="inline-flex items-center text-[9px] px-1.5 py-0.2 rounded-full bg-primary/10 text-primary font-semibold border border-primary/20"
+                                title="Customized schedule entry"
                               >
-                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 ring-2 ring-emerald-500/30 shrink-0" />
-                                Confirmed
-                              </span>
-                            ) : (
-                              <span
-                                className="inline-flex items-center gap-1 text-[9px] px-1.5 py-0.2 rounded-full bg-slate-400/10 text-slate-600 dark:text-slate-400 font-semibold border border-slate-400/20"
-                                title="Unconfirmed by employee"
-                              >
-                                <span className="w-1.5 h-1.5 rounded-full bg-slate-400 dark:bg-slate-500 ring-2 ring-slate-400/30 shrink-0" />
-                                Unconfirmed
+                                Custom Schedule
                               </span>
                             )}
                           </div>
@@ -2317,37 +2551,39 @@ export function TeamAvailabilityTab({
                         </div>
                       </div>
 
-                      <div className="flex items-center justify-between sm:justify-end gap-2 shrink-0 pt-1 sm:pt-0 border-t sm:border-t-0 border-border/50">
+                      <div className="flex items-center justify-between sm:justify-end gap-2.5 shrink-0 pt-1.5 sm:pt-0 border-t sm:border-t-0 border-border/50">
                         <div className="text-right">
                           <Badge
                             className={cn(
-                              "text-[10px] px-2 py-0.5 font-bold",
-                              isAvail && "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30",
-                              isPartial && "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30",
-                              isUnavail && "bg-rose-500/15 text-rose-700 dark:text-rose-400 border-rose-500/30"
+                              "text-[10px] px-2 py-0.5 font-bold transition-colors",
+                              worker.confirmed
+                                ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30"
+                                : "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30"
                             )}
                           >
                             <i
                               className={cn(
                                 "mr-1 text-[9px]",
-                                isAvail && "fa-solid fa-circle-check text-emerald-500",
-                                isPartial && "fa-solid fa-business-time text-amber-500",
-                                isUnavail && "fa-solid fa-circle-xmark text-rose-500"
+                                worker.confirmed ? "fa-solid fa-circle-check text-emerald-500" : "fa-solid fa-clock text-amber-500"
                               )}
                             />
-                            {worker.status}
+                            {worker.confirmed ? "Confirmed" : "Unconfirmed"}
                           </Badge>
 
                           <div className="text-[10px] text-muted-foreground font-mono mt-0.5">
-                            {isPartial
-                              ? `${worker.hours || 0}h (${worker.startTime || "Flex"} - ${worker.endTime || "Flex"})`
-                              : isAvail
-                              ? worker.isDefault
-                                ? "Full Day (Default 8h)"
-                                : "Full Day (8 hrs)"
-                              : worker.isDefault
-                              ? "Sunday Weekly Rest"
-                              : "Off / Unavailable"}
+                            {isPartial ? (
+                              <span className="text-amber-600 dark:text-amber-400 font-semibold">
+                                {worker.hours || 0}h ({worker.startTime || "Flex"} - ${worker.endTime || "Flex"})
+                              </span>
+                            ) : isUnavail ? (
+                              <span className="text-rose-600 dark:text-rose-400 font-semibold">
+                                {worker.notes?.includes("Sunday") ? "Sunday Off" : "Unavailable / Off"}
+                              </span>
+                            ) : worker.isDefault ? (
+                              "Full Day (Default 8h)"
+                            ) : (
+                              "Full Day (8 hrs)"
+                            )}
                           </div>
                         </div>
 
@@ -2379,10 +2615,10 @@ export function TeamAvailabilityTab({
             {/* Footer with Mode notice and Action Buttons */}
             <div className="p-3 sm:p-3.5 border-t border-border bg-muted/20 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 shrink-0">
               <div className="text-[11px] text-muted-foreground flex items-center gap-1.5">
-                {isPrivilegedRole ? (
+                {isAdminRole ? (
                   <>
                     <i className="fa-solid fa-shield-halved text-primary text-xs" />
-                    <span>View-only mode: Availability is self-managed by each employee.</span>
+                    <span>Admin oversight: All team members except Admin record their own availability.</span>
                   </>
                 ) : (
                   <>
@@ -2401,7 +2637,7 @@ export function TeamAvailabilityTab({
                 >
                   Close
                 </Button>
-                {canEditAvailability && !isDateInPastMonth(inspectedDay) && (
+                {!isAdminRole && isEligibleWorker && !isDateInPastMonth(inspectedDay) && (
                   <Button
                     size="sm"
                     className="text-xs h-9 sm:h-8 gap-1.5 bg-primary cursor-pointer rounded-xl px-3.5 shadow-xs"
@@ -2793,7 +3029,7 @@ export function TeamAvailabilityTab({
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="bg-card border border-border rounded-2xl max-w-lg w-full shadow-2xl overflow-hidden animate-in zoom-in-95 flex flex-col max-h-[90vh]"
+            className="bg-card border border-border rounded-2xl max-w-xl w-full shadow-2xl overflow-hidden animate-in zoom-in-95 flex flex-col max-h-[90vh]"
           >
             {/* Modal Header */}
             <div className="p-4 sm:p-5 border-b border-border bg-gradient-to-r from-primary/10 via-background to-emerald-500/10 flex items-center justify-between shrink-0">
@@ -2941,49 +3177,119 @@ export function TeamAvailabilityTab({
             </div>
 
             {/* Modal Footer with Actions */}
-            <div className="p-3.5 sm:p-4 border-t border-border bg-muted/20 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 shrink-0">
-              {skipCount < 2 ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={handleUpdateLater}
-                  className="h-9 sm:h-8 text-xs font-semibold rounded-xl text-muted-foreground hover:text-foreground cursor-pointer order-3 sm:order-1"
-                >
-                  <i className="fa-solid fa-clock mr-1.5" /> Update Later ({2 - skipCount} skip{2 - skipCount === 1 ? "" : "s"} left)
-                </Button>
-              ) : (
-                <div className="text-[11px] font-semibold text-rose-600 dark:text-rose-400 flex items-center gap-1.5 order-3 sm:order-1">
-                  <i className="fa-solid fa-lock text-xs" />
-                  <span>Confirmation mandatory (No skips left)</span>
+            <div className="p-3.5 sm:px-5 sm:py-3.5 border-t border-border bg-muted/20 shrink-0">
+              {/* Desktop / Tablet Layout (>= sm) */}
+              <div className="hidden sm:flex sm:items-center sm:justify-between gap-3 w-full">
+                {skipCount < 2 ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleUpdateLater}
+                    className="h-9 px-3 text-xs font-semibold rounded-xl border-border/80 text-muted-foreground hover:text-foreground hover:bg-muted/70 cursor-pointer flex items-center gap-1.5 whitespace-nowrap shrink-0 transition-all"
+                  >
+                    <i className="fa-solid fa-clock text-amber-500 text-xs" />
+                    <span>Update Later</span>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 font-bold border border-amber-500/25">
+                      {2 - skipCount} left
+                    </span>
+                  </Button>
+                ) : (
+                  <div className="text-[11px] font-semibold text-rose-600 dark:text-rose-400 flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-rose-500/10 border border-rose-500/25 shrink-0">
+                    <i className="fa-solid fa-lock text-xs" />
+                    <span>Mandatory • 0 skips left</span>
+                  </div>
+                )}
+
+                <div className="flex items-center gap-2 shrink-0">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setShowMonthlyPrompt(false);
+                      setViewMode("calendar");
+                    }}
+                    className="h-9 px-3.5 text-xs font-semibold rounded-xl border-border hover:bg-muted/70 text-foreground cursor-pointer flex items-center gap-1.5 whitespace-nowrap shrink-0 transition-all"
+                  >
+                    <i className="fa-solid fa-sliders text-xs mr-1 text-primary" />
+                    Customize Dates
+                  </Button>
+
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={handleConfirmMonth}
+                    disabled={confirmingMonth}
+                    className="h-9 px-4 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl cursor-pointer shadow-xs whitespace-nowrap shrink-0 flex items-center gap-1.5 transition-all"
+                  >
+                    {confirmingMonth ? (
+                      <>
+                        <i className="fa-solid fa-spinner fa-spin text-xs" />
+                        <span>Confirming...</span>
+                      </>
+                    ) : (
+                      <>
+                        <i className="fa-solid fa-circle-check text-xs" />
+                        <span>Confirm Availability</span>
+                      </>
+                    )}
+                  </Button>
                 </div>
-              )}
+              </div>
 
-              <div className="flex items-center gap-2 w-full sm:w-auto order-1 sm:order-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    setShowMonthlyPrompt(false);
-                    setViewMode("calendar");
-                  }}
-                  className="h-9 sm:h-8 text-xs font-semibold rounded-xl flex-1 sm:flex-initial cursor-pointer"
-                >
-                  <i className="fa-solid fa-sliders text-xs mr-1.5 text-primary" />
-                  Customize Dates
-                </Button>
-
+              {/* Mobile Layout (< sm): Stacks with high-touch targets and zero clipping */}
+              <div className="flex flex-col sm:hidden gap-2 w-full">
                 <Button
                   type="button"
                   onClick={handleConfirmMonth}
                   disabled={confirmingMonth}
-                  className="h-9 sm:h-8 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5 rounded-xl cursor-pointer shadow-xs flex-1 sm:flex-initial"
+                  className="w-full h-10 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl cursor-pointer shadow-xs whitespace-nowrap flex items-center justify-center gap-2 transition-all"
                 >
                   {confirmingMonth ? (
-                    <><i className="fa-solid fa-spinner fa-spin" /> Confirming...</>
+                    <>
+                      <i className="fa-solid fa-spinner fa-spin text-xs" />
+                      <span>Confirming...</span>
+                    </>
                   ) : (
-                    <><i className="fa-solid fa-circle-check text-xs" /> Confirm Availability</>
+                    <>
+                      <i className="fa-solid fa-circle-check text-xs" />
+                      <span>Confirm Availability</span>
+                    </>
                   )}
                 </Button>
+
+                <div className="grid grid-cols-2 gap-2 w-full">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setShowMonthlyPrompt(false);
+                      setViewMode("calendar");
+                    }}
+                    className="h-9 text-xs font-semibold rounded-xl border-border hover:bg-muted text-foreground cursor-pointer flex items-center justify-center gap-1.5 whitespace-nowrap"
+                  >
+                    <i className="fa-solid fa-sliders text-xs text-primary" />
+                    <span>Customize</span>
+                  </Button>
+
+                  {skipCount < 2 ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={handleUpdateLater}
+                      className="h-9 text-xs font-semibold rounded-xl border-border text-muted-foreground hover:text-foreground cursor-pointer flex items-center justify-center gap-1.5 whitespace-nowrap"
+                    >
+                      <i className="fa-solid fa-clock text-amber-500 text-xs" />
+                      <span>Later ({2 - skipCount})</span>
+                    </Button>
+                  ) : (
+                    <div className="h-9 text-[10px] font-semibold text-rose-600 dark:text-rose-400 flex items-center justify-center gap-1 px-1 rounded-xl bg-rose-500/10 border border-rose-500/25">
+                      <i className="fa-solid fa-lock text-[10px]" />
+                      <span>Mandatory</span>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>

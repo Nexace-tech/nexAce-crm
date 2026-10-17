@@ -45,11 +45,15 @@ export async function GET(request: Request) {
     const month = searchParams.get("month"); // 0-11
     const year = searchParams.get("year");   // e.g. 2026
 
-    // Find all active employees in the tenant (excluding Admin, Sub-Admin, and HR)
+    const isAdminUser =
+      Boolean(currentUser.role && currentUser.role.trim().toLowerCase() === "admin") ||
+      roleKey === "Admin";
+
+    // Find all active employees in the tenant (excluding only Admin)
     const eligibleWorkers = await User.find({
       tenantId: tenantObjectId,
       status: { $ne: "Suspended" },
-      role: { $nin: ["Admin", "admin", "OPS", "ops", "Sub-Admin", "sub-admin", "SubAdmin", "subadmin", "HR", "hr"] },
+      role: { $nin: ["Admin", "admin", "ADMIN"] },
     })
       .select("name email role employmentType photoUrl department shiftName shiftTime")
       .sort({ name: 1 })
@@ -61,7 +65,7 @@ export async function GET(request: Request) {
       if (selectedUserId && selectedUserId !== "All") {
         query.userId = new mongoose.Types.ObjectId(selectedUserId);
       } else {
-        // By default, query all non-privileged employee availability records
+        // By default, query all eligible worker availability records
         const workerIds = eligibleWorkers.map((w: any) => w._id);
         if (workerIds.length > 0) {
           query.userId = { $in: workerIds };
@@ -90,11 +94,16 @@ export async function GET(request: Request) {
     // Fetch monthly confirmation status for queried users
     const confirmationsMap: Record<string, { confirmed: boolean; confirmedAt?: string }> = {};
     if (monthPrefix) {
+      const allWorkerIds = eligibleWorkers.map((w: any) => w._id);
       const userIdsToQuery = isElevated
         ? (selectedUserId && selectedUserId !== "All"
             ? [new mongoose.Types.ObjectId(selectedUserId)]
-            : eligibleWorkers.map((w: any) => w._id))
+            : allWorkerIds)
         : [userObjectId];
+
+      if (!userIdsToQuery.some((id: any) => String(id) === String(userObjectId)) && !isAdminUser) {
+        userIdsToQuery.push(userObjectId);
+      }
 
       const confirmationDocs = await AvailabilityConfirmation.find({
         tenantId: tenantObjectId,
@@ -115,26 +124,22 @@ export async function GET(request: Request) {
       : String(userObjectId);
 
     const isMonthConfirmed = Boolean(confirmationsMap[targetUserIdKey]?.confirmed);
-
-    const isRestrictedAdminOrHR =
-      Boolean(currentUser.role && currentUser.role.trim().toLowerCase() === "admin") ||
-      isSubAdminRole(currentUser.role) ||
-      roleKey === "HR" ||
-      roleKey === "Admin" ||
-      roleKey === "OPS";
+    const isCurrentUserConfirmed = Boolean(confirmationsMap[String(userObjectId)]?.confirmed);
 
     return NextResponse.json({
       success: true,
       availabilities,
       eligibleWorkers,
       isElevated,
-      isRestrictedAdminOrHR,
-      canEditAvailability: !isRestrictedAdminOrHR,
+      isAdminUser,
+      isRestrictedAdmin: isAdminUser,
+      canEditAvailability: !isAdminUser,
       confirmations: confirmationsMap,
       isMonthConfirmed,
+      isCurrentUserConfirmed,
       monthKey: monthPrefix,
       currentUserEmploymentType: currentUser.employmentType || "",
-      isEligibleWorker: !isRestrictedAdminOrHR,
+      isEligibleWorker: !isAdminUser,
     });
   } catch (err: any) {
     console.error("GET /api/calendar/availability error:", err);
@@ -156,17 +161,14 @@ export async function POST(request: Request) {
     }
 
     const roleKey = normalizeRoleKey(currentUser.role);
-    const isRestrictedAdminOrHR =
+    const isAdminUser =
       Boolean(currentUser.role && currentUser.role.trim().toLowerCase() === "admin") ||
-      isSubAdminRole(currentUser.role) ||
-      roleKey === "HR" ||
-      roleKey === "Admin" ||
-      roleKey === "OPS";
+      roleKey === "Admin";
 
-    // Admin, Sub-admin, and HR cannot update user availability
-    if (isRestrictedAdminOrHR) {
+    // Only Admin is exempt and does not record availability schedules
+    if (isAdminUser) {
       return NextResponse.json(
-        { error: "Forbidden: Admin, Sub-admin, and HR cannot update user availability. Availability is strictly self-managed by each user." },
+        { error: "Forbidden: Admin is exempt from availability schedules. Team members record and manage their own availability." },
         { status: 403 }
       );
     }
@@ -325,17 +327,14 @@ export async function DELETE(request: Request) {
     }
 
     const roleKey = normalizeRoleKey(currentUser.role);
-    const isRestrictedAdminOrHR =
+    const isAdminUser =
       Boolean(currentUser.role && currentUser.role.trim().toLowerCase() === "admin") ||
-      isSubAdminRole(currentUser.role) ||
-      roleKey === "HR" ||
-      roleKey === "Admin" ||
-      roleKey === "OPS";
+      roleKey === "Admin";
 
-    // Admin, Sub-admin, and HR cannot delete or clear user availability
-    if (isRestrictedAdminOrHR) {
+    // Only Admin is exempt from availability schedules
+    if (isAdminUser) {
       return NextResponse.json(
-        { error: "Forbidden: Admin, Sub-admin, and HR cannot delete or clear user availability. Availability is strictly self-managed by each user." },
+        { error: "Forbidden: Admin is exempt from availability schedules." },
         { status: 403 }
       );
     }
