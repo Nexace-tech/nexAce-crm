@@ -243,6 +243,8 @@ export default function CommunicationHub() {
   };
 
   const [sidebarSearch, setSidebarSearch] = useState("");
+  const [mobileChatView, setMobileChatView] = useState<"sidebar" | "chat">("chat");
+  const [showExportMenu, setShowExportMenu] = useState(false);
   const [newMessageText, setNewMessageText] = useState("");
   const [replyingToMsg, setReplyingToMsg] = useState<ChatMsg | null>(null);
   const [loadingChat, setLoadingChat] = useState(false);
@@ -1121,10 +1123,66 @@ export default function CommunicationHub() {
       {/* ========================================================================= */}
       {/* TAB 1: WORKSPACE CHAT (Direct Messages & Channels, Threads, @mentions)   */}
       {/* ========================================================================= */}
-      {activeTab === "chat" && (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 h-[calc(100vh-220px)] min-h-[520px] max-h-[720px]">
-          {/* Channels & DMs Sidebar */}
-          <Card className="p-4 flex flex-col justify-between overflow-hidden">
+      {activeTab === "chat" && (() => {
+        const getActiveChatDisplayName = (channel: string) => {
+          if (channel.startsWith("dm_")) {
+            const getDMChannel = (targetUser: any) => {
+              const myId = user?._id || user?.name || "";
+              const targetId = targetUser._id || targetUser.name || "";
+              const myKey = myId.toString().toLowerCase().replace(/[^a-z0-9]/g, "_");
+              const targetKey = targetId.toString().toLowerCase().replace(/[^a-z0-9]/g, "_");
+              const pairKey = [myKey, targetKey].sort().join("_");
+              return `dm_${pairKey}`;
+            };
+            const target = teamMembers.find((m: any) => getDMChannel(m) === channel || (m.name && channel.includes(m.name.toLowerCase().replace(/[^a-z0-9]/g, "_"))));
+            return target ? target.name : channel.replace("dm_", "").replace(/_/g, " ");
+          }
+          return `#${channel}`;
+        };
+
+        return (
+          <div className="flex flex-col gap-2.5 sm:gap-4 h-[calc(100dvh-175px)] sm:h-[calc(100vh-210px)] min-h-[500px]">
+            {/* Mobile View Switcher Tab (< md screens only) */}
+            <div className="flex md:hidden items-center p-1 bg-muted/60 rounded-xl border border-border/60 shrink-0 gap-1">
+              <button
+                type="button"
+                onClick={() => setMobileChatView("sidebar")}
+                className={cn(
+                  "flex-1 py-1.5 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer",
+                  mobileChatView === "sidebar"
+                    ? "bg-background text-foreground shadow-xs font-bold border border-border/50"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <i className="fa-solid fa-layer-group text-xs text-primary" />
+                <span>Channels & Chats</span>
+                {(pinnedChannels.length + pinnedDMs.length) > 0 && (
+                  <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-amber-500/20 text-amber-500 font-mono font-bold">
+                    {pinnedChannels.length + pinnedDMs.length}
+                  </span>
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={() => setMobileChatView("chat")}
+                className={cn(
+                  "flex-1 py-1.5 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer truncate",
+                  mobileChatView === "chat"
+                    ? "bg-background text-foreground shadow-xs font-bold border border-border/50"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <i className="fa-solid fa-comments text-xs text-emerald-500" />
+                <span className="truncate capitalize">{getActiveChatDisplayName(selectedChannel)}</span>
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 md:gap-6 flex-1 min-h-0 overflow-hidden">
+              {/* Channels & DMs Sidebar */}
+              <Card className={cn(
+                "p-3 sm:p-4 flex flex-col justify-between overflow-hidden h-full",
+                mobileChatView === "chat" ? "hidden md:flex" : "flex"
+              )}>
             <div className="flex-1 flex flex-col min-h-0 space-y-3 overflow-hidden">
               <div className="relative shrink-0">
                 <i className="fa-solid fa-magnifying-glass absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground" />
@@ -1363,11 +1421,14 @@ export default function CommunicationHub() {
                               return (
                                 <div
                                   key={`pinned-ch-${chId || chName}`}
-                                  onClick={() => setSelectedChannel(chName)}
+                                  onClick={() => {
+                                    setSelectedChannel(chName);
+                                    setMobileChatView("chat");
+                                  }}
                                   className={cn(
                                     "group flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer",
                                     isSelected
-                                      ? "bg-amber-500 text-slate-950 font-bold shadow-xs"
+                                      ? "bg-amber-500/15 text-amber-500 border border-amber-500/30 font-bold shadow-xs"
                                       : "bg-background/80 hover:bg-background text-foreground border border-border/40"
                                   )}
                                 >
@@ -1410,11 +1471,14 @@ export default function CommunicationHub() {
                               return (
                                 <div
                                   key={`pinned-dm-${mUser._id || mUser.name}`}
-                                  onClick={() => setSelectedChannel(dmChannel)}
+                                  onClick={() => {
+                                    setSelectedChannel(dmChannel);
+                                    setMobileChatView("chat");
+                                  }}
                                   className={cn(
                                     "group flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer",
                                     isSelected
-                                      ? "bg-amber-500 text-slate-950 font-bold shadow-xs"
+                                      ? "bg-amber-500/15 text-amber-500 border border-amber-500/30 font-bold shadow-xs"
                                       : "bg-background/80 hover:bg-background text-foreground border border-border/40"
                                   )}
                                 >
@@ -1498,7 +1562,10 @@ export default function CommunicationHub() {
                           return (
                             <div
                               key={mUser._id || mUser.name}
-                              onClick={() => setSelectedChannel(dmChannel)}
+                              onClick={() => {
+                                setSelectedChannel(dmChannel);
+                                setMobileChatView("chat");
+                              }}
                               className="group flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-rose-500/10 text-foreground border border-rose-500/20 hover:bg-rose-500/15 transition-colors cursor-pointer"
                             >
                               <span className="flex items-center gap-2 truncate">
@@ -1563,7 +1630,10 @@ export default function CommunicationHub() {
                                     ? "bg-primary text-primary-foreground font-bold shadow-xs"
                                     : "text-muted-foreground hover:bg-accent hover:text-foreground"
                                 )}
-                                onClick={() => setSelectedChannel(chName)}
+                                onClick={() => {
+                                  setSelectedChannel(chName);
+                                  setMobileChatView("chat");
+                                }}
                               >
                                 <span className="flex items-center gap-2 truncate">
                                   <i className={`fa-solid ${
@@ -1754,7 +1824,10 @@ export default function CommunicationHub() {
                               return (
                                 <div
                                   key={mUser._id || mUser.name}
-                                  onClick={() => setSelectedChannel(dmChannel)}
+                                  onClick={() => {
+                                    setSelectedChannel(dmChannel);
+                                    setMobileChatView("chat");
+                                  }}
                                   className={cn(
                                     "group w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer text-left relative",
                                     selectedChannel === dmChannel
@@ -1826,7 +1899,7 @@ export default function CommunicationHub() {
               </div>
             </div>
 
-            <div className="shrink-0 mt-3 p-2.5 rounded-lg border border-border/80 bg-muted/20 text-[11px] text-muted-foreground space-y-1">
+            <div className="shrink-0 mt-3 p-2.5 rounded-lg border border-border/80 bg-muted/20 text-[11px] text-muted-foreground space-y-1 hidden sm:block">
               <p className="font-semibold text-foreground flex items-center gap-1">
                 <i className="fa-solid fa-circle-info text-primary" /> Pro-Tip
               </p>
@@ -1835,11 +1908,23 @@ export default function CommunicationHub() {
           </Card>
 
           {/* Chat Feed */}
-          <Card className="md:col-span-3 p-4 flex flex-col justify-between overflow-hidden">
-            <div className="flex items-center justify-between pb-3 border-b border-border font-semibold text-foreground text-sm flex-wrap gap-2">
-              <div className="flex items-center gap-2 flex-wrap">
-                <i className={selectedChannel.startsWith("dm_") ? "fa-solid fa-user-group text-emerald-500" : isCurrentChannelPrivate ? "fa-solid fa-lock text-amber-500" : "fa-solid fa-hashtag text-primary"} />
-                <span className="capitalize">
+          <Card className={cn(
+            "md:col-span-3 p-3 sm:p-4 flex flex-col justify-between overflow-hidden h-full",
+            mobileChatView === "sidebar" ? "hidden md:flex" : "flex"
+          )}>
+            <div className="flex items-center justify-between pb-2.5 sm:pb-3 border-b border-border font-semibold text-foreground text-sm shrink-0 gap-1.5 sm:gap-2 min-w-0">
+              <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-1">
+                {/* Back to Channels button on Mobile */}
+                <button
+                  type="button"
+                  onClick={() => setMobileChatView("sidebar")}
+                  className="md:hidden p-1.5 -ml-1 text-muted-foreground hover:text-foreground rounded-lg hover:bg-muted/60 transition-colors flex items-center gap-1 shrink-0 cursor-pointer"
+                  title="Back to Channels & Direct Messages"
+                >
+                  <i className="fa-solid fa-arrow-left text-xs text-primary" />
+                </button>
+                <i className={cn("shrink-0 text-xs sm:text-sm", selectedChannel.startsWith("dm_") ? "fa-solid fa-user-group text-emerald-500" : isCurrentChannelPrivate ? "fa-solid fa-lock text-amber-500" : "fa-solid fa-hashtag text-primary")} />
+                <span className="capitalize font-bold text-xs sm:text-sm truncate max-w-[85px] xs:max-w-[130px] sm:max-w-[200px]" title={selectedChannel}>
                   {selectedChannel.startsWith("dm_")
                     ? (() => {
                         const getDMChannel = (targetUser: any) => {
@@ -1856,7 +1941,7 @@ export default function CommunicationHub() {
                     : selectedChannel}
                 </span>
                 <Badge variant="outline" className={cn(
-                  "text-[10px] font-mono tracking-wider px-2 py-0.5 inline-flex items-center gap-1 font-semibold rounded-md",
+                  "text-[9px] sm:text-[10px] font-mono tracking-wider px-1.5 sm:px-2 py-0.5 inline-flex items-center gap-1 font-semibold rounded-md shrink-0",
                   selectedChannel.startsWith("dm_")
                     ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
                     : isCurrentChannelPrivate
@@ -1864,13 +1949,15 @@ export default function CommunicationHub() {
                     : "border-primary/30 bg-primary/10 text-primary dark:text-blue-300"
                 )}>
                   {selectedChannel.startsWith("dm_") ? (
-                    "DIRECT MESSAGE"
+                    "DM"
                   ) : isCurrentChannelPrivate ? (
                     <>
-                      <i className="fa-solid fa-lock text-[9px]" /> PRIVATE CHANNEL
+                      <i className="fa-solid fa-lock text-[8px]" /> <span className="hidden xs:inline">PRIVATE</span><span className="xs:hidden">PRIV</span>
                     </>
                   ) : (
-                    "PUBLIC CHANNEL"
+                    <>
+                      <span className="hidden xs:inline">PUBLIC</span><span className="xs:hidden">PUB</span>
+                    </>
                   )}
                 </Badge>
                 {isCurrentChannelPrivate && currentChannelObj && (
@@ -1880,7 +1967,7 @@ export default function CommunicationHub() {
                       setManagingChannel(currentChannelObj);
                       setShowManageMembersModal(true);
                     }}
-                    className="text-[11px] font-medium text-muted-foreground hover:text-foreground bg-muted/60 hover:bg-muted px-2.5 py-0.5 rounded-md flex items-center gap-1.5 transition-colors cursor-pointer border border-border/60"
+                    className="hidden sm:flex text-[11px] font-medium text-muted-foreground hover:text-foreground bg-muted/60 hover:bg-muted px-2 py-0.5 rounded-md items-center gap-1.5 transition-colors cursor-pointer border border-border/60 shrink-0"
                     title="Manage channel members"
                   >
                     <i className="fa-solid fa-user-group text-[10px] text-amber-500" />
@@ -1888,7 +1975,7 @@ export default function CommunicationHub() {
                   </button>
                 )}
               </div>
-              <div className="flex items-center gap-2 sm:gap-3">
+              <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
                 {/* Pinned Messages Trigger */}
                 {(() => {
                   const pinnedMsgs = messages.filter((m) => m.isPinned);
@@ -1898,7 +1985,7 @@ export default function CommunicationHub() {
                       type="button"
                       onClick={() => setShowPinnedDrawer(!showPinnedDrawer)}
                       className={cn(
-                        "px-2.5 py-1 text-xs font-semibold rounded-lg border transition-all flex items-center gap-1.5 cursor-pointer shadow-xs",
+                        "px-2 sm:px-2.5 py-1 text-xs font-semibold rounded-lg border transition-all flex items-center gap-1 cursor-pointer shadow-xs shrink-0",
                         showPinnedDrawer
                           ? "bg-amber-500/15 text-amber-500 border-amber-500/30 font-bold"
                           : "bg-muted/40 text-muted-foreground hover:text-foreground border-border/60"
@@ -1906,39 +1993,84 @@ export default function CommunicationHub() {
                       title="View pinned messages in this chat"
                     >
                       <i className="fa-solid fa-thumbtack text-amber-500 text-xs" />
-                      <span>{pinnedMsgs.length} Pinned</span>
-                      <i className={cn("fa-solid text-[9px] transition-transform", showPinnedDrawer ? "fa-chevron-up" : "fa-chevron-down")} />
+                      <span className="hidden xs:inline">{pinnedMsgs.length} Pinned</span>
+                      <span className="xs:hidden font-bold text-[11px] text-amber-500">{pinnedMsgs.length}</span>
+                      <i className={cn("fa-solid text-[9px] transition-transform hidden xs:inline", showPinnedDrawer ? "fa-chevron-up" : "fa-chevron-down")} />
                     </button>
                   );
                 })()}
 
-                {/* Export Chat Controls */}
+                {/* Export Chat Controls: Desktop inline, Mobile popover */}
                 {messages && messages.length > 0 && (
-                  <div className="flex items-center gap-1.5 bg-muted/30 p-1 rounded-lg border border-border/60">
-                    <span className="text-[10px] font-semibold text-muted-foreground px-1.5 flex items-center gap-1">
-                      <i className="fa-solid fa-file-arrow-down text-primary" /> Export:
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => handleExportChat("txt")}
-                      className="px-2 py-0.5 text-[10px] font-bold rounded bg-background hover:bg-accent text-foreground border border-border/60 transition-colors flex items-center gap-1 cursor-pointer"
-                      title="Export as Text Transcript (.txt)"
-                    >
-                      <i className="fa-solid fa-file-lines text-slate-500" /> TXT
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleExportChat("json")}
-                      className="px-2 py-0.5 text-[10px] font-bold rounded bg-background hover:bg-accent text-foreground border border-border/60 transition-colors flex items-center gap-1 cursor-pointer"
-                      title="Export as Structured JSON (.json)"
-                    >
-                      <i className="fa-solid fa-code text-indigo-500" /> JSON
-                    </button>
-                  </div>
+                  <>
+                    {/* Desktop View */}
+                    <div className="hidden sm:flex items-center gap-1.5 bg-muted/30 p-1 rounded-lg border border-border/60 shrink-0">
+                      <span className="text-[10px] font-semibold text-muted-foreground px-1.5 flex items-center gap-1">
+                        <i className="fa-solid fa-file-arrow-down text-primary" /> Export:
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleExportChat("txt")}
+                        className="px-2 py-0.5 text-[10px] font-bold rounded bg-background hover:bg-accent text-foreground border border-border/60 transition-colors flex items-center gap-1 cursor-pointer"
+                        title="Export as Text Transcript (.txt)"
+                      >
+                        <i className="fa-solid fa-file-lines text-slate-500" /> TXT
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleExportChat("json")}
+                        className="px-2 py-0.5 text-[10px] font-bold rounded bg-background hover:bg-accent text-foreground border border-border/60 transition-colors flex items-center gap-1 cursor-pointer"
+                        title="Export as Structured JSON (.json)"
+                      >
+                        <i className="fa-solid fa-code text-indigo-500" /> JSON
+                      </button>
+                    </div>
+
+                    {/* Mobile View Icon & Dropdown */}
+                    <div className="relative sm:hidden">
+                      <button
+                        type="button"
+                        onClick={() => setShowExportMenu(!showExportMenu)}
+                        className={cn(
+                          "h-7 w-7 rounded-lg border text-xs transition-colors flex items-center justify-center cursor-pointer",
+                          showExportMenu
+                            ? "bg-primary/10 border-primary/40 text-primary"
+                            : "bg-muted/40 border-border/60 text-muted-foreground hover:text-foreground"
+                        )}
+                        title="Export Chat Transcript"
+                      >
+                        <i className="fa-solid fa-file-arrow-down text-xs text-primary" />
+                      </button>
+                      {showExportMenu && (
+                        <div className="absolute right-0 top-full mt-1.5 w-32 bg-card border border-border rounded-xl shadow-lg z-50 p-1 space-y-0.5">
+                          <button
+                            type="button"
+                            onClick={() => { handleExportChat("txt"); setShowExportMenu(false); }}
+                            className="w-full text-left px-2.5 py-1.5 text-xs font-semibold rounded-lg hover:bg-muted text-foreground flex items-center gap-2 cursor-pointer transition-colors"
+                          >
+                            <i className="fa-solid fa-file-lines text-slate-500 text-xs" /> Export TXT
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => { handleExportChat("json"); setShowExportMenu(false); }}
+                            className="w-full text-left px-2.5 py-1.5 text-xs font-semibold rounded-lg hover:bg-muted text-foreground flex items-center gap-2 cursor-pointer transition-colors"
+                          >
+                            <i className="fa-solid fa-code text-indigo-500 text-xs" /> Export JSON
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </>
                 )}
-                <span className="text-xs text-muted-foreground flex items-center gap-1.5">
-                  <i className="fa-solid fa-signal text-emerald-500 text-[10px]" /> Realtime Sync
-                </span>
+
+                {/* Realtime Status Indicator */}
+                <div className="flex items-center gap-1.5 text-muted-foreground shrink-0" title="Realtime Sync Active">
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                  </span>
+                  <span className="text-xs text-muted-foreground hidden md:inline">Realtime Sync</span>
+                </div>
               </div>
             </div>
 
@@ -2096,11 +2228,11 @@ export default function CommunicationHub() {
                           </div>
 
                           {/* Bubble */}
-                          <div className="flex-1 min-w-0">
+                          <div className="flex-1 min-w-0 max-w-full">
                             <div
                               id={`msg-${m._id}`}
                               className={cn(
-                                "rounded-2xl rounded-tl-sm px-4 py-2.5 border transition-all duration-200 cursor-pointer relative",
+                                "rounded-2xl rounded-tl-sm px-3 sm:px-4 py-2 sm:py-2.5 border transition-all duration-200 cursor-pointer relative max-w-full overflow-hidden",
                                 isSelected
                                   ? "bg-slate-100 border-primary/50 shadow-md dark:bg-[hsl(215,30%,22%)]"
                                   : "bg-slate-50 border-slate-200 hover:bg-slate-100 dark:bg-[hsl(215,30%,20%)] dark:border-[hsl(215,25%,25%)] dark:hover:bg-[hsl(215,30%,22%)]"
@@ -2151,41 +2283,41 @@ export default function CommunicationHub() {
                               )}
 
                               {/* Message Body */}
-                              <div className="flex items-end gap-2">
+                              <div className="flex items-end gap-1.5 sm:gap-2 min-w-0 max-w-full">
                                 {m.deletedForEveryone ? (
                                   <p className="text-xs text-muted-foreground/80 italic flex-1 flex items-center gap-1.5">
                                     <i className="fa-solid fa-ban text-xs text-muted-foreground/60" /> This message was deleted
                                   </p>
                                 ) : (
-                                  <div className="flex-1 space-y-2">
+                                  <div className="flex-1 min-w-0 max-w-full space-y-2 overflow-hidden">
                                     {m.content && !m.content.startsWith("[Attachment]") && (
-                                      <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">
+                                      <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap break-words">
                                         {renderFormattedContent(m.content, m.mentions)}
                                       </p>
                                     )}
 
                                     {/* Message Attachments List */}
                                     {m.attachments && m.attachments.length > 0 && (
-                                      <div className="mt-2 space-y-2">
+                                      <div className="mt-2 space-y-2 w-full max-w-full overflow-hidden">
                                         {m.attachments.map((att, attIdx) => {
                                           const isImg = att.mimeType?.startsWith("image/") || /\.(png|jpe?g|gif|webp|svg)$/i.test(att.name);
                                           const attUrl = att.url.includes("fileId") || att.url.includes("id=") ? att.url : `/api/drive/download?fileId=${(att as any)._id || att.url.split("=").pop()}`;
                                           return (
                                             <div
                                               key={attIdx}
-                                              className="rounded-xl border border-border/80 bg-card/80 p-2.5 max-w-sm space-y-2 shadow-xs"
+                                              className="rounded-xl border border-border/80 bg-card/80 p-2 sm:p-2.5 w-full max-w-full sm:max-w-sm space-y-2 shadow-xs overflow-hidden"
                                               onClick={(e) => e.stopPropagation()}
                                             >
                                               {/* Image Thumbnail */}
                                               {isImg && (
                                                 <div
-                                                  className="overflow-hidden rounded-lg border border-border/60 bg-black/20 cursor-pointer group/img relative"
+                                                  className="overflow-hidden rounded-lg border border-border/60 bg-black/20 cursor-pointer group/img relative w-full max-w-full"
                                                   onClick={() => setPreviewImageModal({ url: attUrl, name: att.name, size: att.size })}
                                                 >
                                                   <img
                                                     src={attUrl}
                                                     alt={att.name}
-                                                    className="w-full max-h-52 object-cover group-hover/img:scale-105 transition-transform duration-200"
+                                                    className="w-full max-h-48 sm:max-h-52 object-contain bg-black/40 group-hover/img:scale-105 transition-transform duration-200"
                                                     onError={(e) => {
                                                       // Hide broken img tag if URL fails
                                                       (e.target as HTMLElement).style.display = "none";
@@ -2198,13 +2330,13 @@ export default function CommunicationHub() {
                                               )}
 
                                               {/* File Meta Info */}
-                                              <div className="flex items-center justify-between gap-2 text-xs">
-                                                <div className="flex items-center gap-2 min-w-0">
+                                              <div className="flex items-center justify-between gap-2 text-xs min-w-0">
+                                                <div className="flex items-center gap-2 min-w-0 flex-1">
                                                   <div className="h-8 w-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center font-bold flex-shrink-0">
                                                     <i className={cn("fa-solid text-sm", isImg ? "fa-file-image text-emerald-500" : "fa-file text-indigo-500")} />
                                                   </div>
-                                                  <div className="min-w-0">
-                                                    <p className="font-bold text-foreground truncate">{att.name}</p>
+                                                  <div className="min-w-0 flex-1">
+                                                    <p className="font-bold text-foreground truncate text-xs">{att.name}</p>
                                                     <p className="text-[10px] text-muted-foreground font-mono">{Math.round(att.size / 1024)} KB</p>
                                                   </div>
                                                 </div>
@@ -2216,7 +2348,7 @@ export default function CommunicationHub() {
                                                   <button
                                                     type="button"
                                                     onClick={() => setPreviewImageModal({ url: attUrl, name: att.name, size: att.size })}
-                                                    className="flex-1 px-2.5 py-1.5 rounded-lg bg-muted/60 hover:bg-primary/10 text-muted-foreground hover:text-primary transition-colors text-[11px] font-semibold flex items-center justify-center gap-1.5 cursor-pointer"
+                                                    className="flex-1 px-2 py-1.5 rounded-lg bg-muted/60 hover:bg-primary/10 text-muted-foreground hover:text-primary transition-colors text-[10px] sm:text-[11px] font-semibold flex items-center justify-center gap-1 cursor-pointer"
                                                   >
                                                     <i className="fa-solid fa-eye text-xs text-primary" /> Preview
                                                   </button>
@@ -2227,7 +2359,7 @@ export default function CommunicationHub() {
                                                   download={att.name}
                                                   target="_blank"
                                                   rel="noopener noreferrer"
-                                                  className="flex-1 px-2.5 py-1.5 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary transition-colors text-[11px] font-semibold flex items-center justify-center gap-1.5 cursor-pointer"
+                                                  className="flex-1 px-2 py-1.5 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary transition-colors text-[10px] sm:text-[11px] font-semibold flex items-center justify-center gap-1 cursor-pointer"
                                                 >
                                                   <i className="fa-solid fa-download text-xs" /> Download
                                                 </a>
@@ -2527,14 +2659,17 @@ export default function CommunicationHub() {
                     <i className="fa-solid fa-at" />
                   </button>
                 </div>
-                <Button color="primary" type="submit" disabled={uploadingFile} className="gap-2 font-semibold">
-                  <i className="fa-solid fa-paper-plane text-xs" /> Send
+                <Button color="primary" type="submit" disabled={uploadingFile} className="gap-1.5 px-3 sm:px-4 font-semibold shrink-0 h-9">
+                  <i className="fa-solid fa-paper-plane text-xs" />
+                  <span className="hidden xs:inline">Send</span>
                 </Button>
               </form>
             </div>
           </Card>
         </div>
-      )}
+      </div>
+    );
+  })()}
 
       {/* ========================================================================= */}
       {/* TAB 2: MAIL CENTER (Inbox, Sent, Starred, Compose Modal)                 */}
