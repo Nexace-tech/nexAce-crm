@@ -170,6 +170,13 @@ export default function CommunicationHub() {
   const [showCreateChannelModal, setShowCreateChannelModal] = useState(false);
   const [newChannelName, setNewChannelName] = useState("");
   const [newChannelDesc, setNewChannelDesc] = useState("");
+  const [isChannelPrivate, setIsChannelPrivate] = useState(false);
+  const [channelMembers, setChannelMembers] = useState<string[]>([]);
+  const [channelMemberSearch, setChannelMemberSearch] = useState("");
+  const [showManageMembersModal, setShowManageMembersModal] = useState(false);
+  const [managingChannel, setManagingChannel] = useState<any | null>(null);
+  const [addMemberSelectId, setAddMemberSelectId] = useState("");
+  const [isUpdatingMembers, setIsUpdatingMembers] = useState(false);
   const [channelError, setChannelError] = useState("");
   const [isSubmittingChannel, setIsSubmittingChannel] = useState(false);
   const [channelDeleteConfirm, setChannelDeleteConfirm] = useState<{ channelId: string; channelName: string } | null>(null);
@@ -184,6 +191,8 @@ export default function CommunicationHub() {
   const [composeBody, setComposeBody] = useState("");
 
   const selectedMail = mails.find((m) => m.id === selectedMailId) || mails[0] || null;
+  const currentChannelObj = channelsList.find((ch: any) => ch.name === selectedChannel);
+  const isCurrentChannelPrivate = Boolean(currentChannelObj?.isPrivate);
 
   const handleSendMail = (e: React.FormEvent) => {
     e.preventDefault();
@@ -439,7 +448,12 @@ export default function CommunicationHub() {
       const res = await fetch("/api/chat/channels", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: newChannelName, description: newChannelDesc }),
+        body: JSON.stringify({
+          name: newChannelName,
+          description: newChannelDesc,
+          isPrivate: isChannelPrivate,
+          members: isChannelPrivate ? channelMembers : [],
+        }),
       });
 
       const data = await res.json();
@@ -447,6 +461,9 @@ export default function CommunicationHub() {
         setShowCreateChannelModal(false);
         setNewChannelName("");
         setNewChannelDesc("");
+        setIsChannelPrivate(false);
+        setChannelMembers([]);
+        setChannelMemberSearch("");
         await fetchChannels();
         if (data.channel?.name) {
           setSelectedChannel(data.channel.name);
@@ -459,6 +476,70 @@ export default function CommunicationHub() {
       setChannelError("An error occurred while creating channel.");
     } finally {
       setIsSubmittingChannel(false);
+    }
+  };
+
+  const handleToggleChannelMember = (userId: string) => {
+    setChannelMembers((prev) =>
+      prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId]
+    );
+  };
+
+  const handleAddMemberToActiveChannel = async (channelId: string, memberId: string) => {
+    if (!memberId) return;
+    setIsUpdatingMembers(true);
+    try {
+      const res = await fetch("/api/chat/channels", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          channelId,
+          action: "addMember",
+          memberId,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        await fetchChannels();
+        if (data.channel) {
+          setManagingChannel(data.channel);
+        }
+        setAddMemberSelectId("");
+      } else {
+        alert(data.error || "Failed to add member");
+      }
+    } catch (err) {
+      console.error("Add member error:", err);
+    } finally {
+      setIsUpdatingMembers(false);
+    }
+  };
+
+  const handleRemoveMemberFromActiveChannel = async (channelId: string, memberId: string) => {
+    setIsUpdatingMembers(true);
+    try {
+      const res = await fetch("/api/chat/channels", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          channelId,
+          action: "removeMember",
+          memberId,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        await fetchChannels();
+        if (data.channel) {
+          setManagingChannel(data.channel);
+        }
+      } else {
+        alert(data.error || "Failed to remove member");
+      }
+    } catch (err) {
+      console.error("Remove member error:", err);
+    } finally {
+      setIsUpdatingMembers(false);
     }
   };
 
@@ -983,15 +1064,15 @@ export default function CommunicationHub() {
                   )}
                 </div>
 
-                <div className="space-y-1 max-h-[100px] overflow-y-auto no-scrollbar">
+                <div className="space-y-1 max-h-[160px] sm:max-h-[220px] overflow-y-auto no-scrollbar">
                   {(() => {
                     const rawChannels = channelsList.length > 0
                       ? channelsList.filter((ch: any) => ch.isActive !== false)
                       : [
-                          { name: "general", _id: "c1", isPinned: true, isActive: true },
-                          { name: "projects", _id: "c2", isPinned: true, isActive: true },
-                          { name: "engineering", _id: "c3", isPinned: false, isActive: true },
-                          { name: "random", _id: "c4", isPinned: false, isActive: true },
+                          { name: "general", _id: "c1", isPinned: true, isActive: true, isPrivate: false },
+                          { name: "projects", _id: "c2", isPinned: true, isActive: true, isPrivate: false },
+                          { name: "engineering", _id: "c3", isPinned: false, isActive: true, isPrivate: false },
+                          { name: "random", _id: "c4", isPinned: false, isActive: true, isPrivate: false },
                         ];
                     
                     const activeChannels = rawChannels.filter((chObj: any) => {
@@ -1003,8 +1084,9 @@ export default function CommunicationHub() {
                       const chName = typeof chObj === "string" ? chObj : chObj.name;
                       const chId = typeof chObj === "string" ? chObj : chObj._id;
                       const isPinned = typeof chObj === "string" ? false : Boolean(chObj.isPinned);
+                      const isPrivate = typeof chObj === "object" && Boolean(chObj.isPrivate);
                       const isSelected = selectedChannel === chName;
-                      const isManagerOrAdmin = user?.role === "Admin" || user?.role === "Manager";
+                      const isPrivileged = isAdmin || isOPS || user?.role === "Manager" || (chObj.createdBy && (chObj.createdBy._id === user?._id || chObj.createdBy === user?._id));
 
                       return (
                         <div
@@ -1018,39 +1100,70 @@ export default function CommunicationHub() {
                           onClick={() => setSelectedChannel(chName)}
                         >
                           <span className="flex items-center gap-2 truncate">
-                            <i className={`fa-solid ${isPinned ? "fa-thumbtack text-amber-400 text-[10px]" : "fa-hashtag text-xs"}`} /> 
-                            {chName}
+                            <i className={`fa-solid ${
+                              isPinned
+                                ? "fa-thumbtack text-amber-400 text-[10px]"
+                                : isPrivate
+                                ? "fa-lock text-amber-500 text-[11px]"
+                                : "fa-hashtag text-xs"
+                            }`} /> 
+                            <span className="truncate">{chName}</span>
+                            {isPrivate && (
+                              <span className={cn(
+                                "text-[9px] px-1 py-0.2 rounded font-mono uppercase tracking-wider shrink-0",
+                                isSelected ? "bg-primary-foreground/20 text-primary-foreground" : "bg-amber-500/10 text-amber-500 border border-amber-500/20"
+                              )}>
+                                Lock
+                              </span>
+                            )}
                           </span>
 
-                          {isManagerOrAdmin && (
-                            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            {isPrivate && (
                               <button
                                 type="button"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  handleTogglePinChannel(chId, isPinned);
+                                  setManagingChannel(chObj);
+                                  setShowManageMembersModal(true);
                                 }}
                                 className="p-1 text-[10px] hover:text-amber-400 transition-colors"
-                                title={isPinned ? "Unpin Channel" : "Pin Channel"}
+                                title="Manage Channel Members"
                               >
-                                <i className="fa-solid fa-thumbtack" />
+                                <i className="fa-solid fa-users-gear" />
                               </button>
+                            )}
 
-                              {chName !== "general" && (
+                            {isPrivileged && (
+                              <>
                                 <button
                                   type="button"
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    handleDeleteChannel(chId, chName);
+                                    handleTogglePinChannel(chId, isPinned);
                                   }}
-                                  className="p-1 text-[10px] hover:text-rose-400 transition-colors"
-                                  title="Deactivate Channel"
+                                  className="p-1 text-[10px] hover:text-amber-400 transition-colors"
+                                  title={isPinned ? "Unpin Channel" : "Pin Channel"}
                                 >
-                                  <i className="fa-solid fa-trash-can" />
+                                  <i className="fa-solid fa-thumbtack" />
                                 </button>
-                              )}
-                            </div>
-                          )}
+
+                                {chName !== "general" && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleDeleteChannel(chId, chName);
+                                    }}
+                                    className="p-1 text-[10px] hover:text-rose-400 transition-colors"
+                                    title="Deactivate Channel"
+                                  >
+                                    <i className="fa-solid fa-trash-can" />
+                                  </button>
+                                )}
+                              </>
+                            )}
+                          </div>
                         </div>
                       );
                     });
@@ -1286,9 +1399,9 @@ export default function CommunicationHub() {
 
           {/* Chat Feed */}
           <Card className="md:col-span-3 p-4 flex flex-col justify-between overflow-hidden">
-            <div className="flex items-center justify-between pb-3 border-b border-border font-semibold text-foreground text-sm">
-              <div className="flex items-center gap-2">
-                <i className={selectedChannel.startsWith("dm_") ? "fa-solid fa-user-group text-emerald-500" : "fa-solid fa-hashtag text-primary"} />
+            <div className="flex items-center justify-between pb-3 border-b border-border font-semibold text-foreground text-sm flex-wrap gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                <i className={selectedChannel.startsWith("dm_") ? "fa-solid fa-user-group text-emerald-500" : isCurrentChannelPrivate ? "fa-solid fa-lock text-amber-500" : "fa-solid fa-hashtag text-primary"} />
                 <span className="capitalize">
                   {selectedChannel.startsWith("dm_")
                     ? (() => {
@@ -1305,9 +1418,38 @@ export default function CommunicationHub() {
                       })()
                     : selectedChannel}
                 </span>
-                <Badge variant="outline" className="text-[10px] font-mono tracking-wider px-2 py-0.5 inline-flex items-center gap-1 border-primary/30 bg-primary/10 text-primary dark:text-blue-300 font-semibold rounded-md">
-                  {selectedChannel.startsWith("dm_") ? "DIRECT MESSAGE" : "PUBLIC CHANNEL"}
+                <Badge variant="outline" className={cn(
+                  "text-[10px] font-mono tracking-wider px-2 py-0.5 inline-flex items-center gap-1 font-semibold rounded-md",
+                  selectedChannel.startsWith("dm_")
+                    ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                    : isCurrentChannelPrivate
+                    ? "border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                    : "border-primary/30 bg-primary/10 text-primary dark:text-blue-300"
+                )}>
+                  {selectedChannel.startsWith("dm_") ? (
+                    "DIRECT MESSAGE"
+                  ) : isCurrentChannelPrivate ? (
+                    <>
+                      <i className="fa-solid fa-lock text-[9px]" /> PRIVATE CHANNEL
+                    </>
+                  ) : (
+                    "PUBLIC CHANNEL"
+                  )}
                 </Badge>
+                {isCurrentChannelPrivate && currentChannelObj && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setManagingChannel(currentChannelObj);
+                      setShowManageMembersModal(true);
+                    }}
+                    className="text-[11px] font-medium text-muted-foreground hover:text-foreground bg-muted/60 hover:bg-muted px-2.5 py-0.5 rounded-md flex items-center gap-1.5 transition-colors cursor-pointer border border-border/60"
+                    title="Manage channel members"
+                  >
+                    <i className="fa-solid fa-user-group text-[10px] text-amber-500" />
+                    <span>{Array.isArray(currentChannelObj.members) ? currentChannelObj.members.length : 1} members</span>
+                  </button>
+                )}
               </div>
               <div className="flex items-center gap-3">
                 {/* Export Chat Controls */}
@@ -2446,41 +2588,116 @@ export default function CommunicationHub() {
 
       {/* Create Channel Modal Dialog */}
       {showCreateChannelModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in">
-          <div className="w-full max-w-md rounded-xl border border-border bg-card p-6 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between border-b border-border pb-3">
-              <h3 className="text-base font-bold text-foreground flex items-center gap-2">
-                <i className="fa-solid fa-hashtag text-primary" /> Create New Channel
-              </h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-3 sm:p-4 animate-in fade-in overflow-y-auto">
+          <div className="w-full max-w-lg rounded-xl border border-border bg-card p-5 sm:p-6 shadow-2xl space-y-4 my-auto max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between border-b border-border pb-3 shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className={cn(
+                  "w-8 h-8 rounded-lg flex items-center justify-center text-sm",
+                  isChannelPrivate ? "bg-amber-500/10 text-amber-500 border border-amber-500/20" : "bg-primary/10 text-primary border border-primary/20"
+                )}>
+                  <i className={`fa-solid ${isChannelPrivate ? "fa-lock" : "fa-hashtag"}`} />
+                </div>
+                <div>
+                  <h3 className="text-sm sm:text-base font-bold text-foreground">
+                    {isChannelPrivate ? "Create Private Channel" : "Create Public Channel"}
+                  </h3>
+                  <p className="text-[11px] text-muted-foreground">
+                    {isChannelPrivate
+                      ? "Only selected teammates will have access to this channel"
+                      : "Open to anyone in your workspace to join and discuss"}
+                  </p>
+                </div>
+              </div>
               <button
-                onClick={() => setShowCreateChannelModal(false)}
-                className="text-muted-foreground hover:text-foreground"
+                type="button"
+                onClick={() => {
+                  setShowCreateChannelModal(false);
+                  setIsChannelPrivate(false);
+                  setChannelMembers([]);
+                  setChannelMemberSearch("");
+                  setChannelError("");
+                }}
+                className="text-muted-foreground hover:text-foreground p-1 transition-colors"
               >
                 <i className="fa-solid fa-xmark text-sm" />
               </button>
             </div>
 
             {channelError && (
-              <div className="p-3 text-xs bg-rose-500/10 text-rose-500 border border-rose-500/20 rounded-lg font-medium">
-                {channelError}
+              <div className="p-3 text-xs bg-rose-500/10 text-rose-500 border border-rose-500/20 rounded-lg font-medium shrink-0 flex items-center gap-2">
+                <i className="fa-solid fa-circle-exclamation shrink-0" />
+                <span>{channelError}</span>
               </div>
             )}
 
-            <form onSubmit={handleCreateChannel} className="space-y-4">
+            <form onSubmit={handleCreateChannel} className="space-y-4 overflow-y-auto pr-1 flex-1">
+              {/* Channel Type Switcher Cards */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-muted-foreground">Channel Privacy</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsChannelPrivate(false)}
+                    className={cn(
+                      "p-3 rounded-lg border text-left transition-all cursor-pointer flex flex-col gap-1",
+                      !isChannelPrivate
+                        ? "border-primary bg-primary/10 text-foreground ring-1 ring-primary/40 shadow-xs"
+                        : "border-border bg-muted/20 hover:bg-muted/40 text-muted-foreground"
+                    )}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-xs flex items-center gap-1.5">
+                        <i className="fa-solid fa-earth-americas text-primary text-xs" /> Public
+                      </span>
+                      {!isChannelPrivate && <i className="fa-solid fa-circle-check text-primary text-xs" />}
+                    </div>
+                    <span className="text-[10px] leading-tight text-muted-foreground">
+                      Anyone in workspace
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setIsChannelPrivate(true)}
+                    className={cn(
+                      "p-3 rounded-lg border text-left transition-all cursor-pointer flex flex-col gap-1",
+                      isChannelPrivate
+                        ? "border-amber-500 bg-amber-500/10 text-foreground ring-1 ring-amber-500/40 shadow-xs"
+                        : "border-border bg-muted/20 hover:bg-muted/40 text-muted-foreground"
+                    )}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-xs flex items-center gap-1.5 text-amber-500">
+                        <i className="fa-solid fa-lock text-amber-500 text-xs" /> Private
+                      </span>
+                      {isChannelPrivate && <i className="fa-solid fa-circle-check text-amber-500 text-xs" />}
+                    </div>
+                    <span className="text-[10px] leading-tight text-muted-foreground">
+                      Invited members only
+                    </span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Channel Name */}
               <div className="space-y-1">
                 <label className="text-xs font-semibold text-muted-foreground">Channel Name</label>
                 <div className="relative">
-                  <span className="absolute left-3 top-2.5 text-muted-foreground text-xs font-mono">#</span>
+                  <span className="absolute left-3 top-2.5 text-muted-foreground text-xs font-mono">
+                    {isChannelPrivate ? <i className="fa-solid fa-lock text-amber-500 text-[10px]" /> : "#"}
+                  </span>
                   <Input
                     value={newChannelName}
                     onChange={(e) => setNewChannelName(e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, ""))}
-                    placeholder="e.g. design-sync"
-                    className="pl-7 text-xs font-mono"
+                    placeholder="e.g. leadership-sync"
+                    className="pl-8 text-xs font-mono"
                     required
                   />
                 </div>
               </div>
 
+              {/* Description */}
               <div className="space-y-1">
                 <label className="text-xs font-semibold text-muted-foreground">Description (Optional)</label>
                 <Input
@@ -2491,16 +2708,324 @@ export default function CommunicationHub() {
                 />
               </div>
 
-              <div className="flex justify-end gap-2 pt-3 border-t border-border">
-                <Button variant="outline" size="sm" type="button" onClick={() => setShowCreateChannelModal(false)}>
+              {/* Member Selection (Only for Private Channels) */}
+              {isChannelPrivate && (
+                <div className="space-y-2 pt-2 border-t border-border">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                      <i className="fa-solid fa-user-plus text-amber-500 text-[10px]" /> Add Initial Members
+                    </label>
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-500 font-bold border border-amber-500/20">
+                      {channelMembers.length} selected
+                    </span>
+                  </div>
+
+                  <p className="text-[10.5px] text-muted-foreground">
+                    You (channel creator) will be included automatically. Select other teammates to invite:
+                  </p>
+
+                  {/* Search member filter */}
+                  <div className="relative">
+                    <i className="fa-solid fa-magnifying-glass absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground" />
+                    <Input
+                      type="text"
+                      placeholder="Search teammates by name or email..."
+                      value={channelMemberSearch}
+                      onChange={(e) => setChannelMemberSearch(e.target.value)}
+                      className="h-8 pl-8 text-xs bg-muted/30 border-border/60"
+                    />
+                  </div>
+
+                  {/* Selected member tags preview */}
+                  {channelMembers.length > 0 && (
+                    <div className="flex flex-wrap gap-1 max-h-16 overflow-y-auto p-1.5 rounded-lg bg-muted/20 border border-border/40">
+                      {channelMembers.map((mId) => {
+                        const memberObj = teamMembers.find((m: any) => (m._id || m.id) === mId);
+                        return (
+                          <span
+                            key={mId}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] rounded-md bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 font-medium"
+                          >
+                            <span>{memberObj?.name || "Member"}</span>
+                            <button
+                              type="button"
+                              onClick={() => handleToggleChannelMember(mId)}
+                              className="hover:text-rose-500 transition-colors"
+                            >
+                              <i className="fa-solid fa-xmark text-[9px]" />
+                            </button>
+                          </span>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* Scrollable Team Member Picker */}
+                  <div className="max-h-40 overflow-y-auto space-y-1 rounded-lg border border-border/60 p-1.5 bg-background/50 divide-y divide-border/30">
+                    {teamMembers
+                      .filter((tm: any) => {
+                        const tmId = (tm._id || tm.id || "").toString();
+                        if (tmId === user?._id?.toString()) return false; // Exclude self
+                        if (!channelMemberSearch) return true;
+                        const searchLower = channelMemberSearch.toLowerCase();
+                        return (
+                          (tm.name && tm.name.toLowerCase().includes(searchLower)) ||
+                          (tm.email && tm.email.toLowerCase().includes(searchLower)) ||
+                          (tm.role && tm.role.toLowerCase().includes(searchLower))
+                        );
+                      })
+                      .map((tm: any) => {
+                        const tmId = (tm._id || tm.id || "").toString();
+                        const isSelected = channelMembers.includes(tmId);
+                        return (
+                          <div
+                            key={tmId}
+                            onClick={() => handleToggleChannelMember(tmId)}
+                            className={cn(
+                              "flex items-center justify-between p-2 rounded-md cursor-pointer transition-colors text-xs",
+                              isSelected
+                                ? "bg-amber-500/10 text-foreground font-semibold"
+                                : "hover:bg-accent text-muted-foreground"
+                            )}
+                          >
+                            <div className="flex items-center gap-2 truncate">
+                              <div className="w-6 h-6 rounded-full bg-primary/20 text-primary flex items-center justify-center font-bold text-[10px] shrink-0 overflow-hidden">
+                                {tm.photoUrl ? (
+                                  <img src={tm.photoUrl} alt="" className="w-full h-full object-cover" />
+                                ) : (
+                                  (tm.name || "U").charAt(0).toUpperCase()
+                                )}
+                              </div>
+                              <div className="truncate">
+                                <div className="truncate text-foreground text-xs font-medium">{tm.name}</div>
+                                <div className="text-[10px] text-muted-foreground truncate">{tm.email}</div>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <span className="text-[9px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-mono">
+                                {tm.role || "Member"}
+                              </span>
+                              <div className={cn(
+                                "w-4 h-4 rounded flex items-center justify-center border text-[9px]",
+                                isSelected ? "bg-amber-500 border-amber-500 text-white" : "border-border"
+                              )}>
+                                {isSelected && <i className="fa-solid fa-check" />}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    {teamMembers.length === 0 && (
+                      <div className="p-3 text-center text-xs text-muted-foreground">
+                        No team members loaded.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-border shrink-0">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  type="button"
+                  onClick={() => {
+                    setShowCreateChannelModal(false);
+                    setIsChannelPrivate(false);
+                    setChannelMembers([]);
+                    setChannelMemberSearch("");
+                  }}
+                >
                   Cancel
                 </Button>
-                <Button color="primary" size="sm" type="submit" disabled={isSubmittingChannel} className="font-semibold gap-2">
-                  <i className={`fa-solid ${isSubmittingChannel ? "fa-spinner fa-spin" : "fa-plus"} text-xs`} />
-                  {isSubmittingChannel ? "Creating..." : "Create Channel"}
+                <Button
+                  color="primary"
+                  size="sm"
+                  type="submit"
+                  disabled={isSubmittingChannel}
+                  className={cn(
+                    "font-semibold gap-2",
+                    isChannelPrivate && "bg-amber-600 hover:bg-amber-700 text-white border-none"
+                  )}
+                >
+                  <i className={`fa-solid ${
+                    isSubmittingChannel
+                      ? "fa-spinner fa-spin"
+                      : isChannelPrivate
+                      ? "fa-lock"
+                      : "fa-plus"
+                  } text-xs`} />
+                  {isSubmittingChannel
+                    ? "Creating..."
+                    : isChannelPrivate
+                    ? "Create Private Channel"
+                    : "Create Channel"}
                 </Button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Manage Channel Members Modal Dialog */}
+      {showManageMembersModal && managingChannel && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-3 sm:p-4 animate-in fade-in overflow-y-auto">
+          <div className="w-full max-w-lg rounded-xl border border-border bg-card p-5 sm:p-6 shadow-2xl space-y-4 my-auto max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between border-b border-border pb-3 shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-lg bg-amber-500/10 text-amber-500 border border-amber-500/20 flex items-center justify-center text-sm">
+                  <i className="fa-solid fa-users-gear" />
+                </div>
+                <div>
+                  <h3 className="text-sm sm:text-base font-bold text-foreground flex items-center gap-2">
+                    <span className="truncate">#{managingChannel.name}</span>
+                    <Badge variant="outline" className="text-[10px] font-mono border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                      <i className="fa-solid fa-lock text-[9px] mr-1" /> PRIVATE
+                    </Badge>
+                  </h3>
+                  <p className="text-[11px] text-muted-foreground truncate">
+                    {managingChannel.description || "Manage access to this private channel"}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowManageMembersModal(false);
+                  setManagingChannel(null);
+                  setAddMemberSelectId("");
+                }}
+                className="text-muted-foreground hover:text-foreground p-1 transition-colors"
+              >
+                <i className="fa-solid fa-xmark text-sm" />
+              </button>
+            </div>
+
+            <div className="space-y-4 overflow-y-auto pr-1 flex-1">
+              {/* Add Member Section */}
+              <div className="p-3 rounded-lg border border-border bg-muted/20 space-y-2">
+                <div className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                  <i className="fa-solid fa-user-plus text-primary text-xs" /> Add New Member
+                </div>
+                <div className="flex items-center gap-2">
+                  <select
+                    value={addMemberSelectId}
+                    onChange={(e) => setAddMemberSelectId(e.target.value)}
+                    className="flex-1 h-8 rounded-md border border-input bg-background px-2.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                  >
+                    <option value="">-- Choose teammate to add --</option>
+                    {teamMembers
+                      .filter((tm: any) => {
+                        const tmId = (tm._id || tm.id || "").toString();
+                        const currentMembers = Array.isArray(managingChannel.members)
+                          ? managingChannel.members.map((m: any) => (m._id || m.id || m).toString())
+                          : [];
+                        return !currentMembers.includes(tmId);
+                      })
+                      .map((tm: any) => (
+                        <option key={tm._id || tm.id} value={tm._id || tm.id}>
+                          {tm.name} ({tm.email}) - {tm.role || "Member"}
+                        </option>
+                      ))}
+                  </select>
+                  <Button
+                    size="sm"
+                    color="primary"
+                    disabled={!addMemberSelectId || isUpdatingMembers}
+                    onClick={() => handleAddMemberToActiveChannel(managingChannel._id, addMemberSelectId)}
+                    className="h-8 font-semibold text-xs gap-1.5 shrink-0"
+                  >
+                    <i className={`fa-solid ${isUpdatingMembers ? "fa-spinner fa-spin" : "fa-plus"} text-[10px]`} />
+                    Add
+                  </Button>
+                </div>
+              </div>
+
+              {/* Existing Members List */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-semibold text-foreground flex items-center gap-1.5">
+                    <i className="fa-solid fa-users text-amber-500 text-xs" /> Channel Members
+                  </span>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-muted text-muted-foreground font-semibold">
+                    {Array.isArray(managingChannel.members) ? managingChannel.members.length : 1} total
+                  </span>
+                </div>
+
+                <div className="max-h-60 overflow-y-auto space-y-1.5 rounded-lg border border-border/60 p-2 bg-background/50 divide-y divide-border/30">
+                  {Array.isArray(managingChannel.members) && managingChannel.members.length > 0 ? (
+                    managingChannel.members.map((member: any) => {
+                      const memberId = (member._id || member.id || member).toString();
+                      const memberDetail = teamMembers.find((m: any) => (m._id || m.id) === memberId) || (typeof member === "object" ? member : null);
+                      const isCreator = (managingChannel.createdBy?._id || managingChannel.createdBy || "").toString() === memberId;
+                      const canRemove = (isAdmin || isOPS || user?.role === "Manager" || (managingChannel.createdBy?._id || managingChannel.createdBy || "").toString() === user?._id?.toString()) && !isCreator;
+
+                      return (
+                        <div key={memberId} className="flex items-center justify-between py-1.5 px-2 rounded-md hover:bg-muted/40 transition-colors text-xs">
+                          <div className="flex items-center gap-2 truncate">
+                            <div className="w-7 h-7 rounded-full bg-primary/20 text-primary flex items-center justify-center font-bold text-xs shrink-0 overflow-hidden">
+                              {memberDetail?.photoUrl ? (
+                                <img src={memberDetail.photoUrl} alt="" className="w-full h-full object-cover" />
+                              ) : (
+                                (memberDetail?.name || "U").charAt(0).toUpperCase()
+                              )}
+                            </div>
+                            <div className="truncate">
+                              <div className="font-medium text-foreground text-xs flex items-center gap-1.5 truncate">
+                                <span>{memberDetail?.name || "Teammate"}</span>
+                                {isCreator && (
+                                  <span className="text-[9px] px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-600 dark:text-amber-400 font-semibold font-mono uppercase tracking-wider">
+                                    Creator
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-[10px] text-muted-foreground truncate">
+                                {memberDetail?.email || ""}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2 shrink-0">
+                            <span className="text-[9px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-mono">
+                              {memberDetail?.role || "Member"}
+                            </span>
+                            {canRemove && (
+                              <button
+                                type="button"
+                                disabled={isUpdatingMembers}
+                                onClick={() => handleRemoveMemberFromActiveChannel(managingChannel._id, memberId)}
+                                className="text-muted-foreground hover:text-rose-500 p-1 rounded transition-colors"
+                                title="Remove member from channel"
+                              >
+                                <i className="fa-solid fa-user-minus text-xs" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div className="p-4 text-center text-xs text-muted-foreground">
+                      No members assigned to this channel.
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-3 border-t border-border shrink-0">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setShowManageMembersModal(false);
+                  setManagingChannel(null);
+                  setAddMemberSelectId("");
+                }}
+              >
+                Close
+              </Button>
+            </div>
           </div>
         </div>
       )}

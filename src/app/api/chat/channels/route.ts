@@ -1,17 +1,20 @@
 import { NextResponse } from "next/server";
+import mongoose from "mongoose";
 import { connectToDatabase } from "@/lib/db";
 import { Channel } from "@/models/Channel";
 import { requireTenantSession, isAuthError } from "@/lib/auth-guard";
+import { isSubAdminRole } from "@/lib/roles";
 
 const DEFAULT_CHANNELS = [
-  { name: "general", description: "Company-wide general discussion", isPinned: true },
-  { name: "projects", description: "Project updates & sprint announcements", isPinned: true },
-  { name: "engineering", description: "Tech stack & code reviews", isPinned: false },
-  { name: "random", description: "Watercooler chat & social", isPinned: false },
+  { name: "general", description: "Company-wide general discussion", isPinned: true, isPrivate: false },
+  { name: "projects", description: "Project updates & sprint announcements", isPinned: true, isPrivate: false },
+  { name: "engineering", description: "Tech stack & code reviews", isPinned: false, isPrivate: false },
+  { name: "random", description: "Watercooler chat & social", isPinned: false, isPrivate: false },
 ];
 
 /**
  * GET: Fetch all channels for the current tenant.
+ * Filters private channels: only accessible to Admins, OPS, channel members, or creators.
  * Seeds defaults if no channels exist.
  */
 export async function GET() {
@@ -19,20 +22,39 @@ export async function GET() {
     const authResult = await requireTenantSession();
     if (isAuthError(authResult)) return authResult;
 
-    const { tenantObjectId, userObjectId } = authResult;
+    const { session, tenantObjectId, userObjectId } = authResult;
     await connectToDatabase();
 
-    let channels = await Channel.find({ tenantId: tenantObjectId }).sort({ isPinned: -1, name: 1 }).lean();
+    const isSuperRole = session.role === "Admin" || isSubAdminRole(session.role);
 
-    // Seed defaults if empty
+    const query: any = { tenantId: tenantObjectId };
+    if (!isSuperRole) {
+      query.$or = [
+        { isPrivate: { $ne: true } },
+        { members: userObjectId },
+        { createdBy: userObjectId },
+      ];
+    }
+
+    let channels = await Channel.find(query)
+      .populate("members", "name email role photoUrl avatar")
+      .populate("createdBy", "name email role")
+      .sort({ isPinned: -1, name: 1 })
+      .lean();
+
+    // Seed defaults if empty and user is looking at channels
     if (channels.length === 0) {
-      const docs = DEFAULT_CHANNELS.map((ch) => ({
-        ...ch,
-        createdBy: userObjectId,
-        tenantId: tenantObjectId,
-      }));
-      const inserted = await Channel.insertMany(docs);
-      channels = inserted.map((doc) => (doc.toObject ? doc.toObject() : doc)) as any;
+      const existingAny = await Channel.findOne({ tenantId: tenantObjectId }).lean();
+      if (!existingAny) {
+        const docs = DEFAULT_CHANNELS.map((ch) => ({
+          ...ch,
+          createdBy: userObjectId,
+          tenantId: tenantObjectId,
+          members: [],
+        }));
+        const inserted = await Channel.insertMany(docs);
+        channels = inserted.map((doc) => (doc.toObject ? doc.toObject() : doc)) as any;
+      }
     }
 
     return NextResponse.json({ channels });
@@ -44,7 +66,8 @@ export async function GET() {
 }
 
 /**
- * POST: Create a new channel (Admin & Manager only).
+ * POST: Create a new channel (Admin, OPS, & Manager).
+ * Supports public and private channels with initial members.
  */
 export async function POST(request: Request) {
   try {
@@ -53,18 +76,22 @@ export async function POST(request: Request) {
 
     const { session, tenantObjectId, userObjectId } = authResult;
 
-    if (session.role !== "Admin" && session.role !== "Manager") {
-      return NextResponse.json({ error: "Only Admins and Managers can create channels." }, { status: 403 });
+    const canCreate = session.role === "Admin" || isSubAdminRole(session.role) || session.role === "Manager";
+    if (!canCreate) {
+      return NextResponse.json({ error: "Only Admins, Operations, and Managers can create channels." }, { status: 403 });
     }
 
     const body = await request.json();
-    const { name, description } = body;
+    const { name, description, isPrivate, members } = body;
 
     if (!name || !name.trim()) {
       return NextResponse.json({ error: "Channel name is required" }, { status: 400 });
     }
 
     const cleanName = name.trim().toLowerCase().replace(/[^a-z0-9_-]/g, "");
+    if (!cleanName) {
+      return NextResponse.json({ error: "Invalid channel name format" }, { status: 400 });
+    }
 
     await connectToDatabase();
 
@@ -73,15 +100,41 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Channel with this name already exists" }, { status: 400 });
     }
 
+    const isPrivateBool = Boolean(isPrivate);
+    let memberIds: mongoose.Types.ObjectId[] = [];
+
+    if (isPrivateBool) {
+      const rawList = Array.isArray(members) ? members : [];
+      const validIds = new Set<string>();
+
+      // Always ensure the channel creator is a member
+      validIds.add(userObjectId.toString());
+
+      rawList.forEach((mId: string) => {
+        if (mId && mongoose.Types.ObjectId.isValid(mId)) {
+          validIds.add(mId.toString());
+        }
+      });
+
+      memberIds = Array.from(validIds).map((id) => new mongoose.Types.ObjectId(id));
+    }
+
     const newChannel = await Channel.create({
       name: cleanName,
       description: description?.trim() || "",
       isPinned: false,
+      isPrivate: isPrivateBool,
+      members: memberIds,
       createdBy: userObjectId,
       tenantId: tenantObjectId,
     });
 
-    return NextResponse.json({ channel: newChannel }, { status: 201 });
+    const populatedChannel = await Channel.findById(newChannel._id)
+      .populate("members", "name email role photoUrl avatar")
+      .populate("createdBy", "name email role")
+      .lean();
+
+    return NextResponse.json({ channel: populatedChannel || newChannel }, { status: 201 });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Internal Server Error";
     console.error("API POST Channel error:", error);
@@ -90,22 +143,17 @@ export async function POST(request: Request) {
 }
 
 /**
- * PUT: Pin/Unpin or Reactivate a channel (Admin & Manager only).
- * Body: { channelId: string, isPinned?: boolean, isActive?: boolean }
+ * PUT: Pin/Unpin, Reactivate, or Manage Members of a channel.
+ * Body: { channelId: string, isPinned?: boolean, isActive?: boolean, description?: string, members?: string[], action?: "addMember" | "removeMember", memberId?: string }
  */
 export async function PUT(request: Request) {
   try {
     const authResult = await requireTenantSession();
     if (isAuthError(authResult)) return authResult;
 
-    const { session, tenantObjectId } = authResult;
-
-    if (session.role !== "Admin" && session.role !== "Manager") {
-      return NextResponse.json({ error: "Only Admins and Managers can modify channels." }, { status: 403 });
-    }
-
+    const { session, tenantObjectId, userObjectId } = authResult;
     const body = await request.json();
-    const { channelId, isPinned, isActive } = body;
+    const { channelId, isPinned, isActive, description, members, action, memberId } = body;
 
     if (!channelId) {
       return NextResponse.json({ error: "channelId is required" }, { status: 400 });
@@ -113,19 +161,58 @@ export async function PUT(request: Request) {
 
     await connectToDatabase();
 
+    const existingChannel = await Channel.findOne({ _id: channelId, tenantId: tenantObjectId });
+    if (!existingChannel) {
+      return NextResponse.json({ error: "Channel not found" }, { status: 404 });
+    }
+
+    const isSuperRole = session.role === "Admin" || isSubAdminRole(session.role);
+    const isCreator = existingChannel.createdBy.equals(userObjectId);
+    const isManager = session.role === "Manager";
+
+    if (!isSuperRole && !isCreator && !isManager) {
+      return NextResponse.json({ error: "You do not have permission to modify this channel." }, { status: 403 });
+    }
+
     const updateFields: any = {};
     if (typeof isPinned === "boolean") updateFields.isPinned = isPinned;
     if (typeof isActive === "boolean") updateFields.isActive = isActive;
+    if (typeof description === "string") updateFields.description = description.trim();
+
+    // Member management for private channels
+    if (existingChannel.isPrivate) {
+      if (action === "addMember" && memberId && mongoose.Types.ObjectId.isValid(memberId)) {
+        await Channel.updateOne(
+          { _id: channelId, tenantId: tenantObjectId },
+          { $addToSet: { members: new mongoose.Types.ObjectId(memberId) } }
+        );
+      } else if (action === "removeMember" && memberId && mongoose.Types.ObjectId.isValid(memberId)) {
+        // Prevent removing the channel creator
+        if (existingChannel.createdBy.toString() === memberId.toString()) {
+          return NextResponse.json({ error: "Cannot remove the channel creator." }, { status: 400 });
+        }
+        await Channel.updateOne(
+          { _id: channelId, tenantId: tenantObjectId },
+          { $pull: { members: new mongoose.Types.ObjectId(memberId) } }
+        );
+      } else if (Array.isArray(members)) {
+        const cleanMembers = new Set<string>();
+        // Creator must always remain in members
+        cleanMembers.add(existingChannel.createdBy.toString());
+        members.forEach((id: string) => {
+          if (id && mongoose.Types.ObjectId.isValid(id)) cleanMembers.add(id);
+        });
+        updateFields.members = Array.from(cleanMembers).map((id) => new mongoose.Types.ObjectId(id));
+      }
+    }
 
     const channel = await Channel.findOneAndUpdate(
       { _id: channelId, tenantId: tenantObjectId },
       { $set: updateFields },
-      { returnDocument: 'after' }
-    );
-
-    if (!channel) {
-      return NextResponse.json({ error: "Channel not found" }, { status: 404 });
-    }
+      { returnDocument: "after" }
+    )
+      .populate("members", "name email role photoUrl avatar")
+      .populate("createdBy", "name email role");
 
     return NextResponse.json({ success: true, channel });
   } catch (error: unknown) {
@@ -136,7 +223,7 @@ export async function PUT(request: Request) {
 }
 
 /**
- * DELETE: Move channel to inactive status (soft delete, Admin & Manager only).
+ * DELETE: Move channel to inactive status (soft delete) or delete permanently.
  * Query: ?id=channelId
  */
 export async function DELETE(request: Request) {
@@ -144,12 +231,7 @@ export async function DELETE(request: Request) {
     const authResult = await requireTenantSession();
     if (isAuthError(authResult)) return authResult;
 
-    const { session, tenantObjectId } = authResult;
-
-    if (session.role !== "Admin" && session.role !== "Manager") {
-      return NextResponse.json({ error: "Only Admins and Managers can deactivate channels." }, { status: 403 });
-    }
-
+    const { session, tenantObjectId, userObjectId } = authResult;
     const { searchParams } = new URL(request.url);
     const channelId = searchParams.get("id");
 
@@ -159,10 +241,17 @@ export async function DELETE(request: Request) {
 
     await connectToDatabase();
 
-    const channel = await Channel.findOne({ _id: channelId, tenantId: tenantObjectId }).lean();
-
+    const channel = await Channel.findOne({ _id: channelId, tenantId: tenantObjectId });
     if (!channel) {
       return NextResponse.json({ error: "Channel not found" }, { status: 404 });
+    }
+
+    const isSuperRole = session.role === "Admin" || isSubAdminRole(session.role);
+    const isCreator = channel.createdBy.equals(userObjectId);
+    const isManager = session.role === "Manager";
+
+    if (!isSuperRole && !isCreator && !isManager) {
+      return NextResponse.json({ error: "You do not have permission to delete this channel." }, { status: 403 });
     }
 
     if (channel.name === "general") {
@@ -170,7 +259,7 @@ export async function DELETE(request: Request) {
     }
 
     if (channel.isActive !== false) {
-      // Step 1: Move to inactive state
+      // Step 1: Move to inactive state (soft delete)
       channel.isActive = false;
       await channel.save();
       return NextResponse.json({ success: true, isPermanent: false, message: "Channel moved to inactive list" });

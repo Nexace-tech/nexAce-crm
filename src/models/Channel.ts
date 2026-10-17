@@ -5,6 +5,8 @@ export interface IChannel extends Document {
   description?: string;
   isPinned: boolean;
   isActive: boolean;
+  isPrivate?: boolean;
+  members?: mongoose.Types.ObjectId[];
   createdBy: mongoose.Types.ObjectId;
   tenantId: mongoose.Types.ObjectId;
   createdAt: Date;
@@ -17,6 +19,8 @@ const ChannelSchema = new Schema<IChannel>(
     description: { type: String, trim: true },
     isPinned: { type: Boolean, default: false },
     isActive: { type: Boolean, default: true },
+    isPrivate: { type: Boolean, default: false },
+    members: [{ type: Schema.Types.ObjectId, ref: "User" }],
     createdBy: { type: Schema.Types.ObjectId, ref: "User", required: true },
     tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true },
   },

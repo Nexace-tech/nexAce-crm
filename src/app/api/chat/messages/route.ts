@@ -3,8 +3,10 @@ import mongoose from "mongoose";
 import { connectToDatabase } from "@/lib/db";
 import { ChatMessage } from "@/models/ChatMessage";
 import { User } from "@/models/User";
+import { Channel } from "@/models/Channel";
 import { requireTenantSession, isAuthError } from "@/lib/auth-guard";
 import { notify } from "@/lib/notify";
+import { isSubAdminRole } from "@/lib/roles";
 
 /**
  * GET: Fetch chat messages by channel.
@@ -63,6 +65,20 @@ export async function GET(request: Request) {
     }
 
     const channel = searchParams.get("channel") || "general";
+
+    // Verify private channel access
+    if (!channel.startsWith("dm_")) {
+      const channelDoc = await Channel.findOne({ tenantId: tenantObjectId, name: channel.toLowerCase() }).lean();
+      if (channelDoc && channelDoc.isPrivate) {
+        const isSuperRole = session.role === "Admin" || isSubAdminRole(session.role);
+        const isCreator = channelDoc.createdBy?.toString() === userObjectId.toString();
+        const isMember = Array.isArray(channelDoc.members) && channelDoc.members.some((m: any) => m.toString() === userObjectId.toString());
+
+        if (!isSuperRole && !isCreator && !isMember) {
+          return NextResponse.json({ error: "Access denied to private channel." }, { status: 403 });
+        }
+      }
+    }
 
     // Build query conditions (with precise target user isolation for DM channels)
     let queryCondition: any = { tenantId: tenantObjectId, channel };
@@ -182,8 +198,24 @@ export async function POST(request: Request) {
 
     await connectToDatabase();
 
+    const channelStr = channel || "general";
+    let privateChannelDoc: any = null;
+
+    if (!channelStr.startsWith("dm_")) {
+      privateChannelDoc = await Channel.findOne({ tenantId: tenantObjectId, name: channelStr.toLowerCase() }).lean();
+      if (privateChannelDoc && privateChannelDoc.isPrivate) {
+        const isSuperRole = session.role === "Admin" || isSubAdminRole(session.role);
+        const isCreator = privateChannelDoc.createdBy?.toString() === userObjectId.toString();
+        const isMember = Array.isArray(privateChannelDoc.members) && privateChannelDoc.members.some((m: any) => m.toString() === userObjectId.toString());
+
+        if (!isSuperRole && !isCreator && !isMember) {
+          return NextResponse.json({ error: "Access denied. You cannot send messages in this private channel." }, { status: 403 });
+        }
+      }
+    }
+
     const newMessage = await ChatMessage.create({
-      channel: channel || "general",
+      channel: channelStr,
       senderId: userObjectId,
       senderName: session.userName || "Team Member",
       senderRole: session.role,
@@ -197,12 +229,10 @@ export async function POST(request: Request) {
     });
 
     // ── Notification logic ──────────────────────────────────────────────────
-    const channelStr = channel || "general";
     const safeContent = trimmedContent || (attachments?.[0] ? `[Attachment] ${attachments[0].name}` : "Sent an attachment");
     const snippet = safeContent.length > 80 ? `${safeContent.slice(0, 80)}...` : safeContent;
 
     // Case 1: Direct Message channel (channel name starts with "dm_")
-    //   Format: "dm_<recipientUserId>" or "dm_<idA>_<idB>"
     const isDMChannel = channelStr.startsWith("dm_");
     if (isDMChannel) {
       let targetRecipientId = recipientId;
@@ -230,9 +260,38 @@ export async function POST(request: Request) {
           linkUrl: `/dashboard/chat?channel=${encodeURIComponent(channelStr)}`,
         });
       }
+    } else if (privateChannelDoc && privateChannelDoc.isPrivate) {
+      // Private channel notifications: only notify members of the private channel
+      const memberIds = (privateChannelDoc.members || [])
+        .map((m: any) => m.toString())
+        .filter((id: string) => id !== userObjectId.toString());
+
+      if (Array.isArray(mentions) && mentions.length > 0 && !mentions.includes("everyone")) {
+        const mentionedUsers = await User.find({
+          tenantId: tenantObjectId,
+          name: { $in: mentions },
+          _id: { $in: memberIds },
+        }).select("_id").lean();
+
+        if (mentionedUsers.length > 0) {
+          const ids = mentionedUsers.map((u: any) => u._id.toString());
+          await notify(tenantObjectId, ids, {
+            title: `🔒 You were mentioned in #${channelStr}`,
+            message: `${session.userName}: ${snippet}`,
+            type: "chat",
+            linkUrl: `/dashboard/chat?channel=${encodeURIComponent(channelStr)}`,
+          });
+        }
+      } else if (memberIds.length > 0) {
+        await notify(tenantObjectId, memberIds, {
+          title: `🔒 #${channelStr}`,
+          message: `${session.userName}: ${snippet}`,
+          type: "chat",
+          linkUrl: `/dashboard/chat?channel=${encodeURIComponent(channelStr)}`,
+        });
+      }
     } else if (Array.isArray(mentions) && mentions.length > 0 && !mentions.includes("everyone")) {
       // Case 2: @mention of specific users in a public channel
-      // mentions[] contains user NAMES — look up their IDs
       const mentionedUsers = await User.find({
         tenantId: tenantObjectId,
         name: { $in: mentions },
@@ -257,7 +316,7 @@ export async function POST(request: Request) {
         linkUrl: `/dashboard/chat?channel=${encodeURIComponent(channelStr)}`,
       });
     } else {
-      // Case 4: Regular channel message — notify all other tenant members
+      // Case 4: Regular public channel message — notify all other tenant members
       const otherMembers = await User.find({
         tenantId: tenantObjectId,
         _id: { $ne: userObjectId },
@@ -269,7 +328,7 @@ export async function POST(request: Request) {
           title: `#${channelStr}`,
           message: `${session.userName}: ${snippet}`,
           type: "chat",
-          linkUrl: "/dashboard/chat",
+          linkUrl: `/dashboard/chat?channel=${encodeURIComponent(channelStr)}`,
         });
       }
     }
