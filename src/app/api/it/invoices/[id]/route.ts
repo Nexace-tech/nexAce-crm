@@ -254,23 +254,23 @@ export async function PATCH(
           let notifMsg = `Your invoice (${updated.invoiceNo}) status was updated to "${updated.status}" by ${session.userName || "Admin"}.`;
 
           if (isPaid) {
-            notifTitle = `✅ Invoice Paid: ${updated.invoiceNo}`;
+            notifTitle = `✅ Payout Processed: ${updated.invoiceNo}`;
             notifMsg = `Your invoice (${updated.invoiceNo}) has been paid via ${payMethod} by ${session.userName || "Admin"}.${hasReceipt ? " Payment receipt is attached." : ""}`;
           } else if (isApproved) {
             notifTitle = `✨ Invoice Approved: ${updated.invoiceNo}`;
             notifMsg = `Your invoice & attached timesheets (${updated.invoiceNo}) have been approved by ${session.userName} (${session.role}) and authorized for payout.`;
           } else if (isRejected) {
-            notifTitle = `❌ Invoice Rejected: ${updated.invoiceNo}`;
+            notifTitle = `❌ Invoice Revision Needed: ${updated.invoiceNo}`;
             notifMsg = `Your invoice (${updated.invoiceNo}) was rejected by ${session.userName} (${session.role}). Reason: ${updated.rejectionReason || "Please review and resubmit."}`;
           }
 
-          // In-app notification
+          // In-app notification: categorized as "finance" so it never displays as a raw [System] log
           await Notification.create({
             tenantId: tenantObjectId,
             recipientId: internalUser._id,
             title: notifTitle,
             message: notifMsg,
-            type: "system",
+            type: "finance",
             linkUrl: `/dashboard/settings?tab=invoice&invoiceNo=${encodeURIComponent(updated.invoiceNo)}`,
             read: false,
           });

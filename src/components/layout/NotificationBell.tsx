@@ -18,13 +18,13 @@ interface NotifItem {
   _id: string;
   title: string;
   message: string;
-  type: "chat" | "announcement" | "task" | "leave" | "hr" | "appraisal" | "kudos" | "okr" | "referral" | "system";
+  type: "chat" | "announcement" | "task" | "leave" | "hr" | "appraisal" | "kudos" | "okr" | "referral" | "finance" | "system";
   linkUrl?: string;
   read: boolean;
   createdAt: string;
 }
 
-type FilterType = "all" | "unread" | "task" | "chat" | "announcement" | "leave" | "hr" | "kudos" | "system";
+type FilterType = "all" | "unread" | "task" | "chat" | "announcement" | "leave" | "hr" | "finance" | "kudos" | "system";
 
 const TYPE_CONFIG: Record<string, { icon: string; color: string; bg: string; label: string }> = {
   chat:         { icon: "fa-solid fa-message",         color: "text-sky-500",     bg: "bg-sky-500/10",     label: "Chat" },
@@ -32,6 +32,7 @@ const TYPE_CONFIG: Record<string, { icon: string; color: string; bg: string; lab
   announcement: { icon: "fa-solid fa-bullhorn",         color: "text-amber-500",   bg: "bg-amber-500/10",   label: "Announce" },
   leave:        { icon: "fa-solid fa-calendar-xmark",  color: "text-rose-500",    bg: "bg-rose-500/10",    label: "Leave" },
   hr:           { icon: "fa-solid fa-briefcase-medical",color: "text-pink-500",    bg: "bg-pink-500/10",    label: "HR" },
+  finance:      { icon: "fa-solid fa-file-invoice-dollar", color: "text-emerald-500", bg: "bg-emerald-500/10", label: "Finance" },
   appraisal:    { icon: "fa-solid fa-star",             color: "text-yellow-500",  bg: "bg-yellow-500/10",  label: "Appraisal" },
   kudos:        { icon: "fa-solid fa-hands-clapping",  color: "text-violet-500",  bg: "bg-violet-500/10",  label: "Kudos" },
   okr:          { icon: "fa-solid fa-bullseye",         color: "text-indigo-500",  bg: "bg-indigo-500/10",  label: "OKR" },
@@ -47,6 +48,7 @@ const FILTER_PILLS: { key: FilterType; label: string; icon: string }[] = [
   { key: "announcement", label: "Announcements",icon: "fa-solid fa-bullhorn" },
   { key: "leave",        label: "Leave",       icon: "fa-solid fa-calendar-xmark" },
   { key: "hr",           label: "HR",          icon: "fa-solid fa-briefcase-medical" },
+  { key: "finance",      label: "Finance",     icon: "fa-solid fa-file-invoice-dollar" },
   { key: "kudos",        label: "Kudos",       icon: "fa-solid fa-hands-clapping" },
   { key: "system",       label: "System",      icon: "fa-solid fa-gear" },
 ];
@@ -498,8 +500,14 @@ export function NotificationBell({ onOpen }: NotificationBellProps = {}) {
   });
   const orderedGroups = GROUP_ORDER.filter((g) => grouped[g]?.length > 0);
 
-  const getTypeCfg = (type: string) => TYPE_CONFIG[type] || TYPE_CONFIG.system;
+  const getTypeCfg = (type: string, title: string = "") => {
+    if (type === "finance" || title.toLowerCase().includes("invoice") || title.toLowerCase().includes("payout")) {
+      return TYPE_CONFIG.finance;
+    }
+    return TYPE_CONFIG[type] || TYPE_CONFIG.system;
+  };
   const isAdminOrManager = user?.role === "Admin" || user?.role === "Manager" || user?.role === "OPS";
+  const availablePills = FILTER_PILLS.filter((p) => p.key !== "system" || isAdminOrManager);
 
   return (
     <div className="relative" ref={dropdownRef}>
@@ -745,7 +753,7 @@ export function NotificationBell({ onOpen }: NotificationBellProps = {}) {
                 className="flex items-center gap-1.5 px-3 py-2 overflow-x-auto scroll-smooth no-scrollbar scrollbar-none overscroll-x-contain"
                 style={{ WebkitOverflowScrolling: "touch" }}
               >
-                {FILTER_PILLS.map(({ key, label, icon }) => {
+                {availablePills.map(({ key, label, icon }) => {
                   const isActive = filterType === key;
                   return (
                     <button
@@ -806,7 +814,7 @@ export function NotificationBell({ onOpen }: NotificationBellProps = {}) {
                     {/* Notifications in group */}
                     <div className="divide-y divide-slate-100 dark:divide-[#232d3b]/40">
                       {grouped[group].map((n) => {
-                        const cfg = getTypeCfg(n.type);
+                        const cfg = getTypeCfg(n.type, n.title);
                         return (
                           <div
                             key={n._id}

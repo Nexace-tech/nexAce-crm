@@ -167,11 +167,12 @@ export async function POST(request: Request) {
       details: `Created invoice ${created.invoiceNo} for ${billedToName.trim()} (₹${total || 0})`,
     });
 
-    // Notify all Admins / OPS / Managers + the submitter's Reporting Manager
+    // Notify only Admins / OPS + privileged Managers
     try {
       const admins = await User.find({
         tenantId: tenantObjectId,
-        role: { $in: ["Admin", "OPS", "Manager"] },
+        role: { $in: ["Admin", "OPS"] },
+        status: "Active",
       }).select("_id").lean();
 
       // Collect IDs already notified to avoid duplicates
@@ -185,24 +186,35 @@ export async function POST(request: Request) {
           recipientId: admin._id,
           title: "New Invoice Submitted",
           message: `${session.userName} submitted invoice ${created.invoiceNo} for ${billedToName.trim()} (${currency || "INR"} ${Number(total || 0).toLocaleString()}). Review and update its status.`,
-          type: "system",
+          type: "finance",
           linkUrl: `/dashboard/finance?tab=invoices&invoiceNo=${encodeURIComponent(created.invoiceNo)}`,
           read: false,
+          adminOnly: true,
         });
       }
 
-      // Also notify the submitter's Reporting Manager if set and not already notified
+      // Also notify submitter's Reporting Manager ONLY if that manager is an Admin/OPS/Manager
       const submitterDoc = await User.findById(userObjectId).select("managerId").lean() as { managerId?: mongoose.Types.ObjectId } | null;
       if (submitterDoc?.managerId && !notifiedIds.has(submitterDoc.managerId.toString())) {
-        await Notification.create({
+        const managerUser = await User.findOne({
+          _id: submitterDoc.managerId,
           tenantId: tenantObjectId,
-          recipientId: submitterDoc.managerId,
-          title: "New Invoice Submitted",
-          message: `${session.userName} submitted invoice ${created.invoiceNo} for ${billedToName.trim()} (${currency || "INR"} ${Number(total || 0).toLocaleString()}). Review and update its status.`,
-          type: "system",
-          linkUrl: `/dashboard/finance?tab=invoices&invoiceNo=${encodeURIComponent(created.invoiceNo)}`,
-          read: false,
-        });
+          role: { $in: ["Admin", "OPS", "Manager"] },
+          status: "Active",
+        }).select("_id").lean();
+
+        if (managerUser) {
+          await Notification.create({
+            tenantId: tenantObjectId,
+            recipientId: managerUser._id,
+            title: "New Invoice Submitted",
+            message: `${session.userName} submitted invoice ${created.invoiceNo} for ${billedToName.trim()} (${currency || "INR"} ${Number(total || 0).toLocaleString()}). Review and update its status.`,
+            type: "finance",
+            linkUrl: `/dashboard/finance?tab=invoices&invoiceNo=${encodeURIComponent(created.invoiceNo)}`,
+            read: false,
+            adminOnly: true,
+          });
+        }
       }
     } catch (notifErr) {
       console.error("Invoice notification error:", notifErr);

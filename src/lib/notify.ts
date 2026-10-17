@@ -14,6 +14,7 @@ type NotifyType =
   | "kudos"
   | "okr"
   | "referral"
+  | "finance"
   | "system";
 
 interface NotifyPayload {

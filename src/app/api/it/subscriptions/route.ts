@@ -66,10 +66,8 @@ async function checkAndNotifyExpiringSubscriptions(tenantObjectId: mongoose.Type
         if (!existingNotif) {
           const recipients = await User.find({
             tenantId: tenantObjectId,
-            $or: [
-              { role: { $in: ["Admin", "OPS", "Sub Admin"] } },
-              ...(sub.createdBy ? [{ _id: sub.createdBy }] : []),
-            ],
+            role: { $in: ["Admin", "OPS", "Sub Admin"] },
+            status: "Active",
           }).select("_id email name").lean();
 
           const uniqueRecipients = Array.from(new Map(recipients.map((r) => [r._id.toString(), r])).values());
@@ -82,6 +80,7 @@ async function checkAndNotifyExpiringSubscriptions(tenantObjectId: mongoose.Type
               message: `The subscription for "${sub.tool}" (${sub.plan || "Plan"}) expires on ${sub.renewalDate} (${diffDays === 0 ? "Today" : `in ${diffDays} day(s)`}). Please renew or review it.`,
               type: "system",
               linkUrl: "/dashboard/it",
+              adminOnly: true,
             });
 
             if (recipient.email) {

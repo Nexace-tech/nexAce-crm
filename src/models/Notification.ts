@@ -4,7 +4,7 @@ export interface INotification extends Document {
   recipientId: mongoose.Types.ObjectId;
   title: string;
   message: string;
-  type: "chat" | "announcement" | "task" | "leave" | "hr" | "appraisal" | "kudos" | "okr" | "referral" | "system";
+  type: "chat" | "announcement" | "task" | "leave" | "hr" | "appraisal" | "kudos" | "okr" | "referral" | "finance" | "system";
   linkUrl?: string;
   read: boolean;
   tenantId: mongoose.Types.ObjectId;
@@ -20,7 +20,7 @@ const NotificationSchema = new Schema<INotification>(
     message: { type: String, required: true, trim: true },
     type: {
       type: String,
-      enum: ["chat", "announcement", "task", "leave", "hr", "appraisal", "kudos", "okr", "referral", "system"],
+      enum: ["chat", "announcement", "task", "leave", "hr", "appraisal", "kudos", "okr", "referral", "finance", "system"],
       default: "system",
     },
     linkUrl: { type: String, trim: true },

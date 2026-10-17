@@ -21,6 +21,9 @@ export async function GET() {
     const ADMIN_ONLY_TITLES = [
       "New Employee Added",
       "New Employee Account Pending Approval",
+      "New Invoice Submitted",
+      "New File Uploaded",
+      "New Leave Request",
     ];
 
     // Build filter: non-admin users are excluded from adminOnly notifications
@@ -33,7 +36,12 @@ export async function GET() {
     if (!isAdminLevel) {
       baseFilter["$and"] = [
         { adminOnly: { $ne: true } },
-        { title: { $nin: ADMIN_ONLY_TITLES } },
+        {
+          title: {
+            $nin: ADMIN_ONLY_TITLES,
+            $not: /^Subscription Expiring Soon/i,
+          },
+        },
       ];
     }
 

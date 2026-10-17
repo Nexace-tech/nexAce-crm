@@ -31,7 +31,7 @@ export default function NotificationsPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [filterType, setFilterType] = useState<
-    "all" | "unread" | "task" | "chat" | "announcement" | "hr" | "kudos" | "system"
+    "all" | "unread" | "task" | "chat" | "announcement" | "hr" | "finance" | "kudos" | "system"
   >("all");
 
   // Broadcast Modal State
@@ -184,6 +184,7 @@ export default function NotificationsPage() {
       if (filterType === "chat" && n.type !== "chat") return false;
       if (filterType === "announcement" && n.type !== "announcement") return false;
       if (filterType === "hr" && n.type !== "hr" && n.type !== "leave" && n.type !== "appraisal" && n.type !== "referral") return false;
+      if (filterType === "finance" && n.type !== "finance" && !n.title.toLowerCase().includes("invoice") && !n.title.toLowerCase().includes("payout")) return false;
       if (filterType === "kudos" && n.type !== "kudos") return false;
       if (filterType === "system" && n.type !== "system" && n.type !== "okr") return false;
 
@@ -216,23 +217,27 @@ export default function NotificationsPage() {
     return filteredNotifications.slice(start, start + pageSize);
   }, [filteredNotifications, currentPage, pageSize]);
 
-  const getTypeDetails = (type: string) => {
+  const getTypeDetails = (type: string, title: string = "") => {
+    const isFinance = type === "finance" || title.toLowerCase().includes("invoice") || title.toLowerCase().includes("payout");
+    if (isFinance) {
+      return { icon: "fa-solid fa-file-invoice-dollar", color: "text-emerald-400", bg: "bg-emerald-500/10 border-emerald-500/20", label: "Finance" };
+    }
     switch (type) {
       case "chat":
-        return { icon: "fa-solid fa-comments", color: "text-sky-400", bg: "bg-sky-500/10 border-sky-500/20" };
+        return { icon: "fa-solid fa-comments", color: "text-sky-400", bg: "bg-sky-500/10 border-sky-500/20", label: "Chat" };
       case "task":
-        return { icon: "fa-solid fa-list-check", color: "text-emerald-400", bg: "bg-emerald-500/10 border-emerald-500/20" };
+        return { icon: "fa-solid fa-list-check", color: "text-emerald-400", bg: "bg-emerald-500/10 border-emerald-500/20", label: "Task" };
       case "announcement":
-        return { icon: "fa-solid fa-bullhorn", color: "text-amber-400", bg: "bg-amber-500/10 border-amber-500/20" };
+        return { icon: "fa-solid fa-bullhorn", color: "text-amber-400", bg: "bg-amber-500/10 border-amber-500/20", label: "Announcement" };
       case "hr":
       case "leave":
       case "appraisal":
       case "referral":
-        return { icon: "fa-solid fa-briefcase", color: "text-purple-400", bg: "bg-purple-500/10 border-purple-500/20" };
+        return { icon: "fa-solid fa-briefcase", color: "text-purple-400", bg: "bg-purple-500/10 border-purple-500/20", label: "HR & Leaves" };
       case "kudos":
-        return { icon: "fa-solid fa-wand-magic-sparkles", color: "text-rose-400", bg: "bg-rose-500/10 border-rose-500/20" };
+        return { icon: "fa-solid fa-wand-magic-sparkles", color: "text-rose-400", bg: "bg-rose-500/10 border-rose-500/20", label: "Kudos" };
       default:
-        return { icon: "fa-solid fa-bell", color: "text-primary", bg: "bg-primary/10 border-primary/20" };
+        return { icon: "fa-solid fa-bell", color: "text-primary", bg: "bg-primary/10 border-primary/20", label: type || "Alert" };
     }
   };
 
@@ -306,10 +311,20 @@ export default function NotificationsPage() {
         <CardContent className="p-4 space-y-4">
           {/* Category Tabs */}
           <div className="flex items-center gap-1 overflow-x-auto w-full scrollbar-none pb-1">
-            {(["all", "unread", "task", "chat", "announcement", "hr", "kudos", "system"] as const).map((key) => (
+            {[
+              { key: "all", label: "All Alerts", icon: "fa-solid fa-layer-group" },
+              { key: "unread", label: "Unread", icon: "fa-solid fa-envelope" },
+              { key: "task", label: "Task", icon: "fa-solid fa-list-check" },
+              { key: "chat", label: "Chat", icon: "fa-solid fa-comments" },
+              { key: "announcement", label: "Announcement", icon: "fa-solid fa-bullhorn" },
+              { key: "hr", label: "HR & Leaves", icon: "fa-solid fa-briefcase" },
+              { key: "finance", label: "Finance", icon: "fa-solid fa-file-invoice-dollar" },
+              { key: "kudos", label: "Kudos", icon: "fa-solid fa-wand-magic-sparkles" },
+              ...((isAdmin || isOPS) ? [{ key: "system", label: "System", icon: "fa-solid fa-gear" }] : []),
+            ].map(({ key, label, icon }) => (
               <button
                 key={key}
-                onClick={() => setFilterType(key)}
+                onClick={() => setFilterType(key as any)}
                 className={cn(
                   "px-3 py-1.5 rounded-lg text-xs font-semibold capitalize transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5",
                   filterType === key
@@ -317,16 +332,8 @@ export default function NotificationsPage() {
                     : "text-muted-foreground hover:bg-accent hover:text-foreground"
                 )}
               >
-                <i className={cn("text-[11px]", 
-                  key === "all" ? "fa-solid fa-layer-group" :
-                  key === "unread" ? "fa-solid fa-envelope" :
-                  key === "task" ? "fa-solid fa-list-check" :
-                  key === "chat" ? "fa-solid fa-comments" :
-                  key === "announcement" ? "fa-solid fa-bullhorn" :
-                  key === "hr" ? "fa-solid fa-briefcase" :
-                  key === "kudos" ? "fa-solid fa-wand-magic-sparkles" : "fa-solid fa-gear"
-                )} />
-                <span>{key === "all" ? "All Alerts" : key === "hr" ? "HR & Leaves" : key}</span>
+                <i className={cn("text-[11px]", icon)} />
+                <span>{label}</span>
               </button>
             ))}
           </div>
@@ -417,7 +424,7 @@ export default function NotificationsPage() {
         <CardHeader className="border-b border-border bg-muted/20 pb-3">
           <div className="flex items-center justify-between">
             <CardTitle className="text-sm font-bold text-foreground flex items-center gap-2">
-              <i className="fa-solid fa-list text-muted-foreground text-xs" /> Notification Logs
+              <i className="fa-solid fa-bell text-muted-foreground text-xs" /> Recent Notifications
             </CardTitle>
             <CardDescription className="text-xs font-medium">
               Showing {filteredNotifications.length > 0 ? (currentPage - 1) * pageSize + 1 : 0}-
@@ -437,7 +444,7 @@ export default function NotificationsPage() {
             </div>
           ) : (
             paginatedNotifications.map((n) => {
-              const details = getTypeDetails(n.type);
+              const details = getTypeDetails(n.type, n.title);
               const targetUrl = getNotificationTargetUrl(n);
 
               return (
@@ -464,7 +471,7 @@ export default function NotificationsPage() {
                           <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
                         )}
                         <Badge variant="outline" className="text-[10px] capitalize px-2 py-0">
-                          {n.type}
+                          {details.label}
                         </Badge>
                       </div>
 
