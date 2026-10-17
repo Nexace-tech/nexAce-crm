@@ -2187,35 +2187,35 @@ export function TeamAvailabilityTab({
           onClick={(e) => {
             if (e.target === e.currentTarget) setInspectedDay(null);
           }}
-          className="fixed inset-0 z-50 bg-black/65 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-200"
+          className="fixed inset-0 z-50 bg-black/65 backdrop-blur-xs flex items-center justify-center p-2.5 sm:p-4 animate-in fade-in duration-200"
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="bg-card border border-border/80 rounded-2xl max-w-lg sm:max-w-xl w-full shadow-2xl overflow-hidden animate-in zoom-in-95 max-h-[88vh] flex flex-col"
+            className="bg-card border border-border/80 rounded-2xl max-w-lg sm:max-w-xl w-full shadow-2xl overflow-hidden animate-in zoom-in-95 max-h-[92vh] sm:max-h-[88vh] flex flex-col"
           >
             {/* Header */}
-            <div className="p-3.5 sm:px-4 sm:py-3.5 border-b border-border bg-muted/30 shrink-0">
-              <div className="flex items-center justify-between gap-2">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <h3 className="font-bold text-sm sm:text-base text-foreground flex items-center gap-2">
-                      <i className="fa-solid fa-calendar-day text-primary" />
-                      <span>
+            <div className="p-3 sm:px-4 sm:py-3.5 border-b border-border bg-muted/30 shrink-0">
+              <div className="flex items-center justify-between gap-1.5 sm:gap-2">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                    <h3 className="font-bold text-xs sm:text-base text-foreground flex items-center gap-1.5 truncate">
+                      <i className="fa-solid fa-calendar-day text-primary shrink-0" />
+                      <span className="truncate">
                         {MONTH_NAMES[inspectedDayData.dateObj.getMonth()]} {inspectedDayData.dateObj.getDate()},{" "}
                         {inspectedDayData.dateObj.getFullYear()}
                       </span>
                     </h3>
                     {inspectedDayData.isSunday ? (
-                      <Badge className="bg-rose-500/15 text-rose-700 dark:text-rose-400 border-rose-500/30 text-[10px] font-bold">
-                        <i className="fa-solid fa-mug-hot mr-1 text-[9px]" /> Sunday Off
+                      <Badge className="bg-rose-500/15 text-rose-700 dark:text-rose-400 border-rose-500/30 text-[9px] sm:text-[10px] font-bold px-1.5 py-0 sm:px-2 sm:py-0.5 shrink-0">
+                        <i className="fa-solid fa-mug-hot mr-1 text-[8px] sm:text-[9px]" /> Sunday Off
                       </Badge>
                     ) : (
-                      <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30 text-[10px] font-bold">
-                        <i className="fa-solid fa-briefcase mr-1 text-[9px]" /> Working Day
+                      <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30 text-[9px] sm:text-[10px] font-bold px-1.5 py-0 sm:px-2 sm:py-0.5 shrink-0">
+                        <i className="fa-solid fa-briefcase mr-1 text-[8px] sm:text-[9px]" /> Working Day
                       </Badge>
                     )}
                   </div>
-                  <p className="text-[11px] text-muted-foreground mt-0.5 truncate">
+                  <p className="text-[10px] sm:text-[11px] text-muted-foreground mt-0.5 truncate">
                     {WEEKDAYS[inspectedDayData.dateObj.getDay()]}, {inspectedDayData.dateString} &bull;{" "}
                     {inspectedDayData.roster.length} employee(s) tracked
                   </p>
@@ -2226,38 +2226,41 @@ export function TeamAvailabilityTab({
                     type="button"
                     onClick={() => navigateInspectedDay(-1)}
                     title="Previous Day"
-                    className="w-8 h-8 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground flex items-center justify-center cursor-pointer transition-colors"
+                    aria-label="Previous Day"
+                    className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground flex items-center justify-center cursor-pointer transition-colors"
                   >
-                    <i className="fa-solid fa-chevron-left text-xs" />
+                    <i className="fa-solid fa-chevron-left text-[11px] sm:text-xs" />
                   </button>
                   <button
                     type="button"
                     onClick={() => navigateInspectedDay(1)}
                     title="Next Day"
-                    className="w-8 h-8 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground flex items-center justify-center cursor-pointer transition-colors"
+                    aria-label="Next Day"
+                    className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground flex items-center justify-center cursor-pointer transition-colors"
                   >
-                    <i className="fa-solid fa-chevron-right text-xs" />
+                    <i className="fa-solid fa-chevron-right text-[11px] sm:text-xs" />
                   </button>
                   <button
                     type="button"
                     onClick={() => setInspectedDay(null)}
                     title="Close"
-                    className="w-8 h-8 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground flex items-center justify-center cursor-pointer transition-colors ml-1"
+                    aria-label="Close"
+                    className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground flex items-center justify-center cursor-pointer transition-colors ml-0.5"
                   >
-                    <i className="fa-solid fa-xmark text-sm" />
+                    <i className="fa-solid fa-xmark text-xs sm:text-sm" />
                   </button>
                 </div>
               </div>
 
               {/* Daily Confirmation Progress Bar */}
-              <div className="mt-2.5 pt-2 border-t border-border/40">
-                <div className="flex items-center justify-between text-[11px] mb-1">
-                  <span className="font-semibold text-muted-foreground flex items-center gap-1.5">
-                    <i className="fa-solid fa-circle-check text-emerald-500 text-[10px]" />
+              <div className="mt-2 sm:mt-2.5 pt-2 border-t border-border/40">
+                <div className="flex items-center justify-between text-[10px] sm:text-[11px] mb-1">
+                  <span className="font-semibold text-muted-foreground flex items-center gap-1.5 truncate">
+                    <i className="fa-solid fa-circle-check text-emerald-500 text-[10px] shrink-0" />
                     <span>Daily Confirmation</span>
                   </span>
-                  <span className="font-mono font-bold text-foreground">
-                    {inspectedDayData.confirmedCount} / {inspectedDayData.totalCount} confirmed ({inspectedDayData.confirmedPercent}%)
+                  <span className="font-mono font-bold text-foreground text-[10px] sm:text-[11px] shrink-0 ml-1">
+                    {inspectedDayData.confirmedCount} / {inspectedDayData.totalCount} ({inspectedDayData.confirmedPercent}%)
                   </span>
                 </div>
                 <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
@@ -2277,7 +2280,7 @@ export function TeamAvailabilityTab({
             </div>
 
             {/* Filter Tabs Bar */}
-            <div className="pt-2.5 pb-2 border-b border-border/60 bg-muted/15 space-y-2 shrink-0">
+            <div className="pt-2 pb-1.5 sm:pt-2.5 sm:pb-2 border-b border-border/60 bg-muted/15 space-y-2 shrink-0">
               <div
                 ref={dayTabsContainerRef}
                 onWheel={(e) => {
@@ -2285,7 +2288,7 @@ export function TeamAvailabilityTab({
                     dayTabsContainerRef.current.scrollLeft += e.deltaY;
                   }
                 }}
-                className="flex items-center gap-2 overflow-x-auto no-scrollbar scroll-smooth overscroll-x-contain touch-pan-x px-3.5 sm:px-4 py-0.5 scroll-px-3.5 sm:scroll-px-4"
+                className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar scroll-smooth overscroll-x-contain touch-pan-x px-3 sm:px-4 py-0.5 scroll-px-3 sm:scroll-px-4"
               >
                 {/* 1. All Staff */}
                 <button
@@ -2295,7 +2298,7 @@ export function TeamAvailabilityTab({
                   type="button"
                   onClick={(e) => selectDayTab("All", e.currentTarget)}
                   className={cn(
-                    "px-3 py-1.5 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap cursor-pointer shadow-2xs select-none",
+                    "px-2.5 sm:px-3 py-1.5 text-[11px] sm:text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap cursor-pointer shadow-2xs select-none min-h-[34px]",
                     dayDrawerTab === "All"
                       ? "bg-primary text-primary-foreground shadow-xs ring-2 ring-primary/30"
                       : "bg-background text-muted-foreground hover:text-foreground hover:bg-muted border border-border/80"
@@ -2321,7 +2324,7 @@ export function TeamAvailabilityTab({
                   type="button"
                   onClick={(e) => selectDayTab("Confirmed", e.currentTarget)}
                   className={cn(
-                    "px-3 py-1.5 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap cursor-pointer shadow-2xs select-none",
+                    "px-2.5 sm:px-3 py-1.5 text-[11px] sm:text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap cursor-pointer shadow-2xs select-none min-h-[34px]",
                     dayDrawerTab === "Confirmed"
                       ? "bg-emerald-600 text-white shadow-xs ring-2 ring-emerald-600/30"
                       : "bg-background text-muted-foreground hover:text-foreground hover:bg-muted border border-border/80"
@@ -2347,7 +2350,7 @@ export function TeamAvailabilityTab({
                   type="button"
                   onClick={(e) => selectDayTab("Unconfirmed", e.currentTarget)}
                   className={cn(
-                    "px-3 py-1.5 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap cursor-pointer shadow-2xs select-none",
+                    "px-2.5 sm:px-3 py-1.5 text-[11px] sm:text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap cursor-pointer shadow-2xs select-none min-h-[34px]",
                     dayDrawerTab === "Unconfirmed"
                       ? "bg-amber-600 text-white shadow-xs ring-2 ring-amber-600/30"
                       : "bg-background text-muted-foreground hover:text-foreground hover:bg-muted border border-border/80"
@@ -2373,7 +2376,7 @@ export function TeamAvailabilityTab({
                   type="button"
                   onClick={(e) => selectDayTab("Partial", e.currentTarget)}
                   className={cn(
-                    "px-3 py-1.5 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap cursor-pointer shadow-2xs select-none",
+                    "px-2.5 sm:px-3 py-1.5 text-[11px] sm:text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap cursor-pointer shadow-2xs select-none min-h-[34px]",
                     dayDrawerTab === "Partial"
                       ? "bg-indigo-600 text-white shadow-xs ring-2 ring-indigo-600/30"
                       : "bg-background text-muted-foreground hover:text-foreground hover:bg-muted border border-border/80"
@@ -2399,7 +2402,7 @@ export function TeamAvailabilityTab({
                   type="button"
                   onClick={(e) => selectDayTab("Unavailable", e.currentTarget)}
                   className={cn(
-                    "px-3 py-1.5 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap cursor-pointer shadow-2xs select-none",
+                    "px-2.5 sm:px-3 py-1.5 text-[11px] sm:text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap cursor-pointer shadow-2xs select-none min-h-[34px]",
                     dayDrawerTab === "Unavailable"
                       ? "bg-rose-600 text-white shadow-xs ring-2 ring-rose-600/30"
                       : "bg-background text-muted-foreground hover:text-foreground hover:bg-muted border border-border/80"
@@ -2419,20 +2422,20 @@ export function TeamAvailabilityTab({
               </div>
 
               {/* Search input for employee name/role/dept */}
-              <div className="px-3.5 sm:px-4">
+              <div className="px-3 sm:px-4">
                 <div className="relative">
                   <i className="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-xs pointer-events-none" />
                   <Input
                     value={dayDrawerSearch}
                     onChange={(e) => setDayDrawerSearch(e.target.value)}
                     placeholder="Filter by name, department, or role..."
-                    className="pl-8 text-xs h-8 rounded-xl bg-background border-border/80"
+                    className="pl-8 text-xs h-8 sm:h-8.5 rounded-xl bg-background border-border/80"
                   />
                   {dayDrawerSearch && (
                     <button
                       type="button"
                       onClick={() => setDayDrawerSearch("")}
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground text-xs"
+                      className="w-7 h-7 absolute right-1.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground text-xs flex items-center justify-center cursor-pointer"
                     >
                       <i className="fa-solid fa-xmark" />
                     </button>
@@ -2442,7 +2445,7 @@ export function TeamAvailabilityTab({
             </div>
 
             {/* List of Employees for the selected tab */}
-            <div className="p-3.5 sm:p-4 space-y-2.5 flex-1 overflow-y-auto overscroll-contain">
+            <div className="p-2.5 sm:p-4 space-y-2 sm:space-y-2.5 flex-1 overflow-y-auto overscroll-contain">
               {(() => {
                 const baseList =
                   dayDrawerTab === "Confirmed"
@@ -2510,27 +2513,27 @@ export function TeamAvailabilityTab({
                   return (
                     <div
                       key={worker.workerId}
-                      className="p-3 rounded-xl border border-border/80 bg-background hover:border-primary/40 hover:shadow-xs transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-2.5"
+                      className="p-2.5 sm:p-3 rounded-xl border border-border/80 bg-background hover:border-primary/40 hover:shadow-xs transition-all flex items-center justify-between gap-2.5"
                     >
-                      <div className="flex items-center gap-3 min-w-0">
+                      <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
                         {worker.photoUrl ? (
                           <img
                             src={worker.photoUrl}
                             alt={worker.name}
-                            className="w-9 h-9 rounded-full object-cover border border-border shrink-0"
+                            className="w-8 h-8 sm:w-9 sm:h-9 rounded-full object-cover border border-border shrink-0"
                           />
                         ) : (
-                          <div className="w-9 h-9 rounded-full bg-primary/10 text-primary border border-primary/20 flex items-center justify-center font-bold text-xs uppercase shrink-0">
+                          <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-primary/10 text-primary border border-primary/20 flex items-center justify-center font-bold text-xs uppercase shrink-0">
                             {worker.name ? worker.name.charAt(0) : "U"}
                           </div>
                         )}
 
-                        <div className="min-w-0 space-y-0.5">
-                          <div className="flex items-center gap-2 flex-wrap">
+                        <div className="min-w-0 space-y-0.5 flex-1">
+                          <div className="flex items-center gap-1.5 flex-wrap">
                             <span className="font-bold text-xs text-foreground truncate">{worker.name}</span>
                             {worker.isDefault === false && (
                               <span
-                                className="inline-flex items-center text-[9px] px-1.5 py-0.2 rounded-full bg-primary/10 text-primary font-semibold border border-primary/20"
+                                className="inline-flex items-center text-[9px] px-1.5 py-0.2 rounded-full bg-primary/10 text-primary font-semibold border border-primary/20 shrink-0"
                                 title="Customized schedule entry"
                               >
                                 Custom Schedule
@@ -2551,11 +2554,11 @@ export function TeamAvailabilityTab({
                         </div>
                       </div>
 
-                      <div className="flex items-center justify-between sm:justify-end gap-2.5 shrink-0 pt-1.5 sm:pt-0 border-t sm:border-t-0 border-border/50">
-                        <div className="text-right">
+                      <div className="flex items-center gap-2 shrink-0">
+                        <div className="text-right shrink-0">
                           <Badge
                             className={cn(
-                              "text-[10px] px-2 py-0.5 font-bold transition-colors",
+                              "text-[10px] px-2 py-0.5 font-bold transition-colors whitespace-nowrap",
                               worker.confirmed
                                 ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30"
                                 : "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30"
@@ -2570,7 +2573,7 @@ export function TeamAvailabilityTab({
                             {worker.confirmed ? "Confirmed" : "Unconfirmed"}
                           </Badge>
 
-                          <div className="text-[10px] text-muted-foreground font-mono mt-0.5">
+                          <div className="text-[10px] text-muted-foreground font-mono mt-0.5 whitespace-nowrap">
                             {isPartial ? (
                               <span className="text-amber-600 dark:text-amber-400 font-semibold">
                                 {worker.hours || 0}h ({worker.startTime || "Flex"} - ${worker.endTime || "Flex"})
@@ -2591,7 +2594,7 @@ export function TeamAvailabilityTab({
                           <Button
                             size="sm"
                             variant="outline"
-                            className="h-8 text-xs px-2.5 cursor-pointer rounded-xl shrink-0 hover:border-primary/50"
+                            className="h-7 w-7 sm:h-8 sm:w-8 p-0 cursor-pointer rounded-xl shrink-0 hover:border-primary/50 flex items-center justify-center"
                             onClick={() => {
                               const targetDay = inspectedDay;
                               const existingRec = (rawAvailabilityByDate[targetDay] || []).find(
@@ -2613,26 +2616,26 @@ export function TeamAvailabilityTab({
             </div>
 
             {/* Footer with Mode notice and Action Buttons */}
-            <div className="p-3 sm:p-3.5 border-t border-border bg-muted/20 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 shrink-0">
-              <div className="text-[11px] text-muted-foreground flex items-center gap-1.5">
+            <div className="p-3 sm:p-3.5 border-t border-border bg-muted/20 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 shrink-0">
+              <div className="text-[10px] sm:text-[11px] text-muted-foreground flex items-center gap-1.5">
                 {isAdminRole ? (
                   <>
-                    <i className="fa-solid fa-shield-halved text-primary text-xs" />
-                    <span>Admin oversight: All team members except Admin record their own availability.</span>
+                    <i className="fa-solid fa-shield-halved text-primary text-xs shrink-0" />
+                    <span className="line-clamp-2 sm:line-clamp-none">Admin oversight: All team members except Admin record their own availability.</span>
                   </>
                 ) : (
                   <>
-                    <i className="fa-solid fa-info-circle text-primary text-xs" />
-                    <span>Working days default to Available unless explicitly modified.</span>
+                    <i className="fa-solid fa-info-circle text-primary text-xs shrink-0" />
+                    <span className="line-clamp-2 sm:line-clamp-none">Working days default to Available unless explicitly modified.</span>
                   </>
                 )}
               </div>
 
-              <div className="flex items-center gap-2 justify-end">
+              <div className="flex items-center gap-2 justify-end pt-0.5 sm:pt-0">
                 <Button
                   variant="outline"
                   size="sm"
-                  className="text-xs h-9 sm:h-8 cursor-pointer rounded-xl px-3.5"
+                  className="flex-1 sm:flex-none text-xs h-9 sm:h-8 cursor-pointer rounded-xl px-3.5 font-semibold"
                   onClick={() => setInspectedDay(null)}
                 >
                   Close
@@ -2640,7 +2643,7 @@ export function TeamAvailabilityTab({
                 {!isAdminRole && isEligibleWorker && !isDateInPastMonth(inspectedDay) && (
                   <Button
                     size="sm"
-                    className="text-xs h-9 sm:h-8 gap-1.5 bg-primary cursor-pointer rounded-xl px-3.5 shadow-xs"
+                    className="flex-1 sm:flex-none text-xs h-9 sm:h-8 gap-1.5 bg-primary cursor-pointer rounded-xl px-3.5 shadow-xs whitespace-nowrap font-bold"
                     onClick={() => {
                       const day = inspectedDay;
                       const existingRec = (rawAvailabilityByDate[day] || []).find(
@@ -2654,7 +2657,7 @@ export function TeamAvailabilityTab({
                   </Button>
                 )}
                 {isDateInPastMonth(inspectedDay) && (
-                  <div className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/25">
+                  <div className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/25">
                     <i className="fa-solid fa-lock text-[10px]" />
                     <span>Past Month (Locked)</span>
                   </div>
