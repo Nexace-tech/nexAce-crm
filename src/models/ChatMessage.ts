@@ -29,6 +29,9 @@ export interface IChatMessage extends Document {
   readAt?: Date;
   deletedForEveryone?: boolean;
   deletedForUsers?: string[];
+  isPinned?: boolean;
+  pinnedBy?: string;
+  pinnedAt?: Date;
   tenantId: mongoose.Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
@@ -58,6 +61,9 @@ const ChatMessageSchema = new Schema<IChatMessage>(
     readAt: { type: Date },
     deletedForEveryone: { type: Boolean, default: false },
     deletedForUsers: [{ type: String }],
+    isPinned: { type: Boolean, default: false, index: true },
+    pinnedBy: { type: String },
+    pinnedAt: { type: Date },
     reactions: [
       {
         emoji: { type: String, required: true },

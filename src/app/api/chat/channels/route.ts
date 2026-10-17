@@ -4,6 +4,7 @@ import { connectToDatabase } from "@/lib/db";
 import { Channel } from "@/models/Channel";
 import { requireTenantSession, isAuthError } from "@/lib/auth-guard";
 import { isSubAdminRole } from "@/lib/roles";
+import { getUserDataScope } from "@/lib/dataScope";
 
 const DEFAULT_CHANNELS = [
   { name: "general", description: "Company-wide general discussion", isPinned: true, isPrivate: false },
@@ -66,8 +67,9 @@ export async function GET() {
 }
 
 /**
- * POST: Create a new channel (Admin, OPS, & Manager).
+ * POST: Create a new channel.
  * Supports public and private channels with initial members.
+ * Checks both standard roles AND dynamic permissions from Settings > Permissions (createChatChannels).
  */
 export async function POST(request: Request) {
   try {
@@ -76,9 +78,15 @@ export async function POST(request: Request) {
 
     const { session, tenantObjectId, userObjectId } = authResult;
 
-    const canCreate = session.role === "Admin" || isSubAdminRole(session.role) || session.role === "Manager";
+    const dataScope = await getUserDataScope(session);
+    const canCreate =
+      session.role === "Admin" ||
+      isSubAdminRole(session.role) ||
+      session.role === "Manager" ||
+      dataScope.canViewFeature("createChatChannels");
+
     if (!canCreate) {
-      return NextResponse.json({ error: "Only Admins, Operations, and Managers can create channels." }, { status: 403 });
+      return NextResponse.json({ error: "You do not have permission to create channels." }, { status: 403 });
     }
 
     const body = await request.json();
@@ -166,11 +174,18 @@ export async function PUT(request: Request) {
       return NextResponse.json({ error: "Channel not found" }, { status: 404 });
     }
 
+    const dataScope = await getUserDataScope(session);
     const isSuperRole = session.role === "Admin" || isSubAdminRole(session.role);
     const isCreator = existingChannel.createdBy.equals(userObjectId);
     const isManager = session.role === "Manager";
+    const canManage =
+      isSuperRole ||
+      isCreator ||
+      isManager ||
+      dataScope.canViewFeature("createChatChannels") ||
+      dataScope.canViewFeature("pinChatMessages");
 
-    if (!isSuperRole && !isCreator && !isManager) {
+    if (!canManage) {
       return NextResponse.json({ error: "You do not have permission to modify this channel." }, { status: 403 });
     }
 
@@ -246,11 +261,17 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: "Channel not found" }, { status: 404 });
     }
 
+    const dataScope = await getUserDataScope(session);
     const isSuperRole = session.role === "Admin" || isSubAdminRole(session.role);
     const isCreator = channel.createdBy.equals(userObjectId);
     const isManager = session.role === "Manager";
+    const canDelete =
+      isSuperRole ||
+      isCreator ||
+      isManager ||
+      dataScope.canViewFeature("deleteChatChannels");
 
-    if (!isSuperRole && !isCreator && !isManager) {
+    if (!canDelete) {
       return NextResponse.json({ error: "You do not have permission to delete this channel." }, { status: 403 });
     }
 

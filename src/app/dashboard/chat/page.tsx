@@ -23,6 +23,9 @@ interface ChatMsg {
   deletedForEveryone?: boolean;
   deletedForUsers?: string[];
   attachments?: Array<{ name: string; url: string; mimeType: string; size: number }>;
+  isPinned?: boolean;
+  pinnedBy?: string;
+  pinnedAt?: string;
   createdAt: string;
 }
 
@@ -139,6 +142,21 @@ export default function CommunicationHub() {
     return [];
   });
 
+  const [pinnedChannels, setPinnedChannels] = useState<string[]>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const saved = localStorage.getItem("pinned_channels");
+        return saved ? JSON.parse(saved) : [];
+      } catch {
+        return [];
+      }
+    }
+    return [];
+  });
+
+  const [sidebarFilter, setSidebarFilter] = useState<"all" | "pinned" | "unread">("all");
+  const [showPinnedDrawer, setShowPinnedDrawer] = useState(false);
+
   const togglePinDM = (dmChannel: string) => {
     setPinnedDMs((prev) => {
       const updated = prev.includes(dmChannel) ? prev.filter((id) => id !== dmChannel) : [...prev, dmChannel];
@@ -151,6 +169,77 @@ export default function CommunicationHub() {
       }
       return updated;
     });
+  };
+
+  const togglePinChannel = async (channelName: string, channelId?: string, isGlobalPinned?: boolean) => {
+    setPinnedChannels((prev) => {
+      const updated = prev.includes(channelName)
+        ? prev.filter((name) => name !== channelName)
+        : [...prev, channelName];
+      if (typeof window !== "undefined") {
+        try {
+          localStorage.setItem("pinned_channels", JSON.stringify(updated));
+        } catch (e) {
+          console.error(e);
+        }
+      }
+      return updated;
+    });
+
+    // If user has admin/ops/manager rights, sync channel global pin state to backend as well
+    if (channelId && (isAdmin || isOPS || user?.role === "Manager")) {
+      try {
+        await fetch("/api/chat/channels", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ channelId, isPinned: !isGlobalPinned }),
+        });
+        await fetchChannels();
+      } catch (err) {
+        console.error("Sync pin channel error:", err);
+      }
+    }
+  };
+
+  const handleTogglePinMessage = async (msgId: string, currentPinStatus?: boolean) => {
+    try {
+      const res = await fetch("/api/chat/messages", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messageId: msgId,
+          action: "togglePin",
+          isPinned: !currentPinStatus,
+        }),
+      });
+      if (res.ok) {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m._id === msgId
+              ? {
+                  ...m,
+                  isPinned: !currentPinStatus,
+                  pinnedBy: !currentPinStatus ? (user?.name || "Team Member") : undefined,
+                  pinnedAt: !currentPinStatus ? new Date().toISOString() : undefined,
+                }
+              : m
+          )
+        );
+      }
+    } catch (err) {
+      console.error("Toggle pin message error:", err);
+    }
+  };
+
+  const jumpToMessage = (msgId: string) => {
+    const el = document.getElementById(`msg-${msgId}`);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      el.classList.add("ring-2", "ring-amber-500", "bg-amber-500/10");
+      setTimeout(() => {
+        el.classList.remove("ring-2", "ring-amber-500", "bg-amber-500/10");
+      }, 2000);
+    }
   };
 
   const [sidebarSearch, setSidebarSearch] = useState("");
@@ -1048,344 +1137,692 @@ export default function CommunicationHub() {
                 />
               </div>
 
-              <div className="shrink-0">
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                    <i className="fa-solid fa-hashtag text-xs text-primary" /> Channels
-                  </h3>
-                  {(can("createChatChannels") || isAdmin || isOPS) && (
+              {/* Sidebar View Filter Pills: All | Pinned | Unread */}
+              {(() => {
+                const rawChannels = channelsList.length > 0
+                  ? channelsList.filter((ch: any) => ch.isActive !== false)
+                  : [
+                      { name: "general", _id: "c1", isPinned: true, isActive: true, isPrivate: false },
+                      { name: "projects", _id: "c2", isPinned: true, isActive: true, isPrivate: false },
+                      { name: "engineering", _id: "c3", isPinned: false, isActive: true, isPrivate: false },
+                      { name: "random", _id: "c4", isPinned: false, isActive: true, isPrivate: false },
+                    ];
+
+                const isChannelPinned = (chObj: any) => {
+                  const chName = typeof chObj === "string" ? chObj : chObj.name;
+                  const isGlobal = typeof chObj === "object" && Boolean(chObj.isPinned);
+                  return Boolean(isGlobal || pinnedChannels.includes(chName));
+                };
+
+                const getDMChannel = (targetUser: any) => {
+                  const myId = user?._id || user?.name || "";
+                  const targetId = targetUser._id || targetUser.name || "";
+                  const myKey = myId.toString().toLowerCase().replace(/[^a-z0-9]/g, "_");
+                  const targetKey = targetId.toString().toLowerCase().replace(/[^a-z0-9]/g, "_");
+                  const pairKey = [myKey, targetKey].sort().join("_");
+                  return `dm_${pairKey}`;
+                };
+
+                const sourceList = teamMembers.length > 0
+                  ? teamMembers
+                  : [
+                      { name: "Admin NEX 2", role: "Admin", _id: "admin_nex_2", status: "Active" },
+                      { name: "Ashu", role: "HR", _id: "ashu", status: "Active" },
+                      { name: "Sarah Jenkins", role: "Product Designer", _id: "u1", status: "Active" },
+                      { name: "Alex Rivera", role: "Frontend Dev", _id: "u2", status: "Active" },
+                      { name: "David Kim", role: "Operations Lead", _id: "u3", status: "Offline" },
+                    ];
+
+                const selfUser = user ? { ...user, isSelf: true } : { name: "Personal Space (You)", _id: "self", isSelf: true };
+
+                const isSameUser = (u1: any, u2: any) => {
+                  if (!u1 || !u2) return false;
+                  const id1 = (u1._id || u1.id || "").toString();
+                  const id2 = (u2._id || u2.id || "").toString();
+                  if (id1 && id2 && id1 === id2) return true;
+                  const name1 = (u1.name || u1.userName || "").toLowerCase().trim();
+                  const name2 = (u2.name || u2.userName || "").toLowerCase().trim();
+                  return Boolean(name1 && name2 && name1 === name2);
+                };
+
+                const otherMembers = sourceList.filter((m: any) => !isSameUser(m, user));
+                const allDmUsers = [{ ...selfUser, isSelf: true }, ...otherMembers];
+
+                const isDmPinned = (mUser: any) => {
+                  if (mUser.isSelf) return true;
+                  const dmChannel = getDMChannel(mUser);
+                  return pinnedDMs.includes(dmChannel);
+                };
+
+                const pinnedChannelList = rawChannels.filter(isChannelPinned);
+                const pinnedDmList = allDmUsers.filter(isDmPinned);
+                const totalPinnedCount = pinnedChannelList.length + pinnedDmList.length;
+
+                const unreadConvCount = recentConversations.filter((c: any) => (c.unreadCount || 0) > 0).length;
+
+                return (
+                  <div className="flex items-center gap-1 p-1 bg-muted/40 rounded-lg shrink-0 text-xs">
                     <button
-                      onClick={() => setShowCreateChannelModal(true)}
-                      className="text-[10px] text-primary hover:underline font-semibold flex items-center gap-1 cursor-pointer"
-                      title="Create Channel"
+                      type="button"
+                      onClick={() => setSidebarFilter("all")}
+                      className={cn(
+                        "flex-1 py-1 px-1.5 rounded-md text-[11px] font-semibold transition-colors cursor-pointer text-center",
+                        sidebarFilter === "all"
+                          ? "bg-background text-foreground shadow-xs font-bold"
+                          : "text-muted-foreground hover:text-foreground"
+                      )}
                     >
-                      <i className="fa-solid fa-plus text-[9px]" /> New
+                      All
                     </button>
-                  )}
-                </div>
+                    <button
+                      type="button"
+                      onClick={() => setSidebarFilter("pinned")}
+                      className={cn(
+                        "flex-1 py-1 px-1.5 rounded-md text-[11px] font-semibold transition-colors cursor-pointer flex items-center justify-center gap-1",
+                        sidebarFilter === "pinned"
+                          ? "bg-amber-500/15 text-amber-500 font-bold shadow-xs border border-amber-500/30"
+                          : "text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      <i className="fa-solid fa-thumbtack text-[10px]" />
+                      <span>Pinned</span>
+                      {totalPinnedCount > 0 && (
+                        <span className="text-[9px] px-1 py-0.2 rounded-full bg-amber-500/20 text-amber-500 font-mono font-bold">
+                          {totalPinnedCount}
+                        </span>
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSidebarFilter("unread")}
+                      className={cn(
+                        "flex-1 py-1 px-1.5 rounded-md text-[11px] font-semibold transition-colors cursor-pointer flex items-center justify-center gap-1",
+                        sidebarFilter === "unread"
+                          ? "bg-rose-500/15 text-rose-500 font-bold shadow-xs border border-rose-500/30"
+                          : "text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      <span>Unread</span>
+                      {unreadConvCount > 0 && (
+                        <span className="text-[9px] px-1 py-0.2 rounded-full bg-rose-500/20 text-rose-500 font-mono font-bold">
+                          {unreadConvCount}
+                        </span>
+                      )}
+                    </button>
+                  </div>
+                );
+              })()}
 
-                <div className="space-y-1 max-h-[160px] sm:max-h-[220px] overflow-y-auto no-scrollbar">
-                  {(() => {
-                    const rawChannels = channelsList.length > 0
-                      ? channelsList.filter((ch: any) => ch.isActive !== false)
-                      : [
-                          { name: "general", _id: "c1", isPinned: true, isActive: true, isPrivate: false },
-                          { name: "projects", _id: "c2", isPinned: true, isActive: true, isPrivate: false },
-                          { name: "engineering", _id: "c3", isPinned: false, isActive: true, isPrivate: false },
-                          { name: "random", _id: "c4", isPinned: false, isActive: true, isPrivate: false },
-                        ];
-                    
-                    const activeChannels = rawChannels.filter((chObj: any) => {
-                      const chName = typeof chObj === "string" ? chObj : chObj.name;
-                      return !sidebarSearch || chName.toLowerCase().includes(sidebarSearch.toLowerCase());
-                    });
+              {/* Scrollable Channels & DMs Container */}
+              <div className="flex-1 flex flex-col min-h-0 space-y-3 overflow-y-auto pr-0.5 scrollbar-thin">
+                {(() => {
+                  const rawChannels = channelsList.length > 0
+                    ? channelsList.filter((ch: any) => ch.isActive !== false)
+                    : [
+                        { name: "general", _id: "c1", isPinned: true, isActive: true, isPrivate: false },
+                        { name: "projects", _id: "c2", isPinned: true, isActive: true, isPrivate: false },
+                        { name: "engineering", _id: "c3", isPinned: false, isActive: true, isPrivate: false },
+                        { name: "random", _id: "c4", isPinned: false, isActive: true, isPrivate: false },
+                      ];
 
-                    return activeChannels.map((chObj: any) => {
-                      const chName = typeof chObj === "string" ? chObj : chObj.name;
-                      const chId = typeof chObj === "string" ? chObj : chObj._id;
-                      const isPinned = typeof chObj === "string" ? false : Boolean(chObj.isPinned);
-                      const isPrivate = typeof chObj === "object" && Boolean(chObj.isPrivate);
-                      const isSelected = selectedChannel === chName;
-                      const isPrivileged = isAdmin || isOPS || user?.role === "Manager" || (chObj.createdBy && (chObj.createdBy._id === user?._id || chObj.createdBy === user?._id));
+                  const isChannelPinned = (chObj: any) => {
+                    const chName = typeof chObj === "string" ? chObj : chObj.name;
+                    const isGlobal = typeof chObj === "object" && Boolean(chObj.isPinned);
+                    return Boolean(isGlobal || pinnedChannels.includes(chName));
+                  };
 
-                      return (
-                        <div
-                          key={chId || chName}
-                          className={cn(
-                            "group flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer",
-                            isSelected
-                              ? "bg-primary text-primary-foreground font-bold shadow-xs"
-                              : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                  const getDMChannel = (targetUser: any) => {
+                    const myId = user?._id || user?.name || "";
+                    const targetId = targetUser._id || targetUser.name || "";
+                    const myKey = myId.toString().toLowerCase().replace(/[^a-z0-9]/g, "_");
+                    const targetKey = targetId.toString().toLowerCase().replace(/[^a-z0-9]/g, "_");
+                    const pairKey = [myKey, targetKey].sort().join("_");
+                    return `dm_${pairKey}`;
+                  };
+
+                  const sourceList = teamMembers.length > 0
+                    ? teamMembers
+                    : [
+                        { name: "Admin NEX 2", role: "Admin", _id: "admin_nex_2", status: "Active" },
+                        { name: "Ashu", role: "HR", _id: "ashu", status: "Active" },
+                        { name: "Sarah Jenkins", role: "Product Designer", _id: "u1", status: "Active" },
+                        { name: "Alex Rivera", role: "Frontend Dev", _id: "u2", status: "Active" },
+                        { name: "David Kim", role: "Operations Lead", _id: "u3", status: "Offline" },
+                      ];
+
+                  const selfUser = user ? { ...user, isSelf: true } : { name: "Personal Space (You)", _id: "self", isSelf: true };
+
+                  const isSameUser = (u1: any, u2: any) => {
+                    if (!u1 || !u2) return false;
+                    const id1 = (u1._id || u1.id || "").toString();
+                    const id2 = (u2._id || u2.id || "").toString();
+                    if (id1 && id2 && id1 === id2) return true;
+                    const name1 = (u1.name || u1.userName || "").toLowerCase().trim();
+                    const name2 = (u2.name || u2.userName || "").toLowerCase().trim();
+                    return Boolean(name1 && name2 && name1 === name2);
+                  };
+
+                  const otherMembers = sourceList.filter((m: any) => !isSameUser(m, user));
+                  const allDmUsers = [{ ...selfUser, isSelf: true }, ...otherMembers];
+
+                  const isDmPinned = (mUser: any) => {
+                    if (mUser.isSelf) return true;
+                    const dmChannel = getDMChannel(mUser);
+                    return pinnedDMs.includes(dmChannel);
+                  };
+
+                  const pinnedChannelList = rawChannels.filter((ch: any) => {
+                    const matchesSearch = !sidebarSearch || (ch.name && ch.name.toLowerCase().includes(sidebarSearch.toLowerCase()));
+                    return isChannelPinned(ch) && matchesSearch;
+                  });
+
+                  const pinnedDmList = allDmUsers.filter((m: any) => {
+                    const matchesSearch = !sidebarSearch || (m.name && m.name.toLowerCase().includes(sidebarSearch.toLowerCase())) || (m.email && m.email.toLowerCase().includes(sidebarSearch.toLowerCase()));
+                    return isDmPinned(m) && matchesSearch;
+                  });
+
+                  const totalPinnedCount = pinnedChannelList.length + pinnedDmList.length;
+
+                  // -------------------------------------------------------------
+                  // PINNED VIEW (when user clicks "Pinned" tab or at top of "All")
+                  // -------------------------------------------------------------
+                  const renderPinnedSection = () => {
+                    if (sidebarFilter !== "pinned" && totalPinnedCount === 0) return null;
+
+                    return (
+                      <div className="shrink-0 p-2.5 rounded-xl bg-amber-500/5 dark:bg-amber-950/20 border border-amber-500/20 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <h3 className="text-[11px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400 flex items-center gap-1.5">
+                            <i className="fa-solid fa-thumbtack text-xs" /> Pinned Items
+                            <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-amber-500/20 font-mono font-bold">
+                              {totalPinnedCount}
+                            </span>
+                          </h3>
+                          {sidebarFilter === "pinned" && (
+                            <span className="text-[10px] text-muted-foreground font-medium">Filtered</span>
                           )}
-                          onClick={() => setSelectedChannel(chName)}
-                        >
-                          <span className="flex items-center gap-2 truncate">
-                            <i className={`fa-solid ${
-                              isPinned
-                                ? "fa-thumbtack text-amber-400 text-[10px]"
-                                : isPrivate
-                                ? "fa-lock text-amber-500 text-[11px]"
-                                : "fa-hashtag text-xs"
-                            }`} /> 
-                            <span className="truncate">{chName}</span>
-                            {isPrivate && (
-                              <span className={cn(
-                                "text-[9px] px-1 py-0.2 rounded font-mono uppercase tracking-wider shrink-0",
-                                isSelected ? "bg-primary-foreground/20 text-primary-foreground" : "bg-amber-500/10 text-amber-500 border border-amber-500/20"
-                              )}>
-                                Lock
-                              </span>
-                            )}
-                          </span>
+                        </div>
 
-                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                            {isPrivate && (
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setManagingChannel(chObj);
-                                  setShowManageMembersModal(true);
-                                }}
-                                className="p-1 text-[10px] hover:text-amber-400 transition-colors"
-                                title="Manage Channel Members"
-                              >
-                                <i className="fa-solid fa-users-gear" />
-                              </button>
-                            )}
+                        {totalPinnedCount === 0 ? (
+                          <div className="py-6 px-3 text-center rounded-lg border border-dashed border-amber-500/30 bg-background/50">
+                            <i className="fa-solid fa-thumbtack text-xl text-amber-400/50 mb-1.5" />
+                            <p className="text-xs font-semibold text-foreground">No pinned chats or channels</p>
+                            <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
+                              Hover over any channel or team chat and click the pin icon to pin it here.
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="space-y-1 max-h-[160px] overflow-y-auto no-scrollbar">
+                            {/* Pinned Channels */}
+                            {pinnedChannelList.map((chObj: any) => {
+                              const chName = typeof chObj === "string" ? chObj : chObj.name;
+                              const chId = typeof chObj === "string" ? chObj : chObj._id;
+                              const isPrivate = typeof chObj === "object" && Boolean(chObj.isPrivate);
+                              const isSelected = selectedChannel === chName;
 
-                            {isPrivileged && (
-                              <>
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleTogglePinChannel(chId, isPinned);
-                                  }}
-                                  className="p-1 text-[10px] hover:text-amber-400 transition-colors"
-                                  title={isPinned ? "Unpin Channel" : "Pin Channel"}
+                              return (
+                                <div
+                                  key={`pinned-ch-${chId || chName}`}
+                                  onClick={() => setSelectedChannel(chName)}
+                                  className={cn(
+                                    "group flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer",
+                                    isSelected
+                                      ? "bg-amber-500 text-slate-950 font-bold shadow-xs"
+                                      : "bg-background/80 hover:bg-background text-foreground border border-border/40"
+                                  )}
                                 >
-                                  <i className="fa-solid fa-thumbtack" />
-                                </button>
-
-                                {chName !== "general" && (
+                                  <span className="flex items-center gap-1.5 truncate min-w-0">
+                                    <i className={cn("fa-solid text-[10px] shrink-0", isPrivate ? "fa-lock text-amber-600 dark:text-amber-400" : "fa-hashtag text-amber-500")} />
+                                    <span className="truncate">{chName}</span>
+                                    <span className={cn(
+                                      "text-[9px] uppercase px-1 py-0.2 rounded font-mono shrink-0",
+                                      isSelected ? "bg-slate-950/20 text-slate-950 font-bold" : "bg-muted text-muted-foreground"
+                                    )}>
+                                      Channel
+                                    </span>
+                                  </span>
                                   <button
                                     type="button"
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      handleDeleteChannel(chId, chName);
+                                      togglePinChannel(chName, chId, isChannelPinned(chObj));
                                     }}
-                                    className="p-1 text-[10px] hover:text-rose-400 transition-colors"
-                                    title="Deactivate Channel"
+                                    className={cn(
+                                      "p-1 text-[10px] transition-colors cursor-pointer",
+                                      isSelected ? "text-slate-950 hover:text-rose-700" : "text-amber-500 hover:text-rose-500"
+                                    )}
+                                    title="Unpin Channel"
                                   >
-                                    <i className="fa-solid fa-trash-can" />
+                                    <i className="fa-solid fa-thumbtack" />
                                   </button>
-                                )}
-                              </>
-                            )}
+                                </div>
+                              );
+                            })}
+
+                            {/* Pinned Direct Messages */}
+                            {pinnedDmList.map((mUser: any) => {
+                              const dmChannel = getDMChannel(mUser);
+                              const isSelfUser = Boolean(mUser.isSelf);
+                              const isSelected = selectedChannel === dmChannel;
+                              const conv = recentConversations.find((c: any) => c._id === dmChannel || (mUser.name && c._id.includes(mUser.name.toLowerCase().replace(/[^a-z0-9]/g, "_"))));
+                              const unreadCount = isSelfUser ? 0 : conv?.unreadCount || 0;
+
+                              return (
+                                <div
+                                  key={`pinned-dm-${mUser._id || mUser.name}`}
+                                  onClick={() => setSelectedChannel(dmChannel)}
+                                  className={cn(
+                                    "group flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer",
+                                    isSelected
+                                      ? "bg-amber-500 text-slate-950 font-bold shadow-xs"
+                                      : "bg-background/80 hover:bg-background text-foreground border border-border/40"
+                                  )}
+                                >
+                                  <span className="flex items-center gap-1.5 truncate min-w-0">
+                                    <i className={cn("fa-solid text-[11px] shrink-0", isSelfUser ? "fa-bookmark text-amber-600 dark:text-amber-400" : "fa-circle-user text-amber-500")} />
+                                    <span className="truncate">{mUser.name || mUser.email} {isSelfUser ? "(You)" : ""}</span>
+                                    <span className={cn(
+                                      "text-[9px] uppercase px-1 py-0.2 rounded font-mono shrink-0",
+                                      isSelected ? "bg-slate-950/20 text-slate-950 font-bold" : "bg-muted text-muted-foreground"
+                                    )}>
+                                      {isSelfUser ? "Notes" : "DM"}
+                                    </span>
+                                  </span>
+                                  <div className="flex items-center gap-1 shrink-0">
+                                    {unreadCount > 0 && (
+                                      <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-full bg-rose-500 text-white font-mono">
+                                        {unreadCount}
+                                      </span>
+                                    )}
+                                    {!isSelfUser && (
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          togglePinDM(dmChannel);
+                                        }}
+                                        className={cn(
+                                          "p-1 text-[10px] transition-colors cursor-pointer",
+                                          isSelected ? "text-slate-950 hover:text-rose-700" : "text-amber-500 hover:text-rose-500"
+                                        )}
+                                        title="Unpin Direct Message"
+                                      >
+                                        <i className="fa-solid fa-thumbtack" />
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
                           </div>
+                        )}
+                      </div>
+                    );
+                  };
+
+                  // If pinned tab selected, render pinned section only
+                  if (sidebarFilter === "pinned") {
+                    return renderPinnedSection();
+                  }
+
+                  // -------------------------------------------------------------
+                  // UNREAD VIEW (when user clicks "Unread" tab)
+                  // -------------------------------------------------------------
+                  if (sidebarFilter === "unread") {
+                    const unreadDms = allDmUsers.filter((m: any) => {
+                      const dmChannel = getDMChannel(m);
+                      const conv = recentConversations.find((c: any) => c._id === dmChannel || (m.name && c._id.includes(m.name.toLowerCase().replace(/[^a-z0-9]/g, "_"))));
+                      return (conv?.unreadCount || 0) > 0;
+                    });
+
+                    if (unreadDms.length === 0) {
+                      return (
+                        <div className="py-8 px-3 text-center rounded-xl border border-dashed border-border/80 bg-muted/20">
+                          <i className="fa-solid fa-circle-check text-2xl text-emerald-500/70 mb-2" />
+                          <p className="text-xs font-semibold text-foreground">All caught up!</p>
+                          <p className="text-[11px] text-muted-foreground mt-0.5">No unread direct messages or channel mentions.</p>
                         </div>
                       );
-                    });
-                  })()}
-                </div>
+                    }
 
-                {/* Inactive Channels Section (Admin & Manager view) */}
-                {(user?.role === "Admin" || user?.role === "Manager") && (
-                  <div className="mt-3 pt-2 border-t border-border/60">
-                    <h4 className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70 mb-1.5 flex items-center gap-1">
-                      <i className="fa-solid fa-box-archive text-[9px] text-amber-500" /> Inactive Channels
-                    </h4>
-                    {channelsList.filter((ch: any) => ch.isActive === false).length === 0 ? (
-                      <p className="text-[10px] text-muted-foreground/50 italic px-1">No inactive channels</p>
-                    ) : (
-                      <div className="space-y-1 max-h-[90px] overflow-y-auto no-scrollbar">
-                        {channelsList
-                          .filter((ch: any) => ch.isActive === false)
-                          .map((inCh: any) => (
+                    return (
+                      <div className="space-y-1">
+                        <h4 className="text-[10px] font-bold uppercase tracking-wider text-rose-500 mb-1 flex items-center gap-1.5">
+                          <i className="fa-solid fa-envelope-open-text text-[10px]" /> Unread Chats ({unreadDms.length})
+                        </h4>
+                        {unreadDms.map((mUser: any) => {
+                          const dmChannel = getDMChannel(mUser);
+                          const conv = recentConversations.find((c: any) => c._id === dmChannel || (mUser.name && c._id.includes(mUser.name.toLowerCase().replace(/[^a-z0-9]/g, "_"))));
+                          const unreadCount = conv?.unreadCount || 0;
+
+                          return (
                             <div
-                              key={inCh._id}
-                              className="group flex items-center justify-between px-2.5 py-1 rounded-lg text-xs font-medium text-muted-foreground/60 bg-muted/20 hover:bg-muted/40 transition-colors"
+                              key={mUser._id || mUser.name}
+                              onClick={() => setSelectedChannel(dmChannel)}
+                              className="group flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-rose-500/10 text-foreground border border-rose-500/20 hover:bg-rose-500/15 transition-colors cursor-pointer"
                             >
-                              <span className="flex items-center gap-1.5 truncate line-through">
-                                <i className="fa-solid fa-hashtag text-[10px] opacity-40" />
-                                {inCh.name}
+                              <span className="flex items-center gap-2 truncate">
+                                <i className="fa-solid fa-circle-user text-rose-500 text-sm" />
+                                <span className="truncate">{mUser.name || mUser.email}</span>
                               </span>
-                              <div className="flex items-center gap-2">
-                                <button
-                                  type="button"
-                                  onClick={() => handleReactivateChannel(inCh._id)}
-                                  className="text-[10px] text-emerald-500 hover:text-emerald-600 font-bold opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 cursor-pointer"
-                                  title="Reactivate Channel"
-                                >
-                                  <i className="fa-solid fa-rotate-left text-[9px]" /> Restore
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteChannel(inCh._id, inCh.name)}
-                                  className="text-[10px] text-rose-400 hover:text-rose-500 font-bold opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 cursor-pointer"
-                                  title="Permanently Delete Channel"
-                                >
-                                  <i className="fa-solid fa-trash-can text-[9px]" />
-                                </button>
-                              </div>
-                            </div>
-                          ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-                <h3 className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5 shrink-0">
-                  <i className="fa-solid fa-user-group text-xs text-emerald-500" /> Direct Messages
-                </h3>
-                <div className="space-y-1 flex-1 overflow-y-auto pr-1 scrollbar-thin">
-                  {(() => {
-                    const getDMChannel = (targetUser: any) => {
-                      const myId = user?._id || user?.name || "";
-                      const targetId = targetUser._id || targetUser.name || "";
-                      const myKey = myId.toString().toLowerCase().replace(/[^a-z0-9]/g, "_");
-                      const targetKey = targetId.toString().toLowerCase().replace(/[^a-z0-9]/g, "_");
-                      const pairKey = [myKey, targetKey].sort().join("_");
-                      return `dm_${pairKey}`;
-                    };
-
-                    const sourceList = teamMembers.length > 0
-                      ? teamMembers
-                      : [
-                          { name: "Admin NEX 2", role: "Admin", _id: "admin_nex_2", status: "Active" },
-                          { name: "Ashu", role: "HR", _id: "ashu", status: "Active" },
-                          { name: "Sarah Jenkins", role: "Product Designer", _id: "u1", status: "Active" },
-                          { name: "Alex Rivera", role: "Frontend Dev", _id: "u2", status: "Active" },
-                          { name: "David Kim", role: "Operations Lead", _id: "u3", status: "Offline" },
-                        ];
-
-                    // Include self as a "Personal Notes / Yourself" target at the top of DM list
-                    const selfUser = user ? { ...user, isSelf: true } : { name: "Personal Space (You)", _id: "self", isSelf: true };
-
-                    const filteredMembers = sourceList.filter((m: any) => {
-                      const matchesSearch = !sidebarSearch || (m.name && m.name.toLowerCase().includes(sidebarSearch.toLowerCase())) || (m.email && m.email.toLowerCase().includes(sidebarSearch.toLowerCase()));
-                      return matchesSearch;
-                    });
-
-                    // Deduplicate self from member list so user never appears twice
-                    const isSameUser = (u1: any, u2: any) => {
-                      if (!u1 || !u2) return false;
-                      const id1 = (u1._id || u1.id || "").toString();
-                      const id2 = (u2._id || u2.id || "").toString();
-                      if (id1 && id2 && id1 === id2) return true;
-                      const name1 = (u1.name || u1.userName || "").toLowerCase().trim();
-                      const name2 = (u2.name || u2.userName || "").toLowerCase().trim();
-                      return Boolean(name1 && name2 && name1 === name2);
-                    };
-
-                    const otherMembers = filteredMembers.filter((m: any) => !isSameUser(m, user));
-                    const finalDmUsers = [{ ...selfUser, isSelf: true }, ...otherMembers];
-
-                    // Multi-Tier DM Sorting: Pinned & Self -> Recent Conversations (by time) -> Active (Online) Users -> Others (Offline)
-                    const sortedDmUsers = [...finalDmUsers].sort((a, b) => {
-                      const channelA = getDMChannel(a);
-                      const channelB = getDMChannel(b);
-
-                      const isPinnedA = Boolean(a.isSelf || pinnedDMs.includes(channelA));
-                      const isPinnedB = Boolean(b.isSelf || pinnedDMs.includes(channelB));
-
-                      // 1. Pinned & Self always on top
-                      if (isPinnedA && !isPinnedB) return -1;
-                      if (!isPinnedA && isPinnedB) return 1;
-
-                      if (isPinnedA && isPinnedB) {
-                        if (a.isSelf) return -1;
-                        if (b.isSelf) return 1;
-                      }
-
-                      // 2. Recent Chat Users next (ordered by most recent message timestamp)
-                      const convA = recentConversations.find((c: any) => c._id === channelA || (a.name && c._id.includes(a.name.toLowerCase().replace(/[^a-z0-9]/g, "_"))));
-                      const convB = recentConversations.find((c: any) => c._id === channelB || (b.name && c._id.includes(b.name.toLowerCase().replace(/[^a-z0-9]/g, "_"))));
-                      
-                      const timeA = convA?.lastMessageAt ? new Date(convA.lastMessageAt).getTime() : 0;
-                      const timeB = convB?.lastMessageAt ? new Date(convB.lastMessageAt).getTime() : 0;
-
-                      const hasRecentA = timeA > 0;
-                      const hasRecentB = timeB > 0;
-
-                      if (hasRecentA && !hasRecentB) return -1;
-                      if (!hasRecentA && hasRecentB) return 1;
-
-                      if (hasRecentA && hasRecentB) {
-                        if (timeA !== timeB) return timeB - timeA;
-                      }
-
-                      // 3. Active (Online) Users next
-                      const isOnlineA = a.isSelf ? true : typeof a.isOnline === "boolean" ? a.isOnline : Boolean(a.isClockedIn || (a.lastActiveAt && Date.now() - new Date(a.lastActiveAt).getTime() < 5 * 60 * 1000));
-                      const isOnlineB = b.isSelf ? true : typeof b.isOnline === "boolean" ? b.isOnline : Boolean(b.isClockedIn || (b.lastActiveAt && Date.now() - new Date(b.lastActiveAt).getTime() < 5 * 60 * 1000));
-
-                      if (isOnlineA && !isOnlineB) return -1;
-                      if (!isOnlineA && isOnlineB) return 1;
-
-                      // 4. Alphabetical fallback
-                      const nameA = (a.name || a.email || "").toLowerCase();
-                      const nameB = (b.name || b.email || "").toLowerCase();
-                      return nameA.localeCompare(nameB);
-                    });
-
-                    return sortedDmUsers.map((mUser: any) => {
-                      const dmChannel = getDMChannel(mUser);
-                      const isSelfUser = Boolean(mUser.isSelf);
-                      const isPinned = Boolean(isSelfUser || pinnedDMs.includes(dmChannel));
-                      const isOnline = isSelfUser
-                        ? true
-                        : typeof mUser.isOnline === "boolean"
-                        ? mUser.isOnline
-                        : Boolean(mUser.isClockedIn || (mUser.lastActiveAt && (Date.now() - new Date(mUser.lastActiveAt).getTime() < 5 * 60 * 1000)));
-                      const conv = recentConversations.find((c: any) => c._id === dmChannel || (mUser.name && c._id.includes(mUser.name.toLowerCase().replace(/[^a-z0-9]/g, "_"))));
-                      const unreadCount = isSelfUser ? 0 : conv?.unreadCount || 0;
-
-                      return (
-                        <div
-                          key={mUser._id || mUser.name}
-                          onClick={() => setSelectedChannel(dmChannel)}
-                          className={cn(
-                            "group w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer text-left relative",
-                            selectedChannel === dmChannel
-                              ? "bg-primary text-primary-foreground font-bold shadow-xs"
-                              : unreadCount > 0
-                              ? "bg-rose-500/10 text-foreground font-semibold border border-rose-500/20"
-                              : "text-muted-foreground hover:bg-accent hover:text-foreground"
-                          )}
-                        >
-                          <span className="flex items-center gap-2 truncate min-w-0 flex-1 mr-1">
-                            <i className={isSelfUser ? "fa-solid fa-bookmark text-amber-400 text-sm shrink-0" : isPinned ? "fa-solid fa-thumbtack text-amber-400 text-xs shrink-0" : "fa-solid fa-circle-user text-sm shrink-0"} />
-                            <span className="truncate">
-                              {mUser.name || mUser.email} {isSelfUser ? "(You)" : ""}
-                            </span>
-                          </span>
-                          
-                          <div className="flex items-center gap-1.5 shrink-0">
-                            {!isSelfUser && (
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  togglePinDM(dmChannel);
-                                }}
-                                className="p-1 text-[10px] opacity-0 group-hover:opacity-100 hover:text-amber-400 transition-opacity"
-                                title={isPinned ? "Unpin Direct Message" : "Pin Direct Message to Top"}
-                              >
-                                <i className={`fa-solid fa-thumbtack ${isPinned ? "text-amber-400" : ""}`} />
-                              </button>
-                            )}
-                            {isSelfUser && (
-                              <Badge variant="outline" className="text-[9px] px-1.5 py-0 border-amber-500/30 text-amber-500 bg-amber-500/10">
-                                Notes
-                              </Badge>
-                            )}
-                            {unreadCount > 0 && selectedChannel !== dmChannel && (
-                              <Badge className="bg-rose-600 text-white font-bold text-[10px] px-1.5 py-0.2 animate-pulse border-0">
+                              <Badge className="bg-rose-600 text-white font-bold text-[10px] px-1.5 py-0.2 border-0">
                                 {unreadCount} new
                               </Badge>
-                            )}
-                            <span className="relative flex h-2.5 w-2.5 shrink-0 items-center justify-center">
-                              {isOnline ? (
-                                <>
-                                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
-                                </>
-                              ) : (
-                                <>
-                                  <span className="animate-pulse absolute inline-flex h-full w-full rounded-full bg-slate-400/40 opacity-50" />
-                                  <span className="relative inline-flex rounded-full h-2 w-2 bg-slate-400 dark:bg-slate-500 opacity-70" />
-                                </>
-                              )}
-                            </span>
-                          </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  }
+
+                  // -------------------------------------------------------------
+                  // ALL VIEW (Default)
+                  // -------------------------------------------------------------
+                  const activeChannels = rawChannels.filter((chObj: any) => {
+                    const chName = typeof chObj === "string" ? chObj : chObj.name;
+                    return !sidebarSearch || chName.toLowerCase().includes(sidebarSearch.toLowerCase());
+                  });
+
+                  return (
+                    <>
+                      {/* Pinned Section in All View if any items pinned */}
+                      {renderPinnedSection()}
+
+                      {/* Channels Section */}
+                      <div className="shrink-0">
+                        <div className="flex items-center justify-between mb-2">
+                          <h3 className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                            <i className="fa-solid fa-hashtag text-xs text-primary" /> Channels
+                          </h3>
+                          {(can("createChatChannels") || isAdmin || isOPS) && (
+                            <button
+                              onClick={() => setShowCreateChannelModal(true)}
+                              className="text-[10px] text-primary hover:underline font-semibold flex items-center gap-1 cursor-pointer"
+                              title="Create Channel"
+                            >
+                              <i className="fa-solid fa-plus text-[9px]" /> New
+                            </button>
+                          )}
                         </div>
-                      );
-                    });
-                  })()}
-                </div>
+
+                        <div className="space-y-1 max-h-[160px] sm:max-h-[200px] overflow-y-auto no-scrollbar">
+                          {activeChannels.map((chObj: any) => {
+                            const chName = typeof chObj === "string" ? chObj : chObj.name;
+                            const chId = typeof chObj === "string" ? chObj : chObj._id;
+                            const isPinned = isChannelPinned(chObj);
+                            const isPrivate = typeof chObj === "object" && Boolean(chObj.isPrivate);
+                            const isSelected = selectedChannel === chName;
+                            const isPrivileged = isAdmin || isOPS || user?.role === "Manager" || (chObj.createdBy && (chObj.createdBy._id === user?._id || chObj.createdBy === user?._id));
+
+                            return (
+                              <div
+                                key={chId || chName}
+                                className={cn(
+                                  "group flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer",
+                                  isSelected
+                                    ? "bg-primary text-primary-foreground font-bold shadow-xs"
+                                    : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                                )}
+                                onClick={() => setSelectedChannel(chName)}
+                              >
+                                <span className="flex items-center gap-2 truncate">
+                                  <i className={`fa-solid ${
+                                    isPinned
+                                      ? "fa-thumbtack text-amber-400 text-[10px]"
+                                      : isPrivate
+                                      ? "fa-lock text-amber-500 text-[11px]"
+                                      : "fa-hashtag text-xs"
+                                  }`} /> 
+                                  <span className="truncate">{chName}</span>
+                                  {isPrivate && (
+                                    <span className={cn(
+                                      "text-[9px] px-1 py-0.2 rounded font-mono uppercase tracking-wider shrink-0",
+                                      isSelected ? "bg-primary-foreground/20 text-primary-foreground" : "bg-amber-500/10 text-amber-500 border border-amber-500/20"
+                                    )}>
+                                      Lock
+                                    </span>
+                                  )}
+                                </span>
+
+                                <div className="flex items-center gap-1">
+                                  {isPrivate && (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setManagingChannel(chObj);
+                                        setShowManageMembersModal(true);
+                                      }}
+                                      className="p-1 text-[10px] opacity-0 group-hover:opacity-100 hover:text-amber-400 transition-opacity"
+                                      title="Manage Channel Members"
+                                    >
+                                      <i className="fa-solid fa-users-gear" />
+                                    </button>
+                                  )}
+
+                                  {/* Pin Channel button available to all users */}
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      togglePinChannel(chName, chId, isPinned);
+                                    }}
+                                    className={cn(
+                                      "p-1 text-[10px] transition-all cursor-pointer",
+                                      isPinned
+                                        ? "text-amber-400 opacity-100"
+                                        : "opacity-0 group-hover:opacity-100 hover:text-amber-400"
+                                    )}
+                                    title={isPinned ? "Unpin Channel" : "Pin Channel to Top"}
+                                  >
+                                    <i className="fa-solid fa-thumbtack" />
+                                  </button>
+
+                                  {isPrivileged && chName !== "general" && (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleDeleteChannel(chId, chName);
+                                      }}
+                                      className="p-1 text-[10px] opacity-0 group-hover:opacity-100 hover:text-rose-400 transition-opacity"
+                                      title="Deactivate Channel"
+                                    >
+                                      <i className="fa-solid fa-trash-can" />
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        {/* Inactive Channels Section (Admin & Manager view) */}
+                        {(user?.role === "Admin" || user?.role === "Manager") && (
+                          <div className="mt-3 pt-2 border-t border-border/60">
+                            <h4 className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70 mb-1.5 flex items-center gap-1">
+                              <i className="fa-solid fa-box-archive text-[9px] text-amber-500" /> Inactive Channels
+                            </h4>
+                            {channelsList.filter((ch: any) => ch.isActive === false).length === 0 ? (
+                              <p className="text-[10px] text-muted-foreground/50 italic px-1">No inactive channels</p>
+                            ) : (
+                              <div className="space-y-1 max-h-[90px] overflow-y-auto no-scrollbar">
+                                {channelsList
+                                  .filter((ch: any) => ch.isActive === false)
+                                  .map((inCh: any) => (
+                                    <div
+                                      key={inCh._id}
+                                      className="group flex items-center justify-between px-2.5 py-1 rounded-lg text-xs font-medium text-muted-foreground/60 bg-muted/20 hover:bg-muted/40 transition-colors"
+                                    >
+                                      <span className="flex items-center gap-1.5 truncate line-through">
+                                        <i className="fa-solid fa-hashtag text-[10px] opacity-40" />
+                                        {inCh.name}
+                                      </span>
+                                      <div className="flex items-center gap-2">
+                                        <button
+                                          type="button"
+                                          onClick={() => handleReactivateChannel(inCh._id)}
+                                          className="text-[10px] text-emerald-500 hover:text-emerald-600 font-bold opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 cursor-pointer"
+                                          title="Reactivate Channel"
+                                        >
+                                          <i className="fa-solid fa-rotate-left text-[9px]" /> Restore
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleDeleteChannel(inCh._id, inCh.name)}
+                                          className="text-[10px] text-rose-400 hover:text-rose-500 font-bold opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 cursor-pointer"
+                                          title="Permanently Delete Channel"
+                                        >
+                                          <i className="fa-solid fa-trash-can text-[9px]" />
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Direct Messages Section */}
+                      <div className="shrink-0">
+                        <h3 className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5 shrink-0">
+                          <i className="fa-solid fa-user-group text-xs text-emerald-500" /> Direct Messages
+                        </h3>
+                        <div className="space-y-1 max-h-[220px] overflow-y-auto pr-1 scrollbar-thin">
+                          {(() => {
+                            const filteredMembers = allDmUsers.filter((m: any) => {
+                              const matchesSearch = !sidebarSearch || (m.name && m.name.toLowerCase().includes(sidebarSearch.toLowerCase())) || (m.email && m.email.toLowerCase().includes(sidebarSearch.toLowerCase()));
+                              return matchesSearch;
+                            });
+
+                            // Multi-Tier DM Sorting: Pinned & Self -> Recent Conversations (by time) -> Active Users -> Others
+                            const sortedDmUsers = [...filteredMembers].sort((a, b) => {
+                              const channelA = getDMChannel(a);
+                              const channelB = getDMChannel(b);
+
+                              const isPinnedA = Boolean(a.isSelf || pinnedDMs.includes(channelA));
+                              const isPinnedB = Boolean(b.isSelf || pinnedDMs.includes(channelB));
+
+                              if (isPinnedA && !isPinnedB) return -1;
+                              if (!isPinnedA && isPinnedB) return 1;
+
+                              if (isPinnedA && isPinnedB) {
+                                if (a.isSelf) return -1;
+                                if (b.isSelf) return 1;
+                              }
+
+                              const convA = recentConversations.find((c: any) => c._id === channelA || (a.name && c._id.includes(a.name.toLowerCase().replace(/[^a-z0-9]/g, "_"))));
+                              const convB = recentConversations.find((c: any) => c._id === channelB || (b.name && c._id.includes(b.name.toLowerCase().replace(/[^a-z0-9]/g, "_"))));
+                              
+                              const timeA = convA?.lastMessageAt ? new Date(convA.lastMessageAt).getTime() : 0;
+                              const timeB = convB?.lastMessageAt ? new Date(convB.lastMessageAt).getTime() : 0;
+
+                              const hasRecentA = timeA > 0;
+                              const hasRecentB = timeB > 0;
+
+                              if (hasRecentA && !hasRecentB) return -1;
+                              if (!hasRecentA && hasRecentB) return 1;
+
+                              if (hasRecentA && hasRecentB) {
+                                if (timeA !== timeB) return timeB - timeA;
+                              }
+
+                              const isOnlineA = a.isSelf ? true : typeof a.isOnline === "boolean" ? a.isOnline : Boolean(a.isClockedIn || (a.lastActiveAt && Date.now() - new Date(a.lastActiveAt).getTime() < 5 * 60 * 1000));
+                              const isOnlineB = b.isSelf ? true : typeof b.isOnline === "boolean" ? b.isOnline : Boolean(b.isClockedIn || (b.lastActiveAt && Date.now() - new Date(b.lastActiveAt).getTime() < 5 * 60 * 1000));
+
+                              if (isOnlineA && !isOnlineB) return -1;
+                              if (!isOnlineA && isOnlineB) return 1;
+
+                              const nameA = (a.name || a.email || "").toLowerCase();
+                              const nameB = (b.name || b.email || "").toLowerCase();
+                              return nameA.localeCompare(nameB);
+                            });
+
+                            return sortedDmUsers.map((mUser: any) => {
+                              const dmChannel = getDMChannel(mUser);
+                              const isSelfUser = Boolean(mUser.isSelf);
+                              const isPinned = Boolean(isSelfUser || pinnedDMs.includes(dmChannel));
+                              const isOnline = isSelfUser
+                                ? true
+                                : typeof mUser.isOnline === "boolean"
+                                ? mUser.isOnline
+                                : Boolean(mUser.isClockedIn || (mUser.lastActiveAt && (Date.now() - new Date(mUser.lastActiveAt).getTime() < 5 * 60 * 1000)));
+                              const conv = recentConversations.find((c: any) => c._id === dmChannel || (mUser.name && c._id.includes(mUser.name.toLowerCase().replace(/[^a-z0-9]/g, "_"))));
+                              const unreadCount = isSelfUser ? 0 : conv?.unreadCount || 0;
+
+                              return (
+                                <div
+                                  key={mUser._id || mUser.name}
+                                  onClick={() => setSelectedChannel(dmChannel)}
+                                  className={cn(
+                                    "group w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer text-left relative",
+                                    selectedChannel === dmChannel
+                                      ? "bg-primary text-primary-foreground font-bold shadow-xs"
+                                      : unreadCount > 0
+                                      ? "bg-rose-500/10 text-foreground font-semibold border border-rose-500/20"
+                                      : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                                  )}
+                                >
+                                  <span className="flex items-center gap-2 truncate min-w-0 flex-1 mr-1">
+                                    <i className={isSelfUser ? "fa-solid fa-bookmark text-amber-400 text-sm shrink-0" : isPinned ? "fa-solid fa-thumbtack text-amber-400 text-xs shrink-0" : "fa-solid fa-circle-user text-sm shrink-0"} />
+                                    <span className="truncate">
+                                      {mUser.name || mUser.email} {isSelfUser ? "(You)" : ""}
+                                    </span>
+                                  </span>
+                                  
+                                  <div className="flex items-center gap-1.5 shrink-0">
+                                    {!isSelfUser && (
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          togglePinDM(dmChannel);
+                                        }}
+                                        className={cn(
+                                          "p-1 text-[10px] transition-all cursor-pointer",
+                                          isPinned
+                                            ? "text-amber-400 opacity-100"
+                                            : "opacity-0 group-hover:opacity-100 hover:text-amber-400"
+                                        )}
+                                        title={isPinned ? "Unpin Direct Message" : "Pin Direct Message to Top"}
+                                      >
+                                        <i className="fa-solid fa-thumbtack" />
+                                      </button>
+                                    )}
+                                    {isSelfUser && (
+                                      <Badge variant="outline" className="text-[9px] px-1.5 py-0 border-amber-500/30 text-amber-500 bg-amber-500/10">
+                                        Notes
+                                      </Badge>
+                                    )}
+                                    {unreadCount > 0 && selectedChannel !== dmChannel && (
+                                      <Badge className="bg-rose-600 text-white font-bold text-[10px] px-1.5 py-0.2 animate-pulse border-0">
+                                        {unreadCount} new
+                                      </Badge>
+                                    )}
+                                    <span className="relative flex h-2.5 w-2.5 shrink-0 items-center justify-center">
+                                      {isOnline ? (
+                                        <>
+                                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                                          <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                                        </>
+                                      ) : (
+                                        <>
+                                          <span className="animate-pulse absolute inline-flex h-full w-full rounded-full bg-slate-400/40 opacity-50" />
+                                          <span className="relative inline-flex rounded-full h-2 w-2 bg-slate-400 dark:bg-slate-500 opacity-70" />
+                                        </>
+                                      )}
+                                    </span>
+                                  </div>
+                                </div>
+                              );
+                            });
+                          })()}
+                        </div>
+                      </div>
+                    </>
+                  );
+                })()}
               </div>
             </div>
 
@@ -1451,7 +1888,30 @@ export default function CommunicationHub() {
                   </button>
                 )}
               </div>
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2 sm:gap-3">
+                {/* Pinned Messages Trigger */}
+                {(() => {
+                  const pinnedMsgs = messages.filter((m) => m.isPinned);
+                  if (pinnedMsgs.length === 0) return null;
+                  return (
+                    <button
+                      type="button"
+                      onClick={() => setShowPinnedDrawer(!showPinnedDrawer)}
+                      className={cn(
+                        "px-2.5 py-1 text-xs font-semibold rounded-lg border transition-all flex items-center gap-1.5 cursor-pointer shadow-xs",
+                        showPinnedDrawer
+                          ? "bg-amber-500/15 text-amber-500 border-amber-500/30 font-bold"
+                          : "bg-muted/40 text-muted-foreground hover:text-foreground border-border/60"
+                      )}
+                      title="View pinned messages in this chat"
+                    >
+                      <i className="fa-solid fa-thumbtack text-amber-500 text-xs" />
+                      <span>{pinnedMsgs.length} Pinned</span>
+                      <i className={cn("fa-solid text-[9px] transition-transform", showPinnedDrawer ? "fa-chevron-up" : "fa-chevron-down")} />
+                    </button>
+                  );
+                })()}
+
                 {/* Export Chat Controls */}
                 {messages && messages.length > 0 && (
                   <div className="flex items-center gap-1.5 bg-muted/30 p-1 rounded-lg border border-border/60">
@@ -1481,6 +1941,60 @@ export default function CommunicationHub() {
                 </span>
               </div>
             </div>
+
+            {/* Pinned Messages Expandable Drawer */}
+            {(() => {
+              const pinnedMsgs = messages.filter((m) => m.isPinned);
+              if (!showPinnedDrawer || pinnedMsgs.length === 0) return null;
+              return (
+                <div className="shrink-0 bg-amber-500/5 dark:bg-amber-950/20 border-b border-amber-500/20 p-2.5 sm:p-3 transition-all">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-bold text-amber-600 dark:text-amber-400 flex items-center gap-1.5">
+                      <i className="fa-solid fa-thumbtack text-xs" /> Pinned Messages in this Conversation ({pinnedMsgs.length})
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setShowPinnedDrawer(false)}
+                      className="text-muted-foreground hover:text-foreground text-xs p-1 cursor-pointer"
+                      title="Close drawer"
+                    >
+                      <i className="fa-solid fa-xmark" />
+                    </button>
+                  </div>
+                  <div className="space-y-1.5 max-h-36 overflow-y-auto no-scrollbar">
+                    {pinnedMsgs.map((pm) => (
+                      <div
+                        key={pm._id}
+                        className="flex items-center justify-between p-2 rounded-lg bg-background/80 hover:bg-background border border-border/60 text-xs transition-colors"
+                      >
+                        <div className="flex items-center gap-2 min-w-0 flex-1 mr-2">
+                          <span className="font-bold text-foreground shrink-0">{pm.senderName}:</span>
+                          <span className="text-muted-foreground truncate">{pm.content || (pm.attachments?.length ? "[Attachment]" : "")}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => jumpToMessage(pm._id)}
+                            className="px-2 py-0.5 rounded text-[10px] font-semibold bg-primary/10 text-primary hover:bg-primary/20 flex items-center gap-1 cursor-pointer"
+                            title="Jump to message in chat"
+                          >
+                            <i className="fa-solid fa-arrow-turn-down text-[9px]" /> Jump
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleTogglePinMessage(pm._id, true)}
+                            className="p-1 text-muted-foreground hover:text-rose-500 text-[11px] cursor-pointer"
+                            title="Unpin message"
+                          >
+                            <i className="fa-solid fa-thumbtack text-amber-500 hover:text-rose-500" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Messages Scroll Area */}
             <div 
@@ -1584,14 +2098,22 @@ export default function CommunicationHub() {
                           {/* Bubble */}
                           <div className="flex-1 min-w-0">
                             <div
+                              id={`msg-${m._id}`}
                               className={cn(
-                                "rounded-2xl rounded-tl-sm px-4 py-2.5 border transition-colors duration-150 cursor-pointer relative",
+                                "rounded-2xl rounded-tl-sm px-4 py-2.5 border transition-all duration-200 cursor-pointer relative",
                                 isSelected
                                   ? "bg-slate-100 border-primary/50 shadow-md dark:bg-[hsl(215,30%,22%)]"
                                   : "bg-slate-50 border-slate-200 hover:bg-slate-100 dark:bg-[hsl(215,30%,20%)] dark:border-[hsl(215,25%,25%)] dark:hover:bg-[hsl(215,30%,22%)]"
                               )}
                               onClick={() => setSelectedMsgId(isSelected ? null : m._id)}
                             >
+                              {/* Pinned Message Indicator Badge */}
+                              {m.isPinned && (
+                                <div className="flex items-center gap-1.5 text-[10px] font-semibold text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded-md mb-2 w-fit border border-amber-500/20">
+                                  <i className="fa-solid fa-thumbtack text-[9px]" />
+                                  <span>Pinned message{m.pinnedBy ? ` by ${m.pinnedBy}` : ""}</span>
+                                </div>
+                              )}
                               {/* Name + Role + Reply for Public Channels */}
                               {!selectedChannel.startsWith("dm_") && (
                                 <div className="flex items-center gap-2 mb-1">
@@ -1797,6 +2319,22 @@ export default function CommunicationHub() {
                                     title="Forward message"
                                   >
                                     <i className="fa-solid fa-share text-indigo-500 text-xs" /> Forward
+                                  </button>
+
+                                  <span className="text-border">|</span>
+
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleTogglePinMessage(m._id, m.isPinned);
+                                      setSelectedMsgId(null);
+                                    }}
+                                    className="hover:text-amber-500 transition-colors flex items-center gap-1 cursor-pointer"
+                                    title={m.isPinned ? "Unpin Message" : "Pin Message to Chat"}
+                                  >
+                                    <i className={cn("fa-solid fa-thumbtack text-xs", m.isPinned ? "text-amber-400" : "text-muted-foreground")} />
+                                    <span>{m.isPinned ? "Unpin" : "Pin"}</span>
                                   </button>
 
                                   <span className="text-border">|</span>

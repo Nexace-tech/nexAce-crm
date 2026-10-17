@@ -343,8 +343,8 @@ export async function POST(request: Request) {
 }
 
 /**
- * PUT: Toggle reaction emoji on a chat message.
- * Body: { messageId: string, emoji: string }
+ * PUT: Toggle reaction emoji or pin status on a chat message.
+ * Body: { messageId: string, emoji?: string, action?: "togglePin", isPinned?: boolean }
  */
 export async function PUT(request: Request) {
   try {
@@ -353,10 +353,10 @@ export async function PUT(request: Request) {
 
     const { session, tenantObjectId } = authResult;
     const body = await request.json();
-    const { messageId, emoji } = body;
+    const { messageId, emoji, action, isPinned } = body;
 
-    if (!messageId || !emoji) {
-      return NextResponse.json({ error: "messageId and emoji are required" }, { status: 400 });
+    if (!messageId) {
+      return NextResponse.json({ error: "messageId is required" }, { status: 400 });
     }
 
     await connectToDatabase();
@@ -370,6 +370,20 @@ export async function PUT(request: Request) {
 
     if (!message) {
       return NextResponse.json({ error: "Message not found" }, { status: 404 });
+    }
+
+    // Case 1: Toggle message pin
+    if (action === "togglePin" || typeof isPinned === "boolean") {
+      const nextPinned = typeof isPinned === "boolean" ? isPinned : !message.isPinned;
+      message.isPinned = nextPinned;
+      message.pinnedBy = nextPinned ? userName : undefined;
+      message.pinnedAt = nextPinned ? new Date() : undefined;
+      await message.save();
+      return NextResponse.json({ success: true, message });
+    }
+
+    if (!emoji) {
+      return NextResponse.json({ error: "emoji or action is required" }, { status: 400 });
     }
 
     // Initialize reactions array if missing
