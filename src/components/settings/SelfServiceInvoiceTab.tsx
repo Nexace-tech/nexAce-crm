@@ -62,6 +62,17 @@ interface Invoice {
   rejectionReason?: string;
   rejectedBy?: string;
   rejectedAt?: string;
+  revisionCount?: number;
+  approvalStage?: "DRAFT" | "PENDING_HR" | "PENDING_ADMIN" | "PAID" | "REJECTED";
+  timeline?: Array<{
+    stage: string;
+    status: string;
+    actorName: string;
+    actorRole: string;
+    actorId?: string;
+    note?: string;
+    timestamp: string | Date;
+  }>;
 }
 
 function formatHoursMinutes(val: number): string {
@@ -82,6 +93,100 @@ function toLocalDateString(d: Date): string {
   const month = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
+}
+
+function renderInvoiceStepper(inv: Invoice) {
+  const isPaid = inv.status === "Paid";
+  const isApproved = inv.status === "Approved" || isPaid;
+  const isRejected = inv.status === "Rejected";
+
+  const steps = [
+    {
+      label: "Submitted",
+      status: "done" as const,
+      icon: "fa-solid fa-paper-plane",
+      sub: inv.invoiceDate ? inv.invoiceDate : "Created",
+    },
+    {
+      label: "HR Attendance",
+      status: isRejected ? ("rejected" as const) : isApproved ? ("done" as const) : ("active" as const),
+      icon: isRejected ? "fa-solid fa-ban" : isApproved ? "fa-solid fa-clipboard-check" : "fa-solid fa-clock",
+      sub: isRejected
+        ? inv.rejectedBy
+          ? `By ${inv.rejectedBy}`
+          : "Disputed"
+        : isApproved
+        ? inv.approvedBy
+          ? `By ${inv.approvedBy}`
+          : "Verified"
+        : "Under Review",
+    },
+    {
+      label: "Admin Payout",
+      status: isPaid ? ("done" as const) : isApproved ? ("active" as const) : ("pending" as const),
+      icon: isPaid ? "fa-solid fa-wallet" : isApproved ? "fa-solid fa-credit-card" : "fa-regular fa-clock",
+      sub: isPaid ? inv.paymentDetails?.method || "Disbursed" : isApproved ? "Ready for Payout" : "Queued",
+    },
+    {
+      label: "Settled",
+      status: isPaid ? ("done" as const) : ("pending" as const),
+      icon: isPaid ? "fa-solid fa-circle-check" : "fa-regular fa-circle",
+      sub: isPaid
+        ? inv.paymentDetails?.paidAt
+          ? new Date(inv.paymentDetails.paidAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short" })
+          : "Completed"
+        : "Pending",
+    },
+  ];
+
+  return (
+    <div className="w-full py-2 px-3 bg-muted/30 border border-border/70 rounded-xl my-2">
+      <div className="flex items-center justify-between relative">
+        <div className="absolute left-4 right-4 top-3 h-0.5 bg-border/80 -z-0" />
+        {steps.map((st, i) => {
+          const isDone = st.status === "done";
+          const isRej = st.status === "rejected";
+          const isActive = st.status === "active";
+          return (
+            <div key={i} className="flex flex-col items-center relative z-10 text-center shrink-0 max-w-[24%]">
+              <div
+                className={cn(
+                  "w-6 h-6 rounded-full flex items-center justify-center text-[10px] transition-all",
+                  isDone
+                    ? "bg-emerald-500 text-white shadow-xs"
+                    : isRej
+                    ? "bg-rose-500 text-white shadow-xs animate-bounce"
+                    : isActive
+                    ? "bg-amber-500 text-white ring-2 ring-amber-500/30 animate-pulse"
+                    : "bg-muted text-muted-foreground border border-border"
+                )}
+                title={`${st.label}: ${st.sub}`}
+              >
+                <i className={st.icon} />
+              </div>
+              <span
+                className={cn(
+                  "text-[10px] font-bold mt-1 truncate max-w-[80px]",
+                  isRej
+                    ? "text-rose-600 dark:text-rose-400"
+                    : isDone
+                    ? "text-emerald-600 dark:text-emerald-400"
+                    : isActive
+                    ? "text-amber-600 dark:text-amber-400 font-extrabold"
+                    : "text-muted-foreground"
+                )}
+              >
+                {st.label}
+              </span>
+              <span className="text-[9px] text-muted-foreground truncate max-w-[75px] hidden sm:inline">
+                {st.sub}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps) {
@@ -811,6 +916,55 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
   );
   const [generatorType, setGeneratorType] = useState<GeneratorType>(isInitialContractor ? "contractor" : "permanent");
 
+  // Re-initiation state for disputed / rejected invoices
+  const [reinitiatingInvoice, setReinitiatingInvoice] = useState<{
+    id: string;
+    invoiceNo: string;
+    revisionCount: number;
+    rejectionReason: string;
+    rejectedBy?: string;
+  } | null>(null);
+
+  const handleFixAndReinitiate = (inv: Invoice) => {
+    const invId = inv._id || inv.id || "";
+    const nextRev = (inv.revisionCount || 0) + 1;
+    setReinitiatingInvoice({
+      id: invId,
+      invoiceNo: inv.invoiceNo,
+      revisionCount: nextRev,
+      rejectionReason: inv.rejectionReason || "Discrepancy identified in attendance or line items.",
+      rejectedBy: inv.rejectedBy,
+    });
+
+    const isSalary =
+      inv.invoiceNo?.startsWith("INV-SAL") ||
+      (inv.customerNo && inv.customerNo.includes("SAL")) ||
+      Boolean((inv as any).businessSubtitle && (inv as any).businessSubtitle.includes("Permanent"));
+
+    if (isSalary) {
+      setGeneratorType("permanent");
+      setSalaryFormData((prev) => ({
+        ...prev,
+        employeeName: inv.businessName || prev.employeeName,
+        billedToName: inv.billedToName || prev.billedToName,
+        notes: inv.notes || prev.notes,
+      }));
+    } else {
+      setGeneratorType("contractor");
+      setInvoiceFormData((prev) => ({
+        ...prev,
+        employeeName: inv.businessName || prev.employeeName,
+        billedToName: inv.billedToName || prev.billedToName,
+        currency: inv.currency || prev.currency,
+        taxRate: Number(inv.taxRate) || 0,
+        notes: inv.notes || prev.notes,
+      }));
+    }
+
+    setActiveSubTab("generate");
+    showToast(`Fixing Revision #${nextRev} for ${inv.invoiceNo}. Make adjustments and submit back to HR!`, "success");
+  };
+
   interface CustomSalaryItem {
     id: string;
     name: string;
@@ -1322,6 +1476,47 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
 
       const combinedNotes = (invoiceFormData.notes ? `${invoiceFormData.notes}\n` : "") + attachmentsSummary.trim();
 
+      if (reinitiatingInvoice) {
+        const patchRes = await fetch(`/api/it/invoices/${reinitiatingInvoice.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "RE_INITIATE",
+            isReinitiating: true,
+            items,
+            subtotal: subtotalVal,
+            taxRate: taxRateVal,
+            taxAmount: taxAmountVal,
+            total: totalVal,
+            currency: invoiceFormData.currency,
+            notes: combinedNotes,
+            resubmitNote: `Revision #${reinitiatingInvoice.revisionCount} submitted with corrections for HR review.`,
+            shiftAttendance: (attachShiftLogs && shiftData.daysWorked > 0) ? {
+              totalHours: shiftData.totalHours,
+              daysWorked: shiftData.daysWorked,
+              overtimeHours: shiftData.overtimeHours,
+              records: shiftData.records,
+            } : null,
+            timesheetEntries: (attachTimesheetLogs && timesheetData.totalEntries > 0) ? {
+              totalHours: timesheetData.totalHours,
+              totalEntries: timesheetData.totalEntries,
+              records: timesheetData.records,
+            } : null,
+          }),
+        });
+
+        if (patchRes.ok) {
+          showToast(`Invoice ${reinitiatingInvoice.invoiceNo} (Revision #${reinitiatingInvoice.revisionCount}) re-submitted to HR for verification!`, "success");
+          setReinitiatingInvoice(null);
+          fetchMyInvoiceHistory();
+          changeSubTab("history");
+        } else {
+          const err = await patchRes.json();
+          showToast(err.error || "Failed to re-initiate invoice.", "error");
+        }
+        return;
+      }
+
       const res = await fetch("/api/it/invoices", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1589,6 +1784,48 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
         upiId: salaryFormData.upiId || "",
       };
 
+      if (reinitiatingInvoice) {
+        const patchRes = await fetch(`/api/it/invoices/${reinitiatingInvoice.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "RE_INITIATE",
+            isReinitiating: true,
+            items,
+            subtotal: netPayableSalary,
+            taxRate: 0,
+            taxAmount: 0,
+            total: netPayableSalary,
+            currency: salaryFormData.currency,
+            notes: combinedNotes,
+            bankDetails: employeeBankDetails,
+            resubmitNote: `Revision #${reinitiatingInvoice.revisionCount} submitted with corrections for HR review.`,
+            shiftAttendance: (attachShiftLogs && shiftData.daysWorked > 0) ? {
+              totalHours: shiftData.totalHours,
+              daysWorked: shiftData.daysWorked,
+              overtimeHours: shiftData.overtimeHours,
+              records: shiftData.records,
+            } : null,
+            timesheetEntries: (attachTimesheetLogs && timesheetData.totalEntries > 0) ? {
+              totalHours: timesheetData.totalHours,
+              totalEntries: timesheetData.totalEntries,
+              records: timesheetData.records,
+            } : null,
+          }),
+        });
+
+        if (patchRes.ok) {
+          showToast(`Salary Invoice ${reinitiatingInvoice.invoiceNo} (Revision #${reinitiatingInvoice.revisionCount}) re-submitted to HR for verification!`, "success");
+          setReinitiatingInvoice(null);
+          fetchMyInvoiceHistory();
+          changeSubTab("history");
+        } else {
+          const err = await patchRes.json();
+          showToast(err.error || "Failed to re-initiate salary invoice.", "error");
+        }
+        return;
+      }
+
       const res = await fetch("/api/it/invoices", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1830,6 +2067,10 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
           setViewInvoice(null);
           changeSubTab("history");
         }}
+        onReinitiate={(inv) => {
+          setViewInvoice(null);
+          handleFixAndReinitiate(inv as any);
+        }}
       />
     );
   }
@@ -1874,8 +2115,48 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
       </div>
 
       {activeSubTab === "generate" && (
-        /* Invoice Generator Form */
-        <Card className="border border-border shadow-sm">
+        <div className="space-y-4">
+          {reinitiatingInvoice && (
+            <div className="bg-amber-500/10 border-2 border-amber-500/30 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in fade-in">
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
+                  <i className="fa-solid fa-rotate-right text-base" />
+                </div>
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h4 className="font-extrabold text-sm text-foreground">
+                      Fixing &amp; Re-initiating Revision #{reinitiatingInvoice.revisionCount}
+                    </h4>
+                    <span className="font-mono text-xs px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-300 font-bold border border-amber-500/30">
+                      {reinitiatingInvoice.invoiceNo}
+                    </span>
+                  </div>
+                  <p className="text-xs text-rose-700 dark:text-rose-400 font-medium">
+                    <strong>HR Feedback Reason:</strong> {reinitiatingInvoice.rejectionReason}
+                    {reinitiatingInvoice.rejectedBy && ` (by ${reinitiatingInvoice.rejectedBy})`}
+                  </p>
+                  <p className="text-[11px] text-muted-foreground">
+                    Update disputed hours, rates, or notes below. Once submitted, HR will immediately receive this revised invoice for re-verification.
+                  </p>
+                </div>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setReinitiatingInvoice(null);
+                  showToast("Cancelled re-initiation mode.", "success");
+                }}
+                className="shrink-0 h-8 text-xs font-semibold cursor-pointer border-border hover:bg-muted"
+              >
+                <i className="fa-solid fa-xmark mr-1.5" /> Cancel Re-initiation
+              </Button>
+            </div>
+          )}
+
+          {/* Invoice Generator Form */}
+          <Card className="border border-border shadow-sm">
           <CardHeader className="pb-3 border-b border-border bg-muted/20">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
@@ -3229,6 +3510,7 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
           )}
           </CardContent>
         </Card>
+        </div>
       )}
 
       {/* Personal Invoices Tracker History */}
@@ -3473,6 +3755,9 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
                         </div>
                       </div>
 
+                      {/* Live Lifecycle Progress Stepper */}
+                      {renderInvoiceStepper(inv)}
+
                       {/* Paid Details Box if Paid */}
                       {isPaid && inv.paymentDetails && (
                         <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-lg p-2 text-[10px] text-emerald-700 dark:text-emerald-400 space-y-1">
@@ -3515,7 +3800,7 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
 
                       {/* Rejected feedback banner if Rejected */}
                       {inv.status === "Rejected" && (
-                        <div className="bg-rose-500/10 border border-rose-500/25 rounded-lg p-2.5 text-[10px] text-rose-700 dark:text-rose-400 space-y-1.5">
+                        <div className="bg-rose-500/10 border border-rose-500/25 rounded-lg p-2.5 text-[10px] text-rose-700 dark:text-rose-400 space-y-2">
                           <div className="flex items-center justify-between">
                             <span className="font-bold flex items-center gap-1.5">
                               <i className="fa-solid fa-triangle-exclamation text-rose-500" />
@@ -3530,14 +3815,36 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
                               &ldquo;{inv.rejectionReason}&rdquo;
                             </p>
                           )}
-                          <p className="text-[9px] text-muted-foreground">
-                            Please review the feedback above, revise your timesheet if needed, and regenerate your invoice.
-                          </p>
+                          <div className="flex items-center justify-between gap-2 pt-1 border-t border-rose-500/20">
+                            <p className="text-[9px] text-muted-foreground">
+                              Update timesheet or disputed items &amp; resubmit to HR:
+                            </p>
+                            <Button
+                              type="button"
+                              size="sm"
+                              onClick={() => handleFixAndReinitiate(inv)}
+                              className="h-7 px-2.5 text-[10px] font-bold gap-1 bg-rose-600 hover:bg-rose-700 text-white cursor-pointer shadow-xs shrink-0"
+                              title="Fix and re-initiate this invoice"
+                            >
+                              <i className="fa-solid fa-rotate-right text-[10px]" /> Fix &amp; Re-initiate
+                            </Button>
+                          </div>
                         </div>
                       )}
 
                       {/* Card Action Buttons Footer */}
                       <div className="flex items-center gap-2 pt-2 border-t border-border/60">
+                        {inv.status === "Rejected" && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            onClick={() => handleFixAndReinitiate(inv)}
+                            className="h-8 px-3 text-[11px] font-bold gap-1.5 bg-rose-600 hover:bg-rose-700 text-white cursor-pointer shadow-xs shrink-0"
+                            title="Fix timesheets/items and re-initiate this invoice for HR review"
+                          >
+                            <i className="fa-solid fa-rotate-right text-xs" /> Fix &amp; Re-initiate
+                          </Button>
+                        )}
                         <Button
                           type="button"
                           variant="outline"
@@ -3705,9 +4012,14 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
                         </div>
                       )}
 
+                      {/* Live Lifecycle Progress Stepper */}
+                      <div className="px-3 pb-1">
+                        {renderInvoiceStepper(inv)}
+                      </div>
+
                       {/* Rejected strip */}
                       {inv.status === "Rejected" && (
-                        <div className="px-3 py-2.5 bg-rose-500/5 border-t border-rose-500/20 text-[11px] text-rose-700 dark:text-rose-400 space-y-1">
+                        <div className="px-3 py-2.5 bg-rose-500/5 border-t border-rose-500/20 text-[11px] text-rose-700 dark:text-rose-400 space-y-1.5">
                           <div className="flex items-center justify-between gap-2">
                             <div className="flex items-center gap-1.5 font-bold">
                               <i className="fa-solid fa-triangle-exclamation text-rose-500 shrink-0" />
@@ -3722,6 +4034,18 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
                               &ldquo;{inv.rejectionReason}&rdquo;
                             </p>
                           )}
+                          <div className="flex items-center justify-between gap-2 pt-1 border-t border-rose-500/20">
+                            <span className="text-[10px] text-muted-foreground">Disputed details can be updated &amp; resubmitted to HR:</span>
+                            <Button
+                              type="button"
+                              size="sm"
+                              onClick={() => handleFixAndReinitiate(inv)}
+                              className="h-6 px-2.5 text-[10px] font-bold gap-1 bg-rose-600 hover:bg-rose-700 text-white cursor-pointer shadow-xs shrink-0"
+                              title="Fix and re-initiate this invoice"
+                            >
+                              <i className="fa-solid fa-rotate-right text-[9px]" /> Fix &amp; Re-initiate
+                            </Button>
+                          </div>
                         </div>
                       )}
                     </div>

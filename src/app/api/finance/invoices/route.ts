@@ -104,6 +104,12 @@ export async function GET() {
         signatureUrl: inv.signatureUrl || (inv.status === "Paid" ? orgSignatureUrl : ""),
         userUpiId: payeeInfo.userUpiId,
         bankDetails: payeeInfo.bankDetails,
+        approvalStage: inv.approvalStage || (inv.status === "Approved" ? "PENDING_PAYMENT" : inv.status === "Paid" ? "PAID" : inv.status === "Rejected" ? "REJECTED" : "PENDING_REVIEW"),
+        timeline: inv.timeline || [],
+        rejectionReason: inv.rejectionReason || "",
+        rejectionHistory: inv.rejectionHistory || [],
+        revisionCount: inv.revisionCount || 0,
+        paymentDetails: inv.paymentDetails || null,
       };
     });
 
@@ -116,6 +122,12 @@ export async function GET() {
         amount: inv.total || 0,
         currency: inv.currency || "USD",
         status: inv.status || "Draft",
+        approvalStage: inv.approvalStage || (inv.status === "Approved" ? "PENDING_ADMIN" : inv.status === "Paid" ? "PAID" : inv.status === "Rejected" ? "REJECTED" : "PENDING_HR"),
+        timeline: inv.timeline || [],
+        rejectionReason: inv.rejectionReason || "",
+        rejectionHistory: inv.rejectionHistory || [],
+        revisionCount: inv.revisionCount || 0,
+        hrReview: inv.hrReview || null,
         issuedDate: inv.invoiceDate || new Date().toISOString().split("T")[0],
         dueDate: inv.dueDate || "",
         category: "Employee Invoice",

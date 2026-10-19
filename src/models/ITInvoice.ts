@@ -23,6 +23,23 @@ export interface ITimesheetEntry {
   billable: boolean;
 }
 
+export interface IInvoiceTimelineEvent {
+  stage: "SUBMITTED" | "HR_APPROVED" | "HR_REJECTED" | "RE_INITIATED" | "ADMIN_APPROVED" | "ADMIN_REJECTED" | "PAID";
+  status: string;
+  actorName: string;
+  actorRole: string;
+  actorId?: mongoose.Types.ObjectId;
+  note?: string;
+  timestamp: Date | string;
+}
+
+export interface IRejectionHistoryItem {
+  reason: string;
+  rejectedBy: string;
+  rejectedAt: Date | string;
+  role: string;
+}
+
 export interface IITInvoice extends Document {
   tenantId: mongoose.Types.ObjectId;
   subscriptionId?: mongoose.Types.ObjectId;
@@ -44,6 +61,7 @@ export interface IITInvoice extends Document {
   total: number;
   currency: string;
   status: "Draft" | "Sent" | "Pending" | "Approved" | "Rejected" | "Paid" | "Overdue" | "Archived" | "Cancelled";
+  approvalStage?: "DRAFT" | "PENDING_HR" | "PENDING_ADMIN" | "PAID" | "REJECTED" | "CANCELLED";
   paidDate?: string;
   notes?: string;
   // Payment confirmation details (captured when admin marks as Paid)
@@ -78,6 +96,16 @@ export interface IITInvoice extends Document {
   rejectionReason?: string;
   rejectedBy?: string;
   rejectedAt?: string;
+  rejectionHistory?: IRejectionHistoryItem[];
+  revisionCount?: number;
+  hrReview?: {
+    reviewedBy?: string;
+    reviewedById?: mongoose.Types.ObjectId;
+    reviewedAt?: Date | string;
+    verifiedHours?: number;
+    notes?: string;
+  };
+  timeline?: IInvoiceTimelineEvent[];
   createdBy: mongoose.Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
@@ -132,6 +160,11 @@ const ITInvoiceSchema = new Schema<IITInvoice>(
       enum: ["Draft", "Sent", "Pending", "Approved", "Rejected", "Paid", "Overdue", "Archived", "Cancelled"],
       default: "Draft",
     },
+    approvalStage: {
+      type: String,
+      enum: ["DRAFT", "PENDING_HR", "PENDING_ADMIN", "PAID", "REJECTED", "CANCELLED"],
+      default: "PENDING_HR",
+    },
     paidDate: { type: String, trim: true, default: "" },
     notes: { type: String, trim: true, default: "" },
     paymentDetails: {
@@ -164,6 +197,33 @@ const ITInvoiceSchema = new Schema<IITInvoice>(
     rejectionReason: { type: String, default: "" },
     rejectedBy: { type: String, default: "" },
     rejectedAt: { type: String, default: "" },
+    rejectionHistory: [
+      {
+        reason: { type: String, required: true },
+        rejectedBy: { type: String, required: true },
+        rejectedAt: { type: Date, default: Date.now },
+        role: { type: String, default: "HR" },
+      },
+    ],
+    revisionCount: { type: Number, default: 0 },
+    hrReview: {
+      reviewedBy: { type: String, default: "" },
+      reviewedById: { type: Schema.Types.ObjectId, ref: "User" },
+      reviewedAt: { type: Date },
+      verifiedHours: { type: Number, default: 0 },
+      notes: { type: String, default: "" },
+    },
+    timeline: [
+      {
+        stage: { type: String, required: true },
+        status: { type: String, required: true },
+        actorName: { type: String, required: true },
+        actorRole: { type: String, required: true },
+        actorId: { type: Schema.Types.ObjectId, ref: "User" },
+        note: { type: String, default: "" },
+        timestamp: { type: Date, default: Date.now },
+      },
+    ],
     createdBy: { type: Schema.Types.ObjectId, ref: "User", required: true },
   },
   { timestamps: true }

@@ -128,6 +128,20 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: `Invoice with number ${invoiceNo} already exists.` }, { status: 400 });
     }
 
+    const submitterDoc = await User.findById(userObjectId).select("hrId managerId email name").lean() as any;
+
+    const initialTimeline = [
+      {
+        stage: "SUBMITTED",
+        status: status || "Pending",
+        actorName: session.userName || "Employee",
+        actorRole: session.role || "Employee",
+        actorId: userObjectId,
+        note: "Invoice generated and submitted for HR timesheet & attendance verification.",
+        timestamp: new Date(),
+      },
+    ];
+
     const created = await ITInvoice.create({
       tenantId: tenantObjectId,
       invoiceNo: invoiceNo.trim(),
@@ -147,13 +161,15 @@ export async function POST(request: Request) {
       taxAmount: Number(taxAmount) || 0,
       total: Number(total) || 0,
       currency: currency || "INR",
-      status: status || "Draft",
+      status: status || "Pending",
+      approvalStage: "PENDING_HR",
       paidDate: paidDate || (status === "Paid" ? new Date().toISOString().slice(0, 10) : ""),
       notes: notes || "",
       // Structured shift clock & timesheet data for admin visibility
       shiftAttendance: shiftAttendance || null,
       timesheetEntries: timesheetEntries || null,
       signatureUrl: signatureUrl || "",
+      timeline: initialTimeline,
       createdBy: userObjectId,
     });
 
@@ -167,25 +183,54 @@ export async function POST(request: Request) {
       details: `Created invoice ${created.invoiceNo} for ${billedToName.trim()} (₹${total || 0})`,
     });
 
-    // Notify only Admins / OPS + privileged Managers
+    // Notify Assigned HR Partner (or all active HRs) + Admins
     try {
+      const notifiedIds = new Set<string>();
+
+      // 1. Identify HR Partner(s) to review timesheets
+      let hrRecipients: mongoose.Types.ObjectId[] = [];
+      if (submitterDoc?.hrId) {
+        hrRecipients.push(submitterDoc.hrId);
+      } else {
+        const activeHRs = await User.find({
+          tenantId: tenantObjectId,
+          role: "HR",
+          status: "Active",
+        }).select("_id").lean();
+        hrRecipients = activeHRs.map((h) => h._id as mongoose.Types.ObjectId);
+      }
+
+      for (const hrId of hrRecipients) {
+        const idStr = hrId.toString();
+        if (notifiedIds.has(idStr)) continue;
+        notifiedIds.add(idStr);
+        await Notification.create({
+          tenantId: tenantObjectId,
+          recipientId: hrId,
+          title: "New Timesheet Invoice to Review",
+          message: `${session.userName} submitted invoice ${created.invoiceNo} (${currency || "INR"} ${Number(total || 0).toLocaleString()}). Please verify shift attendance and project timesheets.`,
+          type: "finance",
+          linkUrl: `/dashboard/finance?tab=invoices&invoiceNo=${encodeURIComponent(created.invoiceNo)}`,
+          read: false,
+        });
+      }
+
+      // 2. Also notify Admins / OPS
       const admins = await User.find({
         tenantId: tenantObjectId,
         role: { $in: ["Admin", "OPS"] },
         status: "Active",
       }).select("_id").lean();
 
-      // Collect IDs already notified to avoid duplicates
-      const notifiedIds = new Set<string>();
-
       for (const admin of admins) {
         const idStr = admin._id.toString();
+        if (notifiedIds.has(idStr)) continue;
         notifiedIds.add(idStr);
         await Notification.create({
           tenantId: tenantObjectId,
           recipientId: admin._id,
-          title: "New Invoice Submitted",
-          message: `${session.userName} submitted invoice ${created.invoiceNo} for ${billedToName.trim()} (${currency || "INR"} ${Number(total || 0).toLocaleString()}). Review and update its status.`,
+          title: "New Invoice Submitted (HR Review Pending)",
+          message: `${session.userName} submitted invoice ${created.invoiceNo} for ${billedToName.trim()} (${currency || "INR"} ${Number(total || 0).toLocaleString()}). Routed to HR for timesheet verification.`,
           type: "finance",
           linkUrl: `/dashboard/finance?tab=invoices&invoiceNo=${encodeURIComponent(created.invoiceNo)}`,
           read: false,
@@ -193,54 +238,41 @@ export async function POST(request: Request) {
         });
       }
 
-      // Also notify submitter's Reporting Manager ONLY if that manager is an Admin/OPS/Manager
-      const submitterDoc = await User.findById(userObjectId).select("managerId").lean() as { managerId?: mongoose.Types.ObjectId } | null;
-      if (submitterDoc?.managerId && !notifiedIds.has(submitterDoc.managerId.toString())) {
-        const managerUser = await User.findOne({
-          _id: submitterDoc.managerId,
-          tenantId: tenantObjectId,
-          role: { $in: ["Admin", "OPS", "Manager"] },
-          status: "Active",
-        }).select("_id").lean();
-
-        if (managerUser) {
-          await Notification.create({
-            tenantId: tenantObjectId,
-            recipientId: managerUser._id,
-            title: "New Invoice Submitted",
-            message: `${session.userName} submitted invoice ${created.invoiceNo} for ${billedToName.trim()} (${currency || "INR"} ${Number(total || 0).toLocaleString()}). Review and update its status.`,
-            type: "finance",
-            linkUrl: `/dashboard/finance?tab=invoices&invoiceNo=${encodeURIComponent(created.invoiceNo)}`,
-            read: false,
-            adminOnly: true,
-          });
-        }
-      }
+      // 3. Send confirmation in-app notification to the Submitter who raised the invoice
+      await Notification.create({
+        tenantId: tenantObjectId,
+        recipientId: userObjectId,
+        title: `Invoice ${created.invoiceNo} Submitted to HR`,
+        message: `Your invoice ${created.invoiceNo} (${currency || "INR"} ${Number(total || 0).toLocaleString()}) has been submitted and routed to HR for timesheet & attendance verification.`,
+        type: "finance",
+        linkUrl: `/dashboard/settings?tab=invoice&invoiceNo=${encodeURIComponent(created.invoiceNo)}`,
+        read: false,
+      });
     } catch (notifErr) {
       console.error("Invoice notification error:", notifErr);
     }
 
     // Send confirmation email to the submitting user
     try {
-      const submitter = await User.findById(userObjectId).select("email name").lean() as { email?: string; name?: string } | null;
-      if (submitter?.email) {
+      const submitterEmail = submitterDoc?.email || (session as any).userEmail || (session as any).email;
+      if (submitterEmail) {
         await sendEmail({
-          to: submitter.email,
-          subject: `[NexAce CRM] Invoice ${created.invoiceNo} Submitted Successfully`,
-          text: `Hello ${submitter.name || session.userName},\n\nYour invoice ${created.invoiceNo} for ${billedToName.trim()} (${currency || "INR"} ${Number(total || 0).toLocaleString()}) has been submitted and is pending review.\n\nLog in to your NexAce dashboard to track its status.`,
+          to: submitterEmail,
+          subject: `[NexAce CRM] Invoice ${created.invoiceNo} Submitted to HR for Review`,
+          text: `Hello ${submitterDoc?.name || session.userName},\n\nYour invoice ${created.invoiceNo} for ${billedToName.trim()} (${currency || "INR"} ${Number(total || 0).toLocaleString()}) has been submitted and is currently pending timesheet & attendance verification by HR.\n\nOnce HR verifies your hours, it will automatically advance to Admin for payment.\n\nLog in to your NexAce dashboard to track its status.`,
           html: `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px; padding: 24px;">
-              <h2 style="color: #4f46e5; margin-top: 0;">✦ Invoice Submitted</h2>
-              <p style="color: #475569; font-size: 14px;">Hello <strong>${submitter.name || session.userName}</strong>,</p>
-              <p style="color: #475569; font-size: 14px;">Your invoice has been submitted and is <strong>pending review</strong> by your admin team.</p>
+              <h2 style="color: #4f46e5; margin-top: 0;">✦ Invoice Submitted to HR</h2>
+              <p style="color: #475569; font-size: 14px;">Hello <strong>${submitterDoc?.name || session.userName}</strong>,</p>
+              <p style="color: #475569; font-size: 14px;">Your invoice has been submitted and is <strong>pending timesheet & attendance verification by HR</strong>.</p>
               <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 16px; border-radius: 8px; margin: 16px 0;">
                 <p style="margin: 4px 0; font-size: 14px;"><strong>Invoice Number:</strong> ${created.invoiceNo}</p>
                 <p style="margin: 4px 0; font-size: 14px;"><strong>Billed To:</strong> ${billedToName.trim()}</p>
                 <p style="margin: 4px 0; font-size: 14px;"><strong>Total Amount:</strong> ${currency || "INR"} ${Number(total || 0).toLocaleString()}</p>
-                <p style="margin: 4px 0; font-size: 14px;"><strong>Status:</strong> <span style="color: #f59e0b; font-weight: bold;">Pending</span></p>
+                <p style="margin: 4px 0; font-size: 14px;"><strong>Current Stage:</strong> <span style="color: #f59e0b; font-weight: bold;">1. Pending HR Review</span></p>
               </div>
-              <p style="color: #475569; font-size: 14px;">You will be notified when the status is updated by your admin.</p>
-              <p style="color: #94a3b8; font-size: 12px;">Log in to <a href="/dashboard/settings?tab=invoice" style="color: #4f46e5;">NexAce CRM</a> to view your invoice history.</p>
+              <p style="color: #475569; font-size: 14px;">Once HR approves your hours, your invoice will automatically advance to Admin for payment processing.</p>
+              <p style="color: #94a3b8; font-size: 12px;">Log in to <a href="/dashboard/settings?tab=invoice" style="color: #4f46e5;">NexAce CRM</a> to track live progress.</p>
             </div>
           `,
         });

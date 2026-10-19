@@ -1053,6 +1053,54 @@ function FinancePageContent() {
                     )}
                   </div>
 
+                  {/* Dynamic UPI QR Code generator for quick Admin scanning */}
+                  {toUpiId.trim() && (() => {
+                    const paymentModalInvoice = invoices.find((i) => i._id === paymentModal.invoiceId);
+                    const effectivePayAmount = paymentModalInvoice ? Number(paymentModalInvoice.amount || 0) : 0;
+                    const payeeDisplayName = paymentModalInvoice ? (paymentModalInvoice.client || "NexAce Payee") : "NexAce Payee";
+                    const upiPayUrl = `upi://pay?pa=${encodeURIComponent(toUpiId.trim())}&pn=${encodeURIComponent(payeeDisplayName)}&am=${encodeURIComponent(effectivePayAmount > 0 ? effectivePayAmount : "")}&cu=INR&tn=${encodeURIComponent(paymentModal.invoiceNo || "Invoice Payout")}`;
+                    const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(upiPayUrl)}`;
+
+                    return (
+                      <div className="p-3 bg-muted/40 border border-emerald-500/30 rounded-xl flex flex-col sm:flex-row items-center gap-3.5">
+                        <div className="bg-white p-2 rounded-xl border border-border shadow-xs shrink-0 flex items-center justify-center">
+                          <img
+                            src={qrCodeUrl}
+                            alt="UPI QR Code"
+                            className="w-24 h-24 sm:w-28 sm:h-28 object-contain"
+                            loading="lazy"
+                          />
+                        </div>
+                        <div className="space-y-1 text-center sm:text-left flex-1 min-w-0">
+                          <div className="flex items-center justify-center sm:justify-start gap-1.5 text-xs font-bold text-foreground">
+                            <i className="fa-solid fa-qrcode text-emerald-500" />
+                            <span>Scan to Pay via PhonePe / GPay / Paytm</span>
+                          </div>
+                          <p className="text-[11px] font-mono text-muted-foreground truncate">
+                            To: <strong className="text-foreground">{toUpiId.trim()}</strong>
+                          </p>
+                          {effectivePayAmount > 0 && (
+                            <p className="text-[11px] text-emerald-600 dark:text-emerald-400 font-extrabold font-mono">
+                              Disbursement: ₹{effectivePayAmount.toLocaleString("en-IN")}
+                            </p>
+                          )}
+                          <div className="pt-1 flex items-center justify-center sm:justify-start gap-2">
+                            <a
+                              href={upiPayUrl}
+                              className="inline-flex items-center gap-1.5 text-[10px] font-bold text-primary hover:underline"
+                            >
+                              <i className="fa-solid fa-mobile-screen-button text-[10px]" /> Open Mobile UPI App
+                            </a>
+                            <span className="text-muted-foreground/40 text-[10px]">&bull;</span>
+                            <span className="text-[10px] text-muted-foreground font-mono">
+                              Ref: #{paymentModal.invoiceNo}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+
                   {/* UPI Transaction ID */}
                   <div className="space-y-1.5">
                     <label className="text-xs font-bold text-foreground flex items-center gap-1.5">

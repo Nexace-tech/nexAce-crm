@@ -35,30 +35,92 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     }
 
     // ── Stamp approver details & signature on approval ───────────────────────
-    const updateBody: Record<string, unknown> = { ...body };
+    const updateBody: Record<string, any> = { ...body };
+    let newTimelineEvent: any = null;
+    let newRejectionHistoryItem: any = null;
 
-    if (body.status === "Approved") {
+    if (body.action === "RE_INITIATE") {
+      const nextRev = Number((previousInvoice as any).revisionCount || 0) + 1;
+      updateBody.status = "Pending";
+      updateBody.approvalStage = "PENDING_REVIEW";
+      updateBody.revisionCount = nextRev;
+      updateBody.rejectionReason = "";
+      updateBody.rejectedBy = "";
+      updateBody.rejectedAt = "";
+
+      newTimelineEvent = {
+        stage: "RE_INITIATED",
+        status: "Pending",
+        actorName: session.userName || "User",
+        actorRole: session.role || "User",
+        actorId: userObjectId,
+        note: body.resubmitNote?.trim() || `Revision #${nextRev} submitted with corrections.`,
+        timestamp: new Date(),
+      };
+    } else if (body.status === "Approved") {
+      updateBody.status = "Approved";
+      updateBody.approvalStage = "PENDING_PAYMENT";
       updateBody.approvedBy = session.userName || "Admin";
       updateBody.approvedAt = new Date().toISOString();
       updateBody.approverRole = session.role === "HR" ? "HR" : "Admin";
       updateBody.rejectionReason = "";
       updateBody.rejectedBy = "";
       updateBody.rejectedAt = "";
-    }
 
-    if (body.status === "Rejected") {
+      newTimelineEvent = {
+        stage: "APPROVED",
+        status: "Approved",
+        actorName: session.userName || "Admin",
+        actorRole: session.role,
+        actorId: userObjectId,
+        note: "Invoice verified and approved for payment collection.",
+        timestamp: new Date(),
+      };
+    } else if (body.status === "Rejected") {
       if (!body.rejectionReason || !body.rejectionReason.trim()) {
         return NextResponse.json(
           { error: "Rejection feedback reason is mandatory" },
           { status: 400 }
         );
       }
-      updateBody.rejectionReason = body.rejectionReason.trim();
+      const reasonText = body.rejectionReason.trim();
+      updateBody.status = "Rejected";
+      updateBody.approvalStage = "REJECTED";
+      updateBody.rejectionReason = reasonText;
       updateBody.rejectedBy = session.userName || "Admin";
       updateBody.rejectedAt = new Date().toISOString();
       updateBody.approvedBy = "";
       updateBody.approvedAt = "";
       updateBody.approverRole = "";
+
+      newTimelineEvent = {
+        stage: "REJECTED",
+        status: "Rejected",
+        actorName: session.userName || "Admin",
+        actorRole: session.role,
+        actorId: userObjectId,
+        note: reasonText,
+        timestamp: new Date(),
+      };
+
+      newRejectionHistoryItem = {
+        reason: reasonText,
+        rejectedBy: session.userName || "Admin",
+        rejectedAt: new Date(),
+        role: session.role,
+      };
+    } else if (body.status === "Paid") {
+      updateBody.status = "Paid";
+      updateBody.approvalStage = "PAID";
+      newTimelineEvent = {
+        stage: "PAID",
+        status: "Paid",
+        actorName: session.userName || "Admin",
+        actorRole: session.role,
+        actorId: userObjectId,
+        note: `Payment settled via ${updateBody.paymentDetails?.method || "Bank/Wire"}`,
+        timestamp: new Date(),
+      };
     }
 
     if (body.status === "Paid" || body.status === "Approved") {
@@ -67,13 +129,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
       try {
         let effectiveSig = "";
-        // 1. Organization signature from Tenant (Primary company signature as requested by user)
         const tenantForSig = await Tenant.findById(tenantObjectId).select("signatureUrl").lean();
         if ((tenantForSig as any)?.signatureUrl?.trim()) {
           effectiveSig = (tenantForSig as any).signatureUrl.trim();
         }
 
-        // 2. Fallback: Approver's user profile signature
         if (!effectiveSig) {
           const approverUser = await User.findById(userObjectId).select("signatureUrl name").lean();
           if ((approverUser as any)?.signatureUrl?.trim()) {
@@ -81,7 +141,6 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
           }
         }
 
-        // 3. Fallback: Check if any Admin in this tenant has a signature
         if (!effectiveSig) {
           const adminWithSig = await User.findOne({
             tenantId: tenantObjectId,
@@ -101,15 +160,55 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       }
     }
 
+    const mongoUpdate: Record<string, any> = {
+      $set: { ...updateBody, updatedAt: new Date() },
+    };
+    const pushOps: Record<string, any> = {};
+    if (newTimelineEvent) pushOps.timeline = newTimelineEvent;
+    if (newRejectionHistoryItem) pushOps.rejectionHistory = newRejectionHistoryItem;
+    if (Object.keys(pushOps).length > 0) mongoUpdate.$push = pushOps;
+
     const invoice = await FinanceInvoice.findOneAndUpdate(
       { _id: id, tenantId: tenantObjectId },
-      { $set: updateBody },
+      mongoUpdate,
       { new: true }
     );
 
     if (!invoice) {
       return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
     }
+
+    // Notify submitter/creator
+    (async () => {
+      try {
+        const { Notification } = await import("@/models/Notification");
+        if (invoice.createdBy) {
+          let title = `Invoice ${invoice.invoiceNo} Updated`;
+          let message = `Invoice ${invoice.invoiceNo} status changed to ${invoice.status}`;
+          if (invoice.status === "Approved") {
+            title = `✨ Invoice ${invoice.invoiceNo} Approved`;
+            message = `Your invoice ${invoice.invoiceNo} for ${invoice.client} has been approved by ${session.userName}.`;
+          } else if (invoice.status === "Rejected") {
+            title = `❌ Invoice ${invoice.invoiceNo} Needs Revision`;
+            message = `Your invoice ${invoice.invoiceNo} was rejected by ${session.userName}. Reason: ${invoice.rejectionReason}`;
+          } else if (invoice.status === "Paid") {
+            title = `✅ Invoice ${invoice.invoiceNo} Paid`;
+            message = `Payment for invoice ${invoice.invoiceNo} has been marked as settled by ${session.userName}.`;
+          }
+          await Notification.create({
+            tenantId: tenantObjectId,
+            recipientId: invoice.createdBy,
+            title,
+            message,
+            type: "finance",
+            linkUrl: `/dashboard/finance?tab=invoices&invoiceNo=${encodeURIComponent(invoice.invoiceNo)}`,
+            read: false,
+          });
+        }
+      } catch (notifErr) {
+        console.error("Finance invoice notification error:", notifErr);
+      }
+    })();
 
     await ActivityLog.create({
       tenantId: tenantObjectId,

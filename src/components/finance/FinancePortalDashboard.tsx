@@ -18,7 +18,7 @@ export interface FinanceInvoice {
   client: string;
   amount: number;
   currency: string;
-  status: "Draft" | "Pending" | "Paid" | "Overdue" | "Cancelled";
+  status: "Draft" | "Pending" | "Approved" | "Rejected" | "Paid" | "Overdue" | "Cancelled";
   issuedDate: string;
   dueDate: string;
   category: string;
@@ -26,6 +26,41 @@ export interface FinanceInvoice {
   notes?: string;
   lineItems?: Array<{ description: string; quantity: number; unitPrice: number; amount: number }>;
   createdAt?: string;
+  approvalStage?: "DRAFT" | "PENDING_HR" | "PENDING_ADMIN" | "PAID" | "REJECTED";
+  rejectionReason?: string;
+  rejectedBy?: string;
+  rejectedAt?: string | Date;
+  rejectionHistory?: Array<{ reason: string; rejectedBy: string; rejectedAt: string | Date; role?: string }>;
+  revisionCount?: number;
+  timeline?: Array<{
+    stage: string;
+    status: string;
+    actorName: string;
+    actorRole: string;
+    actorId?: string;
+    note?: string;
+    timestamp: string | Date;
+  }>;
+  bankDetails?: any;
+  paymentDetails?: any;
+  userUpiId?: string;
+  businessName?: string;
+  businessAddress?: string;
+  businessEmail?: string;
+  billedToName?: string;
+  billedToAddress?: string;
+  billedToEmail?: string;
+  items?: any[];
+  subtotal?: number;
+  taxRate?: number;
+  taxAmount?: number;
+  total?: number;
+  shiftAttendance?: any;
+  timesheetEntries?: any;
+  signatureUrl?: string;
+  approvedBy?: string;
+  approvedAt?: string;
+  approverRole?: string;
 }
 
 export interface FinanceExpense {
@@ -418,6 +453,8 @@ export function FinancePortalDashboard({
           onNewInvoice={onNewInvoice}
           onEditInvoice={onEditInvoice}
           onDeleteInvoice={onDeleteInvoice}
+          onRefresh={onRefresh}
+          showToast={showToast}
         />
       )}
 

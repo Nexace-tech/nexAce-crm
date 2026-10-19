@@ -82,14 +82,41 @@ export interface InvoiceDetailsData {
   rejectionReason?: string;
   rejectedBy?: string;
   rejectedAt?: string;
+  rejectionHistory?: Array<{
+    reason: string;
+    rejectedBy: string;
+    rejectedAt: string | Date;
+    role: string;
+  }>;
+  revisionCount?: number;
+  hrReview?: {
+    reviewedBy?: string;
+    reviewedById?: string;
+    reviewedAt?: string | Date;
+    verifiedHours?: number;
+    notes?: string;
+  } | null;
+  timeline?: Array<{
+    stage: string;
+    status: string;
+    actorName: string;
+    actorRole: string;
+    actorId?: string;
+    note?: string;
+    timestamp: string | Date;
+  }>;
+  approvalStage?: string;
+  userUpiId?: string;
 }
 
 interface InvoiceDetailsViewProps {
   invoice: InvoiceDetailsData;
   onClose?: () => void;
-  onStatusChange?: (newStatus: string) => void;
+  onStatusChange?: (newStatus: string, reason?: string) => void;
   onPaymentConfirm?: () => void; // intercepts "Paid" selection to open payment modal
   isUpdatingStatus?: boolean;
+  scope?: "internal" | "external";
+  onReinitiate?: (invoice: InvoiceDetailsData) => void;
 }
 
 function numberToWords(num: number): string {
@@ -124,11 +151,16 @@ export function InvoiceDetailsView({
   onStatusChange,
   onPaymentConfirm,
   isUpdatingStatus = false,
+  scope,
+  onReinitiate,
 }: InvoiceDetailsViewProps) {
   const printRef = useRef<HTMLDivElement>(null);
   const [companyLogoUrl, setCompanyLogoUrl] = useState<string>("");
   const [companySignatureUrl, setCompanySignatureUrl] = useState<string>("");
   const [isDownloadingPdf, setIsDownloadingPdf] = useState<boolean>(false);
+  const [rejectModalOpen, setRejectModalOpen] = useState(false);
+  const [rejectReasonInput, setRejectReasonInput] = useState("");
+  const [showTraceModal, setShowTraceModal] = useState(false);
 
   useEffect(() => {
     fetch("/api/settings/company")
@@ -809,6 +841,29 @@ export function InvoiceDetailsView({
         </div>
 
         <div className="flex items-center gap-2 flex-wrap shrink-0">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setShowTraceModal(true)}
+            className="gap-1.5 font-bold h-8 px-3 cursor-pointer text-primary border-primary/30 hover:bg-primary/10 shadow-2xs"
+            title="Inspect full timeline audit and tracking history"
+          >
+            <i className="fa-solid fa-route text-[11px]" /> Trace Lifecycle
+          </Button>
+
+          {invoice.status === "Rejected" && onReinitiate && (
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => onReinitiate(invoice)}
+              className="gap-1.5 font-bold h-8 px-3.5 cursor-pointer bg-primary hover:bg-primary/90 text-primary-foreground shadow-xs"
+              title="Pre-fill invoice to correct issues and re-submit to HR"
+            >
+              <i className="fa-solid fa-rotate-right text-[11px]" /> Fix &amp; Re-initiate
+            </Button>
+          )}
+
           {onStatusChange && (
             <>
               {invoice.status === "Pending" && (
@@ -819,18 +874,21 @@ export function InvoiceDetailsView({
                     disabled={isUpdatingStatus}
                     onClick={() => onStatusChange("Approved")}
                     className="gap-1.5 font-bold h-8 px-3 cursor-pointer bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs"
-                    title="Approve invoice and attached timesheets"
+                    title="Verify shift attendance, timesheets, and approve invoice"
                   >
-                    <i className="fa-solid fa-check-double text-[11px]" /> Approve
+                    <i className="fa-solid fa-clipboard-check text-[11px]" /> Verify &amp; Approve
                   </Button>
                   <Button
                     type="button"
                     variant="outline"
                     size="sm"
                     disabled={isUpdatingStatus}
-                    onClick={() => onStatusChange("Rejected")}
+                    onClick={() => {
+                      setRejectReasonInput("");
+                      setRejectModalOpen(true);
+                    }}
                     className="gap-1.5 font-bold h-8 px-3 cursor-pointer text-rose-600 border-rose-300 hover:bg-rose-50 dark:hover:bg-rose-950/30"
-                    title="Reject with mandatory feedback"
+                    title="Reject invoice with mandatory feedback"
                   >
                     <i className="fa-solid fa-ban text-[11px]" /> Reject
                   </Button>
@@ -846,7 +904,7 @@ export function InvoiceDetailsView({
                   className="gap-1.5 font-bold h-8 px-3.5 cursor-pointer bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs"
                   title="Process payment disbursement"
                 >
-                  <i className="fa-solid fa-credit-card text-[11px]" /> Process Payment
+                  <i className="fa-solid fa-wallet text-[11px]" /> Process Payout
                 </Button>
               )}
 
@@ -863,6 +921,9 @@ export function InvoiceDetailsView({
                         return;
                       }
                       if (onPaymentConfirm) onPaymentConfirm();
+                    } else if (newVal === "Rejected") {
+                      setRejectReasonInput("");
+                      setRejectModalOpen(true);
                     } else {
                       onStatusChange(newVal);
                     }
@@ -871,8 +932,8 @@ export function InvoiceDetailsView({
                 >
                   <option value="Draft">Draft</option>
                   <option value="Sent">Sent</option>
-                  <option value="Pending">Pending</option>
-                  <option value="Approved">Approved</option>
+                  <option value="Pending">Pending (HR Review)</option>
+                  <option value="Approved">Approved (Ready for Payout)</option>
                   <option value="Paid" disabled={invoice.status !== "Approved"}>
                     {invoice.status === "Approved" ? "Paid" : "Paid (Requires Approval)"}
                   </option>
@@ -912,10 +973,337 @@ export function InvoiceDetailsView({
         </div>
       </div>
 
+      {/* ── Visual Invoice Lifecycle Tracking Stepper ── */}
+      <div className="p-4 sm:p-5 bg-card/90 border border-border/80 rounded-2xl shadow-xs space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
+            <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+              Invoice Lifecycle Pipeline &bull; {scope === "external" ? "External Client Scope" : "Internal Staff Scope"}
+            </h3>
+          </div>
+          <div className="flex items-center gap-2">
+            {(invoice as any).revisionCount && (invoice as any).revisionCount > 0 ? (
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                Revision #{(invoice as any).revisionCount}
+              </span>
+            ) : null}
+            <span className="text-[11px] font-mono text-muted-foreground">
+              Current: <strong className="text-foreground">{invoice.status}</strong>
+            </span>
+          </div>
+        </div>
+
+        {/* 4-Step Pipeline */}
+        <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 pt-1">
+          {/* Step 1: Submission */}
+          <div className="p-3 rounded-xl border border-emerald-500/30 bg-emerald-500/5 space-y-1">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold text-emerald-700 dark:text-emerald-400 flex items-center gap-1.5">
+                <i className="fa-solid fa-file-invoice text-emerald-600" /> 1. Generated
+              </span>
+              <i className="fa-solid fa-circle-check text-xs text-emerald-600" />
+            </div>
+            <p className="text-[10px] text-muted-foreground truncate">
+              Issued {invoice.invoiceDate}
+            </p>
+          </div>
+
+          {/* Step 2: HR Review */}
+          <div className={cn(
+            "p-3 rounded-xl border space-y-1 transition-all",
+            invoice.status === "Rejected"
+              ? "border-rose-500/40 bg-rose-500/10 text-rose-700 dark:text-rose-300"
+              : (invoice.status === "Approved" || invoice.status === "Paid")
+              ? "border-emerald-500/30 bg-emerald-500/5 text-emerald-700 dark:text-emerald-400"
+              : "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300 ring-1 ring-amber-500/30"
+          )}>
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold flex items-center gap-1.5">
+                <i className={cn("fa-solid", invoice.status === "Rejected" ? "fa-circle-xmark text-rose-500" : (invoice.status === "Approved" || invoice.status === "Paid") ? "fa-user-check text-emerald-600" : "fa-user-clock text-amber-500")} />
+                2. HR Review
+              </span>
+              {invoice.status === "Rejected" ? (
+                <i className="fa-solid fa-circle-xmark text-xs text-rose-500" />
+              ) : (invoice.status === "Approved" || invoice.status === "Paid") ? (
+                <i className="fa-solid fa-circle-check text-xs text-emerald-600" />
+              ) : (
+                <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-full bg-amber-500/20 text-amber-600 uppercase">
+                  Pending
+                </span>
+              )}
+            </div>
+            <p className="text-[10px] opacity-90 truncate">
+              {invoice.status === "Rejected"
+                ? `Rejected by ${invoice.rejectedBy || "HR"}`
+                : (invoice.status === "Approved" || invoice.status === "Paid")
+                ? `Verified by ${invoice.approvedBy || "HR"}`
+                : "Awaiting Timesheet Audit"}
+            </p>
+          </div>
+
+          {/* Step 3: Admin Payout */}
+          <div className={cn(
+            "p-3 rounded-xl border space-y-1 transition-all",
+            invoice.status === "Paid"
+              ? "border-emerald-500/30 bg-emerald-500/5 text-emerald-700 dark:text-emerald-400"
+              : invoice.status === "Approved"
+              ? "border-sky-500/40 bg-sky-500/10 text-sky-700 dark:text-sky-300 ring-1 ring-sky-500/30"
+              : "border-border/60 bg-muted/30 text-muted-foreground opacity-60"
+          )}>
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold flex items-center gap-1.5">
+                <i className={cn("fa-solid", invoice.status === "Paid" ? "fa-credit-card text-emerald-600" : invoice.status === "Approved" ? "fa-wallet text-sky-600" : "fa-clock text-muted-foreground")} />
+                3. Admin Payout
+              </span>
+              {invoice.status === "Paid" ? (
+                <i className="fa-solid fa-circle-check text-xs text-emerald-600" />
+              ) : invoice.status === "Approved" ? (
+                <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-full bg-sky-500/20 text-sky-600 uppercase">
+                  Ready
+                </span>
+              ) : null}
+            </div>
+            <p className="text-[10px] opacity-90 truncate">
+              {invoice.status === "Paid"
+                ? `Paid via ${invoice.paymentDetails?.method || "Bank"}`
+                : invoice.status === "Approved"
+                ? "Authorized & Ready"
+                : "Requires HR Approval"}
+            </p>
+          </div>
+
+          {/* Step 4: Settled */}
+          <div className={cn(
+            "p-3 rounded-xl border space-y-1 transition-all",
+            invoice.status === "Paid"
+              ? "border-emerald-500/30 bg-emerald-500/5 text-emerald-700 dark:text-emerald-400"
+              : "border-border/60 bg-muted/30 text-muted-foreground opacity-60"
+          )}>
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold flex items-center gap-1.5">
+                <i className="fa-solid fa-circle-check text-emerald-600" /> 4. Settled
+              </span>
+              {invoice.status === "Paid" && (
+                <i className="fa-solid fa-circle-check text-xs text-emerald-600" />
+              )}
+            </div>
+            <p className="text-[10px] opacity-90 truncate">
+              {invoice.status === "Paid" ? "Settled & Receipt Attached" : "Pending Disbursement"}
+            </p>
+          </div>
+        </div>
+      </div>
+
       {/* ── Status Feedback Alerts ── */}
       {invoice.status === "Rejected" && (
+        <div className="p-4 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-rose-800 dark:text-rose-200 shadow-2xs">
+          <div className="flex items-start gap-2.5">
+            <i className="fa-solid fa-circle-xmark text-rose-600 dark:text-rose-400 mt-0.5 text-base shrink-0" />
+            <div className="space-y-0.5">
+              <p className="font-bold">Invoice Returned for Revision {invoice.rejectedBy ? `by ${invoice.rejectedBy}` : ""}</p>
+              <p className="text-xs text-rose-700 dark:text-rose-300">
+                <strong>Reason:</strong> {invoice.rejectionReason || "No explanation provided."}
+              </p>
+            </div>
+          </div>
+          {onReinitiate && (
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => onReinitiate(invoice)}
+              className="gap-1.5 font-bold h-8 px-3.5 cursor-pointer bg-rose-600 hover:bg-rose-700 text-white shrink-0 shadow-xs"
+            >
+              <i className="fa-solid fa-rotate-right text-[11px]" /> Fix &amp; Re-initiate
+            </Button>
+          )}
+        </div>
+      )}
+
+      {/* ── Rejection Feedback Modal ── */}
+      {rejectModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+          <div className="bg-card border border-border rounded-2xl p-6 max-w-lg w-full space-y-4 shadow-2xl relative">
+            <div className="flex items-center justify-between pb-3 border-b border-border">
+              <div className="flex items-center gap-2 text-rose-600 dark:text-rose-400">
+                <i className="fa-solid fa-triangle-exclamation text-lg" />
+                <h3 className="font-bold text-base text-foreground">Reject Invoice with Mandatory Feedback</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setRejectModalOpen(false)}
+                className="text-muted-foreground hover:text-foreground cursor-pointer text-sm"
+              >
+                <i className="fa-solid fa-xmark text-base" />
+              </button>
+            </div>
+
+            <p className="text-xs text-muted-foreground">
+              Please provide clear, actionable feedback explaining why this timesheet or invoice is being returned. The raising user will be notified immediately to fix the issue and re-initiate.
+            </p>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-foreground">
+                Rejection Reason &bull; Feedback for Submitter <span className="text-rose-500">*</span>
+              </label>
+              <textarea
+                rows={4}
+                value={rejectReasonInput}
+                onChange={(e) => setRejectReasonInput(e.target.value)}
+                placeholder="e.g., Shift clock log on Oct 14 is missing clock-out time. Overtime hours do not match assigned project tasks. Please update and re-submit."
+                className="w-full text-xs p-3 rounded-xl border border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-rose-500 resize-none font-medium"
+              />
+              <div className="flex justify-between text-[11px] text-muted-foreground">
+                <span>Must be clear and actionable</span>
+                <span>{rejectReasonInput.trim().length} chars</span>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-border">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setRejectModalOpen(false)}
+                className="cursor-pointer"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                disabled={!rejectReasonInput.trim() || isUpdatingStatus}
+                onClick={() => {
+                  if (onStatusChange && rejectReasonInput.trim()) {
+                    onStatusChange("Rejected", rejectReasonInput.trim());
+                    setRejectModalOpen(false);
+                  }
+                }}
+                className="bg-rose-600 hover:bg-rose-700 text-white font-bold cursor-pointer gap-1.5 disabled:opacity-50"
+              >
+                <i className="fa-solid fa-ban text-[11px]" /> Confirm Rejection
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Lifecycle Trace History Modal ── */}
+      {showTraceModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+          <div className="bg-card border border-border rounded-2xl p-6 max-w-2xl w-full space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-border">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+                  <i className="fa-solid fa-route text-sm" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base text-foreground">
+                    Lifecycle Audit Trace &bull; {invoice.invoiceNo}
+                  </h3>
+                  <p className="text-xs text-muted-foreground">
+                    Chronological event trail and verified signatures
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowTraceModal(false)}
+                className="text-muted-foreground hover:text-foreground cursor-pointer text-sm"
+              >
+                <i className="fa-solid fa-xmark text-base" />
+              </button>
+            </div>
+
+            {/* Event Trail */}
+            <div className="space-y-4 py-2">
+              {(invoice.timeline && invoice.timeline.length > 0) ? (
+                <div className="relative pl-6 space-y-6 before:absolute before:left-2.5 before:top-2 before:bottom-2 before:w-0.5 before:bg-border">
+                  {invoice.timeline.map((evt, idx) => (
+                    <div key={idx} className="relative space-y-1">
+                      <span className={cn(
+                        "absolute -left-6 top-1 w-3.5 h-3.5 rounded-full border-2 border-background",
+                        evt.stage === "PAID" ? "bg-emerald-500" :
+                        evt.stage === "HR_APPROVED" || evt.stage === "APPROVED" ? "bg-emerald-500" :
+                        evt.stage === "HR_REJECTED" || evt.stage === "REJECTED" ? "bg-rose-500" :
+                        evt.stage === "RE_INITIATED" ? "bg-amber-500" : "bg-primary"
+                      )} />
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-foreground">
+                          {evt.stage === "SUBMITTED" ? "Invoice Generated & Submitted" :
+                           evt.stage === "HR_APPROVED" ? "Verified & Approved by HR" :
+                           evt.stage === "APPROVED" ? "Invoice Approved" :
+                           evt.stage === "HR_REJECTED" ? "Rejected by HR" :
+                           evt.stage === "REJECTED" ? "Invoice Rejected" :
+                           evt.stage === "RE_INITIATED" ? "Corrected & Re-initiated by User" :
+                           evt.stage === "PAID" ? "Payment Processed & Settled" : evt.stage}
+                        </span>
+                        <span className="text-[10px] font-mono text-muted-foreground">
+                          {new Date(evt.timestamp).toLocaleString("en-IN", {
+                            day: "2-digit",
+                            month: "short",
+                            year: "numeric",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                            hour12: true,
+                          })}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-muted-foreground">
+                        Actor: <strong className="text-foreground">{evt.actorName}</strong> ({evt.actorRole})
+                      </p>
+                      {evt.note && (
+                        <p className={cn(
+                          "text-xs p-2.5 rounded-xl border font-medium mt-1.5",
+                          evt.stage === "HR_REJECTED" || evt.stage === "REJECTED"
+                            ? "bg-rose-500/10 border-rose-500/20 text-rose-700 dark:text-rose-300"
+                            : "bg-muted/40 border-border text-foreground"
+                        )}>
+                          {evt.note}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="p-3 bg-muted/30 border border-border rounded-xl text-xs space-y-1">
+                    <p className="font-bold text-foreground">Stage 1: Generated &amp; Submitted</p>
+                    <p className="text-muted-foreground">Issued on {invoice.invoiceDate} by {invoice.businessName || "Staff Member"}.</p>
+                  </div>
+                  {invoice.approvedBy && (
+                    <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-xs space-y-1">
+                      <p className="font-bold text-emerald-700 dark:text-emerald-400">Stage 2: HR Attendance &amp; Timesheets Verified</p>
+                      <p className="text-muted-foreground">Approved by {invoice.approvedBy} on {invoice.approvedAt ? new Date(invoice.approvedAt).toLocaleDateString("en-IN") : "recently"}.</p>
+                    </div>
+                  )}
+                  {invoice.status === "Paid" && (
+                    <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-xs space-y-1">
+                      <p className="font-bold text-emerald-700 dark:text-emerald-400">Stage 3: Admin Payout Executed</p>
+                      <p className="text-muted-foreground">Disbursed via {invoice.paymentDetails?.method || "Bank"}.</p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end pt-2 border-t border-border">
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => setShowTraceModal(false)}
+                className="cursor-pointer"
+              >
+                Close Audit View
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {invoice.status === "Rejected" && (
         <div className="p-3.5 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-2xl flex items-start gap-2.5 text-xs text-rose-800 dark:text-rose-200 shadow-2xs">
-          <i className="fa-solid fa-circle-xmark text-rose-600 dark:text-rose-400 mt-0.5 text-sm shrink-0" />
+          <i className="fa-solid fa-triangle-exclamation text-rose-600 dark:text-rose-400 mt-0.5 text-sm shrink-0" />
           <div className="space-y-0.5">
             <p className="font-bold">Invoice Rejected {invoice.rejectedBy ? `by ${invoice.rejectedBy}` : ""}</p>
             <p className="text-[11px] text-rose-700 dark:text-rose-300">
