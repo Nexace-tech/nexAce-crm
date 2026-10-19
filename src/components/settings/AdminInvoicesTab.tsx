@@ -481,7 +481,7 @@ export function AdminInvoicesTab({ showToast, scope = "internal" }: AdminInvoice
     );
   };
 
-  const isPrivilegedAdmin = Boolean(isAdmin || isOPS || can("approveInvoices"));
+  const isPrivilegedAdmin = Boolean(isAdmin || isOPS || user?.role === "HR" || can("approveInvoices") || can("approveTimesheetsAndInvoices"));
 
   const formatCurrency = (amount: number, currency: string = "INR") => {
     const symbol = currency === "USD" ? "$" : currency === "EUR" ? "€" : currency === "GBP" ? "£" : currency === "AED" ? "AED " : "₹";
@@ -878,7 +878,7 @@ export function AdminInvoicesTab({ showToast, scope = "internal" }: AdminInvoice
                             <i className="fa-solid fa-file-pdf text-[10px]" /> PDF
                           </Button>
 
-                          {(can("approveInvoices") || isAdmin || isOPS || user?.role === "HR") && (
+                          {(can("approveInvoices") || can("approveTimesheetsAndInvoices") || isAdmin || isOPS || user?.role === "HR") && (
                             <>
                               {inv.status === "Pending" && (
                                 <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>

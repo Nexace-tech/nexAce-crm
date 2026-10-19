@@ -137,5 +137,6 @@ export function usePermissions() {
     role: user?.role || 'Employee',
     isAdmin,
     isOPS: isSubAdminRole(user?.role),
+    isHR: user?.role === "HR" || (Boolean(user?.role) && user!.role.trim().toLowerCase() === "hr"),
   };
 }

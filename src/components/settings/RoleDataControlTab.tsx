@@ -157,6 +157,7 @@ export const FEATURE_ACTIONS: FeatureMeta[] = [
   { key: "manageHRCases", name: "Manage Employee Grievance Cases", category: "HR & Leave", subGroup: "HR Operations", description: "Handle confidential HR disputes and disciplinary cases", icon: "fa-solid fa-scale-balanced" },
   { key: "reassignHRPartner", name: "Assign & Reassign HR Partners", category: "HR & Leave", subGroup: "HR Operations", description: "Allocate or reassign dedicated HR partners to employees and new hires", icon: "fa-solid fa-user-pen" },
   { key: "manageHRIsolation", name: "Manage Multi-HR Data Isolation", category: "HR & Leave", subGroup: "HR Operations", description: "Toggle Multi-HR isolation scope so HR officers only view their assigned staff", icon: "fa-solid fa-users-viewfinder" },
+  { key: "approveTimesheetsAndInvoices", name: "Timesheet & Invoice Approvals", category: "HR & Leave", subGroup: "Approvals & Audit", description: "Access internal Timesheet & Invoice Approvals workdesk to verify shift hours, timesheets, and approve/reject staff invoices (Only HR, OPS & Admin)", icon: "fa-solid fa-file-invoice-dollar" },
 
   // Appraisals
   { key: "viewOwnAppraisals", name: "View Own Performance Appraisals", category: "Appraisals", subGroup: "Performance Reviews", description: "See self review results and manager appraisal feedback", icon: "fa-solid fa-star" },
@@ -328,7 +329,7 @@ const PRESET_TEMPLATES: RolePresetTemplate[] = [
       "viewKpiWidgets", "viewShiftOverview", "viewAnnouncements",
       "viewTeamDirectory", "viewEmployeeProfiles", "editEmployeeProfiles", "inviteTeamMembers", "viewOrgChart", "reassignReportingLine",
       "logOwnTimesheet", "editOwnTimesheet", "viewTeamTimesheets", "approveTimesheets", "exportTimesheets", "clockInOut", "viewShiftCalendar", "viewTeamAvailability", "manageTeamAvailability", "logOwnAvailability",
-      "viewOwnLeaves", "applyLeaves", "viewAllLeaves", "approveLeaves", "manageCompanyChecklists", "manageHRVault", "manageHRCases", "reassignHRPartner", "manageHRIsolation",
+      "viewOwnLeaves", "applyLeaves", "viewAllLeaves", "approveLeaves", "manageCompanyChecklists", "manageHRVault", "manageHRCases", "reassignHRPartner", "manageHRIsolation", "approveTimesheetsAndInvoices", "approveInvoices",
       "viewOwnAppraisals", "submitSelfReview", "viewManagerReviews", "createAppraisalCycles",
       "viewGoals", "sendKudos", "submitSurvey", "createPulseSurveys",
       "submitReferral", "viewOwnReferrals", "viewAllReferrals", "manageReferrals",

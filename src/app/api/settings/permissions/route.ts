@@ -94,7 +94,7 @@ export const DEFAULT_FEATURE_PERMISSIONS: Record<string, Record<string, boolean>
     // Chat
     sendChatMessages: true, createChatChannels: true, deleteChatChannels: true, pinChatMessages: true, deleteOthersChatMessages: true, viewMailCenter: true, sendEmails: true, deleteEmails: true, viewWhatsAppPanel: true, sendWhatsAppMessages: true, startVirtualHuddles: true, joinVirtualHuddles: true,
     // HR & Leave
-    viewOwnLeaves: true, applyLeaves: true, viewAllLeaves: true, approveLeaves: true, manageCompanyChecklists: true, manageHRVault: true, manageHRCases: true, reassignHRPartner: true, manageHRIsolation: true,
+    viewOwnLeaves: true, applyLeaves: true, viewAllLeaves: true, approveLeaves: true, manageCompanyChecklists: true, manageHRVault: true, manageHRCases: true, reassignHRPartner: true, manageHRIsolation: true, approveTimesheetsAndInvoices: true,
     // Appraisals
     viewOwnAppraisals: true, submitSelfReview: true, viewManagerReviews: true, createAppraisalCycles: true,
     // Goals & OKRs
@@ -133,7 +133,7 @@ export const DEFAULT_FEATURE_PERMISSIONS: Record<string, Record<string, boolean>
     // Chat
     sendChatMessages: true, createChatChannels: true, deleteChatChannels: false, pinChatMessages: true, deleteOthersChatMessages: false, viewMailCenter: true, sendEmails: true, deleteEmails: false, viewWhatsAppPanel: true, sendWhatsAppMessages: true, startVirtualHuddles: true, joinVirtualHuddles: true,
     // HR & Leave
-    viewOwnLeaves: true, applyLeaves: true, viewAllLeaves: true, approveLeaves: true, manageCompanyChecklists: false, manageHRVault: false, manageHRCases: false, reassignHRPartner: false, manageHRIsolation: false,
+    viewOwnLeaves: true, applyLeaves: true, viewAllLeaves: true, approveLeaves: true, manageCompanyChecklists: false, manageHRVault: false, manageHRCases: false, reassignHRPartner: false, manageHRIsolation: false, approveTimesheetsAndInvoices: false,
     // Appraisals
     viewOwnAppraisals: true, submitSelfReview: true, viewManagerReviews: true, createAppraisalCycles: false,
     // Goals & OKRs
@@ -172,7 +172,7 @@ export const DEFAULT_FEATURE_PERMISSIONS: Record<string, Record<string, boolean>
     // Chat
     sendChatMessages: true, createChatChannels: false, deleteChatChannels: false, pinChatMessages: false, deleteOthersChatMessages: false, viewMailCenter: true, sendEmails: true, deleteEmails: false, viewWhatsAppPanel: false, sendWhatsAppMessages: false, startVirtualHuddles: true, joinVirtualHuddles: true,
     // HR & Leave
-    viewOwnLeaves: true, applyLeaves: true, viewAllLeaves: true, approveLeaves: true, manageCompanyChecklists: true, manageHRVault: true, manageHRCases: true, reassignHRPartner: true, manageHRIsolation: true,
+    viewOwnLeaves: true, applyLeaves: true, viewAllLeaves: true, approveLeaves: true, manageCompanyChecklists: true, manageHRVault: true, manageHRCases: true, reassignHRPartner: true, manageHRIsolation: true, approveTimesheetsAndInvoices: true,
     // Appraisals
     viewOwnAppraisals: true, submitSelfReview: true, viewManagerReviews: true, createAppraisalCycles: true,
     // Goals & OKRs
@@ -185,7 +185,7 @@ export const DEFAULT_FEATURE_PERMISSIONS: Record<string, Record<string, boolean>
     // BD & Leads
     viewBD: false, manageLeads: false, deleteLeads: false, manageProposals: false, sendProposals: false, manageExecutiveTargets: false, exportBD: false,
     // Finance & Invoices
-    viewFinancePortal: false, createInvoices: false, approveInvoices: false, confirmInvoicePayments: false, exportInvoices: false, manageExpenses: false, viewExpenseReports: false,
+    viewFinancePortal: false, createInvoices: false, approveInvoices: true, confirmInvoicePayments: false, exportInvoices: false, manageExpenses: false, viewExpenseReports: false,
     // IT & Infrastructure
     viewITPortal: true, manageITAccess: false, manageITSubscriptions: false, manageITDevices: true, manageITInvoices: false,
     // Referrals
@@ -211,7 +211,7 @@ export const DEFAULT_FEATURE_PERMISSIONS: Record<string, Record<string, boolean>
     // Chat
     sendChatMessages: true, createChatChannels: false, deleteChatChannels: false, pinChatMessages: false, deleteOthersChatMessages: false, viewMailCenter: false, sendEmails: false, deleteEmails: false, viewWhatsAppPanel: false, sendWhatsAppMessages: false, startVirtualHuddles: false, joinVirtualHuddles: true,
     // HR & Leave
-    viewOwnLeaves: true, applyLeaves: true, viewAllLeaves: false, approveLeaves: false, manageCompanyChecklists: false, manageHRVault: false, manageHRCases: false, reassignHRPartner: false, manageHRIsolation: false,
+    viewOwnLeaves: true, applyLeaves: true, viewAllLeaves: false, approveLeaves: false, manageCompanyChecklists: false, manageHRVault: false, manageHRCases: false, reassignHRPartner: false, manageHRIsolation: false, approveTimesheetsAndInvoices: false,
     // Appraisals
     viewOwnAppraisals: true, submitSelfReview: true, viewManagerReviews: false, createAppraisalCycles: false,
     // Goals & OKRs
@@ -333,10 +333,22 @@ export async function GET() {
       featurePermissionsMap.HR.manageContracts = true;
       featurePermissionsMap.HR.manageHRWorkdesk = true;
       featurePermissionsMap.HR.viewClients = false;
+      featurePermissionsMap.HR.approveTimesheetsAndInvoices = true;
+      featurePermissionsMap.HR.approveInvoices = true;
+    }
+    if (featurePermissionsMap.OPS) {
+      featurePermissionsMap.OPS.approveTimesheetsAndInvoices = true;
+      featurePermissionsMap.OPS.approveInvoices = true;
+    }
+    if (featurePermissionsMap.Manager) {
+      featurePermissionsMap.Manager.approveTimesheetsAndInvoices = false;
+      featurePermissionsMap.Manager.approveInvoices = false;
     }
     if (featurePermissionsMap.Employee) {
       featurePermissionsMap.Employee.viewProjects = true;
       featurePermissionsMap.Employee.viewClients = false;
+      featurePermissionsMap.Employee.approveTimesheetsAndInvoices = false;
+      featurePermissionsMap.Employee.approveInvoices = false;
     }
 
     const customRoles = dbPermissions.filter((d) => d.isCustom).map((d) => d.role);
@@ -369,8 +381,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    if (session.role !== "Admin") {
-      return NextResponse.json({ error: "Forbidden: Admin access required" }, { status: 403 });
+    if (session.role !== "Admin" && session.role !== "OPS" && session.role !== "HR") {
+      return NextResponse.json({ error: "Forbidden: Privileged access required" }, { status: 403 });
     }
 
     const body = await request.json();

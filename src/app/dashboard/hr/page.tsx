@@ -513,11 +513,20 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
       const tabParam = params.get("tab");
-      if (tabParam && ["directory", "tasks", "checklists", "leaves", "vault", "cases", "appraisals", "probation", "sandbox"].includes(tabParam)) {
+      if (tabParam && ["directory", "tasks", "checklists", "invoices", "leaves", "vault", "cases", "appraisals", "probation", "sandbox"].includes(tabParam)) {
         setActiveTab(tabParam as any);
       }
     }
   }, []);
+
+  useEffect(() => {
+    if (!authLoading && user) {
+      const canAccessInvoices = isAdmin || isOPS || user?.role === "HR" || can("approveTimesheetsAndInvoices");
+      if (activeTab === "invoices" && !canAccessInvoices) {
+        setActiveTab("directory");
+      }
+    }
+  }, [activeTab, authLoading, user, isAdmin, isOPS, can]);
 
   useEffect(() => {
     const init = async () => {
@@ -1251,8 +1260,8 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
               <i className="fa-solid fa-list-check text-xs" /> Onboarding / Offboarding
             </button>
           )}
-          {/* Timesheet & Invoice Approvals — guarded */}
-          {(isManagerOrAdmin || user?.role === "HR" || can("approveInvoices") || can("approveTimesheets") || Boolean(user)) && (
+          {/* Timesheet & Invoice Approvals — only HR and OPS and Admin can see */}
+          {(isAdmin || isOPS || user?.role === "HR" || can("approveTimesheetsAndInvoices")) && (
             <button onClick={() => setActiveTab("invoices")} className={cn(
               "px-4 py-2 text-xs font-semibold rounded-lg transition-all flex items-center gap-2 cursor-pointer shrink-0",
               activeTab === "invoices" ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
@@ -2174,8 +2183,8 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
         </div>
       )}
 
-      {/* TAB: TIMESHEET & INVOICE APPROVALS — guarded */}
-      {activeTab === "invoices" && (isManagerOrAdmin || user?.role === "HR" || can("approveInvoices") || can("approveTimesheets") || Boolean(user)) && (
+      {/* TAB: TIMESHEET & INVOICE APPROVALS — only HR and OPS and Admin can see */}
+      {activeTab === "invoices" && (isAdmin || isOPS || user?.role === "HR" || can("approveTimesheetsAndInvoices")) && (
         <div className="space-y-4">
           <AdminInvoicesTab
             showToast={showToast}

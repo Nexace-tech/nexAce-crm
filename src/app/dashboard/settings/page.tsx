@@ -21,7 +21,7 @@ function SettingsPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, loading: authLoading, refreshUser } = useAuth();
-  const { can, isAdmin, isOPS, canAccessModule, loading: permLoading } = usePermissions();
+  const { can, isAdmin, isOPS, isHR, canAccessModule, loading: permLoading } = usePermissions();
 
   const [activeTab, setActiveTab] = useTabPersistence<"profile" | "security" | "subscription" | "permissions" | "organization">(
     "settings_active_tab_v3",
@@ -253,7 +253,7 @@ function SettingsPageContent() {
       if (activeTab === "organization" && !isAdmin && !isOPS) {
         setActiveTab("profile");
       }
-      if (activeTab === "permissions" && !can("manageRolePermissions") && !isAdmin) {
+      if (activeTab === "permissions" && !can("manageRolePermissions") && !isAdmin && !isOPS && !isHR && user?.role !== "HR") {
         setActiveTab("profile");
       }
       if (activeTab === "subscription" && !can("viewBillingSubscription") && !isAdmin) {
@@ -1066,7 +1066,7 @@ function SettingsPageContent() {
         )}
 
 
-        {(can("manageRoles") || isAdmin || isOPS) && (
+        {(can("manageRoles") || can("manageRolePermissions") || isAdmin || isOPS || isHR || user?.role === "HR") && (
           <button
             onClick={() => setActiveTab("permissions")}
             className={cn(
@@ -3297,9 +3297,9 @@ function SettingsPageContent() {
       )}
 
       {/* TAB 3: ROLES & MULTI-TENANT SECURITY */}
-      {activeTab === "permissions" && (can("manageRolePermissions") || isAdmin || isOPS) && (
+      {activeTab === "permissions" && (can("manageRolePermissions") || isAdmin || isOPS || isHR || user?.role === "HR") && (
         <div className="space-y-6">
-          <RoleDataControlTab isAdmin={user?.role === "Admin" || user?.role === "OPS"} showToast={showToast} />
+          <RoleDataControlTab isAdmin={user?.role === "Admin" || user?.role === "OPS" || user?.role === "HR"} showToast={showToast} />
 
           {/* Admin File Restrictions Control Panel */}
           {user?.role === "Admin" && (
