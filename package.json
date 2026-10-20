@@ -4,11 +4,11 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "NEXT_WORKER_THREADS=2 next build --webpack",
+    "build": "TOKIO_WORKER_THREADS=1 next build --webpack",
     "start": "next start",
     "lint": "eslint",
     "cap:sync": "cap sync",
-    "cap:build": "NEXT_WORKER_THREADS=2 next build --webpack && cap sync",
+    "cap:build": "TOKIO_WORKER_THREADS=1 next build --webpack && cap sync",
     "cap:android": "cap open android",
     "cap:ios": "cap open ios"
   },

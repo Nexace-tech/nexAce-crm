@@ -6,9 +6,12 @@ const nextConfig: NextConfig = {
   devIndicators: false,
   allowedDevOrigins: ["127.0.0.1", "localhost"],
   // Prevent thread exhaustion on constrained build servers (os error 11 / SIGABRT).
-  // Worker concurrency is capped via NEXT_WORKER_THREADS=4 in the build script.
+  // TOKIO_WORKER_THREADS=1 in the build script caps Rust/SWC Tokio thread pool per worker.
+  // experimental.cpus limits Next.js concurrent page-data workers (default = number of routes).
   staticPageGenerationTimeout: 120,
   experimental: {
+    // Cap concurrent page-data workers. Without this Next.js defaults to 1 per route (63).
+    cpus: 2,
     optimizePackageImports: [
       "framer-motion",
       "@iconify/react",
