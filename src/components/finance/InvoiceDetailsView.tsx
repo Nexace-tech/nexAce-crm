@@ -6,6 +6,24 @@ import { cn } from "@/lib/utils";
 import { downloadInvoicePdf } from "@/lib/invoice-pdf";
 import { downloadElementAsPdf } from "@/lib/invoice-dom-pdf";
 
+export interface IInvoiceObjection {
+  category: string;
+  itemRef?: string;
+  remark: string;
+  attachmentUrl?: string;
+  attachmentName?: string;
+}
+
+export interface InvoiceObjectionFormItem {
+  id: string;
+  category: string;
+  itemRef: string;
+  customItemRef?: string;
+  remark: string;
+  attachmentUrl?: string;
+  attachmentName?: string;
+}
+
 export interface InvoiceDetailsItem {
   description: string;
   quantity: number;
@@ -80,13 +98,17 @@ export interface InvoiceDetailsData {
   approvedAt?: string;
   approverRole?: string;
   rejectionReason?: string;
+  rejectionRemark?: string;
+  objections?: IInvoiceObjection[];
   rejectedBy?: string;
   rejectedAt?: string;
   rejectionHistory?: Array<{
     reason: string;
+    remark?: string;
+    objections?: IInvoiceObjection[];
     rejectedBy: string;
     rejectedAt: string | Date;
-    role: string;
+    role?: string;
   }>;
   revisionCount?: number;
   hrReview?: {
@@ -112,7 +134,7 @@ export interface InvoiceDetailsData {
 interface InvoiceDetailsViewProps {
   invoice: InvoiceDetailsData;
   onClose?: () => void;
-  onStatusChange?: (newStatus: string, reason?: string) => void;
+  onStatusChange?: (newStatus: string, reason?: string, remark?: string, objections?: IInvoiceObjection[]) => void;
   onPaymentConfirm?: () => void; // intercepts "Paid" selection to open payment modal
   isUpdatingStatus?: boolean;
   scope?: "internal" | "external";
@@ -145,6 +167,48 @@ function numberToWords(num: number): string {
   return str.trim() + " Only";
 }
 
+function getItemChoicesForDetails(inv?: InvoiceDetailsData) {
+  const choices: Array<{ label: string; value: string; group?: string }> = [
+    { label: "General Invoice Issue (Whole Invoice)", value: "General Invoice Issue (Whole Invoice)" },
+  ];
+  if (!inv) return choices;
+
+  if (inv.items && inv.items.length > 0) {
+    inv.items.forEach((item, idx) => {
+      choices.push({
+        label: `Deliverable #${idx + 1}: ${item.description || "Line Item"} (${inv.currency || "$"}${item.amount || 0})`,
+        value: `Line Item #${idx + 1}: ${item.description || "Deliverable"}`,
+        group: "Deliverables",
+      });
+    });
+  }
+
+  const shifts = (inv as any).shiftAttendance?.records;
+  if (Array.isArray(shifts) && shifts.length > 0) {
+    shifts.forEach((shift: any, idx: number) => {
+      choices.push({
+        label: `Shift: ${shift.date || `Day ${idx + 1}`} (${shift.clockIn || "--"} - ${shift.clockOut || "--"}, ${shift.totalHours || 0} hrs)`,
+        value: `Shift Attendance: ${shift.date || `Day ${idx + 1}`} (${shift.totalHours || 0} hrs)`,
+        group: "Shift Attendance",
+      });
+    });
+  }
+
+  const ts = (inv as any).timesheetEntries?.records;
+  if (Array.isArray(ts) && ts.length > 0) {
+    ts.forEach((entry: any, idx: number) => {
+      choices.push({
+        label: `Timesheet #${idx + 1}: ${entry.date || ""} - ${entry.projectName || "Project"} (${entry.hours || 0} hrs)`,
+        value: `Timesheet: ${entry.projectName || "Project"} on ${entry.date || `Entry ${idx + 1}`}`,
+        group: "Timesheets",
+      });
+    });
+  }
+
+  choices.push({ label: "Custom / Other Item (Specify below)", value: "__CUSTOM__" });
+  return choices;
+}
+
 export function InvoiceDetailsView({
   invoice,
   onClose,
@@ -158,8 +222,19 @@ export function InvoiceDetailsView({
   const [companyLogoUrl, setCompanyLogoUrl] = useState<string>("");
   const [companySignatureUrl, setCompanySignatureUrl] = useState<string>("");
   const [isDownloadingPdf, setIsDownloadingPdf] = useState<boolean>(false);
+
+  const createBlankObjection = (): InvoiceObjectionFormItem => ({
+    id: Math.random().toString(36).substring(2, 9),
+    category: "Timesheet Hours Discrepancy",
+    itemRef: "General Invoice Issue (Whole Invoice)",
+    customItemRef: "",
+    remark: "",
+    attachmentUrl: "",
+    attachmentName: "",
+  });
+
   const [rejectModalOpen, setRejectModalOpen] = useState(false);
-  const [rejectReasonInput, setRejectReasonInput] = useState("");
+  const [objections, setObjections] = useState<InvoiceObjectionFormItem[]>([createBlankObjection()]);
   const [showTraceModal, setShowTraceModal] = useState(false);
 
   useEffect(() => {
@@ -884,7 +959,7 @@ export function InvoiceDetailsView({
                     size="sm"
                     disabled={isUpdatingStatus}
                     onClick={() => {
-                      setRejectReasonInput("");
+                      setObjections([createBlankObjection()]);
                       setRejectModalOpen(true);
                     }}
                     className="gap-1.5 font-bold h-8 px-3 cursor-pointer text-rose-600 border-rose-300 hover:bg-rose-50 dark:hover:bg-rose-950/30"
@@ -908,6 +983,14 @@ export function InvoiceDetailsView({
                 </Button>
               )}
 
+              {/* If Approved and viewed by HR (onPaymentConfirm undefined), show Awaiting Payment badge */}
+              {invoice.status === "Approved" && !onPaymentConfirm && (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/25">
+                  <i className="fa-solid fa-clock-rotate-left text-[10px]" />
+                  <span>Verified by HR &bull; Awaiting Admin Payment</span>
+                </span>
+              )}
+
               <div className="flex items-center gap-1.5">
                 <span className="text-[11px] font-semibold text-muted-foreground hidden sm:inline">Status:</span>
                 <select
@@ -916,13 +999,17 @@ export function InvoiceDetailsView({
                   onChange={(e) => {
                     const newVal = e.target.value;
                     if (newVal === "Paid") {
+                      if (!onPaymentConfirm) {
+                        alert("Forbidden: Only Admin or OPS can process payments. HR is authorized for attendance and timesheet verification only.");
+                        return;
+                      }
                       if (invoice.status !== "Approved") {
                         alert("Approval Mandatory: This invoice must be approved by an HR Partner or Admin before payment can be processed.");
                         return;
                       }
-                      if (onPaymentConfirm) onPaymentConfirm();
+                      onPaymentConfirm();
                     } else if (newVal === "Rejected") {
-                      setRejectReasonInput("");
+                      setObjections([createBlankObjection()]);
                       setRejectModalOpen(true);
                     } else {
                       onStatusChange(newVal);
@@ -934,9 +1021,11 @@ export function InvoiceDetailsView({
                   <option value="Sent">Sent</option>
                   <option value="Pending">Pending (HR Review)</option>
                   <option value="Approved">Approved (Ready for Payout)</option>
-                  <option value="Paid" disabled={invoice.status !== "Approved"}>
-                    {invoice.status === "Approved" ? "Paid" : "Paid (Requires Approval)"}
-                  </option>
+                  {onPaymentConfirm && (
+                    <option value="Paid" disabled={invoice.status !== "Approved"}>
+                      {invoice.status === "Approved" ? "Paid" : "Paid (Requires Approval)"}
+                    </option>
+                  )}
                   <option value="Rejected">Rejected</option>
                   <option value="Overdue">Overdue</option>
                   <option value="Cancelled">Cancelled</option>
@@ -1097,37 +1186,96 @@ export function InvoiceDetailsView({
 
       {/* ── Status Feedback Alerts ── */}
       {invoice.status === "Rejected" && (
-        <div className="p-4 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-rose-800 dark:text-rose-200 shadow-2xs">
-          <div className="flex items-start gap-2.5">
-            <i className="fa-solid fa-circle-xmark text-rose-600 dark:text-rose-400 mt-0.5 text-base shrink-0" />
-            <div className="space-y-0.5">
-              <p className="font-bold">Invoice Returned for Revision {invoice.rejectedBy ? `by ${invoice.rejectedBy}` : ""}</p>
-              <p className="text-xs text-rose-700 dark:text-rose-300">
-                <strong>Reason:</strong> {invoice.rejectionReason || "No explanation provided."}
-              </p>
+        <div className="p-4 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-2xl space-y-3 text-xs text-rose-800 dark:text-rose-200 shadow-2xs">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div className="flex items-start gap-2.5">
+              <i className="fa-solid fa-circle-xmark text-rose-600 dark:text-rose-400 mt-0.5 text-base shrink-0" />
+              <div>
+                <p className="font-bold text-sm text-rose-900 dark:text-rose-100">
+                  Invoice Returned for Revision {invoice.rejectedBy ? `by ${invoice.rejectedBy}` : ""}
+                </p>
+                <p className="text-[11px] text-rose-700 dark:text-rose-300">
+                  {(invoice.objections && invoice.objections.length > 0)
+                    ? `${invoice.objections.length} issue${invoice.objections.length !== 1 ? "s" : ""} flagged by reviewer. Please resolve the objections below before resubmitting.`
+                    : "Please review the feedback below and rectify before resubmitting."}
+                </p>
+              </div>
             </div>
+            {onReinitiate && (
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => onReinitiate(invoice)}
+                className="gap-1.5 font-bold h-8 px-3.5 cursor-pointer bg-rose-600 hover:bg-rose-700 text-white shrink-0 shadow-xs"
+              >
+                <i className="fa-solid fa-rotate-right text-[11px]" /> Fix &amp; Re-initiate
+              </Button>
+            )}
           </div>
-          {onReinitiate && (
-            <Button
-              type="button"
-              size="sm"
-              onClick={() => onReinitiate(invoice)}
-              className="gap-1.5 font-bold h-8 px-3.5 cursor-pointer bg-rose-600 hover:bg-rose-700 text-white shrink-0 shadow-xs"
-            >
-              <i className="fa-solid fa-rotate-right text-[11px]" /> Fix &amp; Re-initiate
-            </Button>
+
+          {/* Itemized Objections */}
+          {(invoice.objections && invoice.objections.length > 0) ? (
+            <div className="space-y-2 pt-1 border-t border-rose-200/80 dark:border-rose-900/60">
+              {invoice.objections.map((obj, oIdx) => (
+                <div
+                  key={oIdx}
+                  className="p-3 rounded-xl bg-white/70 dark:bg-card/70 border border-rose-200/60 dark:border-rose-900/40 text-foreground space-y-1.5 shadow-2xs"
+                >
+                  <div className="flex items-center justify-between flex-wrap gap-1.5">
+                    <span className="font-bold text-xs text-rose-700 dark:text-rose-400 flex items-center gap-1.5">
+                      <span className="w-4 h-4 rounded-full bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-300 text-[10px] flex items-center justify-center font-black">
+                        {oIdx + 1}
+                      </span>
+                      {obj.category}
+                    </span>
+                    {obj.itemRef && (
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-rose-100 dark:bg-rose-950/60 text-rose-800 dark:text-rose-200 font-semibold border border-rose-300/40">
+                        Disputed Item: {obj.itemRef}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground leading-relaxed pl-5">
+                    {obj.remark}
+                  </p>
+                  {obj.attachmentUrl && (
+                    <div className="pl-5 pt-1 flex items-center gap-2">
+                      <a
+                        href={obj.attachmentUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[11px] font-semibold text-rose-600 dark:text-rose-400 hover:underline flex items-center gap-1.5 bg-rose-50 dark:bg-rose-950/30 px-2.5 py-1 rounded-md border border-rose-200 dark:border-rose-900/40"
+                      >
+                        <i className="fa-solid fa-paperclip text-[10px]" />
+                        <span>View Attachment: {obj.attachmentName || "Proof Document"}</span>
+                      </a>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="space-y-1 pl-7">
+              <p className="text-xs text-rose-700 dark:text-rose-300">
+                <strong>Reason Category:</strong> {invoice.rejectionReason || "No explanation provided."}
+              </p>
+              {invoice.rejectionRemark && (
+                <div className="p-2 rounded-lg bg-rose-500/10 border border-rose-500/20 text-xs text-rose-800 dark:text-rose-200">
+                  <strong>Reviewer Remarks:</strong> {invoice.rejectionRemark}
+                </div>
+              )}
+            </div>
           )}
         </div>
       )}
 
       {/* ── Rejection Feedback Modal ── */}
       {rejectModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-150">
-          <div className="bg-card border border-border rounded-2xl p-6 max-w-lg w-full space-y-4 shadow-2xl relative">
-            <div className="flex items-center justify-between pb-3 border-b border-border">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-3 sm:p-4 animate-in fade-in duration-150">
+          <div className="bg-card border border-border rounded-2xl max-w-2xl w-full shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
+            <div className="px-5 py-3.5 border-b border-border flex items-center justify-between bg-rose-500/10 shrink-0">
               <div className="flex items-center gap-2 text-rose-600 dark:text-rose-400">
-                <i className="fa-solid fa-triangle-exclamation text-lg" />
-                <h3 className="font-bold text-base text-foreground">Reject Invoice with Mandatory Feedback</h3>
+                <i className="fa-solid fa-ban text-lg" />
+                <h3 className="font-bold text-sm sm:text-base text-foreground">Reject Invoice with Structured Feedback</h3>
               </div>
               <button
                 type="button"
@@ -1138,51 +1286,262 @@ export function InvoiceDetailsView({
               </button>
             </div>
 
-            <p className="text-xs text-muted-foreground">
-              Please provide clear, actionable feedback explaining why this timesheet or invoice is being returned. The raising user will be notified immediately to fix the issue and re-initiate.
-            </p>
+            <div className="p-4 sm:p-5 overflow-y-auto space-y-4">
+              <p className="text-xs text-muted-foreground">
+                Submit itemized objections explaining why this invoice is returned. Tag disputed line items or attendance shifts and optionally attach proof screenshots for the submitter.
+              </p>
 
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-foreground">
-                Rejection Reason &bull; Feedback for Submitter <span className="text-rose-500">*</span>
-              </label>
-              <textarea
-                rows={4}
-                value={rejectReasonInput}
-                onChange={(e) => setRejectReasonInput(e.target.value)}
-                placeholder="e.g., Shift clock log on Oct 14 is missing clock-out time. Overtime hours do not match assigned project tasks. Please update and re-submit."
-                className="w-full text-xs p-3 rounded-xl border border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-rose-500 resize-none font-medium"
-              />
-              <div className="flex justify-between text-[11px] text-muted-foreground">
-                <span>Must be clear and actionable</span>
-                <span>{rejectReasonInput.trim().length} chars</span>
+              <div className="space-y-3.5">
+                {objections.map((obj, index) => {
+                  const targetChoices = getItemChoicesForDetails(invoice);
+                  const isCustomTarget = obj.itemRef === "__CUSTOM__";
+
+                  return (
+                    <div
+                      key={obj.id}
+                      className="border border-border/80 rounded-xl bg-card p-4 space-y-3 relative shadow-2xs group hover:border-rose-400/40 transition-colors"
+                    >
+                      <div className="flex items-center justify-between pb-2 border-b border-border/50">
+                        <div className="flex items-center gap-2">
+                          <span className="w-5 h-5 rounded-full bg-rose-500/10 text-rose-600 dark:text-rose-400 font-bold text-[11px] flex items-center justify-center border border-rose-500/20">
+                            {index + 1}
+                          </span>
+                          <span className="font-bold text-xs text-foreground">
+                            Objection #{index + 1}
+                          </span>
+                        </div>
+                        {objections.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setObjections((prev) => prev.filter((o) => o.id !== obj.id));
+                            }}
+                            className="text-[11px] text-rose-600 hover:text-rose-700 font-semibold flex items-center gap-1 cursor-pointer hover:underline"
+                          >
+                            <i className="fa-solid fa-trash-can text-[10px]" />
+                            Remove
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-[11px] font-bold text-foreground block mb-1">
+                            Reason Category <span className="text-rose-500">*</span>
+                          </label>
+                          <select
+                            value={obj.category}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setObjections((prev) => prev.map((o) => o.id === obj.id ? { ...o, category: val } : o));
+                            }}
+                            className="w-full text-xs h-9 px-2.5 rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-rose-500 font-medium"
+                          >
+                            <option value="Timesheet Hours Discrepancy">Timesheet Hours Discrepancy</option>
+                            <option value="Attendance & Punch Clock Mismatch">Attendance &amp; Punch Clock Mismatch</option>
+                            <option value="Incorrect Billable Rate or Calculation">Incorrect Billable Rate or Calculation</option>
+                            <option value="Missing Required Documentation or Proof">Missing Required Documentation or Proof</option>
+                            <option value="Project / Task Scope Not Approved">Project / Task Scope Not Approved</option>
+                            <option value="Duplicate Invoice Submission">Duplicate Invoice Submission</option>
+                            <option value="Other / Custom Policy Violation">Other / Custom Policy Violation</option>
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="text-[11px] font-bold text-foreground block mb-1">
+                            Disputed Line Item / Shift / Task
+                          </label>
+                          <select
+                            value={obj.itemRef}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setObjections((prev) => prev.map((o) => o.id === obj.id ? { ...o, itemRef: val } : o));
+                            }}
+                            className="w-full text-xs h-9 px-2.5 rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-rose-500 font-medium truncate"
+                          >
+                            {targetChoices.map((choice, cIdx) => (
+                              <option key={cIdx} value={choice.value}>
+                                {choice.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+
+                      {isCustomTarget && (
+                        <div>
+                          <label className="text-[11px] font-bold text-foreground block mb-1">
+                            Specify Item / Shift Name
+                          </label>
+                          <input
+                            type="text"
+                            value={obj.customItemRef || ""}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setObjections((prev) => prev.map((o) => o.id === obj.id ? { ...o, customItemRef: val } : o));
+                            }}
+                            placeholder="e.g. October 14 Overtime Shift or Deliverable Task A"
+                            className="w-full text-xs h-8 px-2.5 rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-rose-500"
+                          />
+                        </div>
+                      )}
+
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="text-[11px] font-bold text-foreground">
+                            Actionable Remarks &bull; Explanation for Submitter <span className="text-rose-500">*</span>
+                          </label>
+                          <span className="text-[10px] text-muted-foreground font-mono">
+                            {obj.remark.trim().length} chars
+                          </span>
+                        </div>
+                        <textarea
+                          value={obj.remark}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setObjections((prev) => prev.map((o) => o.id === obj.id ? { ...o, remark: val } : o));
+                          }}
+                          placeholder="e.g. Discrepancy on punch clock: logged 8 hrs but biometric showed 6.5 hrs. Please adjust hours to match attendance."
+                          rows={2}
+                          className="w-full p-2 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500 resize-none font-medium"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-[11px] font-bold text-foreground flex items-center justify-between mb-1">
+                          <span className="flex items-center gap-1.5">
+                            <i className="fa-solid fa-paperclip text-muted-foreground text-[10px]" />
+                            Attach Issue Proof / Screenshot (Optional)
+                          </span>
+                          {obj.attachmentUrl && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setObjections((prev) => prev.map((o) => o.id === obj.id ? { ...o, attachmentUrl: "", attachmentName: "" } : o));
+                              }}
+                              className="text-[10px] text-rose-500 hover:underline cursor-pointer"
+                            >
+                              Remove Attachment
+                            </button>
+                          )}
+                        </label>
+
+                        {!obj.attachmentUrl ? (
+                          <label className="flex items-center gap-2 p-2 border border-dashed border-border rounded-lg hover:bg-muted/30 cursor-pointer transition-colors text-xs text-muted-foreground">
+                            <i className="fa-solid fa-cloud-arrow-up text-primary text-sm" />
+                            <span className="text-[11px]">Upload screenshot or proof PDF (max 5MB)</span>
+                            <input
+                              type="file"
+                              accept="image/*,.pdf"
+                              className="hidden"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (!file) return;
+                                if (file.size > 5 * 1024 * 1024) {
+                                  alert("File size must be under 5MB");
+                                  return;
+                                }
+                                const reader = new FileReader();
+                                reader.onload = () => {
+                                  setObjections((prev) => prev.map((o) => o.id === obj.id ? {
+                                    ...o,
+                                    attachmentUrl: reader.result as string,
+                                    attachmentName: file.name,
+                                  } : o));
+                                };
+                                reader.readAsDataURL(file);
+                              }}
+                            />
+                          </label>
+                        ) : (
+                          <div className="flex items-center gap-2.5 p-2 bg-muted/40 border border-border rounded-lg">
+                            {obj.attachmentUrl.startsWith("data:image/") ? (
+                              <img
+                                src={obj.attachmentUrl}
+                                alt="Proof Preview"
+                                className="w-10 h-10 object-cover rounded-md border border-border shrink-0"
+                              />
+                            ) : (
+                              <div className="w-10 h-10 rounded-md bg-rose-500/10 text-rose-600 flex items-center justify-center shrink-0 border border-rose-500/20">
+                                <i className="fa-solid fa-file-pdf text-base" />
+                              </div>
+                            )}
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-semibold text-foreground truncate">
+                                {obj.attachmentName || "Attached Proof"}
+                              </p>
+                              <p className="text-[10px] text-muted-foreground">Ready to attach</p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setObjections((prev) => prev.map((o) => o.id === obj.id ? { ...o, attachmentUrl: "", attachmentName: "" } : o));
+                              }}
+                              className="w-6 h-6 rounded-md hover:bg-rose-500/10 text-rose-500 flex items-center justify-center cursor-pointer shrink-0"
+                            >
+                              <i className="fa-solid fa-xmark text-xs" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setObjections((prev) => [...prev, createBlankObjection()]);
+                }}
+                className="w-full py-2.5 border-2 border-dashed border-border rounded-xl hover:border-primary/50 hover:bg-primary/5 text-primary text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+              >
+                <i className="fa-solid fa-plus text-xs" />
+                Add Another Objection
+              </button>
             </div>
 
-            <div className="flex justify-end gap-2 pt-2 border-t border-border">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setRejectModalOpen(false)}
-                className="cursor-pointer"
-              >
-                Cancel
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                disabled={!rejectReasonInput.trim() || isUpdatingStatus}
-                onClick={() => {
-                  if (onStatusChange && rejectReasonInput.trim()) {
-                    onStatusChange("Rejected", rejectReasonInput.trim());
-                    setRejectModalOpen(false);
-                  }
-                }}
-                className="bg-rose-600 hover:bg-rose-700 text-white font-bold cursor-pointer gap-1.5 disabled:opacity-50"
-              >
-                <i className="fa-solid fa-ban text-[11px]" /> Confirm Rejection
-              </Button>
+            <div className="px-5 py-3 border-t border-border bg-muted/20 flex items-center justify-between gap-2 shrink-0">
+              <span className="text-xs text-muted-foreground font-medium">
+                {objections.length} objection{objections.length !== 1 ? "s" : ""} configured
+              </span>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setRejectModalOpen(false)}
+                  className="cursor-pointer"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={objections.some((o) => !o.remark.trim()) || isUpdatingStatus}
+                  onClick={() => {
+                    if (objections.some((o) => !o.remark.trim())) {
+                      alert("Please provide actionable remarks for all objections");
+                      return;
+                    }
+                    const formatted = objections.map((o) => ({
+                      category: o.category,
+                      itemRef: o.itemRef === "__CUSTOM__" ? (o.customItemRef?.trim() || "Custom Item") : o.itemRef,
+                      remark: o.remark.trim(),
+                      attachmentUrl: o.attachmentUrl || "",
+                      attachmentName: o.attachmentName || "",
+                    }));
+                    if (onStatusChange) {
+                      onStatusChange("Rejected", formatted[0].category, formatted[0].remark, formatted);
+                      setRejectModalOpen(false);
+                    }
+                  }}
+                  className="bg-rose-600 hover:bg-rose-700 text-white font-bold cursor-pointer gap-1.5 disabled:opacity-50"
+                >
+                  <i className="fa-solid fa-ban text-[11px]" />
+                  Confirm Rejection ({objections.length})
+                </Button>
+              </div>
             </div>
           </div>
         </div>
@@ -1304,11 +1663,16 @@ export function InvoiceDetailsView({
       {invoice.status === "Rejected" && (
         <div className="p-3.5 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-2xl flex items-start gap-2.5 text-xs text-rose-800 dark:text-rose-200 shadow-2xs">
           <i className="fa-solid fa-triangle-exclamation text-rose-600 dark:text-rose-400 mt-0.5 text-sm shrink-0" />
-          <div className="space-y-0.5">
+          <div className="space-y-1">
             <p className="font-bold">Invoice Rejected {invoice.rejectedBy ? `by ${invoice.rejectedBy}` : ""}</p>
             <p className="text-[11px] text-rose-700 dark:text-rose-300">
-              <strong>Reason:</strong> {invoice.rejectionReason || "No explanation provided."}
+              <strong>Category:</strong> {invoice.rejectionReason || "No explanation provided."}
             </p>
+            {invoice.rejectionRemark && (
+              <p className="text-[11px] text-rose-800 dark:text-rose-200">
+                <strong>Remarks:</strong> {invoice.rejectionRemark}
+              </p>
+            )}
           </div>
         </div>
       )}

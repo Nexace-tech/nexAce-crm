@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/db";
-import { FinanceInvoice } from "@/models/FinanceInvoice";
+import { FinanceInvoice, IInvoiceObjection } from "@/models/FinanceInvoice";
 import { ActivityLog } from "@/models/ActivityLog";
 import { Tenant } from "@/models/Tenant";
 import { User } from "@/models/User";
@@ -16,14 +16,29 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const body = await request.json();
     await connectToDatabase();
 
-    // Fetch previous state so we can check if signatureUrl is already set
-    const previousInvoice = await FinanceInvoice.findOne({ _id: id, tenantId: tenantObjectId }).lean();
+    // Fetch previous state from FinanceInvoice, fallback to ITInvoice if needed
+    let isITInvoice = false;
+    let previousInvoice = await FinanceInvoice.findOne({ _id: id, tenantId: tenantObjectId }).lean();
     if (!previousInvoice) {
-      return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
+      const { ITInvoice } = await import("@/models/ITInvoice");
+      previousInvoice = await ITInvoice.findOne({ _id: id, tenantId: tenantObjectId }).lean();
+      if (!previousInvoice) {
+        return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
+      }
+      isITInvoice = true;
     }
 
     // ── MANDATORY APPROVAL GATE BEFORE PAYMENT ───────────────────────────────
+    // Payment processing can only be executed by Admin or OPS. HR is strictly prohibited.
     if (body.status === "Paid") {
+      if (session.role === "HR") {
+        return NextResponse.json(
+          {
+            error: "Forbidden: Payment processing can only be executed by Admin or OPS. HR is authorized for attendance & timesheet verification only.",
+          },
+          { status: 403 }
+        );
+      }
       if ((previousInvoice as any).status !== "Approved") {
         return NextResponse.json(
           {
@@ -45,6 +60,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       updateBody.approvalStage = "PENDING_REVIEW";
       updateBody.revisionCount = nextRev;
       updateBody.rejectionReason = "";
+      updateBody.rejectionRemark = "";
+      updateBody.objections = [];
       updateBody.rejectedBy = "";
       updateBody.rejectedAt = "";
 
@@ -64,6 +81,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       updateBody.approvedAt = new Date().toISOString();
       updateBody.approverRole = session.role === "HR" ? "HR" : "Admin";
       updateBody.rejectionReason = "";
+      updateBody.rejectionRemark = "";
+      updateBody.objections = [];
       updateBody.rejectedBy = "";
       updateBody.rejectedAt = "";
 
@@ -77,21 +96,67 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         timestamp: new Date(),
       };
     } else if (body.status === "Rejected") {
-      if (!body.rejectionReason || !body.rejectionReason.trim()) {
+      let formattedObjections: IInvoiceObjection[] = [];
+      if (Array.isArray(body.objections) && body.objections.length > 0) {
+        formattedObjections = body.objections
+          .filter((o: any) => o && (o.category || o.remark))
+          .map((o: any) => ({
+            category: String(o.category || "General Discrepancy").trim(),
+            itemRef: String(o.itemRef || "").trim(),
+            remark: String(o.remark || "").trim(),
+            attachmentUrl: String(o.attachmentUrl || "").trim(),
+            attachmentName: String(o.attachmentName || "").trim(),
+          }));
+      }
+
+      const primaryCategory = (
+        (formattedObjections.length > 0 ? formattedObjections[0].category : "") ||
+        body.rejectionReason ||
+        body.reason ||
+        "General Discrepancy"
+      ).trim();
+
+      const primaryRemark = (
+        (formattedObjections.length > 0 ? formattedObjections[0].remark : "") ||
+        body.rejectionRemark ||
+        body.remark ||
+        body.rejectionReason ||
+        ""
+      ).trim();
+
+      if (!primaryRemark && !primaryCategory && formattedObjections.length === 0) {
         return NextResponse.json(
-          { error: "Rejection feedback reason is mandatory" },
+          { error: "Rejection reason and actionable remarks are mandatory" },
           { status: 400 }
         );
       }
-      const reasonText = body.rejectionReason.trim();
+
+      if (formattedObjections.length === 0) {
+        formattedObjections = [
+          {
+            category: primaryCategory,
+            itemRef: String(body.itemRef || "").trim(),
+            remark: primaryRemark,
+            attachmentUrl: String(body.attachmentUrl || "").trim(),
+            attachmentName: String(body.attachmentName || "").trim(),
+          },
+        ];
+      }
+
       updateBody.status = "Rejected";
       updateBody.approvalStage = "REJECTED";
-      updateBody.rejectionReason = reasonText;
+      updateBody.rejectionReason = primaryCategory;
+      updateBody.rejectionRemark = primaryRemark;
+      updateBody.objections = formattedObjections;
       updateBody.rejectedBy = session.userName || "Admin";
       updateBody.rejectedAt = new Date().toISOString();
       updateBody.approvedBy = "";
       updateBody.approvedAt = "";
       updateBody.approverRole = "";
+
+      const objSummary = formattedObjections.length > 1
+        ? `[${formattedObjections.length} Issues Flagged] ${formattedObjections.map((o, idx) => `#${idx + 1} ${o.category}${o.itemRef ? ` (${o.itemRef})` : ""}: ${o.remark}${o.attachmentUrl ? " 📎" : ""}`).join(" | ")}`
+        : `[${primaryCategory}${formattedObjections[0]?.itemRef ? ` (${formattedObjections[0]?.itemRef})` : ""}] ${primaryRemark}${formattedObjections[0]?.attachmentUrl ? " 📎" : ""}`;
 
       newTimelineEvent = {
         stage: "REJECTED",
@@ -99,12 +164,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         actorName: session.userName || "Admin",
         actorRole: session.role,
         actorId: userObjectId,
-        note: reasonText,
+        note: objSummary,
         timestamp: new Date(),
       };
 
       newRejectionHistoryItem = {
-        reason: reasonText,
+        reason: primaryCategory,
+        remark: primaryRemark,
+        objections: formattedObjections,
         rejectedBy: session.userName || "Admin",
         rejectedAt: new Date(),
         role: session.role,
@@ -168,11 +235,21 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (newRejectionHistoryItem) pushOps.rejectionHistory = newRejectionHistoryItem;
     if (Object.keys(pushOps).length > 0) mongoUpdate.$push = pushOps;
 
-    const invoice = await FinanceInvoice.findOneAndUpdate(
-      { _id: id, tenantId: tenantObjectId },
-      mongoUpdate,
-      { new: true }
-    );
+    let invoice = null;
+    if (isITInvoice) {
+      const { ITInvoice } = await import("@/models/ITInvoice");
+      invoice = await ITInvoice.findOneAndUpdate(
+        { _id: id, tenantId: tenantObjectId },
+        mongoUpdate,
+        { new: true }
+      );
+    } else {
+      invoice = await FinanceInvoice.findOneAndUpdate(
+        { _id: id, tenantId: tenantObjectId },
+        mongoUpdate,
+        { new: true }
+      );
+    }
 
     if (!invoice) {
       return NextResponse.json({ error: "Invoice not found" }, { status: 404 });
@@ -190,7 +267,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
             message = `Your invoice ${invoice.invoiceNo} for ${invoice.client} has been approved by ${session.userName}.`;
           } else if (invoice.status === "Rejected") {
             title = `❌ Invoice ${invoice.invoiceNo} Needs Revision`;
-            message = `Your invoice ${invoice.invoiceNo} was rejected by ${session.userName}. Reason: ${invoice.rejectionReason}`;
+            message = `Your invoice was rejected by ${session.userName}. Reason: ${invoice.rejectionReason || "Discrepancy"}. Remark: ${invoice.rejectionRemark || "Please review and fix issues."}`;
           } else if (invoice.status === "Paid") {
             title = `✅ Invoice ${invoice.invoiceNo} Paid`;
             message = `Payment for invoice ${invoice.invoiceNo} has been marked as settled by ${session.userName}.`;

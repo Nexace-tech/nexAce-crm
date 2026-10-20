@@ -198,6 +198,11 @@ export function getNotificationTargetUrl(n: { type?: string; title?: string; mes
     return "/dashboard/clients?tab=users&filter=Pending";
   }
 
+  // Shift extension notifications
+  if (type === "shift_extension" || title.includes("shift extension") || msg.includes("shift extension") || title.includes("shift time") || msg.includes("additional shift")) {
+    return "/dashboard/calendar?tab=attendance";
+  }
+
   // Invoice notifications
   if (title.includes("invoice") || msg.includes("invoice")) {
     if (title.includes("new invoice") || msg.includes("review") || msg.includes("submitted invoice")) {

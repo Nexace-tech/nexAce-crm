@@ -88,7 +88,9 @@ export const FEATURE_ACTIONS: FeatureMeta[] = [
   { key: "exportTimesheets", name: "Export Timesheet Reports", category: "Calendar & Time", subGroup: "Timesheets & Hours Logging", description: "Download CSV/PDF timesheet data for payroll", icon: "fa-solid fa-file-csv" },
   { key: "manageShifts", name: "Manage Shift Schedules", category: "Calendar & Time", subGroup: "Shifts & Punch Clock", description: "Create, edit, and assign shift slots to employees", icon: "fa-solid fa-calendar-plus" },
   { key: "viewShiftCalendar", name: "View Team Shift Calendar", category: "Calendar & Time", subGroup: "Shifts & Punch Clock", description: "Access full team shift calendar and roster overview", icon: "fa-solid fa-calendar-days" },
-  { key: "clockInOut", name: "Clock In & Clock Out Shift", category: "Calendar & Time", subGroup: "Shifts & Punch Clock", description: "Record daily shift punch-in and punch-out attendance", icon: "fa-solid fa-business-time" },
+  { key: "canViewShiftClock", name: "Access Shift Clock Tab", category: "Calendar & Time", subGroup: "Shifts & Punch Clock", description: "View the Shift Clock & Attendance tab in Calendar (Admin, OPS & HR by default)", icon: "fa-solid fa-fingerprint" },
+  { key: "approveAdditionalShiftTime", name: "Approve Additional Shift Time", category: "Calendar & Time", subGroup: "Shifts & Punch Clock", description: "Review and approve employee requests to extend shift time past the 10-hour limit", icon: "fa-solid fa-clock-rotate-left" },
+  { key: "viewLoginHoursSummary", name: "View Login & Hours Summary", category: "Calendar & Time", subGroup: "Timesheets & Hours Logging", description: "Access aggregated employee login times, clock-in/out records, and working hours summary report", icon: "fa-solid fa-user-clock" },
   { key: "viewTeamAvailability", name: "View Team Availability Roster", category: "Calendar & Time", subGroup: "Availability & Scheduling", description: "Access team-wide work availability roster, filter staff by department, and inspect member schedules", icon: "fa-solid fa-user-clock" },
   { key: "manageTeamAvailability", name: "Manage Team Work Availability", category: "Calendar & Time", subGroup: "Availability & Scheduling", description: "Record, edit, and coordinate work availability and shift hours for other team members and flexible staff", icon: "fa-solid fa-calendar-check" },
   { key: "logOwnAvailability", name: "Record Own Work Availability", category: "Calendar & Time", subGroup: "Availability & Scheduling", description: "Mark personal available dates, partial shift hours, and offline rest days", icon: "fa-solid fa-calendar-plus" },
@@ -196,6 +198,7 @@ export const FEATURE_ACTIONS: FeatureMeta[] = [
   { key: "exportInvoices", name: "Export & Download Invoices PDF", category: "Finance & Invoices", subGroup: "Invoices Management", description: "Download official PDF invoice documents and export data", icon: "fa-solid fa-file-pdf" },
   { key: "manageExpenses", name: "Record & Manage Expenses", category: "Finance & Invoices", subGroup: "Expenses & Budget", description: "Create, categorize, edit, and delete company operational expenses", icon: "fa-solid fa-money-bill-transfer" },
   { key: "viewExpenseReports", name: "View Financial & Expense Reports", category: "Finance & Invoices", subGroup: "Expenses & Budget", description: "Access detailed monthly expense breakdowns and audit reports", icon: "fa-solid fa-chart-pie" },
+  { key: "uploadInvoiceExcel", name: "Upload Excel Files for Invoice Generation", category: "Finance & Invoices", subGroup: "Invoices Management", description: "Allow users with this role to upload Excel (.xlsx, .xls, .csv) timesheets and itemized billing spreadsheets when generating invoices (configured dynamically per role)", icon: "fa-solid fa-file-excel" },
 
   // IT & Infrastructure
   { key: "viewITPortal", name: "Access IT Portal", category: "IT & Infrastructure", subGroup: "IT Command Center", description: "Browse the IT Portal overview and hardware/software inventory", icon: "fa-solid fa-terminal" },
@@ -306,7 +309,7 @@ const PRESET_TEMPLATES: RolePresetTemplate[] = [
     features: [
       "viewKpiWidgets", "viewShiftOverview", "viewRecentActivity", "viewAnnouncements",
       "viewTeamDirectory", "viewEmployeeProfiles", "viewOrgChart", "reassignReportingLine",
-      "logOwnTimesheet", "editOwnTimesheet", "viewTeamTimesheets", "approveTimesheets", "exportTimesheets", "manageShifts", "viewShiftCalendar", "clockInOut",
+      "logOwnTimesheet", "editOwnTimesheet", "viewTeamTimesheets", "approveTimesheets", "exportTimesheets", "manageShifts", "viewShiftCalendar", "clockInOut", "canViewShiftClock", "viewLoginHoursSummary", "approveAdditionalShiftTime",
       "viewTeamAvailability", "manageTeamAvailability", "logOwnAvailability",
       "viewProjects", "createProjects", "deleteProjects", "assignTasksToOthers", "changeTaskStatus", "commentOnTasks", "deleteTaskComments", "manageProjectWiki", "viewProjectGantt", "exportProjectData",
       "createSprints", "moveBetweenSprints", "completeSprints", "deleteSprints",
@@ -328,7 +331,7 @@ const PRESET_TEMPLATES: RolePresetTemplate[] = [
     features: [
       "viewKpiWidgets", "viewShiftOverview", "viewAnnouncements",
       "viewTeamDirectory", "viewEmployeeProfiles", "editEmployeeProfiles", "inviteTeamMembers", "viewOrgChart", "reassignReportingLine",
-      "logOwnTimesheet", "editOwnTimesheet", "viewTeamTimesheets", "approveTimesheets", "exportTimesheets", "clockInOut", "viewShiftCalendar", "viewTeamAvailability", "manageTeamAvailability", "logOwnAvailability",
+      "logOwnTimesheet", "editOwnTimesheet", "viewTeamTimesheets", "approveTimesheets", "exportTimesheets", "clockInOut", "canViewShiftClock", "viewShiftCalendar", "viewLoginHoursSummary", "approveAdditionalShiftTime", "viewTeamAvailability", "manageTeamAvailability", "logOwnAvailability",
       "viewOwnLeaves", "applyLeaves", "viewAllLeaves", "approveLeaves", "manageCompanyChecklists", "manageHRVault", "manageHRCases", "reassignHRPartner", "manageHRIsolation", "approveTimesheetsAndInvoices", "approveInvoices",
       "viewOwnAppraisals", "submitSelfReview", "viewManagerReviews", "createAppraisalCycles",
       "viewGoals", "sendKudos", "submitSurvey", "createPulseSurveys",

@@ -20,6 +20,11 @@ export interface IAttendance extends Document {
   regularHours?: number;
   overtimeHours?: number;
   status: "Present" | "On Leave" | "Absent";
+  extensionRequested?: boolean;
+  extensionReason?: string;
+  extensionApproved?: boolean;
+  extensionApprovedBy?: mongoose.Types.ObjectId;
+  extensionApprovedAt?: Date;
   tenantId: mongoose.Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
@@ -51,6 +56,11 @@ const AttendanceSchema = new Schema<IAttendance>(
       enum: ["Present", "On Leave", "Absent"],
       default: "Present",
     },
+    extensionRequested: { type: Boolean, default: false },
+    extensionReason: { type: String, default: "" },
+    extensionApproved: { type: Boolean, default: false },
+    extensionApprovedBy: { type: Schema.Types.ObjectId, ref: "User" },
+    extensionApprovedAt: { type: Date },
     tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true },
   },
   { timestamps: true }

@@ -10,6 +10,14 @@ export interface IFinanceInvoiceTimelineEvent {
   timestamp: Date | string;
 }
 
+export interface IInvoiceObjection {
+  category: string;
+  itemRef?: string;
+  remark: string;
+  attachmentUrl?: string;
+  attachmentName?: string;
+}
+
 export interface IFinanceInvoice extends Document {
   tenantId: mongoose.Types.ObjectId;
   createdBy: mongoose.Types.ObjectId;
@@ -35,10 +43,14 @@ export interface IFinanceInvoice extends Document {
   approvedAt?: string;
   approverRole?: string;
   rejectionReason?: string;
+  rejectionRemark?: string;
+  objections?: IInvoiceObjection[];
   rejectedBy?: string;
   rejectedAt?: string;
   rejectionHistory?: Array<{
     reason: string;
+    remark?: string;
+    objections?: IInvoiceObjection[];
     rejectedBy: string;
     rejectedAt: Date | string;
     role: string;
@@ -97,11 +109,31 @@ const FinanceInvoiceSchema = new Schema<IFinanceInvoice>(
     approvedAt: { type: String, default: "" },
     approverRole: { type: String, default: "" },
     rejectionReason: { type: String, default: "" },
+    rejectionRemark: { type: String, default: "" },
+    objections: [
+      {
+        category: { type: String, required: true },
+        itemRef: { type: String, default: "" },
+        remark: { type: String, required: true },
+        attachmentUrl: { type: String, default: "" },
+        attachmentName: { type: String, default: "" },
+      },
+    ],
     rejectedBy: { type: String, default: "" },
     rejectedAt: { type: String, default: "" },
     rejectionHistory: [
       {
         reason: { type: String, required: true },
+        remark: { type: String, default: "" },
+        objections: [
+          {
+            category: { type: String, required: true },
+            itemRef: { type: String, default: "" },
+            remark: { type: String, required: true },
+            attachmentUrl: { type: String, default: "" },
+            attachmentName: { type: String, default: "" },
+          },
+        ],
         rejectedBy: { type: String, required: true },
         rejectedAt: { type: Date, default: Date.now },
         role: { type: String, default: "Admin" },

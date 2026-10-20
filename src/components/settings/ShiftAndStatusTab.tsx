@@ -34,6 +34,9 @@ export function ShiftAndStatusTab({ isAdmin, showToast }: ShiftAndStatusTabProps
   const [teamMembers, setTeamMembers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [savingRules, setSavingRules] = useState(false);
+  const [maxShiftHours, setMaxShiftHours] = useState<number>(10);
+  const [targetShiftHours, setTargetShiftHours] = useState<number>(8);
 
   // New Shift Form States
   const [showAddShiftModal, setShowAddShiftModal] = useState(false);
@@ -66,6 +69,8 @@ export function ShiftAndStatusTab({ isAdmin, showToast }: ShiftAndStatusTabProps
         const sData = await shiftsRes.json();
         setShifts(sData.shifts || []);
         setEmploymentTypes(sData.employmentTypes || ["Permanent", "Freelancer", "Part-Time", "Contractor", "Intern"]);
+        if (sData.maxShiftHours) setMaxShiftHours(Number(sData.maxShiftHours));
+        if (sData.targetShiftHours) setTargetShiftHours(Number(sData.targetShiftHours));
       }
 
       if (teamRes.ok) {
@@ -102,6 +107,29 @@ export function ShiftAndStatusTab({ isAdmin, showToast }: ShiftAndStatusTabProps
       showToast("Error updating settings", "error");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleSaveShiftRules = async () => {
+    try {
+      setSavingRules(true);
+      const res = await fetch("/api/settings/shifts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          maxShiftHours: Number(maxShiftHours),
+          targetShiftHours: Number(targetShiftHours),
+        }),
+      });
+      if (res.ok) {
+        showToast("Shift rules updated! Auto clock-out cap set to " + maxShiftHours + "h.");
+      } else {
+        showToast("Failed to save shift rules", "error");
+      }
+    } catch {
+      showToast("Error updating shift rules", "error");
+    } finally {
+      setSavingRules(false);
     }
   };
 
@@ -188,7 +216,7 @@ export function ShiftAndStatusTab({ isAdmin, showToast }: ShiftAndStatusTabProps
                 <i className="fa-solid fa-clock-rotate-left text-primary" /> Workspace Shifts &amp; Employment Statuses
               </CardTitle>
               <CardDescription className="mt-1">
-                Configure custom shift schedules (Day, Night, Weekend) and employee employment types (Permanent, Freelancer, Part-Time).
+                Configure custom shift schedules (Day, Night, Weekend), shift hour limits, and employee employment types.
               </CardDescription>
             </div>
             {isAdmin && (
@@ -203,6 +231,101 @@ export function ShiftAndStatusTab({ isAdmin, showToast }: ShiftAndStatusTabProps
             )}
           </div>
         </CardHeader>
+      </Card>
+
+      {/* SHIFT DURATION & AUTO CLOCK-OUT POLICY */}
+      <Card className="border border-border/80 bg-gradient-to-br from-card via-card to-primary/5 shadow-xs overflow-hidden">
+        <CardHeader className="pb-3 border-b border-border/60">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-xl bg-primary/10 text-primary flex items-center justify-center border border-primary/20 shrink-0">
+                <i className="fa-solid fa-stopwatch text-sm" />
+              </div>
+              <div>
+                <CardTitle className="text-sm font-bold flex items-center gap-2">
+                  Shift Duration &amp; Auto Clock-Out Policy
+                </CardTitle>
+                <CardDescription className="text-xs">
+                  Set standard work hours target and the maximum allowable shift duration before auto clock-out.
+                </CardDescription>
+              </div>
+            </div>
+            {isAdmin && (
+              <Button
+                color="primary"
+                size="sm"
+                onClick={handleSaveShiftRules}
+                disabled={savingRules}
+                className="gap-1.5 font-semibold text-xs cursor-pointer shrink-0"
+              >
+                {savingRules ? (
+                  <><i className="fa-solid fa-spinner animate-spin text-xs" /> Saving...</>
+                ) : (
+                  <><i className="fa-solid fa-floppy-disk text-xs" /> Save Shift Rules</>
+                )}
+              </Button>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent className="p-4 sm:p-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {/* Target Hours */}
+            <div className="p-3.5 rounded-xl border border-border bg-background/80 space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                  <i className="fa-solid fa-business-time text-emerald-500" /> Standard Target Hours
+                </label>
+                <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 border border-emerald-500/20">
+                  Regular Shift
+                </span>
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                Base working hours expected per shift. Working past this will accrue overtime hours.
+              </p>
+              <div className="flex items-center gap-2 pt-1">
+                <Input
+                  type="number"
+                  step="0.5"
+                  min="1"
+                  max="24"
+                  value={targetShiftHours}
+                  disabled={!isAdmin}
+                  onChange={(e) => setTargetShiftHours(Math.max(1, Number(e.target.value) || 1))}
+                  className="w-28 text-sm font-mono font-bold"
+                />
+                <span className="text-xs font-semibold text-muted-foreground">hours / shift</span>
+              </div>
+            </div>
+
+            {/* Max Shift Hours */}
+            <div className="p-3.5 rounded-xl border border-border bg-background/80 space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                  <i className="fa-solid fa-triangle-exclamation text-amber-500" /> Max Shift Duration (Hard Cap)
+                </label>
+                <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 border border-amber-500/20">
+                  Auto Clock-Out
+                </span>
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                Hard ceiling for shifts. When an active shift hits this limit, the system automatically clocks the employee out.
+              </p>
+              <div className="flex items-center gap-2 pt-1">
+                <Input
+                  type="number"
+                  step="0.5"
+                  min="1"
+                  max="24"
+                  value={maxShiftHours}
+                  disabled={!isAdmin}
+                  onChange={(e) => setMaxShiftHours(Math.max(1, Number(e.target.value) || 1))}
+                  className="w-28 text-sm font-mono font-bold"
+                />
+                <span className="text-xs font-semibold text-muted-foreground">hours max</span>
+              </div>
+            </div>
+          </div>
+        </CardContent>
       </Card>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

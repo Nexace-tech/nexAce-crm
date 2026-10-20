@@ -84,7 +84,7 @@ export const DEFAULT_FEATURE_PERMISSIONS: Record<string, Record<string, boolean>
     // Team
     viewTeamDirectory: true, viewEmployeeProfiles: true, editEmployeeProfiles: true, inviteTeamMembers: true, deactivateEmployees: true, reassignReportingLine: true, viewSalaryData: true, viewOrgChart: true,
     // Calendar & Time
-    logOwnTimesheet: true, editOwnTimesheet: true, viewTeamTimesheets: true, approveTimesheets: true, exportTimesheets: true, manageShifts: true, viewShiftCalendar: true, clockInOut: true, viewTeamAvailability: true, manageTeamAvailability: true, logOwnAvailability: true,
+    logOwnTimesheet: true, editOwnTimesheet: true, viewTeamTimesheets: true, approveTimesheets: true, exportTimesheets: true, manageShifts: true, viewShiftCalendar: true, clockInOut: true, canViewShiftClock: true, viewLoginHoursSummary: true, approveAdditionalShiftTime: true, viewTeamAvailability: true, manageTeamAvailability: true, logOwnAvailability: true,
     // Projects
     viewProjects: true, createProjects: true, deleteProjects: true, assignTasksToOthers: true, changeTaskStatus: true, commentOnTasks: true, deleteTaskComments: true, manageProjectWiki: true, viewProjectGantt: true, exportProjectData: true,
     // Sprints
@@ -107,7 +107,7 @@ export const DEFAULT_FEATURE_PERMISSIONS: Record<string, Record<string, boolean>
     // BD & Leads
     viewBD: true, manageLeads: true, deleteLeads: true, manageProposals: true, sendProposals: true, manageExecutiveTargets: true, exportBD: true,
     // Finance & Invoices
-    viewFinancePortal: true, createInvoices: true, approveInvoices: true, confirmInvoicePayments: true, exportInvoices: true, manageExpenses: true, viewExpenseReports: true,
+    viewFinancePortal: true, createInvoices: true, approveInvoices: true, confirmInvoicePayments: true, exportInvoices: true, manageExpenses: true, viewExpenseReports: true, uploadInvoiceExcel: true,
     // IT & Infrastructure
     viewITPortal: true, manageITAccess: true, manageITSubscriptions: true, manageITDevices: true, manageITInvoices: true,
     // Referrals
@@ -123,7 +123,7 @@ export const DEFAULT_FEATURE_PERMISSIONS: Record<string, Record<string, boolean>
     // Team
     viewTeamDirectory: true, viewEmployeeProfiles: true, editEmployeeProfiles: false, inviteTeamMembers: false, deactivateEmployees: false, reassignReportingLine: true, viewSalaryData: false, viewOrgChart: true,
     // Calendar & Time
-    logOwnTimesheet: true, editOwnTimesheet: true, viewTeamTimesheets: true, approveTimesheets: true, exportTimesheets: true, manageShifts: true, viewShiftCalendar: true, clockInOut: true, viewTeamAvailability: true, manageTeamAvailability: true, logOwnAvailability: true,
+    logOwnTimesheet: true, editOwnTimesheet: true, viewTeamTimesheets: true, approveTimesheets: true, exportTimesheets: true, manageShifts: true, viewShiftCalendar: true, clockInOut: true, canViewShiftClock: true, viewLoginHoursSummary: false, approveAdditionalShiftTime: false, viewTeamAvailability: true, manageTeamAvailability: true, logOwnAvailability: true,
     // Projects
     viewProjects: true, createProjects: true, deleteProjects: false, assignTasksToOthers: true, changeTaskStatus: true, commentOnTasks: true, deleteTaskComments: false, manageProjectWiki: true, viewProjectGantt: true, exportProjectData: true,
     // Sprints
@@ -146,7 +146,7 @@ export const DEFAULT_FEATURE_PERMISSIONS: Record<string, Record<string, boolean>
     // BD & Leads
     viewBD: true, manageLeads: true, deleteLeads: false, manageProposals: true, sendProposals: true, manageExecutiveTargets: false, exportBD: true,
     // Finance & Invoices
-    viewFinancePortal: false, createInvoices: true, approveInvoices: false, confirmInvoicePayments: false, exportInvoices: true, manageExpenses: false, viewExpenseReports: false,
+    viewFinancePortal: false, createInvoices: true, approveInvoices: false, confirmInvoicePayments: false, exportInvoices: true, manageExpenses: false, viewExpenseReports: false, uploadInvoiceExcel: true,
     // IT & Infrastructure
     viewITPortal: false, manageITAccess: false, manageITSubscriptions: false, manageITDevices: false, manageITInvoices: false,
     // Referrals
@@ -162,7 +162,7 @@ export const DEFAULT_FEATURE_PERMISSIONS: Record<string, Record<string, boolean>
     // Team
     viewTeamDirectory: true, viewEmployeeProfiles: true, editEmployeeProfiles: true, inviteTeamMembers: true, deactivateEmployees: false, reassignReportingLine: true, viewSalaryData: true, viewOrgChart: true,
     // Calendar & Time
-    logOwnTimesheet: true, editOwnTimesheet: true, viewTeamTimesheets: true, approveTimesheets: true, exportTimesheets: true, manageShifts: false, viewShiftCalendar: true, clockInOut: true, viewTeamAvailability: true, manageTeamAvailability: true, logOwnAvailability: true,
+    logOwnTimesheet: true, editOwnTimesheet: true, viewTeamTimesheets: true, approveTimesheets: true, exportTimesheets: true, manageShifts: false, viewShiftCalendar: true, clockInOut: true, canViewShiftClock: true, viewLoginHoursSummary: true, approveAdditionalShiftTime: true, viewTeamAvailability: true, manageTeamAvailability: true, logOwnAvailability: true,
     // Projects
     viewProjects: true, createProjects: false, deleteProjects: false, assignTasksToOthers: false, changeTaskStatus: false, commentOnTasks: true, deleteTaskComments: false, manageProjectWiki: true, viewProjectGantt: true, exportProjectData: false,
     // Sprints
@@ -185,7 +185,7 @@ export const DEFAULT_FEATURE_PERMISSIONS: Record<string, Record<string, boolean>
     // BD & Leads
     viewBD: false, manageLeads: false, deleteLeads: false, manageProposals: false, sendProposals: false, manageExecutiveTargets: false, exportBD: false,
     // Finance & Invoices
-    viewFinancePortal: false, createInvoices: false, approveInvoices: true, confirmInvoicePayments: false, exportInvoices: false, manageExpenses: false, viewExpenseReports: false,
+    viewFinancePortal: false, createInvoices: false, approveInvoices: true, confirmInvoicePayments: false, exportInvoices: false, manageExpenses: false, viewExpenseReports: false, uploadInvoiceExcel: false,
     // IT & Infrastructure
     viewITPortal: true, manageITAccess: false, manageITSubscriptions: false, manageITDevices: true, manageITInvoices: false,
     // Referrals
@@ -201,7 +201,7 @@ export const DEFAULT_FEATURE_PERMISSIONS: Record<string, Record<string, boolean>
     // Team
     viewTeamDirectory: true, viewEmployeeProfiles: true, editEmployeeProfiles: false, inviteTeamMembers: false, deactivateEmployees: false, reassignReportingLine: false, viewSalaryData: false, viewOrgChart: true,
     // Calendar & Time
-    logOwnTimesheet: true, editOwnTimesheet: true, viewTeamTimesheets: false, approveTimesheets: false, exportTimesheets: false, manageShifts: false, viewShiftCalendar: true, clockInOut: true, viewTeamAvailability: false, manageTeamAvailability: false, logOwnAvailability: true,
+    logOwnTimesheet: true, editOwnTimesheet: true, viewTeamTimesheets: false, approveTimesheets: false, exportTimesheets: false, manageShifts: false, viewShiftCalendar: true, clockInOut: true, canViewShiftClock: true, viewLoginHoursSummary: false, approveAdditionalShiftTime: false, viewTeamAvailability: false, manageTeamAvailability: false, logOwnAvailability: true,
     // Projects
     viewProjects: true, createProjects: false, deleteProjects: false, assignTasksToOthers: false, changeTaskStatus: true, commentOnTasks: true, deleteTaskComments: false, manageProjectWiki: false, viewProjectGantt: true, exportProjectData: false,
     // Sprints
@@ -224,7 +224,7 @@ export const DEFAULT_FEATURE_PERMISSIONS: Record<string, Record<string, boolean>
     // BD & Leads
     viewBD: false, manageLeads: false, deleteLeads: false, manageProposals: false, sendProposals: false, manageExecutiveTargets: false, exportBD: false,
     // Finance & Invoices
-    viewFinancePortal: false, createInvoices: false, approveInvoices: false, confirmInvoicePayments: false, exportInvoices: false, manageExpenses: false, viewExpenseReports: false,
+    viewFinancePortal: false, createInvoices: false, approveInvoices: false, confirmInvoicePayments: false, exportInvoices: false, manageExpenses: false, viewExpenseReports: false, uploadInvoiceExcel: false,
     // IT & Infrastructure
     viewITPortal: false, manageITAccess: false, manageITSubscriptions: false, manageITDevices: false, manageITInvoices: false,
     // Referrals
@@ -333,22 +333,10 @@ export async function GET() {
       featurePermissionsMap.HR.manageContracts = true;
       featurePermissionsMap.HR.manageHRWorkdesk = true;
       featurePermissionsMap.HR.viewClients = false;
-      featurePermissionsMap.HR.approveTimesheetsAndInvoices = true;
-      featurePermissionsMap.HR.approveInvoices = true;
-    }
-    if (featurePermissionsMap.OPS) {
-      featurePermissionsMap.OPS.approveTimesheetsAndInvoices = true;
-      featurePermissionsMap.OPS.approveInvoices = true;
-    }
-    if (featurePermissionsMap.Manager) {
-      featurePermissionsMap.Manager.approveTimesheetsAndInvoices = false;
-      featurePermissionsMap.Manager.approveInvoices = false;
     }
     if (featurePermissionsMap.Employee) {
       featurePermissionsMap.Employee.viewProjects = true;
       featurePermissionsMap.Employee.viewClients = false;
-      featurePermissionsMap.Employee.approveTimesheetsAndInvoices = false;
-      featurePermissionsMap.Employee.approveInvoices = false;
     }
 
     const customRoles = dbPermissions.filter((d) => d.isCustom).map((d) => d.role);

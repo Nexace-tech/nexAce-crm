@@ -71,6 +71,77 @@ function getAvatarColor(name: string) {
   return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
 }
 
+export interface IInvoiceObjection {
+  category: string;
+  itemRef?: string;
+  remark: string;
+  attachmentUrl?: string;
+  attachmentName?: string;
+}
+
+export interface InvoiceObjectionFormItem {
+  id: string;
+  category: string;
+  itemRef: string;
+  customItemRef?: string;
+  remark: string;
+  attachmentUrl?: string;
+  attachmentName?: string;
+}
+
+function getItemChoicesForFinance(inv?: FinanceInvoice | null) {
+  const choices: Array<{ label: string; value: string; group?: string }> = [
+    { label: "General Invoice Issue (Whole Invoice)", value: "General Invoice Issue (Whole Invoice)" },
+  ];
+  if (!inv) return choices;
+
+  const rawItems = (inv as any).items || (inv as any).lineItems || [];
+  if (Array.isArray(rawItems) && rawItems.length > 0) {
+    rawItems.forEach((item: any, idx: number) => {
+      choices.push({
+        label: `Deliverable #${idx + 1}: ${item.description || "Line Item"} (${inv.currency || "$"}${item.amount || item.unitPrice || 0})`,
+        value: `Line Item #${idx + 1}: ${item.description || "Deliverable"}`,
+        group: "Deliverables",
+      });
+    });
+  }
+
+  const shifts = (inv as any).shiftAttendance?.records;
+  if (Array.isArray(shifts) && shifts.length > 0) {
+    shifts.forEach((shift: any, idx: number) => {
+      choices.push({
+        label: `Shift: ${shift.date || `Day ${idx + 1}`} (${shift.clockIn || "--"} - ${shift.clockOut || "--"}, ${shift.totalHours || 0} hrs)`,
+        value: `Shift Attendance: ${shift.date || `Day ${idx + 1}`} (${shift.totalHours || 0} hrs)`,
+        group: "Shift Attendance",
+      });
+    });
+  }
+
+  const ts = (inv as any).timesheetEntries?.records;
+  if (Array.isArray(ts) && ts.length > 0) {
+    ts.forEach((entry: any, idx: number) => {
+      choices.push({
+        label: `Timesheet #${idx + 1}: ${entry.date || ""} - ${entry.projectName || "Project"} (${entry.hours || 0} hrs)`,
+        value: `Timesheet: ${entry.projectName || "Project"} on ${entry.date || `Entry ${idx + 1}`}`,
+        group: "Timesheets",
+      });
+    });
+  }
+
+  choices.push({ label: "Custom / Other Item (Specify below)", value: "__CUSTOM__" });
+  return choices;
+}
+
+const createBlankObjection = (initialTarget?: string): InvoiceObjectionFormItem => ({
+  id: Math.random().toString(36).substring(2, 9),
+  category: "Timesheet Hours Discrepancy",
+  itemRef: initialTarget || "General Invoice Issue (Whole Invoice)",
+  customItemRef: "",
+  remark: "",
+  attachmentUrl: "",
+  attachmentName: "",
+});
+
 function formatForInvoiceDetails(inv: any): InvoiceDetailsData {
   const rawItems = inv.items || inv.lineItems || [];
   const items: InvoiceDetailsItem[] = rawItems.length > 0
@@ -124,6 +195,8 @@ function formatForInvoiceDetails(inv: any): InvoiceDetailsData {
     approvedAt: inv.approvedAt || "",
     approverRole: inv.approverRole,
     rejectionReason: inv.rejectionReason,
+    rejectionRemark: inv.rejectionRemark,
+    objections: inv.objections || [],
     rejectedBy: inv.rejectedBy,
     rejectedAt: inv.rejectedAt,
     rejectionHistory: inv.rejectionHistory,
@@ -156,11 +229,15 @@ export default function InvoiceGridView({
   // Trace Lifecycle Modal
   const [traceInvoice, setTraceInvoice] = useState<FinanceInvoice | null>(null);
 
-  // Reject Modal
-  const [rejectModal, setRejectModal] = useState<{ open: boolean; invoice: FinanceInvoice | null; reason: string }>({
+  // Reject Modal with Multiple Itemized Objections & Attachments
+  const [rejectModal, setRejectModal] = useState<{
+    open: boolean;
+    invoice: FinanceInvoice | null;
+    objections: InvoiceObjectionFormItem[];
+  }>({
     open: false,
     invoice: null,
-    reason: "",
+    objections: [createBlankObjection()],
   });
 
   // Payout / Settlement Modal
@@ -258,23 +335,46 @@ export default function InvoiceGridView({
     setRejectModal({
       open: true,
       invoice: inv,
-      reason: "",
+      objections: [createBlankObjection()],
     });
   };
 
-  /** Confirm Rejection with Reason */
+  /** Confirm Rejection with Multiple Structured Objections */
   const handleConfirmReject = async () => {
     if (!rejectModal.invoice) return;
-    if (!rejectModal.reason.trim()) {
-      notify("Please provide a reason for rejection", "error");
+    if (!rejectModal.objections || rejectModal.objections.length === 0) {
+      notify("Please specify at least one rejection objection", "error");
       return;
     }
+
+    for (let i = 0; i < rejectModal.objections.length; i++) {
+      const obj = rejectModal.objections[i];
+      if (!obj.category?.trim() || !obj.remark?.trim()) {
+        notify(`Please provide both a reason category and actionable remarks for objection #${i + 1}`, "error");
+        return;
+      }
+      if (obj.itemRef === "__CUSTOM__" && !obj.customItemRef?.trim()) {
+        notify(`Please specify the custom item or shift name for objection #${i + 1}`, "error");
+        return;
+      }
+    }
+
+    const cleanedObjections: IInvoiceObjection[] = rejectModal.objections.map((o) => ({
+      category: o.category.trim(),
+      itemRef: o.itemRef === "__CUSTOM__" ? (o.customItemRef?.trim() || "Custom Item") : o.itemRef,
+      remark: o.remark.trim(),
+      attachmentUrl: o.attachmentUrl || undefined,
+      attachmentName: o.attachmentName || undefined,
+    }));
+
     const ok = await patchInvoice(rejectModal.invoice._id, {
       status: "Rejected",
-      rejectionReason: rejectModal.reason.trim(),
+      objections: cleanedObjections,
+      rejectionReason: cleanedObjections[0]?.category || "Discrepancy identified",
+      rejectionRemark: cleanedObjections[0]?.remark || "",
     });
     if (ok) {
-      setRejectModal({ open: false, invoice: null, reason: "" });
+      setRejectModal({ open: false, invoice: null, objections: [createBlankObjection()] });
     }
   };
 
@@ -412,9 +512,13 @@ export default function InvoiceGridView({
       <InvoiceDetailsView
         invoice={formatForInvoiceDetails(viewingInvoice)}
         onClose={() => setViewingInvoice(null)}
-        onStatusChange={async (newStatus, reason) => {
+        onStatusChange={async (newStatus, reason, remark) => {
           if (newStatus === "Rejected") {
-            await patchInvoice(viewingInvoice._id, { status: "Rejected", rejectionReason: reason });
+            await patchInvoice(viewingInvoice._id, {
+              status: "Rejected",
+              rejectionReason: reason,
+              rejectionRemark: remark,
+            });
           } else if (newStatus === "Approved") {
             await patchInvoice(viewingInvoice._id, { status: "Approved" });
           } else if (newStatus === "Paid") {
@@ -1234,7 +1338,7 @@ export default function InvoiceGridView({
 
               {/* Revision Alert Box if Rejected */}
               {traceInvoice.status === "Rejected" && (
-                <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/25 space-y-1.5 animate-in fade-in duration-150">
+                <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/25 space-y-2.5 animate-in fade-in duration-150">
                   <div className="flex items-center gap-2 text-rose-600 dark:text-rose-400 text-xs font-bold">
                     <i className="fa-solid fa-triangle-exclamation text-sm" />
                     <span>Revision Requested by HR / Reviewer</span>
@@ -1244,9 +1348,48 @@ export default function InvoiceGridView({
                       </span>
                     )}
                   </div>
-                  <p className="text-xs text-foreground bg-background/80 p-2.5 rounded-lg border border-rose-500/20 italic">
-                    "{traceInvoice.rejectionReason || "No explicit reason logged."}"
-                  </p>
+                  {((traceInvoice as any).objections && (traceInvoice as any).objections.length > 0) ? (
+                    <div className="space-y-2">
+                      {((traceInvoice as any).objections as IInvoiceObjection[]).map((obj, oIdx) => (
+                        <div
+                          key={oIdx}
+                          className="p-2.5 rounded-lg bg-background/90 border border-rose-500/20 text-xs space-y-1 shadow-xs"
+                        >
+                          <div className="flex items-center justify-between flex-wrap gap-1">
+                            <span className="font-bold text-rose-700 dark:text-rose-300 flex items-center gap-1.5">
+                              <i className="fa-solid fa-circle-exclamation text-[10px]" />
+                              #{oIdx + 1}. {obj.category}
+                            </span>
+                            {obj.itemRef && (
+                              <span className="text-[10px] px-2 py-0.5 rounded-full bg-rose-500/15 text-rose-800 dark:text-rose-200 font-semibold border border-rose-500/20">
+                                Target: {obj.itemRef}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[11px] text-foreground font-medium">
+                            {obj.remark}
+                          </p>
+                          {obj.attachmentUrl && (
+                            <div className="pt-1 border-t border-rose-500/15 flex items-center gap-2">
+                              <a
+                                href={obj.attachmentUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-[10px] font-bold text-rose-600 dark:text-rose-400 hover:underline flex items-center gap-1"
+                              >
+                                <i className="fa-solid fa-paperclip text-[10px]" />
+                                <span>View Proof: {obj.attachmentName || "Attachment"}</span>
+                              </a>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-foreground bg-background/80 p-2.5 rounded-lg border border-rose-500/20 italic">
+                      "{traceInvoice.rejectionReason || "No explicit reason logged."}"
+                    </p>
+                  )}
                   <p className="text-[10px] text-muted-foreground">
                     Rejected by {traceInvoice.rejectedBy || "HR Partner"} &bull; {fmtDateTime(traceInvoice.rejectedAt)}
                   </p>
@@ -1402,78 +1545,324 @@ export default function InvoiceGridView({
         </div>
       )}
 
-      {/* ─── REJECT REASON MODAL ─── */}
-      {rejectModal.open && rejectModal.invoice && (
-        <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
-          <div className="bg-card border border-border rounded-2xl shadow-2xl max-w-md w-full overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-            <div className="p-5 border-b border-border/80 bg-rose-500/10 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-rose-500/20 text-rose-600 dark:text-rose-400 flex items-center justify-center shrink-0">
-                  <i className="fa-solid fa-ban text-base" />
+      {/* ─── REJECT REASON MODAL WITH MULTIPLE STRUCTURED OBJECTIONS & ATTACHMENTS ─── */}
+      {rejectModal.open && rejectModal.invoice && (() => {
+        const targetChoices = getItemChoicesForFinance(rejectModal.invoice);
+
+        return (
+          <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
+            <div className="bg-card border border-border rounded-2xl shadow-2xl max-w-2xl w-full max-h-[92vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+              {/* Header */}
+              <div className="p-4 sm:p-5 border-b border-border/80 bg-rose-500/10 flex items-center justify-between shrink-0">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-rose-500/20 text-rose-600 dark:text-rose-400 flex items-center justify-center shrink-0">
+                    <i className="fa-solid fa-ban text-base" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-extrabold text-foreground">Reject &amp; Dispute Invoice</h3>
+                    <p className="text-xs text-muted-foreground">
+                      #{rejectModal.invoice.invoiceNo} &bull; {rejectModal.invoice.client}
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="text-sm font-bold text-foreground">Reject Invoice</h3>
-                  <p className="text-xs text-muted-foreground">
-                    #{rejectModal.invoice.invoiceNo} &bull; {rejectModal.invoice.client}
-                  </p>
+                <button
+                  type="button"
+                  onClick={() => setRejectModal({ open: false, invoice: null, objections: [createBlankObjection()] })}
+                  className="w-7 h-7 rounded-lg border border-border bg-background hover:bg-muted flex items-center justify-center text-muted-foreground cursor-pointer"
+                >
+                  <i className="fa-solid fa-xmark text-xs" />
+                </button>
+              </div>
+
+              {/* Modal Body */}
+              <div className="p-4 sm:p-5 overflow-y-auto space-y-4">
+                <div className="p-3 rounded-xl bg-rose-500/5 border border-rose-500/20 text-xs text-rose-800 dark:text-rose-300 flex items-start gap-2.5">
+                  <i className="fa-solid fa-circle-exclamation text-rose-600 mt-0.5 shrink-0" />
+                  <div className="space-y-0.5 text-[11px] leading-relaxed">
+                    <span className="font-bold">Itemized Discrepancy Reporting:</span>
+                    <p className="text-muted-foreground">
+                      Specify all disputed items, mismatched attendance punches, or rate calculations. You can flag multiple distinct objections and attach proof/screenshots to help the submitter revise and re-initiate accurately.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Objections List */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                      <i className="fa-solid fa-list-check text-rose-500 text-xs" />
+                      <span>Itemized Objections ({rejectModal.objections.length})</span>
+                    </label>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setRejectModal((prev) => ({
+                          ...prev,
+                          objections: [...prev.objections, createBlankObjection()],
+                        }));
+                      }}
+                      className="h-7 px-2.5 text-xs font-semibold gap-1.5 border-rose-500/30 text-rose-600 dark:text-rose-400 hover:bg-rose-500/10 cursor-pointer"
+                    >
+                      <i className="fa-solid fa-plus text-[10px]" /> Add Another Objection
+                    </Button>
+                  </div>
+
+                  {rejectModal.objections.map((obj, idx) => {
+                    const isCustomTarget = obj.itemRef === "__CUSTOM__";
+
+                    return (
+                      <div
+                        key={obj.id}
+                        className="p-3.5 rounded-xl border border-border bg-muted/20 space-y-3 relative group"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-extrabold text-foreground flex items-center gap-1.5">
+                            <span className="w-5 h-5 rounded-full bg-rose-500/20 text-rose-700 dark:text-rose-300 text-[10px] flex items-center justify-center font-mono">
+                              #{idx + 1}
+                            </span>
+                            Objection #{idx + 1}
+                          </span>
+
+                          {rejectModal.objections.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setRejectModal((prev) => ({
+                                  ...prev,
+                                  objections: prev.objections.filter((o) => o.id !== obj.id),
+                                }));
+                              }}
+                              className="text-[11px] text-rose-600 hover:text-rose-700 font-semibold flex items-center gap-1 cursor-pointer hover:underline"
+                            >
+                              <i className="fa-solid fa-trash-can text-[10px]" />
+                              Remove
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Reason Category & Target Item Pickers */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <label className="text-[11px] font-bold text-foreground block mb-1">
+                              Reason Category <span className="text-rose-500">*</span>
+                            </label>
+                            <select
+                              value={obj.category}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setRejectModal((prev) => ({
+                                  ...prev,
+                                  objections: prev.objections.map((o) => o.id === obj.id ? { ...o, category: val } : o),
+                                }));
+                              }}
+                              className="w-full text-xs h-9 px-2.5 rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-rose-500 font-medium"
+                            >
+                              <option value="Timesheet Hours Discrepancy">Timesheet Hours Discrepancy</option>
+                              <option value="Attendance & Punch Clock Mismatch">Attendance &amp; Punch Clock Mismatch</option>
+                              <option value="Incorrect Billable Rate or Calculation">Incorrect Billable Rate or Calculation</option>
+                              <option value="Missing Required Documentation or Proof">Missing Required Documentation or Proof</option>
+                              <option value="Project / Task Scope Not Approved">Project / Task Scope Not Approved</option>
+                              <option value="Duplicate Invoice Submission">Duplicate Invoice Submission</option>
+                              <option value="Other / Custom Policy Violation">Other / Custom Policy Violation</option>
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="text-[11px] font-bold text-foreground block mb-1">
+                              Disputed Line Item / Shift / Task
+                            </label>
+                            <select
+                              value={obj.itemRef}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setRejectModal((prev) => ({
+                                  ...prev,
+                                  objections: prev.objections.map((o) => o.id === obj.id ? { ...o, itemRef: val } : o),
+                                }));
+                              }}
+                              className="w-full text-xs h-9 px-2.5 rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-rose-500 font-medium truncate"
+                            >
+                              {targetChoices.map((choice, cIdx) => (
+                                <option key={cIdx} value={choice.value}>
+                                  {choice.label}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+
+                        {/* Custom item input if selected */}
+                        {isCustomTarget && (
+                          <div>
+                            <label className="text-[11px] font-bold text-foreground block mb-1">
+                              Specify Item / Shift Name
+                            </label>
+                            <input
+                              type="text"
+                              value={obj.customItemRef || ""}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setRejectModal((prev) => ({
+                                  ...prev,
+                                  objections: prev.objections.map((o) => o.id === obj.id ? { ...o, customItemRef: val } : o),
+                                }));
+                              }}
+                              placeholder="e.g. October 14 Overtime Shift or Deliverable Task A"
+                              className="w-full text-xs h-8 px-2.5 rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-rose-500"
+                            />
+                          </div>
+                        )}
+
+                        {/* Actionable Remarks */}
+                        <div>
+                          <div className="flex items-center justify-between mb-1">
+                            <label className="text-[11px] font-bold text-foreground">
+                              Actionable Remarks &bull; Explanation for Submitter <span className="text-rose-500">*</span>
+                            </label>
+                            <span className="text-[10px] text-muted-foreground font-mono">
+                              {obj.remark.trim().length} chars
+                            </span>
+                          </div>
+                          <textarea
+                            value={obj.remark}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setRejectModal((prev) => ({
+                                ...prev,
+                                objections: prev.objections.map((o) => o.id === obj.id ? { ...o, remark: val } : o),
+                              }));
+                            }}
+                            placeholder="e.g. Discrepancy on punch clock: logged 8 hrs but biometric showed 6.5 hrs. Please adjust hours to match attendance."
+                            rows={2}
+                            className="w-full p-2 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-500 resize-none font-medium"
+                          />
+                        </div>
+
+                        {/* Proof Attachment */}
+                        <div>
+                          <label className="text-[11px] font-bold text-foreground flex items-center justify-between mb-1">
+                            <span className="flex items-center gap-1.5">
+                              <i className="fa-solid fa-paperclip text-muted-foreground text-[10px]" />
+                              Attach Issue Proof / Screenshot (Optional)
+                            </span>
+                            {obj.attachmentUrl && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setRejectModal((prev) => ({
+                                    ...prev,
+                                    objections: prev.objections.map((o) => o.id === obj.id ? { ...o, attachmentUrl: "", attachmentName: "" } : o),
+                                  }));
+                                }}
+                                className="text-[10px] text-rose-500 hover:underline cursor-pointer"
+                              >
+                                Remove Attachment
+                              </button>
+                            )}
+                          </label>
+
+                          {!obj.attachmentUrl ? (
+                            <label className="flex items-center gap-2 p-2 border border-dashed border-border rounded-lg hover:bg-muted/30 cursor-pointer transition-colors text-xs text-muted-foreground">
+                              <i className="fa-solid fa-cloud-arrow-up text-primary text-sm" />
+                              <span className="text-[11px]">Upload screenshot or proof PDF (max 5MB)</span>
+                              <input
+                                type="file"
+                                accept="image/*,.pdf"
+                                className="hidden"
+                                onChange={(e) => {
+                                  const file = e.target.files?.[0];
+                                  if (!file) return;
+                                  if (file.size > 5 * 1024 * 1024) {
+                                    notify("File size exceeds 5MB limit", "error");
+                                    return;
+                                  }
+                                  const reader = new FileReader();
+                                  reader.onload = (uploadEv) => {
+                                    const base64 = uploadEv.target?.result as string;
+                                    setRejectModal((prev) => ({
+                                      ...prev,
+                                      objections: prev.objections.map((o) =>
+                                        o.id === obj.id
+                                          ? { ...o, attachmentUrl: base64, attachmentName: file.name }
+                                          : o
+                                      ),
+                                    }));
+                                  };
+                                  reader.readAsDataURL(file);
+                                }}
+                              />
+                            </label>
+                          ) : (
+                            <div className="flex items-center justify-between p-2 rounded-lg bg-background border border-border text-xs">
+                              <div className="flex items-center gap-2 truncate">
+                                {obj.attachmentUrl.startsWith("data:image/") ? (
+                                  <img
+                                    src={obj.attachmentUrl}
+                                    alt="Proof"
+                                    className="w-7 h-7 object-cover rounded border border-border shrink-0"
+                                  />
+                                ) : (
+                                  <div className="w-7 h-7 rounded bg-rose-500/10 text-rose-600 flex items-center justify-center shrink-0">
+                                    <i className="fa-solid fa-file-pdf text-xs" />
+                                  </div>
+                                )}
+                                <span className="font-medium text-foreground truncate text-[11px]">
+                                  {obj.attachmentName || "Attached Proof"}
+                                </span>
+                              </div>
+                              <a
+                                href={obj.attachmentUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-[10px] text-primary hover:underline font-bold shrink-0 ml-2"
+                              >
+                                Preview
+                              </a>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={() => setRejectModal({ open: false, invoice: null, reason: "" })}
-                className="w-7 h-7 rounded-lg border border-border bg-background hover:bg-muted flex items-center justify-center text-muted-foreground"
-              >
-                <i className="fa-solid fa-xmark text-xs" />
-              </button>
-            </div>
 
-            <div className="p-5 space-y-4">
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-foreground flex items-center justify-between">
-                  <span>Rejection Reason <span className="text-rose-500">*</span></span>
-                  <span className="text-[10px] text-muted-foreground">Required for submitter</span>
-                </label>
-                <textarea
-                  value={rejectModal.reason}
-                  onChange={(e) => setRejectModal((prev) => ({ ...prev, reason: e.target.value }))}
-                  placeholder="Explain why this invoice cannot be approved (e.g. Disputed shift on 12th Oct, mismatch in overtime billings, missing client timesheet sign-off)..."
-                  rows={4}
-                  className="w-full text-xs p-3 rounded-xl border border-input bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-rose-500 resize-none"
-                />
+              {/* Modal Footer */}
+              <div className="p-4 border-t border-border/80 bg-muted/20 flex items-center justify-between shrink-0">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setRejectModal({ open: false, invoice: null, objections: [createBlankObjection()] })}
+                  className="text-xs cursor-pointer"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  size="sm"
+                  disabled={
+                    rejectModal.objections.length === 0 ||
+                    rejectModal.objections.some((o) => !o.category?.trim() || !o.remark?.trim() || (o.itemRef === "__CUSTOM__" && !o.customItemRef?.trim())) ||
+                    isUpdatingStatus
+                  }
+                  onClick={handleConfirmReject}
+                  className="text-xs font-bold flex items-center gap-1.5 bg-rose-600 hover:bg-rose-700 text-white cursor-pointer"
+                >
+                  {isUpdatingStatus ? (
+                    <i className="fa-solid fa-spinner fa-spin text-xs" />
+                  ) : (
+                    <i className="fa-solid fa-ban text-xs" />
+                  )}
+                  <span>
+                    Confirm Rejection ({rejectModal.objections.length} Issue{rejectModal.objections.length === 1 ? "" : "s"})
+                  </span>
+                </Button>
               </div>
-
-              <div className="p-3 rounded-xl bg-muted/40 border border-border/60 text-[11px] text-muted-foreground">
-                <i className="fa-solid fa-circle-info text-primary mr-1.5" />
-                The submitter will receive an immediate in-app and email notification with your feedback, enabling them to fix the disputed hours and re-initiate this invoice.
-              </div>
-            </div>
-
-            <div className="p-4 border-t border-border/80 bg-muted/20 flex items-center justify-end gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setRejectModal({ open: false, invoice: null, reason: "" })}
-                className="text-xs"
-              >
-                Cancel
-              </Button>
-              <Button
-                size="sm"
-                disabled={!rejectModal.reason.trim() || isUpdatingStatus}
-                onClick={handleConfirmReject}
-                className="text-xs font-bold flex items-center gap-1.5 bg-rose-600 hover:bg-rose-700 text-white"
-              >
-                {isUpdatingStatus ? (
-                  <i className="fa-solid fa-spinner fa-spin text-xs" />
-                ) : (
-                  <i className="fa-solid fa-ban text-xs" />
-                )}
-                <span>Confirm Rejection</span>
-              </Button>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* ─── PAYMENT DISBURSEMENT MODAL WITH DYNAMIC UPI QR ─── */}
       {paymentModal.open && paymentModal.invoice && (

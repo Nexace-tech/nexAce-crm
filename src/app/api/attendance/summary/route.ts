@@ -2,11 +2,12 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
 import { connectToDatabase } from "@/lib/db";
 import { Attendance } from "@/models/Attendance";
+import { getUserDataScope } from "@/lib/dataScope";
 import mongoose from "mongoose";
 
 /**
  * GET /api/attendance/summary
- * Returns user login activity and working hours for Admin / OPS.
+ * Returns user login activity and working hours for Admin / OPS / HR or any role with viewLoginHoursSummary permission.
  * Query params:
  *   from   - YYYY-MM-DD  (default: start of current week Mon)
  *   to     - YYYY-MM-DD  (default: today)
@@ -20,10 +21,15 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Only Admin and OPS roles can see all-users data
-    const isElevated = session.role === "Admin" || session.role === "OPS";
-
     await connectToDatabase();
+
+    // Dynamically check role and feature permissions from database
+    const dataScope = await getUserDataScope(session);
+    const isElevated = session.role === "Admin" || session.role === "OPS" || dataScope.canViewFeature("viewLoginHoursSummary");
+
+    if (!isElevated) {
+      return NextResponse.json({ error: "Forbidden: Login & Hours Summary permission required" }, { status: 403 });
+    }
 
     const { searchParams } = new URL(request.url);
 

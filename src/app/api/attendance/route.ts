@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
 import { connectToDatabase } from "@/lib/db";
 import { Attendance } from "@/models/Attendance";
+import { Tenant } from "@/models/Tenant";
+import { getUserDataScope } from "@/lib/dataScope";
 import mongoose from "mongoose";
 
 // IST offset constant
@@ -28,7 +30,8 @@ function getTodayDateNormalized(): Date {
   return getISTDayRange().start;
 }
 
-const SHIFT_TARGET_HOURS = 8.0;
+const SHIFT_TARGET_HOURS = 8.0;  // Regular hours target (before overtime kicks in)
+const MAX_SHIFT_HOURS     = 10.0; // Hard cap — shift auto-clocks out at 10h
 
 /**
  * GET: Returns the current user's today-attendance, shift metadata, and history.
@@ -55,10 +58,28 @@ export async function GET(request: Request) {
       date: { $gte: dayStart, $lt: dayEnd },
     }).sort({ clockIn: -1 }); // prefer the latest if duplicates somehow exist
 
+    const tenant = await Tenant.findById(tenantObjectId).lean();
+    const dynamicTargetHours = Number(tenant?.targetShiftHours) || SHIFT_TARGET_HOURS;
+    const dynamicMaxShiftHours = Number(tenant?.maxShiftHours) || MAX_SHIFT_HOURS;
+
+    // Auto-clock out active session if it has exceeded dynamicMaxShiftHours
+    if (todayAttendance && !todayAttendance.clockOut) {
+      const clockInTime = new Date(todayAttendance.originalClockIn || todayAttendance.clockIn).getTime();
+      const elapsedHours = (Date.now() - clockInTime) / (1000 * 60 * 60);
+      if (elapsedHours >= dynamicMaxShiftHours) {
+        todayAttendance.clockOut = new Date(clockInTime + dynamicMaxShiftHours * 3600 * 1000);
+        todayAttendance.lastResumedAt = undefined;
+        todayAttendance.regularHours = dynamicTargetHours;
+        todayAttendance.overtimeHours = Number(Math.max(0, dynamicMaxShiftHours - dynamicTargetHours).toFixed(2));
+        await todayAttendance.save();
+      }
+    }
+
     const { searchParams } = new URL(request.url);
     const limitParam    = searchParams.get("limit");
 
-    const isElevatedRole = session.role === "Admin" || session.role === "OPS" || session.role === "Manager";
+    const dataScope = await getUserDataScope(session);
+    const isElevatedRole = session.role === "Admin" || session.role === "OPS" || session.role === "Manager" || session.role === "HR" || dataScope.canViewFeature("viewTeamTimesheets");
 
     const historyFilter: Record<string, unknown> = { tenantId: tenantObjectId };
     if (!isElevatedRole) {
@@ -70,19 +91,20 @@ export async function GET(request: Request) {
       .sort({ date: -1, clockIn: -1 });
 
     if (limitParam !== "all") {
-      const parsedLimit = parseInt(limitParam ?? "50", 10);
-      const safeLimit   = !isNaN(parsedLimit) && parsedLimit > 0 ? Math.min(parsedLimit, 500) : 50;
+      const parsedLimit = parseInt(limitParam ?? "1000", 10);
+      const safeLimit   = !isNaN(parsedLimit) && parsedLimit > 0 ? Math.min(parsedLimit, 2000) : 1000;
       historyQuery      = historyQuery.limit(safeLimit);
     }
 
     const history = await historyQuery.lean();
 
     const shiftInfo = {
-      shiftName:   "Standard Regular Shift",
-      startTime:   "09:00 AM",
-      endTime:     "05:00 PM",
-      targetHours: SHIFT_TARGET_HOURS,
-      location:    "Office / Remote Hybrid",
+      shiftName:    "Standard Regular Shift",
+      startTime:    "09:00 AM",
+      endTime:      "07:00 PM",
+      targetHours:  dynamicTargetHours,
+      maxHours:     dynamicMaxShiftHours,
+      location:     "Office / Remote Hybrid",
     };
 
     return NextResponse.json({ attendance: todayAttendance, history, shiftInfo });
@@ -104,11 +126,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const body     = await request.json();
-    const { action, location } = body;
+    const body = await request.json().catch(() => ({}));
+    const { action, location, targetAttendanceId, targetUserId, reason } = body;
 
-    if (!action || !["in", "out", "resume"].includes(action)) {
-      return NextResponse.json({ error: "Action must be 'in', 'out', or 'resume'" }, { status: 400 });
+    if (!action || !["in", "out", "resume", "request_extension", "approve_extension"].includes(action)) {
+      return NextResponse.json({ error: "Action must be 'in', 'out', 'resume', 'request_extension', or 'approve_extension'" }, { status: 400 });
     }
 
     await connectToDatabase();
@@ -139,6 +161,20 @@ export async function POST(request: Request) {
         if (!existing.clockOut) {
           return NextResponse.json({ error: "You are already clocked in for today" }, { status: 400 });
         }
+
+        const tenant = await Tenant.findById(tenantObjectId).lean();
+        const dynamicMaxShiftHours = Number(tenant?.maxShiftHours) || MAX_SHIFT_HOURS;
+        const dataScope = await getUserDataScope(session);
+        const isElevatedStaff = session.role === "Admin" || session.role === "OPS" || session.role === "HR" || dataScope.canViewFeature("approveAdditionalShiftTime");
+        const workedHoursSoFar = (existing.regularHours || 0) + (existing.overtimeHours || 0);
+
+        if (workedHoursSoFar >= dynamicMaxShiftHours && !isElevatedStaff && !existing.extensionApproved) {
+          return NextResponse.json({
+            error: `Maximum shift limit reached (${dynamicMaxShiftHours}h). You cannot resume without Admin, OPS, or HR approval. Please raise an additional shift time request.`,
+            maxLimitReached: true
+          }, { status: 403 });
+        }
+
         // If user already clocked out earlier today, automatically resume / merge shift:
         // Keep existing.clockIn intact (original clock-in), start new segment with lastResumedAt
         if (!existing.originalClockIn) {
@@ -200,14 +236,19 @@ export async function POST(request: Request) {
         totalAccumulated = diffMs / (1000 * 60 * 60);
       }
 
+      const tenant = await Tenant.findById(tenantObjectId).lean();
+      const dynamicTargetHours = Number(tenant?.targetShiftHours) || SHIFT_TARGET_HOURS;
+      const dynamicMaxShiftHours = Number(tenant?.maxShiftHours) || MAX_SHIFT_HOURS;
+
       // Hard sanity guard: total worked hours on a single day can NEVER exceed elapsed time since clock-in
       const maxPossibleHours = Math.max(0, (now.getTime() - new Date(record.clockIn).getTime()) / (1000 * 60 * 60));
-      const safeTotal = Math.min(totalAccumulated, maxPossibleHours);
+      // Enforce the dynamic max shift hours cap
+      const safeTotal = Math.min(totalAccumulated, maxPossibleHours, dynamicMaxShiftHours);
 
       record.clockOut      = now;
       record.lastResumedAt = undefined;
-      record.regularHours  = Number(Math.min(safeTotal, SHIFT_TARGET_HOURS).toFixed(2));
-      record.overtimeHours = Number(Math.max(0, safeTotal - SHIFT_TARGET_HOURS).toFixed(2));
+      record.regularHours  = Number(Math.min(safeTotal, dynamicTargetHours).toFixed(2));
+      record.overtimeHours = Number(Math.max(0, safeTotal - dynamicTargetHours).toFixed(2));
       await record.save();
 
       return NextResponse.json({ success: true, attendance: record });
@@ -227,6 +268,19 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "Your shift is currently active" }, { status: 400 });
       }
 
+      const tenant = await Tenant.findById(tenantObjectId).lean();
+      const dynamicMaxShiftHours = Number(tenant?.maxShiftHours) || MAX_SHIFT_HOURS;
+      const dataScope = await getUserDataScope(session);
+      const isElevatedStaff = session.role === "Admin" || session.role === "OPS" || session.role === "HR" || dataScope.canViewFeature("approveAdditionalShiftTime");
+      const workedHoursSoFar = (record.regularHours || 0) + (record.overtimeHours || 0);
+
+      if (workedHoursSoFar >= dynamicMaxShiftHours && !isElevatedStaff && !record.extensionApproved) {
+        return NextResponse.json({
+          error: `Maximum shift limit reached (${dynamicMaxShiftHours}h). You cannot resume without Admin, OPS, or HR approval. Please raise an additional shift time request.`,
+          maxLimitReached: true
+        }, { status: 403 });
+      }
+
       // Resume:
       // DO NOT overwrite record.clockIn — it stays as the day's original clock-in time!
       // Set lastResumedAt = now to mark the start of this active work segment.
@@ -239,6 +293,53 @@ export async function POST(request: Request) {
       await record.save();
 
       return NextResponse.json({ success: true, attendance: record, message: "Shift resumed successfully!" });
+
+    } else if (action === "approve_extension") {
+      const dataScope = await getUserDataScope(session);
+      const isElevatedStaff = session.role === "Admin" || session.role === "OPS" || session.role === "HR" || dataScope.canViewFeature("approveAdditionalShiftTime");
+      if (!isElevatedStaff) {
+        return NextResponse.json({ error: "Forbidden: Only Admin, OPS, or HR can approve shift time extensions" }, { status: 403 });
+      }
+
+      const filter: Record<string, unknown> = { tenantId: tenantObjectId };
+      if (targetAttendanceId) {
+        filter._id = new mongoose.Types.ObjectId(targetAttendanceId);
+      } else if (targetUserId) {
+        filter.userId = new mongoose.Types.ObjectId(targetUserId);
+        filter.date = { $gte: dayStart, $lt: dayEnd };
+      } else {
+        return NextResponse.json({ error: "targetAttendanceId or targetUserId is required" }, { status: 400 });
+      }
+
+      const recordToApprove = await Attendance.findOne(filter);
+      if (!recordToApprove) {
+        return NextResponse.json({ error: "Attendance record not found" }, { status: 404 });
+      }
+
+      recordToApprove.extensionApproved = true;
+      recordToApprove.extensionApprovedBy = userObjectId;
+      recordToApprove.extensionApprovedAt = now;
+      recordToApprove.extensionRequested = false;
+      await recordToApprove.save();
+
+      return NextResponse.json({ success: true, message: "Shift extension approved! User can now resume their shift." });
+
+    } else if (action === "request_extension") {
+      const record = await Attendance.findOne({
+        userId: userObjectId,
+        tenantId: tenantObjectId,
+        date: { $gte: dayStart, $lt: dayEnd },
+      }).sort({ clockIn: -1 });
+
+      if (!record) {
+        return NextResponse.json({ error: "No attendance record found for today" }, { status: 400 });
+      }
+
+      record.extensionRequested = true;
+      record.extensionReason = String(reason || "").trim();
+      await record.save();
+
+      return NextResponse.json({ success: true, message: "Shift extension request recorded successfully." });
     }
 
     return NextResponse.json({ error: "Invalid action" }, { status: 400 });

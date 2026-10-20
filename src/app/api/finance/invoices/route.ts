@@ -107,6 +107,8 @@ export async function GET() {
         approvalStage: inv.approvalStage || (inv.status === "Approved" ? "PENDING_PAYMENT" : inv.status === "Paid" ? "PAID" : inv.status === "Rejected" ? "REJECTED" : "PENDING_REVIEW"),
         timeline: inv.timeline || [],
         rejectionReason: inv.rejectionReason || "",
+        rejectionRemark: inv.rejectionRemark || "",
+        objections: inv.objections || [],
         rejectionHistory: inv.rejectionHistory || [],
         revisionCount: inv.revisionCount || 0,
         paymentDetails: inv.paymentDetails || null,
@@ -125,6 +127,8 @@ export async function GET() {
         approvalStage: inv.approvalStage || (inv.status === "Approved" ? "PENDING_ADMIN" : inv.status === "Paid" ? "PAID" : inv.status === "Rejected" ? "REJECTED" : "PENDING_HR"),
         timeline: inv.timeline || [],
         rejectionReason: inv.rejectionReason || "",
+        rejectionRemark: inv.rejectionRemark || "",
+        objections: inv.objections || [],
         rejectionHistory: inv.rejectionHistory || [],
         revisionCount: inv.revisionCount || 0,
         hrReview: inv.hrReview || null,
@@ -196,6 +200,7 @@ export async function POST(request: Request) {
       amount: Number(amount) || 0,
       currency: currency || "USD",
       status: status || "Draft",
+      approvalStage: status === "Pending" ? "PENDING_REVIEW" : "DRAFT",
       issuedDate: issuedDate || new Date().toISOString().split("T")[0],
       dueDate: dueDate || "",
       category: category || "Services",
@@ -203,6 +208,17 @@ export async function POST(request: Request) {
       notes: notes || "",
       lineItems: lineItems || [],
       signatureUrl: body.signatureUrl || "",
+      timeline: [
+        {
+          stage: "SUBMITTED",
+          status: status || "Draft",
+          actorName: session.userName || "User",
+          actorRole: session.role || "Employee",
+          actorId: userObjectId,
+          note: "Invoice generated and submitted for HR attendance and timesheet verification.",
+          timestamp: new Date(),
+        },
+      ],
     });
 
     await ActivityLog.create({

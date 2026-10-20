@@ -1,15 +1,18 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/hooks/useAuth";
+import { usePermissions } from "@/hooks/usePermissions";
 import { cn } from "@/lib/utils";
 import { InvoiceDetailsView } from "@/components/finance/InvoiceDetailsView";
 import { downloadInvoicePdf } from "@/lib/invoice-pdf";
 import { removeSignatureBackground } from "@/lib/signature";
+import type { IInvoiceObjection } from "./AdminInvoicesTab";
+import * as XLSX from "xlsx";
 
 interface InvoiceItem {
   description: string;
@@ -60,8 +63,18 @@ interface Invoice {
   approvedAt?: string;
   approverRole?: string;
   rejectionReason?: string;
+  rejectionRemark?: string;
+  objections?: IInvoiceObjection[];
   rejectedBy?: string;
   rejectedAt?: string;
+  rejectionHistory?: Array<{
+    reason: string;
+    remark?: string;
+    objections?: IInvoiceObjection[];
+    rejectedBy: string;
+    rejectedAt: string | Date;
+    role?: string;
+  }>;
   revisionCount?: number;
   approvalStage?: "DRAFT" | "PENDING_HR" | "PENDING_ADMIN" | "PAID" | "REJECTED";
   timeline?: Array<{
@@ -906,6 +919,143 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
     });
   };
 
+  // Dynamic Role-based & Employment-type permission for Excel invoice upload
+  const { can } = usePermissions();
+  const isFullTime = Boolean(
+    user?.employmentType &&
+    (user.employmentType.toLowerCase().includes("permanent") || user.employmentType.toLowerCase().includes("full"))
+  );
+  const canUploadExcel = can("uploadInvoiceExcel");
+  const allowExcelUpload = canUploadExcel || !isFullTime;
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [excelImporting, setExcelImporting] = useState(false);
+  const [excelSummary, setExcelSummary] = useState<{
+    fileName: string;
+    itemCount: number;
+    totalAmount: number;
+    totalHours: number;
+  } | null>(null);
+
+  const downloadSampleExcelTemplate = () => {
+    const sampleData = [
+      {
+        "Project / Task Description": "Frontend UI & Mobile Responsiveness Audit",
+        "Date": new Date().toISOString().split("T")[0],
+        "Hours / Qty": 16,
+        "Rate": 500,
+        "Amount": 8000,
+        "Notes": "Delivered milestone sprint 1",
+      },
+      {
+        "Project / Task Description": "Backend API Integration & Role Permissions",
+        "Date": new Date().toISOString().split("T")[0],
+        "Hours / Qty": 20,
+        "Rate": 500,
+        "Amount": 10000,
+        "Notes": "Completed invoice verification workflow",
+      },
+      {
+        "Project / Task Description": "Code Review, Testing & Bug Fixing",
+        "Date": new Date().toISOString().split("T")[0],
+        "Hours / Qty": 8,
+        "Rate": 500,
+        "Amount": 4000,
+        "Notes": "Quality assurance & deployment prep",
+      },
+    ];
+
+    const ws = XLSX.utils.json_to_sheet(sampleData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Invoice_Timesheet");
+    XLSX.writeFile(wb, "NexAce_Invoice_Timesheet_Template.xlsx");
+    showToast("Sample Excel template downloaded successfully!", "success");
+  };
+
+  const handleExcelFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setExcelImporting(true);
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const bstr = evt.target?.result;
+        const wb = XLSX.read(bstr, { type: "binary" });
+        const wsName = wb.SheetNames[0];
+        const ws = wb.Sheets[wsName];
+        const rows: any[] = XLSX.utils.sheet_to_json(ws, { defval: "" });
+
+        if (!rows || rows.length === 0) {
+          showToast("No data rows found in the uploaded Excel file.", "error");
+          setExcelImporting(false);
+          return;
+        }
+
+        let parsedHours = 0;
+        let parsedTotalAmount = 0;
+        const importedProjects: Array<{ id: string; name: string; amount: number }> = [];
+
+        rows.forEach((row, idx) => {
+          const keys = Object.keys(row);
+          const findVal = (terms: string[]) => {
+            const foundKey = keys.find((k) => terms.some((t) => k.toLowerCase().includes(t)));
+            return foundKey ? row[foundKey] : undefined;
+          };
+
+          const desc = findVal(["desc", "project", "task", "item", "title", "scope"]) || `Deliverable #${idx + 1}`;
+          const qty = Number(findVal(["hour", "qty", "quantity", "unit"]) || 0);
+          const rate = Number(findVal(["rate", "price", "cost"]) || 0);
+          let amount = Number(findVal(["amount", "total", "fee"]) || 0);
+
+          if (!amount && qty > 0 && rate > 0) {
+            amount = qty * rate;
+          }
+
+          if (qty > 0) parsedHours += qty;
+          if (amount > 0) parsedTotalAmount += amount;
+
+          importedProjects.push({
+            id: `excel-${Date.now()}-${idx}`,
+            name: String(desc).trim() || `Deliverable #${idx + 1}`,
+            amount: amount || 0,
+          });
+        });
+
+        if (importedProjects.length > 0) {
+          setInvoiceFormData((prev) => ({
+            ...prev,
+            rateType: "project",
+            projects: importedProjects,
+            hoursWorked: parsedHours > 0 ? parsedHours : prev.hoursWorked,
+          }));
+
+          setExcelSummary({
+            fileName: file.name,
+            itemCount: importedProjects.length,
+            totalAmount: parsedTotalAmount,
+            totalHours: parsedHours,
+          });
+
+          showToast(`Successfully imported ${importedProjects.length} items totaling ₹${parsedTotalAmount.toLocaleString()} from ${file.name}`, "success");
+        }
+      } catch (err) {
+        console.error("Excel parse error:", err);
+        showToast("Failed to parse Excel file. Please use the sample template (.xlsx, .xls, .csv).", "error");
+      } finally {
+        setExcelImporting(false);
+        e.target.value = "";
+      }
+    };
+
+    reader.onerror = () => {
+      showToast("Error reading file.", "error");
+      setExcelImporting(false);
+    };
+
+    reader.readAsBinaryString(file);
+  };
+
   // Generator Mode: automatically derived from employee profile (user cannot manually change type)
   type GeneratorType = "permanent" | "contractor";
   const isInitialContractor = Boolean(
@@ -922,6 +1072,8 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
     invoiceNo: string;
     revisionCount: number;
     rejectionReason: string;
+    rejectionRemark?: string;
+    objections?: IInvoiceObjection[];
     rejectedBy?: string;
   } | null>(null);
 
@@ -933,6 +1085,8 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
       invoiceNo: inv.invoiceNo,
       revisionCount: nextRev,
       rejectionReason: inv.rejectionReason || "Discrepancy identified in attendance or line items.",
+      rejectionRemark: (inv as any).rejectionRemark || "",
+      objections: (inv as any).objections || [],
       rejectedBy: inv.rejectedBy,
     });
 
@@ -2131,10 +2285,65 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
                       {reinitiatingInvoice.invoiceNo}
                     </span>
                   </div>
-                  <p className="text-xs text-rose-700 dark:text-rose-400 font-medium">
-                    <strong>HR Feedback Reason:</strong> {reinitiatingInvoice.rejectionReason}
-                    {reinitiatingInvoice.rejectedBy && ` (by ${reinitiatingInvoice.rejectedBy})`}
-                  </p>
+                  {(reinitiatingInvoice.objections && reinitiatingInvoice.objections.length > 0) ? (
+                    <div className="space-y-2 pt-1">
+                      <div className="flex items-center gap-1.5 text-xs font-bold text-rose-700 dark:text-rose-400">
+                        <i className="fa-solid fa-list-check text-rose-600" />
+                        <span>Itemized Objections From Reviewer ({reinitiatingInvoice.objections.length})</span>
+                      </div>
+                      <div className="space-y-2">
+                        {reinitiatingInvoice.objections.map((obj, oIdx) => (
+                          <div
+                            key={oIdx}
+                            className="p-2.5 rounded-xl bg-background/90 border border-rose-500/25 text-xs space-y-1.5 shadow-xs"
+                          >
+                            <div className="flex items-center justify-between flex-wrap gap-1">
+                              <span className="font-bold text-rose-700 dark:text-rose-300 flex items-center gap-1.5">
+                                <i className="fa-solid fa-circle-exclamation text-[10px]" />
+                                #{oIdx + 1}. {obj.category}
+                              </span>
+                              {obj.itemRef && (
+                                <span className="text-[10px] px-2 py-0.5 rounded-full bg-rose-500/15 text-rose-800 dark:text-rose-200 font-semibold border border-rose-500/20">
+                                  Disputed Target: {obj.itemRef}
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-[11px] text-foreground font-medium leading-relaxed">
+                              {obj.remark}
+                            </p>
+                            {obj.attachmentUrl && (
+                              <div className="pt-1 border-t border-rose-500/15 flex items-center gap-2">
+                                <a
+                                  href={obj.attachmentUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-[10px] font-bold text-rose-600 dark:text-rose-400 hover:underline flex items-center gap-1.5"
+                                >
+                                  <i className="fa-solid fa-paperclip text-[10px]" />
+                                  <span>View Issue Proof / Screenshot ({obj.attachmentName || "Attachment"})</span>
+                                </a>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <p className="text-xs text-rose-700 dark:text-rose-400 font-semibold flex items-center gap-1.5 flex-wrap">
+                        <i className="fa-solid fa-triangle-exclamation text-rose-600" />
+                        <span><strong>HR Feedback Category:</strong> {reinitiatingInvoice.rejectionReason}</span>
+                        {reinitiatingInvoice.rejectedBy && (
+                          <span className="text-muted-foreground font-normal">({reinitiatingInvoice.rejectedBy})</span>
+                        )}
+                      </p>
+                      {reinitiatingInvoice.rejectionRemark && (
+                        <div className="p-2.5 rounded-lg bg-rose-500/10 border border-rose-500/20 text-xs text-rose-800 dark:text-rose-200">
+                          <strong>Reviewer Remarks:</strong> {reinitiatingInvoice.rejectionRemark}
+                        </div>
+                      )}
+                    </>
+                  )}
                   <p className="text-[11px] text-muted-foreground">
                     Update disputed hours, rates, or notes below. Once submitted, HR will immediately receive this revised invoice for re-verification.
                   </p>
@@ -2849,6 +3058,106 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
                   />
                 </div>
               </div>
+
+              {/* ── Excel Spreadsheet Import Card (Dynamic Permission / Excluded for Full Time unless permitted) ── */}
+              {allowExcelUpload ? (
+                <div className="p-4 bg-emerald-500/5 dark:bg-emerald-950/20 rounded-xl border border-emerald-500/20 space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-emerald-500/15">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+                        <i className="fa-solid fa-file-excel text-sm" />
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-bold text-foreground flex items-center gap-2">
+                          <span>Smart Excel Timesheet &amp; Item Upload</span>
+                          <span className="text-[10px] px-2 py-0.2 rounded-full bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 font-bold border border-emerald-500/30">
+                            Auto-Populate
+                          </span>
+                        </h4>
+                        <p className="text-[11px] text-muted-foreground">
+                          Upload your timesheet or milestone spreadsheet (.xlsx, .xls, .csv) to auto-fill deliverables and fees
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={downloadSampleExcelTemplate}
+                        className="h-7 px-2.5 text-[11px] font-semibold gap-1.5 cursor-pointer bg-background hover:bg-muted text-foreground border-border"
+                        title="Download sample Excel template (.xlsx)"
+                      >
+                        <i className="fa-solid fa-download text-[10px] text-emerald-600 dark:text-emerald-400" />
+                        <span>Download Sample Template</span>
+                      </Button>
+
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept=".xlsx,.xls,.csv"
+                        onChange={handleExcelFileUpload}
+                        className="hidden"
+                      />
+                      <Button
+                        type="button"
+                        size="sm"
+                        disabled={excelImporting}
+                        onClick={() => fileInputRef.current?.click()}
+                        className="h-7 px-3 text-[11px] font-bold gap-1.5 cursor-pointer bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs"
+                      >
+                        {excelImporting ? (
+                          <><i className="fa-solid fa-spinner fa-spin text-xs" /> Importing...</>
+                        ) : (
+                          <><i className="fa-solid fa-upload text-xs" /> Upload Excel File</>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+
+                  {excelSummary && (
+                    <div className="p-3 bg-emerald-500/10 border border-emerald-500/25 rounded-lg flex items-center justify-between text-xs flex-wrap gap-2">
+                      <div className="flex items-center gap-2">
+                        <i className="fa-solid fa-circle-check text-emerald-600 text-sm" />
+                        <div>
+                          <p className="font-bold text-emerald-800 dark:text-emerald-200">
+                            Imported {excelSummary.itemCount} items from <span className="font-mono">{excelSummary.fileName}</span>
+                          </p>
+                          <p className="text-[11px] text-emerald-700 dark:text-emerald-300">
+                            Total: <strong>{currSymbol}{excelSummary.totalAmount.toLocaleString()}</strong>
+                            {excelSummary.totalHours > 0 && ` (${excelSummary.totalHours} hrs)`} &bull; Mapped into deliverables below
+                          </p>
+                        </div>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setExcelSummary(null);
+                          showToast("Reset imported Excel data.", "success");
+                        }}
+                        className="h-6 px-2 text-[10px] text-muted-foreground hover:text-rose-600 cursor-pointer"
+                      >
+                        <i className="fa-solid fa-trash-can mr-1" /> Clear
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              ) : isFullTime ? (
+                <div className="p-3 bg-muted/30 border border-border rounded-xl text-xs flex items-center justify-between gap-3 text-muted-foreground">
+                  <div className="flex items-center gap-2">
+                    <i className="fa-solid fa-shield-halved text-primary shrink-0" />
+                    <span>
+                      Permanent staff fixed compensation is synchronized with verified biometric attendance. (Excel upload is enabled for contract employees or by Admin in Settings &gt; Permissions).
+                    </span>
+                  </div>
+                  <span className="text-[10px] uppercase font-bold text-muted-foreground bg-muted px-2 py-0.5 rounded-md shrink-0 border border-border">
+                    Biometric Shift Sync
+                  </span>
+                </div>
+              ) : null}
 
               {/* Rate Type / Billing Model Selector */}
               <div className="space-y-1.5 p-3.5 bg-muted/30 rounded-xl border border-border">
@@ -3810,11 +4119,51 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
                               <span className="text-[9px] text-muted-foreground font-medium">By {inv.rejectedBy}</span>
                             )}
                           </div>
-                          {inv.rejectionReason && (
-                            <p className="text-[10px] font-medium bg-rose-500/5 p-2 rounded border border-rose-500/10 text-foreground break-words leading-relaxed">
-                              &ldquo;{inv.rejectionReason}&rdquo;
-                            </p>
-                          )}
+                          {((inv as any).objections && (inv as any).objections.length > 0) ? (
+                            <div className="space-y-1.5 pt-1">
+                              {((inv as any).objections as IInvoiceObjection[]).map((obj, oIdx) => (
+                                <div key={oIdx} className="bg-rose-500/10 p-2 rounded border border-rose-500/15 text-[10px] space-y-1">
+                                  <div className="flex items-center justify-between flex-wrap gap-1">
+                                    <span className="font-bold text-rose-700 dark:text-rose-400">
+                                      #{oIdx + 1}. {obj.category}
+                                    </span>
+                                    {obj.itemRef && (
+                                      <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-rose-500/15 text-rose-800 dark:text-rose-200 font-medium">
+                                        Target: {obj.itemRef}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <p className="text-foreground font-normal">
+                                    {obj.remark}
+                                  </p>
+                                  {obj.attachmentUrl && (
+                                    <div className="pt-0.5 border-t border-rose-500/15">
+                                      <a
+                                        href={obj.attachmentUrl}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-[9px] font-bold text-rose-600 dark:text-rose-400 hover:underline flex items-center gap-1"
+                                      >
+                                        <i className="fa-solid fa-paperclip text-[9px]" />
+                                        <span>Proof: {obj.attachmentName || "Attachment"}</span>
+                                      </a>
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          ) : inv.rejectionReason ? (
+                            <div className="space-y-0.5 bg-rose-500/5 p-2 rounded border border-rose-500/10 text-foreground break-words leading-relaxed text-[10px]">
+                              <p className="font-semibold text-rose-700 dark:text-rose-400">
+                                <strong>Category:</strong> {inv.rejectionReason}
+                              </p>
+                              {inv.rejectionRemark && (
+                                <p className="text-muted-foreground italic">
+                                  <strong>Remarks:</strong> &ldquo;{inv.rejectionRemark}&rdquo;
+                                </p>
+                              )}
+                            </div>
+                          ) : null}
                           <div className="flex items-center justify-between gap-2 pt-1 border-t border-rose-500/20">
                             <p className="text-[9px] text-muted-foreground">
                               Update timesheet or disputed items &amp; resubmit to HR:
@@ -4029,11 +4378,51 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
                               <span className="text-[10px] text-muted-foreground">Reviewed by {inv.rejectedBy}</span>
                             )}
                           </div>
-                          {inv.rejectionReason && (
-                            <p className="text-[10px] font-medium text-foreground bg-rose-500/10 px-2 py-1 rounded border border-rose-500/15 break-words">
-                              &ldquo;{inv.rejectionReason}&rdquo;
-                            </p>
-                          )}
+                          {((inv as any).objections && (inv as any).objections.length > 0) ? (
+                            <div className="space-y-1.5 pt-1">
+                              {((inv as any).objections as IInvoiceObjection[]).map((obj, oIdx) => (
+                                <div key={oIdx} className="bg-rose-500/10 p-2 rounded border border-rose-500/15 text-[10px] space-y-1">
+                                  <div className="flex items-center justify-between flex-wrap gap-1">
+                                    <span className="font-bold text-rose-700 dark:text-rose-400">
+                                      #{oIdx + 1}. {obj.category}
+                                    </span>
+                                    {obj.itemRef && (
+                                      <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-rose-500/15 text-rose-800 dark:text-rose-200 font-medium">
+                                        Target: {obj.itemRef}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <p className="text-foreground font-normal">
+                                    {obj.remark}
+                                  </p>
+                                  {obj.attachmentUrl && (
+                                    <div className="pt-0.5 border-t border-rose-500/15">
+                                      <a
+                                        href={obj.attachmentUrl}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-[9px] font-bold text-rose-600 dark:text-rose-400 hover:underline flex items-center gap-1"
+                                      >
+                                        <i className="fa-solid fa-paperclip text-[9px]" />
+                                        <span>Proof: {obj.attachmentName || "Attachment"}</span>
+                                      </a>
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          ) : inv.rejectionReason ? (
+                            <div className="space-y-0.5 text-[10px] font-medium text-foreground bg-rose-500/10 px-2.5 py-1.5 rounded border border-rose-500/15 break-words">
+                              <p className="font-semibold text-rose-700 dark:text-rose-400">
+                                <strong>Category:</strong> {inv.rejectionReason}
+                              </p>
+                              {inv.rejectionRemark && (
+                                <p className="text-muted-foreground italic">
+                                  <strong>Remarks:</strong> &ldquo;{inv.rejectionRemark}&rdquo;
+                                </p>
+                              )}
+                            </div>
+                          ) : null}
                           <div className="flex items-center justify-between gap-2 pt-1 border-t border-rose-500/20">
                             <span className="text-[10px] text-muted-foreground">Disputed details can be updated &amp; resubmitted to HR:</span>
                             <Button

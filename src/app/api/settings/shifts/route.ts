@@ -36,7 +36,10 @@ export async function GET() {
       ? tenant.employmentTypes
       : DEFAULT_EMPLOYMENT_TYPES;
 
-    return NextResponse.json({ shifts, employmentTypes });
+    const maxShiftHours = tenant?.maxShiftHours ?? 10;
+    const targetShiftHours = tenant?.targetShiftHours ?? 8;
+
+    return NextResponse.json({ shifts, employmentTypes, maxShiftHours, targetShiftHours });
   } catch (error: unknown) {
     console.error("GET Shifts API Error:", error);
     return NextResponse.json({ error: (error instanceof Error ? error.message : "Internal Server Error") || "Internal Error" }, { status: 500 });
@@ -58,7 +61,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { shifts, employmentTypes, updateUserId, newShiftName, newShiftTime, newEmploymentType } = body;
+    const { shifts, employmentTypes, updateUserId, newShiftName, newShiftTime, newEmploymentType, maxShiftHours, targetShiftHours } = body;
 
     await connectToDatabase();
     const tenant = await Tenant.findById(session.tenantId);
@@ -92,6 +95,18 @@ export async function POST(request: Request) {
     if (Array.isArray(employmentTypes)) {
       tenant.employmentTypes = employmentTypes;
     }
+    if (maxShiftHours !== undefined) {
+      const parsedMax = Number(maxShiftHours);
+      if (!isNaN(parsedMax) && parsedMax > 0 && parsedMax <= 24) {
+        tenant.maxShiftHours = parsedMax;
+      }
+    }
+    if (targetShiftHours !== undefined) {
+      const parsedTarget = Number(targetShiftHours);
+      if (!isNaN(parsedTarget) && parsedTarget > 0 && parsedTarget <= 24) {
+        tenant.targetShiftHours = parsedTarget;
+      }
+    }
 
     await tenant.save();
 
@@ -99,7 +114,9 @@ export async function POST(request: Request) {
       success: true,
       shifts: tenant.customShifts,
       employmentTypes: tenant.employmentTypes,
-      message: "Workspace shifts and employment types updated"
+      maxShiftHours: tenant.maxShiftHours ?? 10,
+      targetShiftHours: tenant.targetShiftHours ?? 8,
+      message: "Workspace shifts and shift rules updated"
     });
   } catch (error: unknown) {
     console.error("POST Shifts API Error:", error);

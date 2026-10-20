@@ -28,9 +28,30 @@ export interface FinanceInvoice {
   createdAt?: string;
   approvalStage?: "DRAFT" | "PENDING_HR" | "PENDING_ADMIN" | "PAID" | "REJECTED";
   rejectionReason?: string;
+  rejectionRemark?: string;
+  objections?: Array<{
+    category: string;
+    itemRef?: string;
+    remark: string;
+    attachmentUrl?: string;
+    attachmentName?: string;
+  }>;
   rejectedBy?: string;
   rejectedAt?: string | Date;
-  rejectionHistory?: Array<{ reason: string; rejectedBy: string; rejectedAt: string | Date; role?: string }>;
+  rejectionHistory?: Array<{
+    reason: string;
+    remark?: string;
+    objections?: Array<{
+      category: string;
+      itemRef?: string;
+      remark: string;
+      attachmentUrl?: string;
+      attachmentName?: string;
+    }>;
+    rejectedBy: string;
+    rejectedAt: string | Date;
+    role?: string;
+  }>;
   revisionCount?: number;
   timeline?: Array<{
     stage: string;

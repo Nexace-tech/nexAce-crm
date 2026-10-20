@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { connectToDatabase } from "@/lib/db";
-import { ITInvoice } from "@/models/ITInvoice";
+import { ITInvoice, IInvoiceObjection } from "@/models/ITInvoice";
 import { ActivityLog } from "@/models/ActivityLog";
 import { User } from "@/models/User";
 import { Tenant } from "@/models/Tenant";
@@ -60,8 +60,16 @@ export async function PATCH(
     }
 
     // ── MANDATORY APPROVAL GATE BEFORE PAYMENT ───────────────────────────────
-    // Payment processing is strictly blocked unless the invoice has already been Approved.
+    // Payment processing can only be executed by Admin or OPS. HR is strictly prohibited.
     if (body.status === "Paid" || body.paymentDetails) {
+      if (session.role === "HR") {
+        return NextResponse.json(
+          {
+            error: "Forbidden: Payment processing can only be executed by Admin or OPS. HR is authorized for attendance & timesheet verification only.",
+          },
+          { status: 403 }
+        );
+      }
       if ((previousInvoice as any).status !== "Approved") {
         return NextResponse.json(
           {
@@ -142,6 +150,8 @@ export async function PATCH(
       updateBody.approvalStage = "PENDING_HR";
       updateBody.revisionCount = nextRevision;
       updateBody.rejectionReason = "";
+      updateBody.rejectionRemark = "";
+      updateBody.objections = [];
       updateBody.rejectedBy = "";
       updateBody.rejectedAt = "";
 
@@ -164,6 +174,8 @@ export async function PATCH(
       updateBody.approvedAt = new Date().toISOString();
       updateBody.approverRole = session.role === "HR" ? "HR" : "Admin";
       updateBody.rejectionReason = "";
+      updateBody.rejectionRemark = "";
+      updateBody.objections = [];
       updateBody.rejectedBy = "";
       updateBody.rejectedAt = "";
 
@@ -211,21 +223,67 @@ export async function PATCH(
 
     // ── Handle Explicit Rejection Transition ──────────────────────────────────
     if (body.status === "Rejected") {
-      if (!body.rejectionReason || !body.rejectionReason.trim()) {
+      let formattedObjections: IInvoiceObjection[] = [];
+      if (Array.isArray(body.objections) && body.objections.length > 0) {
+        formattedObjections = body.objections
+          .filter((o: any) => o && (o.category || o.remark))
+          .map((o: any) => ({
+            category: String(o.category || "General Discrepancy").trim(),
+            itemRef: String(o.itemRef || "").trim(),
+            remark: String(o.remark || "").trim(),
+            attachmentUrl: String(o.attachmentUrl || "").trim(),
+            attachmentName: String(o.attachmentName || "").trim(),
+          }));
+      }
+
+      const primaryCategory = (
+        (formattedObjections.length > 0 ? formattedObjections[0].category : "") ||
+        body.rejectionReason ||
+        body.reason ||
+        "General Discrepancy"
+      ).trim();
+
+      const primaryRemark = (
+        (formattedObjections.length > 0 ? formattedObjections[0].remark : "") ||
+        body.rejectionRemark ||
+        body.remark ||
+        body.rejectionReason ||
+        ""
+      ).trim();
+
+      if (!primaryRemark && !primaryCategory && formattedObjections.length === 0) {
         return NextResponse.json(
-          { error: "Rejection feedback reason is mandatory" },
+          { error: "Rejection category reason and actionable remarks are mandatory" },
           { status: 400 }
         );
       }
-      const reasonText = body.rejectionReason.trim();
+
+      if (formattedObjections.length === 0) {
+        formattedObjections = [
+          {
+            category: primaryCategory,
+            itemRef: String(body.itemRef || "").trim(),
+            remark: primaryRemark,
+            attachmentUrl: String(body.attachmentUrl || "").trim(),
+            attachmentName: String(body.attachmentName || "").trim(),
+          },
+        ];
+      }
+
       updateBody.status = "Rejected";
       updateBody.approvalStage = "REJECTED";
-      updateBody.rejectionReason = reasonText;
+      updateBody.rejectionReason = primaryCategory;
+      updateBody.rejectionRemark = primaryRemark;
+      updateBody.objections = formattedObjections;
       updateBody.rejectedBy = session.userName || "HR";
       updateBody.rejectedAt = new Date().toISOString();
       updateBody.approvedBy = "";
       updateBody.approvedAt = "";
       updateBody.approverRole = null;
+
+      const objSummary = formattedObjections.length > 1
+        ? `[${formattedObjections.length} Issues Flagged] ${formattedObjections.map((o, idx) => `#${idx + 1} ${o.category}${o.itemRef ? ` (${o.itemRef})` : ""}: ${o.remark}${o.attachmentUrl ? " 📎" : ""}`).join(" | ")}`
+        : `[${primaryCategory}${formattedObjections[0]?.itemRef ? ` (${formattedObjections[0]?.itemRef})` : ""}] ${primaryRemark}${formattedObjections[0]?.attachmentUrl ? " 📎" : ""}`;
 
       newTimelineEvent = {
         stage: "HR_REJECTED",
@@ -233,12 +291,14 @@ export async function PATCH(
         actorName: session.userName || "HR",
         actorRole: session.role || "HR",
         actorId: userObjectId,
-        note: reasonText,
+        note: objSummary,
         timestamp: new Date(),
       };
 
       newRejectionHistoryItem = {
-        reason: reasonText,
+        reason: primaryCategory,
+        remark: primaryRemark,
+        objections: formattedObjections,
         rejectedBy: session.userName || "HR",
         rejectedAt: new Date(),
         role: session.role || "HR",
@@ -408,33 +468,56 @@ export async function PATCH(
             });
           }
         } else if (body.status === "Rejected") {
-          // 3. Rejected: Alert Submitter with mandatory reason
+          // 3. Rejected: Alert Submitter with mandatory reason & itemized objections
           if (internalUser) {
+            const currentObjections = (updated.objections && updated.objections.length > 0)
+              ? updated.objections
+              : [{ category: updated.rejectionReason, remark: updated.rejectionRemark }];
+
+            const summaryNote = currentObjections.length > 1
+              ? `${currentObjections.length} Issues Flagged`
+              : (updated.rejectionReason || "Discrepancy");
+
             await Notification.create({
               tenantId: tenantObjectId,
               recipientId: internalUser._id,
               title: `❌ Invoice Returned for Revision: ${updated.invoiceNo}`,
-              message: `Your invoice (${updated.invoiceNo}) was rejected by ${session.userName}. Reason: ${updated.rejectionReason}. Click to fix and re-initiate.`,
+              message: `Your invoice (${updated.invoiceNo}) was returned by ${session.userName}. [${summaryNote}] ${updated.rejectionRemark || ""}. Click to fix and re-initiate.`,
               type: "finance",
               linkUrl: `/dashboard/settings?tab=invoice&invoiceNo=${encodeURIComponent(updated.invoiceNo)}`,
               read: false,
             });
 
             if (internalUser.email) {
+              const objectionsHtml = currentObjections.map((obj: any, idx: number) => `
+                <div style="background-color: #fff1f2; border-left: 4px solid #f43f5e; padding: 10px 14px; margin-bottom: 8px; border-radius: 4px;">
+                  <p style="margin: 0 0 4px 0; font-size: 13px; font-weight: bold; color: #be123c;">
+                    #${idx + 1}. ${obj.category || "Issue"} ${obj.itemRef ? `<span style="font-size: 11px; background: #ffe4e6; color: #9f1239; padding: 2px 6px; border-radius: 4px; margin-left: 6px;">Target: ${obj.itemRef}</span>` : ""}
+                  </p>
+                  <p style="margin: 0; font-size: 13px; color: #334155;">${obj.remark || ""}</p>
+                  ${obj.attachmentUrl ? `<p style="margin: 6px 0 0 0; font-size: 12px; color: #64748b;">📎 Attachment included: <em>${obj.attachmentName || "Proof Document"}</em></p>` : ""}
+                </div>
+              `).join("");
+
+              const objectionsText = currentObjections.map((obj: any, idx: number) =>
+                `${idx + 1}. [${obj.category}] ${obj.itemRef ? `(${obj.itemRef}) ` : ""}${obj.remark}${obj.attachmentUrl ? " [Attachment included]" : ""}`
+              ).join("\n");
+
               await sendEmail({
                 to: internalUser.email,
                 subject: `[NexAce CRM] Invoice ${updated.invoiceNo} Returned for Revision`,
-                text: `Hello ${internalUser.name},\n\nYour invoice ${updated.invoiceNo} was returned for revision by ${session.userName} (${session.role}).\n\nReason: ${updated.rejectionReason}\n\nPlease log in to your portal, make the necessary corrections, and re-initiate your invoice.`,
+                text: `Hello ${internalUser.name},\n\nYour invoice ${updated.invoiceNo} was returned for revision by ${session.userName} (${session.role}).\n\nFlagged Issues:\n${objectionsText}\n\nPlease log in to your portal, make the necessary corrections, and re-initiate your invoice.`,
                 html: `
                   <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px; padding: 24px;">
                     <h2 style="color: #e11d48; margin-top: 0;">❌ Invoice Revision Needed</h2>
                     <p style="color: #475569; font-size: 14px;">Hello <strong>${internalUser.name}</strong>,</p>
                     <p style="color: #475569; font-size: 14px;">Your invoice has been reviewed and returned for revision by <strong>${session.userName} (${session.role})</strong>.</p>
-                    <div style="background-color: #fff1f2; border: 1px solid #fecdd3; padding: 16px; border-radius: 8px; margin: 16px 0;">
-                      <p style="margin: 4px 0; font-size: 14px;"><strong>Invoice Number:</strong> ${updated.invoiceNo}</p>
-                      <p style="margin: 4px 0; font-size: 14px; color: #be123c;"><strong>Rejection Reason:</strong> ${updated.rejectionReason}</p>
+                    <div style="border: 1px solid #e2e8f0; padding: 16px; border-radius: 8px; margin: 16px 0; background: #fafafa;">
+                      <p style="margin: 0 0 10px 0; font-size: 14px;"><strong>Invoice Number:</strong> ${updated.invoiceNo}</p>
+                      <h4 style="margin: 0 0 8px 0; color: #9f1239; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px;">Flagged Issues (${currentObjections.length}):</h4>
+                      ${objectionsHtml}
                     </div>
-                    <p style="color: #475569; font-size: 14px;">You can review this feedback, make the required corrections to your hours or notes, and re-initiate the invoice directly.</p>
+                    <p style="color: #475569; font-size: 14px;">You can review each objection, make the required corrections to your hours, tasks, or line items, and re-initiate the invoice directly.</p>
                     <p style="color: #94a3b8; font-size: 12px; margin-top: 16px;">Log in to <a href="/dashboard/settings?tab=invoice" style="color: #4f46e5;">NexAce CRM</a> to fix and resubmit.</p>
                   </div>
                 `,

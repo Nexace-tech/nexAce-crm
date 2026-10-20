@@ -27,7 +27,7 @@ import { AccessRestricted } from "@/components/ui/AccessRestricted";
 
 function CalendarPageContent() {
   const { user: currentUser, loading: authLoading } = useAuth();
-  const { can, canAccessModule, isAdmin, isOPS, loading: permLoading } = usePermissions();
+  const { can, canAccessModule, isAdmin, isOPS, isHR, loading: permLoading } = usePermissions();
   const [activeTab, setActiveTab] = useTabPersistence<"calendar" | "sprints" | "timesheets" | "attendance" | "availability">(
     "calendar_active_tab",
     "calendar",
@@ -110,6 +110,10 @@ function CalendarPageContent() {
   const [elapsedTime, setElapsedTime] = useState("00:00:00");
   const [totalSecondsWorked, setTotalSecondsWorked] = useState(0);
   const [timerIntervalId, setTimerIntervalId] = useState<NodeJS.Timeout | null>(null);
+  const [additionalTimeRequested, setAdditionalTimeRequested] = useState(false);
+  const [additionalTimeReason, setAdditionalTimeReason] = useState("");
+  const [showAdditionalTimeModal, setShowAdditionalTimeModal] = useState(false);
+  const [submittingAdditionalTime, setSubmittingAdditionalTime] = useState(false);
 
   // Pagination, Date Filter & Export States for Attendance History
   const [attendancePage, setAttendancePage] = useState(1);
@@ -272,7 +276,8 @@ function CalendarPageContent() {
   };
 
   const fetchLoginHoursSummary = async (from?: string, to?: string) => {
-    if (!isAdmin && !isOPS) return;
+    const canViewSummary = Boolean(isAdmin || isOPS || isHR || can("viewLoginHoursSummary"));
+    if (!canViewSummary) return;
     setSummaryLoading(true);
     try {
       const fromStr = from ?? summaryFrom;
@@ -535,12 +540,12 @@ function CalendarPageContent() {
     }
   };
 
-  const fetchAttendance = async (loadAll: boolean = false) => {
+  const fetchAttendance = async (loadAll: boolean = true) => {
     try {
       setAttendanceLoading(true);
       const params = new URLSearchParams();
       if (loadAll) params.append("limit", "all");
-      if (isAdmin || isOPS || can("viewTeamTimesheets")) params.append("allUsers", "true");
+      if (isAdmin || isOPS || isHR || can("viewTeamTimesheets") || can("viewLoginHoursSummary")) params.append("allUsers", "true");
       const url = `/api/attendance?${params.toString()}`;
       const res = await fetch(url);
       if (res.ok) {
@@ -572,8 +577,8 @@ function CalendarPageContent() {
           await fetchTimesheets(projs, selectedTimesheetUser);
         }
         else if (activeTab === "attendance") {
-          await fetchAttendance();
-          if (isAdmin || isOPS) {
+          await fetchAttendance(true);
+          if (isAdmin || isOPS || isHR || can("viewLoginHoursSummary")) {
             await fetchLoginHoursSummary();
           }
         }
@@ -584,7 +589,7 @@ function CalendarPageContent() {
       }
     };
     loadData();
-  }, [activeTab, timesheetWeekStart, selectedTimesheetUser, mounted, isAdmin, isOPS, currentUser?.role, isManagerOrAdmin]);
+  }, [activeTab, timesheetWeekStart, selectedTimesheetUser, mounted, isAdmin, isOPS, isHR, currentUser?.role, isManagerOrAdmin]);
 
   useEffect(() => {
     if (!mounted) return;
@@ -1631,17 +1636,20 @@ function CalendarPageContent() {
           <i className="fa-solid fa-file-csv text-sm" /> Timesheets
         </button>
 
-        <button
-          onClick={() => setActiveTab("attendance")}
-          className={cn(
-            "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
-            activeTab === "attendance"
-              ? "border-primary text-primary bg-primary/10 rounded-t-md font-semibold -mb-px"
-              : "border-transparent text-muted-foreground hover:text-foreground"
-          )}
-        >
-          <i className="fa-solid fa-fingerprint text-sm" /> Shift Clock
-        </button>
+        {/* Shift Clock Tab — permission-controlled (Admin, OPS, HR by default; adjustable via Settings > Permissions) */}
+        {(isAdmin || isOPS || isHR || can("canViewShiftClock")) && (
+          <button
+            onClick={() => setActiveTab("attendance")}
+            className={cn(
+              "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
+              activeTab === "attendance"
+                ? "border-primary text-primary bg-primary/10 rounded-t-md font-semibold -mb-px"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <i className="fa-solid fa-fingerprint text-sm" /> Shift Clock
+          </button>
+        )}
 
         {(isAdmin || isOPS || (currentUser?.role as string) === "HR" || can("viewTeamAvailability") || can("manageTeamAvailability") || can("logOwnAvailability")) && (
           <button
@@ -3163,18 +3171,68 @@ function CalendarPageContent() {
                       </div>
                     ) : (
                       <div className="flex flex-col items-center gap-2">
-                        <Button
-                          color="primary"
-                          size="lg"
-                          onClick={() => handleClockAction("resume")}
-                          className="gap-2.5 px-9 py-3 text-sm font-semibold shadow-md shadow-emerald-500/20 hover:shadow-emerald-500/30 hover:scale-[1.01] active:scale-[0.99] transition-all cursor-pointer bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl border border-emerald-400/20"
-                        >
-                          <i className="fa-solid fa-play text-xs" /> Resume Shift
-                        </Button>
-                        <p className="text-xs text-muted-foreground flex items-center gap-1.5 font-medium">
-                          <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                          Shift paused • <span className="font-mono font-semibold text-foreground">{workedHours.toFixed(1)} hrs</span> logged today
-                        </p>
+                        {(() => {
+                          const dynamicMaxHours = Number(shiftInfo?.maxHours) || 10;
+                          const isElevatedStaff = Boolean(isAdmin || isOPS || isHR || can("approveAdditionalShiftTime"));
+                          const isMaxReached = workedHours >= dynamicMaxHours;
+                          const isExtensionApproved = Boolean(attendanceToday?.extensionApproved);
+                          const canResume = !isMaxReached || isElevatedStaff || isExtensionApproved;
+
+                          if (!canResume) {
+                            return (
+                              <div className="flex flex-col items-center gap-3 p-4 rounded-2xl bg-rose-500/10 border border-rose-500/25 max-w-md text-center animate-in fade-in">
+                                <div className="w-10 h-10 rounded-full bg-rose-500/15 text-rose-600 dark:text-rose-400 flex items-center justify-center text-sm border border-rose-500/30">
+                                  <i className="fa-solid fa-lock" />
+                                </div>
+                                <div>
+                                  <div className="font-bold text-xs text-foreground">
+                                    Maximum Shift Limit Reached ({dynamicMaxHours}h)
+                                  </div>
+                                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                                    You have completed your daily shift limit. Resuming is locked without approval from Admin, OPS, or HR.
+                                  </p>
+                                </div>
+                                {!additionalTimeRequested ? (
+                                  <Button
+                                    color="primary"
+                                    size="sm"
+                                    onClick={() => setShowAdditionalTimeModal(true)}
+                                    className="gap-2 font-semibold text-xs cursor-pointer shadow-xs"
+                                  >
+                                    <i className="fa-solid fa-plus-circle text-xs" /> Raise Request for Additional Shift Time
+                                  </Button>
+                                ) : (
+                                  <div className="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400 font-medium bg-amber-500/10 border border-amber-500/20 px-3 py-1.5 rounded-lg">
+                                    <i className="fa-solid fa-clock-rotate-left text-xs" />
+                                    <span>Extension requested — awaiting Admin, OPS, or HR approval</span>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          }
+
+                          return (
+                            <>
+                              <Button
+                                color="primary"
+                                size="lg"
+                                onClick={() => handleClockAction("resume")}
+                                className="gap-2.5 px-9 py-3 text-sm font-semibold shadow-md shadow-emerald-500/20 hover:shadow-emerald-500/30 hover:scale-[1.01] active:scale-[0.99] transition-all cursor-pointer bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl border border-emerald-400/20"
+                              >
+                                <i className="fa-solid fa-play text-xs" /> Resume Shift
+                              </Button>
+                              <p className="text-xs text-muted-foreground flex items-center gap-1.5 font-medium">
+                                <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                                Shift paused • <span className="font-mono font-semibold text-foreground">{workedHours.toFixed(1)} hrs</span> logged today
+                                {isExtensionApproved && (
+                                  <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded-md ml-1">
+                                    <i className="fa-solid fa-shield-check mr-1" />Extension Approved
+                                  </span>
+                                )}
+                              </p>
+                            </>
+                          );
+                        })()}
                       </div>
                     )}
                   </div>
@@ -3258,6 +3316,12 @@ function CalendarPageContent() {
                       </div>
                       <div className="flex justify-between py-2 border-b border-border/40">
                         <span className="text-muted-foreground flex items-center gap-2">
+                          <i className="fa-solid fa-hourglass-end text-amber-500/80 text-xs w-4 text-center" /> Shift Max
+                        </span>
+                        <span className="font-semibold text-amber-600 dark:text-amber-400 font-mono text-right">{shiftInfo?.maxHours || 10} Hours (Auto Clock-Out)</span>
+                      </div>
+                      <div className="flex justify-between py-2 border-b border-border/40">
+                        <span className="text-muted-foreground flex items-center gap-2">
                           <i className="fa-solid fa-location-dot text-emerald-500 text-xs w-4 text-center" /> Work Location
                         </span>
                         <span className="font-semibold text-emerald-500 text-right">{shiftInfo?.location || "Hybrid"}</span>
@@ -3273,17 +3337,173 @@ function CalendarPageContent() {
                     </div>
                   </div>
 
-                  <div className="p-3 rounded-xl bg-primary/10 border border-primary/20 text-xs text-primary font-medium flex items-start gap-2.5">
-                    <i className="fa-solid fa-circle-info text-sm shrink-0 mt-0.5" />
-                    <span>Clock-in records automatically calculate regular and overtime hours upon clock-out. Shifts can be resumed anytime on the same day.</span>
-                  </div>
+                  {(() => {
+                    const dynamicMaxHours = Number(shiftInfo?.maxHours) || 10;
+                    const dynamicTargetHours = Number(shiftInfo?.targetHours) || 8;
+
+                    return (
+                      <>
+                        <div className="p-3 rounded-xl bg-primary/10 border border-primary/20 text-xs text-primary font-medium flex items-start gap-2.5">
+                          <i className="fa-solid fa-circle-info text-sm shrink-0 mt-0.5" />
+                          <span>Clock-in records automatically calculate regular and overtime hours upon clock-out. Shifts auto-close at <strong>{dynamicMaxHours} hours max</strong>. Shifts can be resumed anytime on the same day.</span>
+                        </div>
+
+                        {/* Request Additional Shift Time — shown when near/at max cap */}
+                        {isShiftActive && workedHours >= dynamicTargetHours && (
+                          <div className={cn(
+                            "p-3 rounded-xl border text-xs font-medium flex flex-col gap-2",
+                            workedHours >= dynamicMaxHours
+                              ? "bg-rose-500/10 border-rose-500/30 text-rose-600 dark:text-rose-400"
+                              : "bg-amber-500/10 border-amber-500/30 text-amber-600 dark:text-amber-400"
+                          )}>
+                            <div className="flex items-center gap-2">
+                              <i className={cn("fa-solid text-sm shrink-0", workedHours >= dynamicMaxHours ? "fa-triangle-exclamation" : "fa-clock-rotate-left")} />
+                              <span className="font-semibold">
+                                {workedHours >= dynamicMaxHours
+                                  ? `${dynamicMaxHours}h limit reached — shift will auto-clock-out`
+                                  : `${(dynamicMaxHours - workedHours).toFixed(1)}h remaining before auto clock-out`}
+                              </span>
+                            </div>
+                            {!additionalTimeRequested ? (
+                              <button
+                                onClick={() => setShowAdditionalTimeModal(true)}
+                                className="mt-0.5 w-full text-center py-1.5 px-3 rounded-lg border border-current/30 bg-current/10 hover:bg-current/20 font-semibold transition-colors cursor-pointer text-[11px] flex items-center justify-center gap-1.5"
+                              >
+                                <i className="fa-solid fa-plus-circle" /> Raise Request for Additional Shift Time
+                              </button>
+                            ) : (
+                              <div className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
+                                <i className="fa-solid fa-circle-check" />
+                                <span>Additional shift time request submitted — pending approval</span>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
                 </Card>
+              </div>
+            );
+          })()}
+
+          {/* Dedicated Pending Shift Extension Requests Queue for Admin, OPS, and HR */}
+          {(() => {
+            const canApprove = Boolean(isAdmin || isOPS || isHR || can("approveAdditionalShiftTime"));
+            if (!canApprove) return null;
+
+            const mergedHistory = mergeAttendanceByISTDay(attendanceHistory);
+            const pendingRequests = mergedHistory.filter((log: any) => log.extensionRequested && !log.extensionApproved);
+
+            if (pendingRequests.length === 0) return null;
+
+            return (
+              <div className="p-4 sm:p-5 rounded-2xl border border-amber-500/30 bg-gradient-to-br from-amber-500/10 via-card/95 to-card/85 shadow-md space-y-4 animate-in fade-in duration-200">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-amber-500/20">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center text-lg border border-amber-500/30 shadow-xs shrink-0">
+                      <i className="fa-solid fa-clock-rotate-left animate-spin-slow" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className="text-sm font-bold text-foreground">Pending Shift Extension Requests</h3>
+                        <span className="px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30 animate-pulse">
+                          {pendingRequests.length} Awaiting Approval
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Team members who reached the maximum shift limit and requested additional working hours today
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                  {pendingRequests.map((req: any) => {
+                    const emp = typeof req.userId === "object" ? req.userId : null;
+                    const { reg, ot } = getLogHours(req);
+                    const totalHours = (reg + ot).toFixed(1);
+
+                    return (
+                      <div
+                        key={req._id}
+                        className="p-4 rounded-xl bg-card border border-amber-500/25 shadow-xs flex flex-col justify-between space-y-3 hover:border-amber-500/40 transition-colors"
+                      >
+                        <div className="space-y-2.5">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <div className="w-9 h-9 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 font-bold flex items-center justify-center text-xs border border-amber-500/30 shrink-0">
+                                {emp?.name?.[0]?.toUpperCase() || "U"}
+                              </div>
+                              <div className="min-w-0">
+                                <div className="font-bold text-xs truncate text-foreground">{emp?.name || "Team Member"}</div>
+                                <div className="text-[10px] text-muted-foreground truncate">{emp?.role || "Employee"} {emp?.department ? `• ${emp?.department}` : ""}</div>
+                              </div>
+                            </div>
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 shrink-0">
+                              {totalHours}h Worked
+                            </span>
+                          </div>
+
+                          {req.extensionReason && (
+                            <div className="p-2.5 rounded-lg bg-accent/40 border border-border/60 text-xs text-foreground/90 leading-relaxed">
+                              <div className="text-[10px] font-semibold text-muted-foreground flex items-center gap-1 mb-1">
+                                <i className="fa-solid fa-comment-dots text-amber-500/80 text-[10px]" /> Reason:
+                              </div>
+                              <p className="italic font-normal text-[11px]">"{req.extensionReason}"</p>
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-2 pt-2 border-t border-border/60">
+                          <Button
+                            size="sm"
+                            onClick={async () => {
+                              try {
+                                const res = await fetch("/api/attendance", {
+                                  method: "POST",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({
+                                    action: "approve_extension",
+                                    targetAttendanceId: req._id,
+                                  }),
+                                });
+                                const data = await res.json();
+                                if (res.ok) {
+                                  showToast(`Shift extension approved for ${emp?.name || "employee"}!`, "success");
+                                  await fetchAttendance();
+                                } else {
+                                  showToast(data.error || "Failed to approve extension", "error");
+                                }
+                              } catch {
+                                showToast("Failed to approve shift extension", "error");
+                              }
+                            }}
+                            className="flex-1 cursor-pointer gap-1.5 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs"
+                          >
+                            <i className="fa-solid fa-check text-xs" /> Approve Extension
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setSelectedAttendanceLog(req)}
+                            className="cursor-pointer gap-1 text-xs text-muted-foreground hover:text-foreground"
+                            title="View Full Shift Log"
+                          >
+                            <i className="fa-solid fa-eye text-xs" />
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             );
           })()}
 
           {/* Enhanced Shift Attendance Logs & History Table */}
           {(() => {
+            const canViewAllStaff = Boolean(isAdmin || isOPS || isHR || can("viewTeamTimesheets") || can("viewLoginHoursSummary"));
             const mergedHistory = mergeAttendanceByISTDay(attendanceHistory);
             const targetLogs = selectedDateFilter
               ? mergedHistory.filter((log) => getISTDateString(new Date(log.date)) === selectedDateFilter)
@@ -3590,7 +3810,7 @@ function CalendarPageContent() {
                       <table className="w-full text-xs text-left border-collapse">
                         <thead>
                           <tr className="bg-muted/40 border-b border-border/70 text-muted-foreground font-semibold text-[10px] uppercase tracking-wider">
-                            {(isAdmin || isOPS) && <th className="py-3 px-4">Employee</th>}
+                            {canViewAllStaff && <th className="py-3 px-4">Employee</th>}
                             <th className="py-3 px-4">Date</th>
                             <th className="py-3 px-4 text-center">Status</th>
                             <th className="py-3 px-4">Clock In</th>
@@ -3603,7 +3823,7 @@ function CalendarPageContent() {
                         <tbody className="divide-y divide-border/60">
                           {paginatedItems.length === 0 ? (
                             <tr>
-                              <td colSpan={(isAdmin || isOPS) ? 8 : 7} className="py-14 text-center text-muted-foreground">
+                              <td colSpan={canViewAllStaff ? 8 : 7} className="py-14 text-center text-muted-foreground">
                                 <div className="flex flex-col items-center justify-center gap-2.5">
                                   <div className="w-12 h-12 rounded-2xl bg-muted/60 flex items-center justify-center text-muted-foreground/60 border border-border/60">
                                     <i className="fa-solid fa-inbox text-lg" />
@@ -3654,7 +3874,7 @@ function CalendarPageContent() {
                                       : "hover:bg-accent/30"
                                   )}
                                 >
-                                  {(isAdmin || isOPS) && (
+                                  {canViewAllStaff && (
                                     <td className="py-3 px-4 font-semibold text-foreground">
                                       {empObj ? (
                                         <div className="flex items-center gap-2.5 min-w-[150px]">
@@ -3712,20 +3932,33 @@ function CalendarPageContent() {
 
                                   {/* Status */}
                                   <td className="py-3 px-4 text-center">
-                                    <span className={cn(
-                                      "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border whitespace-nowrap shadow-2xs",
-                                      log.status === "Present" || !log.status
-                                        ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/25"
-                                        : log.status === "Late"
-                                        ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/25"
-                                        : "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/25"
-                                    )}>
+                                    <div className="flex flex-col items-center gap-1">
                                       <span className={cn(
-                                        "w-1.5 h-1.5 rounded-full",
-                                        log.status === "Late" ? "bg-amber-500" : log.status === "Half Day" ? "bg-indigo-500" : "bg-emerald-500"
-                                      )} />
-                                      {log.status || "Present"}
-                                    </span>
+                                        "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border whitespace-nowrap shadow-2xs",
+                                        log.status === "Present" || !log.status
+                                          ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/25"
+                                          : log.status === "Late"
+                                          ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/25"
+                                          : "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/25"
+                                      )}>
+                                        <span className={cn(
+                                          "w-1.5 h-1.5 rounded-full",
+                                          log.status === "Late" ? "bg-amber-500" : log.status === "Half Day" ? "bg-indigo-500" : "bg-emerald-500"
+                                        )} />
+                                        {log.status || "Present"}
+                                      </span>
+
+                                      {log.extensionRequested && !log.extensionApproved && (
+                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 animate-pulse whitespace-nowrap" title={log.extensionReason || "Additional shift time requested"}>
+                                          <i className="fa-solid fa-clock-rotate-left text-[9px]" /> Extension Req.
+                                        </span>
+                                      )}
+                                      {log.extensionApproved && (
+                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 whitespace-nowrap">
+                                          <i className="fa-solid fa-circle-check text-[9px]" /> Ext. Approved
+                                        </span>
+                                      )}
+                                    </div>
                                   </td>
 
                                   {/* Clock In */}
@@ -3810,20 +4043,55 @@ function CalendarPageContent() {
 
                                   {/* Action Button */}
                                   <td className="py-3 px-4 text-center whitespace-nowrap">
-                                    <Button
-                                      type="button"
-                                      variant="ghost"
-                                      size="sm"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setSelectedAttendanceLog(log);
-                                      }}
-                                      className="h-7 px-2.5 rounded-lg text-xs font-semibold text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors inline-flex items-center gap-1 cursor-pointer"
-                                      title="View Shift Breakdown"
-                                    >
-                                      <span>View</span>
-                                      <i className="fa-solid fa-chevron-right text-[10px] group-hover:translate-x-0.5 transition-transform" />
-                                    </Button>
+                                    <div className="flex items-center justify-center gap-1.5">
+                                      {canViewAllStaff && log.extensionRequested && !log.extensionApproved && (
+                                        <Button
+                                          type="button"
+                                          size="sm"
+                                          onClick={async (e) => {
+                                            e.stopPropagation();
+                                            try {
+                                              const res = await fetch("/api/attendance", {
+                                                method: "POST",
+                                                headers: { "Content-Type": "application/json" },
+                                                body: JSON.stringify({
+                                                  action: "approve_extension",
+                                                  targetAttendanceId: log._id,
+                                                }),
+                                              });
+                                              const data = await res.json();
+                                              if (res.ok) {
+                                                showToast(`Shift extension approved for ${typeof log.userId === "object" ? log.userId?.name : "employee"}!`, "success");
+                                                await fetchAttendance();
+                                              } else {
+                                                showToast(data.error || "Failed to approve extension", "error");
+                                              }
+                                            } catch {
+                                              showToast("Failed to approve extension", "error");
+                                            }
+                                          }}
+                                          className="h-7 px-2 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer shadow-xs"
+                                          title="Approve Extension Request"
+                                        >
+                                          <i className="fa-solid fa-check text-[10px]" />
+                                          <span className="hidden sm:inline ml-1">Approve</span>
+                                        </Button>
+                                      )}
+                                      <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setSelectedAttendanceLog(log);
+                                        }}
+                                        className="h-7 px-2.5 rounded-lg text-xs font-semibold text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors inline-flex items-center gap-1 cursor-pointer"
+                                        title="View Shift Breakdown"
+                                      >
+                                        <span>View</span>
+                                        <i className="fa-solid fa-chevron-right text-[10px] group-hover:translate-x-0.5 transition-transform" />
+                                      </Button>
+                                    </div>
                                   </td>
                                 </tr>
                               );
@@ -3899,8 +4167,8 @@ function CalendarPageContent() {
             );
           })()}
 
-          {/* ─── Login & Hours Summary (Admin/OPS only) ─── */}
-          {(isAdmin || isOPS) && (
+          {/* ─── Login & Hours Summary (Admin/OPS/HR) ─── */}
+          {(isAdmin || isOPS || isHR || can("viewLoginHoursSummary")) && (
             <Card className="border border-border bg-card/60 overflow-hidden">
               {/* Header */}
               <CardHeader className="pb-3 border-b border-border/60">
@@ -4526,6 +4794,118 @@ function CalendarPageContent() {
         </div>
       )}
 
+      {/* Additional Shift Time Request Modal */}
+      {showAdditionalTimeModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in" onClick={() => setShowAdditionalTimeModal(false)}>
+          <div className="w-full max-w-md bg-card border border-border rounded-xl shadow-2xl animate-in zoom-in-95 overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            {/* Header */}
+            <div className="px-5 py-4 border-b border-border bg-amber-500/5 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-amber-500/15 text-amber-500 flex items-center justify-center text-base">
+                  <i className="fa-solid fa-clock-rotate-left" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-foreground">Request Additional Shift Time</h3>
+                  <p className="text-[11px] text-muted-foreground">Submit for Admin / OPS / HR approval</p>
+                </div>
+              </div>
+              <button onClick={() => setShowAdditionalTimeModal(false)} className="w-7 h-7 rounded-lg flex items-center justify-center hover:bg-muted/60 text-muted-foreground cursor-pointer transition-colors">
+                <i className="fa-solid fa-xmark text-sm" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="px-5 py-4 space-y-4">
+              {/* Current worked hours info */}
+              <div className="flex items-center justify-between p-3 rounded-lg bg-muted/40 border border-border/60 text-xs">
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <i className="fa-solid fa-business-time text-primary text-sm" />
+                  <span>Hours worked today</span>
+                </div>
+                <span className="font-mono font-bold text-foreground">{(totalSecondsWorked / 3600).toFixed(1)}h / {shiftInfo?.maxHours || 10}h max</span>
+              </div>
+
+              {/* Reason */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                  <i className="fa-solid fa-message-lines text-primary text-xs" />
+                  Reason for Additional Time <span className="text-destructive">*</span>
+                </label>
+                <textarea
+                  value={additionalTimeReason}
+                  onChange={(e) => setAdditionalTimeReason(e.target.value)}
+                  placeholder="Describe why additional shift time is needed (e.g. critical deadline, client deliverable, handover required)..."
+                  rows={4}
+                  className="w-full text-xs resize-none rounded-lg border border-border bg-input px-3 py-2.5 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 transition-colors"
+                />
+              </div>
+
+              <p className="text-[11px] text-muted-foreground flex items-start gap-1.5 bg-primary/5 border border-primary/20 rounded-lg px-3 py-2">
+                <i className="fa-solid fa-shield-check text-primary text-xs mt-0.5 shrink-0" />
+                This request will be visible to Admin, OPS &amp; HR for approval. Once approved, your shift clock-out limit will be extended.
+              </p>
+            </div>
+
+            {/* Footer */}
+            <div className="px-5 py-4 border-t border-border flex items-center justify-end gap-2">
+              <Button variant="outline" size="sm" onClick={() => setShowAdditionalTimeModal(false)} className="cursor-pointer">
+                Cancel
+              </Button>
+              <Button
+                color="primary"
+                size="sm"
+                disabled={!additionalTimeReason.trim() || submittingAdditionalTime}
+                className="gap-1.5 font-semibold cursor-pointer"
+                onClick={async () => {
+                  if (!additionalTimeReason.trim()) return;
+                  setSubmittingAdditionalTime(true);
+                  try {
+                    // 1. Record extension request in database
+                    await fetch("/api/attendance", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        action: "request_extension",
+                        reason: additionalTimeReason.trim(),
+                      }),
+                    });
+
+                    // 2. Submit broadcast notification to Admin, OPS, and HR
+                    await fetch("/api/notifications", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        title: `⏱ Shift Extension Request — ${currentUser?.name || "Team Member"}`,
+                        message: `Additional shift time requested: "${additionalTimeReason.trim()}"`,
+                        type: "shift_extension",
+                        broadcast: true,
+                      }),
+                    });
+
+                    setAdditionalTimeRequested(true);
+                    setShowAdditionalTimeModal(false);
+                    showToast("Additional shift time request submitted for approval!", "success");
+                    await fetchAttendance();
+                  } catch {
+                    showToast("Request submitted. Admin/OPS/HR will be notified.", "success");
+                    setAdditionalTimeRequested(true);
+                    setShowAdditionalTimeModal(false);
+                  } finally {
+                    setSubmittingAdditionalTime(false);
+                  }
+                }}
+              >
+                {submittingAdditionalTime ? (
+                  <><i className="fa-solid fa-spinner animate-spin text-xs" /> Submitting...</>
+                ) : (
+                  <><i className="fa-solid fa-paper-plane text-xs" /> Submit Request</>
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Selected Event Details Modal */}
       {selectedEvent && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in" onClick={() => setSelectedEvent(null)}>
@@ -4722,6 +5102,35 @@ function CalendarPageContent() {
                     </div>
                   </div>
 
+                  {/* Shift Extension Request & Approval Status Banner */}
+                  {selectedAttendanceLog.extensionRequested && (
+                    <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/25 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-amber-600 dark:text-amber-400 flex items-center gap-1.5">
+                          <i className="fa-solid fa-clock-rotate-left" /> Shift Extension Requested
+                        </span>
+                        <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30">
+                          Pending Approval
+                        </span>
+                      </div>
+                      {selectedAttendanceLog.extensionReason ? (
+                        <div className="text-xs text-foreground/90 bg-card/60 p-2.5 rounded-lg border border-border/60">
+                          <span className="text-[10px] uppercase font-bold text-muted-foreground block mb-0.5">Reason:</span>
+                          <p className="italic font-normal">"{selectedAttendanceLog.extensionReason}"</p>
+                        </div>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">Additional working hours requested past maximum shift duration.</p>
+                      )}
+                    </div>
+                  )}
+
+                  {selectedAttendanceLog.extensionApproved && (
+                    <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-2">
+                      <i className="fa-solid fa-circle-check text-sm shrink-0" />
+                      <span>Shift extension has been approved for this session. Employee is cleared to resume active shift.</span>
+                    </div>
+                  )}
+
                   {/* All-Time Attendance History Table */}
                   {empLogs.length > 0 && (
                     <div className="space-y-2">
@@ -4781,18 +5190,57 @@ function CalendarPageContent() {
                   )}
 
                   {/* Modal Footer */}
-                  <div className="flex items-center justify-between pt-3 border-t border-border/70 text-xs text-muted-foreground">
+                  <div className="flex items-center justify-between pt-3 border-t border-border/70 text-xs text-muted-foreground flex-wrap gap-2">
                     <span className="flex items-center gap-1.5 text-[11px]">
                       <i className="fa-solid fa-clock text-[10px]" /> Shift records displayed in IST
                     </span>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setSelectedAttendanceLog(null)}
-                      className="cursor-pointer gap-1.5 rounded-lg text-xs font-semibold hover:bg-accent"
-                    >
-                      <i className="fa-solid fa-xmark text-xs" /> Close Details
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      {Boolean(isAdmin || isOPS || isHR || can("approveAdditionalShiftTime")) && (
+                        selectedAttendanceLog.extensionApproved ? (
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 font-bold text-xs">
+                            <i className="fa-solid fa-circle-check text-xs" /> Extension Approved
+                          </span>
+                        ) : (
+                          <Button
+                            size="sm"
+                            color="primary"
+                            onClick={async () => {
+                              try {
+                                const res = await fetch("/api/attendance", {
+                                  method: "POST",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({
+                                    action: "approve_extension",
+                                    targetAttendanceId: selectedAttendanceLog._id,
+                                  }),
+                                });
+                                const data = await res.json();
+                                if (res.ok) {
+                                  showToast("Shift extension approved! Employee can now resume.", "success");
+                                  setSelectedAttendanceLog({ ...selectedAttendanceLog, extensionApproved: true });
+                                  await fetchAttendance();
+                                } else {
+                                  showToast(data.error || "Failed to approve extension", "error");
+                                }
+                              } catch {
+                                showToast("Failed to approve shift extension", "error");
+                              }
+                            }}
+                            className="cursor-pointer gap-1.5 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white"
+                          >
+                            <i className="fa-solid fa-unlock text-xs" /> Approve Shift Extension
+                          </Button>
+                        )
+                      )}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setSelectedAttendanceLog(null)}
+                        className="cursor-pointer gap-1.5 rounded-lg text-xs font-semibold hover:bg-accent"
+                      >
+                        <i className="fa-solid fa-xmark text-xs" /> Close Details
+                      </Button>
+                    </div>
                   </div>
                 </div>
               );

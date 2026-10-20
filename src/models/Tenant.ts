@@ -55,6 +55,8 @@ export interface ITenant extends Document {
   employmentTypes?: string[];
   signatureUrl?: string;
   isolateHRData?: boolean;
+  maxShiftHours?: number;
+  targetShiftHours?: number;
   createdAt: Date;
 }
 
@@ -115,6 +117,8 @@ const TenantSchema: Schema = new Schema({
   },
   signatureUrl: { type: String, default: "" },
   isolateHRData: { type: Boolean, default: false },
+  maxShiftHours: { type: Number, default: 10 },
+  targetShiftHours: { type: Number, default: 8 },
   createdAt: { type: Date, default: Date.now }
 }, { strict: false });
 
