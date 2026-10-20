@@ -6,9 +6,7 @@ const nextConfig: NextConfig = {
   devIndicators: false,
   allowedDevOrigins: ["127.0.0.1", "localhost"],
   // Prevent thread exhaustion on constrained build servers (os error 11 / SIGABRT).
-  // Next.js was spawning 63 workers during "Collecting page data" which hit the
-  // OS NPROC limit. Disabling worker threads falls back to sequential processing.
-  workerThreads: false,
+  // Worker concurrency is capped via NEXT_WORKER_THREADS=4 in the build script.
   staticPageGenerationTimeout: 120,
   experimental: {
     optimizePackageImports: [
