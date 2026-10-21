@@ -9,7 +9,7 @@ import { createSession, deleteSession } from "@/lib/session";
 import { redirect } from "next/navigation";
 import { sendEmail } from "@/lib/mail";
 import { Notification } from "@/models/Notification";
-import { validatePasswordPattern } from "@/lib/utils";
+import { validatePasswordPattern, validateDob } from "@/lib/utils";
 import { rateLimitOtp, rateLimitVerify, rateLimitLogin, getClientIp } from "@/lib/rateLimiter";
 
 export interface FormState {
@@ -20,6 +20,7 @@ export interface FormState {
     username?: string[];
     adminEmail?: string[];
     adminPassword?: string[];
+    dob?: string[];
     email?: string[];
     password?: string[];
     code?: string[];
@@ -75,6 +76,7 @@ export async function registerAction(state: FormState | undefined, formData: For
   const usernameRaw = (formData.get("username") as string)?.trim()?.toLowerCase()?.replace(/^@/, "");
   const adminEmail = formData.get("adminEmail") as string;
   const adminPassword = formData.get("adminPassword") as string;
+  const dobRaw = formData.get("dob") as string;
   const code = formData.get("code") as string;
 
   // 1. Simple Server-Side Validation
@@ -95,6 +97,11 @@ export async function registerAction(state: FormState | undefined, formData: For
   const pwdValidation = validatePasswordPattern(adminPassword);
   if (!pwdValidation.isValid) {
     errors.adminPassword = [pwdValidation.error!];
+  }
+
+  const dobValidation = validateDob(dobRaw);
+  if (!dobValidation.isValid) {
+    errors.dob = [dobValidation.error!];
   }
 
   if (Object.keys(errors).length > 0) {
@@ -171,6 +178,7 @@ export async function registerAction(state: FormState | undefined, formData: For
       role: assignedRole,
       status: assignedStatus,
       tenantId: tenant._id,
+      dob: dobValidation.date,
     });
 
     // Delete verification record only after User.create succeeds

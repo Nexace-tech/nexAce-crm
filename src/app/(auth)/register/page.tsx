@@ -7,7 +7,7 @@ import { registerAction } from "@/app/actions/auth";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { getPasswordCriteria, generateSecurePassword, cn } from "@/lib/utils";
+import { getPasswordCriteria, generateSecurePassword, getMaxDobDateString, cn } from "@/lib/utils";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -18,6 +18,7 @@ export default function RegisterPage() {
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [dob, setDob] = useState("");
   const [verificationCode, setVerificationCode] = useState("");
   
   const [showPassword, setShowPassword] = useState(false);
@@ -186,6 +187,29 @@ export default function RegisterPage() {
                   <span className="text-[11px] text-destructive font-medium">{state.errors.username[0]}</span>
                 )}
               </div>
+            </div>
+
+            {/* Date of Birth */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label htmlFor="dob" className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                  <i className="fa-solid fa-cake-candles text-muted-foreground text-xs" /> Date of Birth <span className="text-destructive font-bold">*</span>
+                </label>
+                <span className="text-[10.5px] text-muted-foreground font-normal">Must be at least 18 years old</span>
+              </div>
+              <Input
+                id="dob"
+                name="dob"
+                type="date"
+                max={getMaxDobDateString(18)}
+                value={dob}
+                onChange={(e) => setDob(e.target.value)}
+                required
+                className="w-full h-10 cursor-pointer"
+              />
+              {state?.errors?.dob && (
+                <span className="text-[11px] text-destructive font-medium">{state.errors.dob[0]}</span>
+              )}
             </div>
 
             {/* 2. Email Address & Code Request Button */}

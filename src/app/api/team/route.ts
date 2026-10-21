@@ -6,7 +6,7 @@ import { Attendance } from "@/models/Attendance";
 import { Notification } from "@/models/Notification";
 import { getUserDataScope } from "@/lib/dataScope";
 import { canAssignRole, isSubAdminRole } from "@/lib/roles";
-import { generateSecurePassword } from "@/lib/utils";
+import { generateSecurePassword, validateDob } from "@/lib/utils";
 import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
 
@@ -219,6 +219,12 @@ export async function POST(request: Request) {
           continue;
         }
 
+        const dobValidation = validateDob(item.dob);
+        if (!dobValidation.isValid) {
+          errors.push(`Row ${i + 1} (${item.email}): ${dobValidation.error}`);
+          continue;
+        }
+
         // Privilege-escalation guard: prevent assigning Admin/OPS unless caller is Admin/OPS
         const memberRole = (item.role || "Employee") as string;
         if (!canAssignRole(session.role, memberRole)) {
@@ -254,6 +260,7 @@ export async function POST(request: Request) {
           passwordHash: hash,
           role: memberRole,
           tenantId: tenantObjectId,
+          dob: dobValidation.date,
           department: depts[0] || "General",
           departments: depts,
           managerId: item.managerId ? new mongoose.Types.ObjectId(item.managerId) : undefined,
@@ -308,10 +315,15 @@ export async function POST(request: Request) {
     }
 
     // Single member insert payload
-    const { name, email, role, department, departments, managerId, skills, bio, phone, photoUrl, employmentType, salary } = body;
+    const { name, email, role, department, departments, managerId, skills, bio, phone, photoUrl, employmentType, salary, dob } = body;
 
     if (!name || !email) {
       return NextResponse.json({ error: "Name and email are required fields" }, { status: 400 });
+    }
+
+    const dobValidation = validateDob(dob);
+    if (!dobValidation.isValid) {
+      return NextResponse.json({ error: dobValidation.error }, { status: 400 });
     }
 
     // Privilege-escalation guard: only Admin/OPS may grant Admin/OPS roles
@@ -349,6 +361,7 @@ export async function POST(request: Request) {
       passwordHash: hash,
       role: validatedRole,
       tenantId: tenantObjectId,
+      dob: dobValidation.date,
       department: deptsList[0] || "General",
       departments: deptsList,
       managerId: managerId ? new mongoose.Types.ObjectId(managerId) : undefined,

@@ -247,3 +247,53 @@ export function getNotificationTargetUrl(n: { type?: string; title?: string; mes
 
   return null;
 }
+
+/**
+ * Validates a Date of Birth string or Date object:
+ * - Must be present and a valid date
+ * - Must not be in the future
+ * - Must satisfy a minimum age requirement (default: 18 years old)
+ */
+export function validateDob(
+  dobInput: string | Date | undefined | null,
+  minAge: number = 18
+): { isValid: boolean; error?: string; date?: Date } {
+  if (!dobInput) {
+    return { isValid: false, error: "Date of Birth is required." };
+  }
+
+  const date = typeof dobInput === "string" ? new Date(dobInput) : dobInput;
+  if (isNaN(date.getTime())) {
+    return { isValid: false, error: "Please enter a valid Date of Birth." };
+  }
+
+  const today = new Date();
+  const todayNormalized = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const birthNormalized = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+
+  if (birthNormalized > todayNormalized) {
+    return { isValid: false, error: "Date of Birth cannot be in the future." };
+  }
+
+  let age = todayNormalized.getFullYear() - birthNormalized.getFullYear();
+  const monthDiff = todayNormalized.getMonth() - birthNormalized.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && todayNormalized.getDate() < birthNormalized.getDate())) {
+    age--;
+  }
+
+  if (age < minAge) {
+    return { isValid: false, error: `Employee must be at least ${minAge} years old.` };
+  }
+
+  return { isValid: true, date };
+}
+
+/**
+ * Returns the maximum date string (YYYY-MM-DD) permissible for an employee of minimum age (default 18).
+ */
+export function getMaxDobDateString(minAge: number = 18): string {
+  const d = new Date();
+  d.setFullYear(d.getFullYear() - minAge);
+  return d.toISOString().split("T")[0];
+}
+

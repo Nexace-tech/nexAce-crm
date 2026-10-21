@@ -6,7 +6,7 @@ import { EmailVerification } from "@/models/EmailVerification";
 import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
 import { sendEmail } from "@/lib/mail";
-import { validatePasswordPattern } from "@/lib/utils";
+import { validatePasswordPattern, validateDob } from "@/lib/utils";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -254,6 +254,13 @@ export async function PUT(request: Request, { params }: RouteParams) {
 
     // Personal profile meta updates (Allowed for Self and Permitted editors)
     if (isSelf || canEditOthers) {
+      if (body.dob !== undefined) {
+        const dobValidation = validateDob(body.dob);
+        if (!dobValidation.isValid) {
+          return NextResponse.json({ error: dobValidation.error }, { status: 400 });
+        }
+        user.dob = dobValidation.date;
+      }
       if (body.bio !== undefined) user.bio = body.bio;
       if (body.phone !== undefined) user.phone = body.phone;
       if (body.photoUrl !== undefined) user.photoUrl = body.photoUrl;
@@ -293,6 +300,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
     if (body.resumeFileName !== undefined) directUpdate.resumeFileName = body.resumeFileName;
     if (body.resumeFileSize !== undefined) directUpdate.resumeFileSize = body.resumeFileSize;
     if (body.resumeUpdatedAt !== undefined) directUpdate.resumeUpdatedAt = body.resumeUpdatedAt;
+    if (body.dob !== undefined && user.dob) directUpdate.dob = user.dob;
     if (body.bankDetails !== undefined) {
       directUpdate.bankDetails = {
         bankName: (body.bankDetails.bankName || "").trim(),

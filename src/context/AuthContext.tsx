@@ -14,6 +14,7 @@ interface UserProfile {
     name: string;
     slug: string;
   };
+  dob?: string | Date;
   department?: string;
   shiftName?: string;
   shiftTime?: string;

@@ -27,12 +27,13 @@ export function ProfileCompletionBanner() {
 
   // Check profile completion percentage & missing fields
   const missingFields: string[] = [];
+  if (!user?.dob) missingFields.push("Date of Birth");
   if (!user?.phone) missingFields.push("Phone Number");
   if (!user?.bio) missingFields.push("Bio / About Me");
   if (!user?.skills || user.skills.length === 0) missingFields.push("Skills");
   if (!user?.photoUrl) missingFields.push("Avatar / Profile Photo");
 
-  const totalChecks = 4;
+  const totalChecks = 5;
   const completedCount = totalChecks - missingFields.length;
   const percent = Math.round((completedCount / totalChecks) * 100);
 
@@ -512,6 +513,7 @@ export function ProfileCompletionBanner() {
               </p>
               <div className="space-y-1.5">
                 {[
+                  { label: "Date of Birth", done: Boolean(user?.dob) },
                   { label: "Profile Photo & Avatar", done: Boolean(user?.photoUrl) },
                   { label: "Contact Phone Number", done: Boolean(user?.phone) },
                   { label: "Bio / Professional Summary", done: Boolean(user?.bio) },

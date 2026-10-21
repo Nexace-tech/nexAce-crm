@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { BrokenPhotoPlaceholder, BrokenPhotoBanner } from "@/components/ui/BrokenPhotoPlaceholder";
-import { cn, generateSecurePassword } from "@/lib/utils";
+import { cn, generateSecurePassword, validateDob, getMaxDobDateString } from "@/lib/utils";
 import { useTabPersistence } from "@/hooks/useTabPersistence";
 import { RoleDataControlTab } from "@/components/settings/RoleDataControlTab";
 import { AccessRestricted } from "@/components/ui/AccessRestricted";
@@ -74,6 +74,7 @@ function SettingsPageContent() {
   const [phone, setPhone] = useState("");
   const [bio, setBio] = useState("");
   const [skills, setSkills] = useState("");
+  const [dob, setDob] = useState("");
 
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [photoBroken, setPhotoBroken] = useState(false);
@@ -223,6 +224,8 @@ function SettingsPageContent() {
     if (user) {
       setName(user.name || "");
       setEmail(user.email || "");
+      const userDobStr = (user as any).dob ? new Date((user as any).dob).toISOString().split("T")[0] : "";
+      setDob(userDobStr);
       setPhone(user.phone || "");
       setBio(user.bio || "");
       setSkills(user.skills ? user.skills.join(", ") : "");
@@ -767,6 +770,11 @@ function SettingsPageContent() {
       showToast("Please enter a valid email address.", "error");
       return;
     }
+    const dobValidation = validateDob(dob);
+    if (!dobValidation.isValid) {
+      showToast(dobValidation.error || "Please enter a valid Date of Birth (at least 18 years old).", "error");
+      return;
+    }
     const skillsArray = skills.split(",").map((s) => s.trim()).filter((s) => s.length > 0);
     let finalSig = signatureUrl;
     if (showSignaturePad && signatureCanvasRef.current) {
@@ -776,6 +784,7 @@ function SettingsPageContent() {
     const profileData = {
       name,
       email,          // new email — sent to backend after verification
+      dob: dobValidation.date,
       phone,
       bio,
       skills: skillsArray,
@@ -821,6 +830,11 @@ function SettingsPageContent() {
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
+    const dobValidation = validateDob(dob);
+    if (!dobValidation.isValid) {
+      showToast(dobValidation.error || "Please enter a valid Date of Birth (at least 18 years old).", "error");
+      return;
+    }
     const skillsArray = skills.split(",").map((s) => s.trim()).filter((s) => s.length > 0);
     let finalSig = signatureUrl;
     if (showSignaturePad && signatureCanvasRef.current) {
@@ -830,6 +844,7 @@ function SettingsPageContent() {
     const profileData = {
       name,
       email,
+      dob: dobValidation.date,
       phone,
       bio,
       skills: skillsArray,
@@ -2288,6 +2303,23 @@ function SettingsPageContent() {
                       {updatingProfile ? "Sending..." : "Change Email"}
                     </Button>
                   </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                      <i className="fa-solid fa-cake-candles text-muted-foreground text-xs" /> Date of Birth <span className="text-destructive font-bold">*</span>
+                    </label>
+                    <span className="text-[10.5px] text-muted-foreground font-normal">Must be at least 18 years old</span>
+                  </div>
+                  <Input
+                    type="date"
+                    max={getMaxDobDateString(18)}
+                    value={dob}
+                    onChange={(e) => setDob(e.target.value)}
+                    required
+                    className="w-full h-10 text-xs cursor-pointer"
+                  />
                 </div>
 
                 <div className="space-y-1.5">

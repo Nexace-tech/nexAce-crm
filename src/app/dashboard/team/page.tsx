@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Pagination } from "@/components/ui/pagination";
-import { cn } from "@/lib/utils";
+import { cn, getMaxDobDateString, validateDob } from "@/lib/utils";
 import { isSubAdminRole } from "@/lib/roles";
 
 interface IDepartmentItem {
@@ -36,6 +36,7 @@ interface IBulkAddRow {
   role: string;
   departments: string[];
   managerId: string;
+  dob: string;
 }
 
 const generateDeptCode = (name: string): string => {
@@ -119,8 +120,8 @@ export default function TeamDashboardPage() {
   // Bulk Add Modal States
   const [showBulkAddModal, setShowBulkAddModal] = useState(false);
   const [bulkRows, setBulkRows] = useState<IBulkAddRow[]>([
-    { id: "1", name: "", email: "", role: "Employee", departments: ["Engineering"], managerId: "" },
-    { id: "2", name: "", email: "", role: "Employee", departments: ["Engineering"], managerId: "" },
+    { id: "1", name: "", email: "", role: "Employee", departments: ["Engineering"], managerId: "", dob: "" },
+    { id: "2", name: "", email: "", role: "Employee", departments: ["Engineering"], managerId: "", dob: "" },
   ]);
   const [bulkAddError, setBulkAddError] = useState("");
   const [isSubmittingBulkAdd, setIsSubmittingBulkAdd] = useState(false);
@@ -141,6 +142,7 @@ export default function TeamDashboardPage() {
   const memberFileInputRef = React.useRef<HTMLInputElement | null>(null);
   const [editName, setEditName] = useState("");
   const [editEmail, setEditEmail] = useState("");
+  const [editDob, setEditDob] = useState("");
   const [editPhone, setEditPhone] = useState("");
   const [editDepts, setEditDepts] = useState<string[]>(["Engineering"]);
   const [editRole, setEditRole] = useState("Employee");
@@ -166,6 +168,7 @@ export default function TeamDashboardPage() {
   const [showAddForm, setShowAddForm] = useState(false);
   const [addName, setAddName] = useState("");
   const [addEmail, setAddEmail] = useState("");
+  const [addDob, setAddDob] = useState("");
   const [addRole, setAddRole] = useState("Employee");
   const [addDepts, setAddDepts] = useState<string[]>(["Engineering"]);
   const [addManagerId, setAddManagerId] = useState("");
@@ -366,6 +369,15 @@ export default function TeamDashboardPage() {
       return;
     }
 
+    for (let i = 0; i < validRows.length; i++) {
+      const r = validRows[i];
+      const dobValidation = validateDob(r.dob);
+      if (!dobValidation.isValid) {
+        setBulkAddError(`Row ${i + 1} (${r.name || r.email}): ${dobValidation.error}`);
+        return;
+      }
+    }
+
     setIsSubmittingBulkAdd(true);
     try {
       const response = await fetch("/api/team", {
@@ -379,8 +391,8 @@ export default function TeamDashboardPage() {
         showToast(`Successfully added ${data.count} team member(s)!`, "success");
         setShowBulkAddModal(false);
         setBulkRows([
-          { id: "1", name: "", email: "", role: "Employee", departments: ["Engineering"], managerId: "" },
-          { id: "2", name: "", email: "", role: "Employee", departments: ["Engineering"], managerId: "" },
+          { id: "1", name: "", email: "", role: "Employee", departments: ["Engineering"], managerId: "", dob: "" },
+          { id: "2", name: "", email: "", role: "Employee", departments: ["Engineering"], managerId: "", dob: "" },
         ]);
         await fetchTeam();
       } else {
@@ -486,6 +498,16 @@ export default function TeamDashboardPage() {
           upiId: editUpiId.trim(),
         },
       };
+
+      if (editDob) {
+        const dobRes = validateDob(editDob);
+        if (!dobRes.isValid) {
+          showToast(dobRes.error || "Please enter a valid Date of Birth (at least 18 years old).", "error");
+          setIsUpdating(false);
+          return;
+        }
+        updateData.dob = dobRes.date;
+      }
 
       if (isAdmin) {
         updateData.departments = editDepts;
@@ -598,6 +620,12 @@ export default function TeamDashboardPage() {
       return;
     }
 
+    const dobValidation = validateDob(addDob);
+    if (!dobValidation.isValid) {
+      setFormError(dobValidation.error || "Date of Birth is required (minimum 18 years old).");
+      return;
+    }
+
     const trimmedName = addName.trim().toLowerCase();
     const isDuplicateName = users.some(
       (u) => u.name && u.name.trim().toLowerCase() === trimmedName
@@ -620,6 +648,7 @@ export default function TeamDashboardPage() {
           name: addName,
           email: addEmail,
           role: addRole,
+          dob: addDob,
           departments: addDepts,
           department: addDepts[0] || "General",
           managerId: addManagerId || undefined,
@@ -637,6 +666,7 @@ export default function TeamDashboardPage() {
           : "Employee added successfully!");
         setAddName("");
         setAddEmail("");
+        setAddDob("");
         setAddSkills("");
         setAddManagerId("");
         setAddEmploymentType("Permanent");
@@ -744,6 +774,7 @@ export default function TeamDashboardPage() {
       setEditPhotoUrl(member.photoUrl || "");
       setEditName(member.name || "");
       setEditEmail(member.email || "");
+      setEditDob(member.dob ? new Date(member.dob).toISOString().split("T")[0] : "");
       setEditPhone(member.phone || "");
       const userDepts = member.departments && member.departments.length > 0
         ? member.departments
@@ -2373,6 +2404,16 @@ export default function TeamDashboardPage() {
                 </div>
               )}
               <div className="space-y-0.5">
+                <p className="text-muted-foreground font-medium flex items-center gap-1">
+                  <i className="fa-solid fa-cake-candles text-[10px] text-pink-500" /> Date of Birth
+                </p>
+                <p className="font-semibold text-foreground">
+                  {selectedMember.dob
+                    ? new Date(selectedMember.dob).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })
+                    : "Not Configured"}
+                </p>
+              </div>
+              <div className="space-y-0.5">
                 <p className="text-muted-foreground font-medium">Join Date</p>
                 <p className="font-semibold text-foreground">
                   {selectedMember.createdAt
@@ -2417,6 +2458,22 @@ export default function TeamDashboardPage() {
                 <div className="space-y-1">
                   <label className="text-xs font-semibold text-foreground">Email</label>
                   <Input type="email" value={editEmail} onChange={(e) => setEditEmail(e.target.value)} required />
+                </div>
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                      <i className="fa-solid fa-cake-candles text-muted-foreground text-xs" /> Date of Birth <span className="text-destructive font-bold">*</span>
+                    </label>
+                    <span className="text-[10px] text-muted-foreground">Min 18 years old</span>
+                  </div>
+                  <Input
+                    type="date"
+                    max={getMaxDobDateString(18)}
+                    value={editDob}
+                    onChange={(e) => setEditDob(e.target.value)}
+                    required
+                    className="h-9 text-xs cursor-pointer"
+                  />
                 </div>
                 <div className="space-y-1">
                   <label className="text-xs font-semibold text-foreground">Phone</label>
@@ -2702,6 +2759,24 @@ export default function TeamDashboardPage() {
                 </div>
               </div>
 
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-foreground flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <i className="fa-solid fa-cake-candles text-primary text-xs" />
+                    Date of Birth *
+                  </span>
+                  <span className="text-[10px] text-muted-foreground font-normal">Must be 18+ years old</span>
+                </label>
+                <Input
+                  type="date"
+                  max={getMaxDobDateString(18)}
+                  value={addDob}
+                  onChange={(e) => setAddDob(e.target.value)}
+                  className="h-9 text-sm"
+                  required
+                />
+              </div>
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <label className="text-xs font-semibold text-foreground">Role</label>
@@ -2788,11 +2863,14 @@ export default function TeamDashboardPage() {
       {/* MODAL 3: Bulk Add Members Modal */}
       {showBulkAddModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in" onClick={() => setShowBulkAddModal(false)}>
-          <div className="w-full max-w-3xl bg-card border border-border rounded-xl p-6 shadow-2xl space-y-4 animate-in zoom-in-95 max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+          <div className="w-full max-w-4xl bg-card border border-border rounded-xl p-6 shadow-2xl space-y-4 animate-in zoom-in-95 max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between border-b border-border pb-3">
-              <h3 className="font-bold text-lg text-foreground flex items-center gap-2">
-                <i className="fa-solid fa-people-group text-primary text-lg" /> Bulk Add Employees
-              </h3>
+              <div>
+                <h3 className="font-bold text-lg text-foreground flex items-center gap-2">
+                  <i className="fa-solid fa-people-group text-primary text-lg" /> Bulk Add Employees
+                </h3>
+                <p className="text-xs text-muted-foreground mt-0.5">Quickly add multiple team members. All employees must be at least 18 years old.</p>
+              </div>
               <button onClick={() => setShowBulkAddModal(false)} className="text-muted-foreground hover:text-foreground cursor-pointer">
                 <i className="fa-solid fa-xmark" />
               </button>
@@ -2803,7 +2881,7 @@ export default function TeamDashboardPage() {
             <form onSubmit={handleBulkAddSubmit} className="space-y-4">
               <div className="space-y-3">
                 {bulkRows.map((row, index) => (
-                  <div key={row.id} className="p-3 rounded-lg border border-border bg-accent/20 grid grid-cols-1 sm:grid-cols-4 gap-2 items-center">
+                  <div key={row.id} className="p-3 rounded-lg border border-border bg-accent/20 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-2 items-center">
                     <Input
                       placeholder="Name"
                       value={row.name}
@@ -2811,6 +2889,7 @@ export default function TeamDashboardPage() {
                         const val = e.target.value;
                         setBulkRows((prev) => prev.map((r) => (r.id === row.id ? { ...r, name: val } : r)));
                       }}
+                      required
                     />
                     <Input
                       type="email"
@@ -2820,7 +2899,22 @@ export default function TeamDashboardPage() {
                         const val = e.target.value;
                         setBulkRows((prev) => prev.map((r) => (r.id === row.id ? { ...r, email: val } : r)));
                       }}
+                      required
                     />
+                    <div>
+                      <Input
+                        type="date"
+                        title="Date of Birth (18+ required)"
+                        max={getMaxDobDateString(18)}
+                        value={row.dob || ""}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setBulkRows((prev) => prev.map((r) => (r.id === row.id ? { ...r, dob: val } : r)));
+                        }}
+                        className="text-xs h-9"
+                        required
+                      />
+                    </div>
                     <select
                       value={row.role}
                       onChange={(e) => {
@@ -2874,7 +2968,7 @@ export default function TeamDashboardPage() {
                   onClick={() =>
                     setBulkRows((prev) => [
                       ...prev,
-                      { id: String(Date.now()), name: "", email: "", role: "Employee", departments: ["Engineering"], managerId: "" },
+                      { id: String(Date.now()), name: "", email: "", role: "Employee", departments: ["Engineering"], managerId: "", dob: "" },
                     ])
                   }
                   className="gap-1"
