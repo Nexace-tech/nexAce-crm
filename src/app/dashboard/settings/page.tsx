@@ -9,6 +9,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DobPicker } from "@/components/ui/DobPicker";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { BrokenPhotoPlaceholder, BrokenPhotoBanner } from "@/components/ui/BrokenPhotoPlaceholder";
 import { cn, generateSecurePassword, validateDob, getMaxDobDateString } from "@/lib/utils";
@@ -2305,20 +2306,12 @@ function SettingsPageContent() {
                   </div>
                 </div>
 
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
-                      <i className="fa-solid fa-cake-candles text-muted-foreground text-xs" /> Date of Birth <span className="text-destructive font-bold">*</span>
-                    </label>
-                    <span className="text-[10.5px] text-muted-foreground font-normal">Must be at least 18 years old</span>
-                  </div>
-                  <Input
-                    type="date"
-                    max={getMaxDobDateString(18)}
+                <div className="space-y-1">
+                  <DobPicker
                     value={dob}
-                    onChange={(e) => setDob(e.target.value)}
+                    onChange={setDob}
                     required
-                    className="w-full h-10 text-xs cursor-pointer"
+                    helperText="Must be at least 18 years old."
                   />
                 </div>
 

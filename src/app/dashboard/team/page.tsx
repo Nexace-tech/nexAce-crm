@@ -10,6 +10,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DobPicker } from "@/components/ui/DobPicker";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Pagination } from "@/components/ui/pagination";
 import { cn, getMaxDobDateString, validateDob } from "@/lib/utils";
@@ -2460,19 +2461,12 @@ export default function TeamDashboardPage() {
                   <Input type="email" value={editEmail} onChange={(e) => setEditEmail(e.target.value)} required />
                 </div>
                 <div className="space-y-1">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
-                      <i className="fa-solid fa-cake-candles text-muted-foreground text-xs" /> Date of Birth <span className="text-destructive font-bold">*</span>
-                    </label>
-                    <span className="text-[10px] text-muted-foreground">Min 18 years old</span>
-                  </div>
-                  <Input
-                    type="date"
-                    max={getMaxDobDateString(18)}
+                  <DobPicker
+                    size="sm"
                     value={editDob}
-                    onChange={(e) => setEditDob(e.target.value)}
+                    onChange={setEditDob}
                     required
-                    className="h-9 text-xs cursor-pointer"
+                    helperText="Must be at least 18 years old."
                   />
                 </div>
                 <div className="space-y-1">
@@ -2760,20 +2754,12 @@ export default function TeamDashboardPage() {
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-foreground flex items-center justify-between">
-                  <span className="flex items-center gap-1.5">
-                    <i className="fa-solid fa-cake-candles text-primary text-xs" />
-                    Date of Birth *
-                  </span>
-                  <span className="text-[10px] text-muted-foreground font-normal">Must be 18+ years old</span>
-                </label>
-                <Input
-                  type="date"
-                  max={getMaxDobDateString(18)}
+                <DobPicker
+                  size="sm"
                   value={addDob}
-                  onChange={(e) => setAddDob(e.target.value)}
-                  className="h-9 text-sm"
+                  onChange={setAddDob}
                   required
+                  helperText="Must be at least 18 years old."
                 />
               </div>
 
