@@ -413,12 +413,12 @@ export function generateInvoicePdfDoc(invoice: InvoicePdfData): jsPDF {
     drawPayItem("Method:", invoice.paymentDetails?.method || "Bank Transfer");
 
     if (isBankTransfer || (!isUpi && !isCash)) {
-      drawPayItem("Bank:", invoice.bankDetails?.bankName || "Axis Bank");
-      drawPayItem("Account No:", invoice.bankDetails?.accountNo || "48571847770003");
-      drawPayItem("IFSC / Code:", invoice.bankDetails?.ifscCode || "UTIB00078L");
+      drawPayItem("Bank:", invoice.bankDetails?.bankName || "N/A");
+      drawPayItem("Account No:", invoice.bankDetails?.accountNo || "N/A");
+      drawPayItem("IFSC / Code:", invoice.bankDetails?.ifscCode || "N/A");
     } else if (isUpi) {
-      const fromUpi = (invoice.paymentDetails as any)?.fromUpiId || "nexace@axl";
-      const toUpi = (invoice.paymentDetails as any)?.toUpiId || "linuxclaw@axl";
+      const fromUpi = (invoice.paymentDetails as any)?.fromUpiId || "N/A";
+      const toUpi = (invoice.paymentDetails as any)?.toUpiId || invoice.bankDetails?.upiId || "N/A";
       drawPayItem("Paid From:", fromUpi);
       drawPayItem("Paid To:", toUpi);
       if (invoice.paymentDetails?.transactionId) {
@@ -456,9 +456,9 @@ export function generateInvoicePdfDoc(invoice: InvoicePdfData): jsPDF {
       bankRowY += 4.8;
     };
 
-    drawBankItem("Bank:", invoice.bankDetails?.bankName || "Axis Bank");
-    drawBankItem("Account No:", invoice.bankDetails?.accountNo || "48571847770003");
-    drawBankItem("IFSC / Code:", invoice.bankDetails?.ifscCode || "UTIB00078L");
+    drawBankItem("Bank:", invoice.bankDetails?.bankName || "N/A");
+    drawBankItem("Account No:", invoice.bankDetails?.accountNo || "N/A");
+    drawBankItem("IFSC / Code:", invoice.bankDetails?.ifscCode || "N/A");
     drawBankItem("Payment Ref:", invoice.invoiceNo);
   }
 

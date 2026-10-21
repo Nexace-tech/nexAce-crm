@@ -115,6 +115,7 @@ export async function POST(request: Request) {
       shiftAttendance,
       timesheetEntries,
       signatureUrl,
+      bankDetails,
     } = body;
 
     if (!invoiceNo || !billedToName) {
@@ -169,9 +170,34 @@ export async function POST(request: Request) {
       shiftAttendance: shiftAttendance || null,
       timesheetEntries: timesheetEntries || null,
       signatureUrl: signatureUrl || "",
+      bankDetails: bankDetails ? {
+        bankName: (bankDetails.bankName || "").trim(),
+        accountNo: (bankDetails.accountNo || "").trim(),
+        ifscCode: (bankDetails.ifscCode || "").trim(),
+        upiId: (bankDetails.upiId || "").trim(),
+      } : undefined,
       timeline: initialTimeline,
       createdBy: userObjectId,
     });
+
+    // ── Auto-sync employee bank details to User profile ──────────────────────
+    if (bankDetails && (bankDetails.bankName || bankDetails.accountNo || bankDetails.ifscCode || bankDetails.upiId)) {
+      try {
+        await User.updateOne(
+          { _id: userObjectId },
+          {
+            $set: {
+              "bankDetails.bankName": (bankDetails.bankName || "").trim(),
+              "bankDetails.accountNo": (bankDetails.accountNo || "").trim(),
+              "bankDetails.ifscCode": (bankDetails.ifscCode || "").trim(),
+              "bankDetails.upiId": (bankDetails.upiId || "").trim(),
+            },
+          }
+        );
+      } catch (syncErr) {
+        console.error("Failed to auto-sync bank details to User profile:", syncErr);
+      }
+    }
 
     await ActivityLog.create({
       tenantId: tenantObjectId,

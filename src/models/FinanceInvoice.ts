@@ -57,6 +57,12 @@ export interface IFinanceInvoice extends Document {
   }>;
   revisionCount?: number;
   timeline?: IFinanceInvoiceTimelineEvent[];
+  bankDetails?: {
+    bankName?: string;
+    accountNo?: string;
+    ifscCode?: string;
+    upiId?: string;
+  };
   paymentDetails?: {
     method: "Bank Transfer" | "UPI" | "Cash" | "Credit Card" | "Cheque";
     upiId?: string;
@@ -151,6 +157,12 @@ const FinanceInvoiceSchema = new Schema<IFinanceInvoice>(
         timestamp: { type: Date, default: Date.now },
       },
     ],
+    bankDetails: {
+      bankName: { type: String, default: "", trim: true },
+      accountNo: { type: String, default: "", trim: true },
+      ifscCode: { type: String, default: "", trim: true },
+      upiId: { type: String, default: "", trim: true },
+    },
     paymentDetails: {
       method: { type: String, enum: ["Bank Transfer", "UPI", "Cash", "Credit Card", "Cheque"], default: null },
       upiId: { type: String, default: "" },

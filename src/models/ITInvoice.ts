@@ -118,6 +118,12 @@ export interface IITInvoice extends Document {
     notes?: string;
   };
   timeline?: IInvoiceTimelineEvent[];
+  bankDetails?: {
+    bankName?: string;
+    accountNo?: string;
+    ifscCode?: string;
+    upiId?: string;
+  };
   createdBy: mongoose.Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
@@ -256,6 +262,12 @@ const ITInvoiceSchema = new Schema<IITInvoice>(
         timestamp: { type: Date, default: Date.now },
       },
     ],
+    bankDetails: {
+      bankName: { type: String, default: "", trim: true },
+      accountNo: { type: String, default: "", trim: true },
+      ifscCode: { type: String, default: "", trim: true },
+      upiId: { type: String, default: "", trim: true },
+    },
     createdBy: { type: Schema.Types.ObjectId, ref: "User", required: true },
   },
   { timestamps: true }

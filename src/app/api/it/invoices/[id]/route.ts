@@ -139,6 +139,36 @@ export async function PATCH(
     // Build final update body
     const updateBody: Record<string, any> = { ...body, ...(paymentDetails ? { paymentDetails } : {}) };
 
+    // ── Persist bankDetails if provided ──────────────────────────────────────
+    if (body.bankDetails) {
+      updateBody.bankDetails = {
+        bankName: (body.bankDetails.bankName || "").trim(),
+        accountNo: (body.bankDetails.accountNo || "").trim(),
+        ifscCode: (body.bankDetails.ifscCode || "").trim(),
+        upiId: (body.bankDetails.upiId || "").trim(),
+      };
+
+      // Auto-sync bank details to User profile
+      const invoiceCreator = (previousInvoice as any).createdBy;
+      if (invoiceCreator && (body.bankDetails.bankName || body.bankDetails.accountNo || body.bankDetails.ifscCode || body.bankDetails.upiId)) {
+        try {
+          await User.updateOne(
+            { _id: invoiceCreator },
+            {
+              $set: {
+                "bankDetails.bankName": (body.bankDetails.bankName || "").trim(),
+                "bankDetails.accountNo": (body.bankDetails.accountNo || "").trim(),
+                "bankDetails.ifscCode": (body.bankDetails.ifscCode || "").trim(),
+                "bankDetails.upiId": (body.bankDetails.upiId || "").trim(),
+              },
+            }
+          );
+        } catch (syncErr) {
+          console.error("Failed to auto-sync bank details to User profile on PATCH:", syncErr);
+        }
+      }
+    }
+
     // Timeline event to push
     let newTimelineEvent: any = null;
     let newRejectionHistoryItem: any = null;

@@ -1932,9 +1932,9 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
       const combinedNotes = (salaryFormData.notes ? `${salaryFormData.notes}\n` : "") + attachmentsSummary.trim();
 
       const employeeBankDetails = {
-        bankName: salaryFormData.bankName || companyBankDetails.bankName || "Salary Account",
-        accountNo: salaryFormData.accountNo || companyBankDetails.accountNo || "",
-        ifscCode: salaryFormData.ifscCode || companyBankDetails.ifscCode || "",
+        bankName: salaryFormData.bankName || "",
+        accountNo: salaryFormData.accountNo || "",
+        ifscCode: salaryFormData.ifscCode || "",
         upiId: salaryFormData.upiId || "",
       };
 
@@ -2099,9 +2099,9 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
     const finalNotesToPrint = (salaryFormData.notes ? `${salaryFormData.notes}\n` : "") + draftAttachmentsSummary.trim();
 
     const employeeBankDetails = {
-      bankName: salaryFormData.bankName || companyBankDetails.bankName || "Salary Account",
-      accountNo: salaryFormData.accountNo || companyBankDetails.accountNo || "",
-      ifscCode: salaryFormData.ifscCode || companyBankDetails.ifscCode || "",
+      bankName: salaryFormData.bankName || "",
+      accountNo: salaryFormData.accountNo || "",
+      ifscCode: salaryFormData.ifscCode || "",
       upiId: salaryFormData.upiId || "",
     };
 
