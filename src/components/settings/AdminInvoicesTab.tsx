@@ -1594,7 +1594,7 @@ export function AdminInvoicesTab({ showToast, scope = "internal" }: AdminInvoice
               <button
                 type="button"
                 onClick={() => setPaymentModal({ open: false, invoiceId: "", invoiceNo: "" })}
-                className="w-8 h-8 rounded-lg hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                className="w-9 h-9 sm:w-8 sm:h-8 min-w-[36px] min-h-[36px] rounded-lg hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
               >
                 <i className="fa-solid fa-xmark text-sm" />
               </button>
@@ -2029,7 +2029,7 @@ export function AdminInvoicesTab({ showToast, scope = "internal" }: AdminInvoice
               <button
                 type="button"
                 onClick={() => setRejectModal({ open: false, invoiceId: "", invoiceNo: "", targetInvoice: null, objections: [createBlankObjection()] })}
-                className="w-7 h-7 rounded-lg hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground cursor-pointer"
+                className="w-9 h-9 sm:w-8 sm:h-8 min-w-[36px] min-h-[36px] rounded-lg hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground cursor-pointer"
               >
                 <i className="fa-solid fa-xmark text-xs" />
               </button>
@@ -2373,7 +2373,7 @@ export function AdminInvoicesTab({ showToast, scope = "internal" }: AdminInvoice
               <button
                 type="button"
                 onClick={() => setTimelineModalInvoice(null)}
-                className="w-8 h-8 rounded-lg hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground cursor-pointer transition-colors"
+                className="w-9 h-9 sm:w-8 sm:h-8 min-w-[36px] min-h-[36px] rounded-lg hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground cursor-pointer transition-colors"
                 title="Close"
               >
                 <i className="fa-solid fa-xmark text-sm" />

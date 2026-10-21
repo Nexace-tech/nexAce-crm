@@ -1042,11 +1042,11 @@ function SettingsPageContent() {
       </div>
 
       {/* Settings Navigation Tabs */}
-      <div className="flex items-center gap-1.5 p-1.5 bg-muted/40 dark:bg-muted/20 rounded-xl border border-border/80 overflow-x-auto no-scrollbar flex-nowrap sm:flex-wrap">
+      <div className="flex items-center gap-1.5 p-1.5 bg-muted/40 dark:bg-muted/20 rounded-xl border border-border/80 overflow-x-auto touch-scroll-x no-scrollbar flex-nowrap sm:flex-wrap">
         <button
           onClick={() => setActiveTab("profile")}
           className={cn(
-            "px-3 py-2 text-xs sm:text-sm font-medium rounded-lg transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap shrink-0 sm:shrink",
+            "px-3.5 py-2.5 text-xs sm:text-sm font-medium rounded-lg transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap shrink-0 sm:shrink touch-target",
             activeTab === "profile"
               ? "bg-background text-primary shadow-xs font-bold border border-border"
               : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
@@ -1058,7 +1058,7 @@ function SettingsPageContent() {
         <button
           onClick={() => setActiveTab("security")}
           className={cn(
-            "px-3 py-2 text-xs sm:text-sm font-medium rounded-lg transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap shrink-0 sm:shrink",
+            "px-3.5 py-2.5 text-xs sm:text-sm font-medium rounded-lg transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap shrink-0 sm:shrink touch-target",
             activeTab === "security"
               ? "bg-background text-primary shadow-xs font-bold border border-border"
               : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
@@ -1071,7 +1071,7 @@ function SettingsPageContent() {
           <button
             onClick={() => setActiveTab("organization")}
             className={cn(
-              "px-3 py-2 text-xs sm:text-sm font-medium rounded-lg transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap shrink-0 sm:shrink",
+              "px-3.5 py-2.5 text-xs sm:text-sm font-medium rounded-lg transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap shrink-0 sm:shrink touch-target",
               activeTab === "organization"
                 ? "bg-background text-primary shadow-xs font-bold border border-border"
                 : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
@@ -1086,7 +1086,7 @@ function SettingsPageContent() {
           <button
             onClick={() => setActiveTab("permissions")}
             className={cn(
-              "px-3 py-2 text-xs sm:text-sm font-medium rounded-lg transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap shrink-0 sm:shrink",
+              "px-3.5 py-2.5 text-xs sm:text-sm font-medium rounded-lg transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap shrink-0 sm:shrink touch-target",
               activeTab === "permissions"
                 ? "bg-background text-primary shadow-xs font-bold border border-border"
                 : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
@@ -1100,7 +1100,7 @@ function SettingsPageContent() {
           <button
             onClick={() => setActiveTab("subscription")}
             className={cn(
-              "px-3 py-2 text-xs sm:text-sm font-medium rounded-lg transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap shrink-0 sm:shrink",
+              "px-3.5 py-2.5 text-xs sm:text-sm font-medium rounded-lg transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap shrink-0 sm:shrink touch-target",
               activeTab === "subscription"
                 ? "bg-background text-primary shadow-xs font-bold border border-border"
                 : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
@@ -3129,7 +3129,7 @@ function SettingsPageContent() {
                 </div>
               </div>
 
-              <Button color="primary" type="submit" disabled={updatingProfile} className="gap-2">
+              <Button color="primary" type="submit" disabled={updatingProfile} className="gap-2 w-full sm:w-auto min-h-[42px] cursor-pointer font-bold">
                 <i className="fa-solid fa-floppy-disk text-xs" /> {updatingProfile ? "Saving Details..." : "Save Profile Details"}
               </Button>
             </CardContent>

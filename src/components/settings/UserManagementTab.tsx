@@ -1151,14 +1151,14 @@ export function UserManagementTab() {
               <button
                 type="button"
                 onClick={() => setShowEditModal(false)}
-                className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors cursor-pointer shrink-0 ml-2"
+                className="w-9 h-9 sm:w-8 sm:h-8 min-w-[36px] min-h-[36px] rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors cursor-pointer shrink-0 ml-2"
               >
                 <i className="fa-solid fa-xmark text-base" />
               </button>
             </div>
 
             {/* Segmented Navigation Tab Bar */}
-            <div className="flex items-center gap-1.5 p-2 bg-muted/30 border-b border-border/80 overflow-x-auto no-scrollbar shrink-0">
+            <div className="flex items-center gap-1.5 p-2 bg-muted/30 border-b border-border/80 overflow-x-auto touch-scroll-x no-scrollbar shrink-0">
               <button
                 type="button"
                 onClick={() => setEditModalTab("identity")}

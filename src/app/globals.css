@@ -483,3 +483,55 @@ input[type="number"].no-spinner {
   scrollbar-width: none !important;
 }
 
+/* ========================================================================= */
+/* Mobile First & Capacitor Native Responsive Touch Enhancements             */
+/* ========================================================================= */
+
+/* Prevent horizontal page overflow on mobile viewports */
+@media (max-width: 768px) {
+  html, body {
+    overflow-x: hidden;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+}
+
+/* Edge-to-edge safe area padding for notch, status bar, and home indicator */
+.safe-top {
+  padding-top: max(env(safe-area-inset-top, 0px), 0.5rem);
+}
+
+.safe-bottom {
+  padding-bottom: max(env(safe-area-inset-bottom, 0px), 0.5rem);
+}
+
+.safe-left {
+  padding-left: max(env(safe-area-inset-left, 0px), 0.5rem);
+}
+
+.safe-right {
+  padding-right: max(env(safe-area-inset-right, 0px), 0.5rem);
+}
+
+/* Smooth native touch horizontal scrolling with momentum */
+.touch-scroll-x {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+  overscroll-behavior-x: contain;
+  touch-action: pan-x;
+}
+
+/* Minimum touch target utility for mobile tap targets */
+.touch-target {
+  min-height: 40px;
+  min-width: 40px;
+}
+
+@media (min-width: 640px) {
+  .touch-target {
+    min-height: 36px;
+    min-width: 36px;
+  }
+}
+

@@ -2946,7 +2946,7 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
                         placeholder="e.g. HDFC Bank, State Bank of India"
                         value={salaryFormData.bankName}
                         onChange={(e) => setSalaryFormData((prev) => ({ ...prev, bankName: e.target.value }))}
-                        className="h-8.5 text-xs bg-background"
+                        className="h-9 sm:h-8.5 min-h-[38px] text-xs bg-background"
                       />
                     </div>
                     <div className="space-y-1">
@@ -2956,7 +2956,7 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
                         placeholder="e.g. 501002345678"
                         value={salaryFormData.accountNo}
                         onChange={(e) => setSalaryFormData((prev) => ({ ...prev, accountNo: e.target.value }))}
-                        className="h-8.5 text-xs bg-background font-mono"
+                        className="h-9 sm:h-8.5 min-h-[38px] text-xs bg-background font-mono"
                       />
                     </div>
                     <div className="space-y-1">
@@ -2966,7 +2966,7 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
                         placeholder="e.g. HDFC0001234"
                         value={salaryFormData.ifscCode}
                         onChange={(e) => setSalaryFormData((prev) => ({ ...prev, ifscCode: e.target.value }))}
-                        className="h-8.5 text-xs bg-background font-mono uppercase"
+                        className="h-9 sm:h-8.5 min-h-[38px] text-xs bg-background font-mono uppercase"
                       />
                     </div>
                     <div className="space-y-1">
@@ -2976,7 +2976,7 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
                         placeholder="e.g. username@okhdfcbank"
                         value={salaryFormData.upiId}
                         onChange={(e) => setSalaryFormData((prev) => ({ ...prev, upiId: e.target.value }))}
-                        className="h-8.5 text-xs bg-background font-mono"
+                        className="h-9 sm:h-8.5 min-h-[38px] text-xs bg-background font-mono"
                       />
                     </div>
                   </div>
@@ -2995,7 +2995,7 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
                     readOnly
                     disabled
                     value={salaryFormData.billedToName}
-                    className="opacity-85 cursor-not-allowed bg-muted/40 font-medium select-none"
+                    className="opacity-85 cursor-not-allowed bg-muted/40 font-medium select-none min-h-[38px]"
                   />
                 </div>
 
@@ -3003,14 +3003,14 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
                 {renderSignatureSection()}
 
                 {/* Submit Actions for Permanent Salary */}
-                <div className="flex items-center justify-end gap-3 pt-3 border-t border-border">
+                <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2.5 sm:gap-3 pt-3 border-t border-border">
                   <Button
                     type="button"
                     variant="outline"
                     suppressHydrationWarning
                     onClick={handlePermanentPrintPDF}
                     disabled={mounted ? baseSalary <= 0 : false}
-                    className="cursor-pointer gap-2 font-semibold h-10 px-4 border-rose-500/30 hover:border-rose-500 text-rose-500 bg-rose-500/5 hover:bg-rose-500/10 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full sm:w-auto cursor-pointer gap-2 font-semibold h-10 px-4 border-rose-500/30 hover:border-rose-500 text-rose-500 bg-rose-500/5 hover:bg-rose-500/10 disabled:opacity-50 disabled:cursor-not-allowed min-h-[40px]"
                   >
                     <i className="fa-solid fa-file-pdf text-sm" /> Export Salary PDF Draft
                   </Button>
@@ -3020,7 +3020,7 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
                     size="sm"
                     suppressHydrationWarning
                     disabled={mounted ? (invoiceSubmitting || baseSalary <= 0) : false}
-                    className="cursor-pointer gap-2 font-semibold h-10 px-5 bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full sm:w-auto cursor-pointer gap-2 font-semibold h-10 px-5 bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-50 disabled:cursor-not-allowed min-h-[40px]"
                   >
                     {invoiceSubmitting ? (
                       <><i className="fa-solid fa-spinner fa-spin text-sm" /> Submitting Salary Claim...</>
