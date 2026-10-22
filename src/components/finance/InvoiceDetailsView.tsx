@@ -56,6 +56,7 @@ export interface InvoiceDetailsData {
   notes?: string;
   paymentTerms?: string;
   bankDetails?: {
+    accountName?: string;
     bankName?: string;
     accountNo?: string;
     ifscCode?: string;
@@ -88,6 +89,8 @@ export interface InvoiceDetailsData {
   paymentDetails?: {
     method: "Bank Transfer" | "UPI" | "Cash";
     upiId?: string;
+    fromUpiId?: string;
+    toUpiId?: string;
     transactionId?: string;
     screenshotUrl?: string;
     screenshotFileName?: string;
@@ -678,9 +681,12 @@ export function InvoiceDetailsView({
                     Bank &amp; Remittance Details
                   </div>
                 </div>
+                ${invoice.bankDetails?.accountName ? `<div class="info-row"><span class="info-label">Beneficiary:</span><span class="info-val">${invoice.bankDetails.accountName}</span></div>` : ""}
                 <div class="info-row"><span class="info-label">Bank Name:</span><span class="info-val">${invoice.bankDetails?.bankName || "Corporate Banking Partner"}</span></div>
-                <div class="info-row"><span class="info-label">Account No:</span><span class="info-val">${invoice.bankDetails?.accountNo || "782459739212"}</span></div>
-                <div class="info-row"><span class="info-label">IFSC / Swift:</span><span class="info-val">${invoice.bankDetails?.ifscCode || "NEXA0004128"}</span></div>
+                <div class="info-row"><span class="info-label">Account No:</span><span class="info-val">${invoice.bankDetails?.accountNo || "—"}</span></div>
+                <div class="info-row"><span class="info-label">IFSC / Swift:</span><span class="info-val">${invoice.bankDetails?.ifscCode || "—"}</span></div>
+                ${invoice.bankDetails?.branch ? `<div class="info-row"><span class="info-label">Branch:</span><span class="info-val">${invoice.bankDetails.branch}</span></div>` : ""}
+                ${(invoice.bankDetails?.upiId || invoice.userUpiId) ? `<div class="info-row"><span class="info-label">UPI ID:</span><span class="info-val" style="color:#059669;font-weight:700;">${invoice.bankDetails?.upiId || invoice.userUpiId}</span></div>` : ""}
                 <div class="info-row"><span class="info-label">Payment Ref:</span><span class="info-val" style="color:#0d9488;">${invoice.invoiceNo}</span></div>
               `}
             </div>
@@ -2072,24 +2078,50 @@ export function InvoiceDetailsView({
               </div>
             ) : (
               <div className="rounded-2xl border border-border/80 bg-muted/20 dark:bg-slate-900/40 p-4 sm:p-5 shadow-xs space-y-3">
-                <div className="pb-3 border-b border-border/60">
-                  <h4 className="text-xs font-black text-foreground uppercase tracking-wider">
+                <div className="pb-3 border-b border-border/60 flex items-center justify-between">
+                  <h4 className="text-xs font-black text-foreground uppercase tracking-wider flex items-center gap-1.5">
+                    <i className="fa-solid fa-building-columns text-primary text-xs" />
                     Bank &amp; Payment Details
                   </h4>
+                  {(invoice.bankDetails?.upiId || invoice.userUpiId) && (
+                    <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                      UPI Configured
+                    </span>
+                  )}
                 </div>
                 <div className="space-y-2.5 text-xs">
+                  {invoice.bankDetails?.accountName && (
+                    <div className="flex justify-between items-center py-1 border-b border-border/25">
+                      <span className="text-muted-foreground">Beneficiary Name</span>
+                      <span className="font-bold text-foreground">{invoice.bankDetails.accountName}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between items-center py-1 border-b border-border/25">
                     <span className="text-muted-foreground">Bank Name</span>
                     <span className="font-bold text-foreground">{invoice.bankDetails?.bankName || "Corporate Banking Partner"}</span>
                   </div>
                   <div className="flex justify-between items-center py-1 border-b border-border/25">
                     <span className="text-muted-foreground">Account Number</span>
-                    <span className="font-mono text-xs font-bold text-foreground">{invoice.bankDetails?.accountNo || "782459739212"}</span>
+                    <span className="font-mono text-xs font-bold text-foreground">{invoice.bankDetails?.accountNo || "—"}</span>
                   </div>
                   <div className="flex justify-between items-center py-1 border-b border-border/25">
                     <span className="text-muted-foreground">IFSC / Swift Code</span>
-                    <span className="font-mono text-xs font-bold text-foreground">{invoice.bankDetails?.ifscCode || "NEXA0004128"}</span>
+                    <span className="font-mono text-xs font-bold text-foreground">{invoice.bankDetails?.ifscCode || "—"}</span>
                   </div>
+                  {invoice.bankDetails?.branch && (
+                    <div className="flex justify-between items-center py-1 border-b border-border/25">
+                      <span className="text-muted-foreground">Branch</span>
+                      <span className="font-medium text-foreground">{invoice.bankDetails.branch}</span>
+                    </div>
+                  )}
+                  {(invoice.bankDetails?.upiId || invoice.userUpiId) && (
+                    <div className="flex justify-between items-center py-1 border-b border-border/25">
+                      <span className="text-muted-foreground">UPI ID / VPA</span>
+                      <span className="font-mono text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                        {invoice.bankDetails?.upiId || invoice.userUpiId}
+                      </span>
+                    </div>
+                  )}
                   <div className="flex justify-between items-center py-1">
                     <span className="text-muted-foreground">Payment Reference</span>
                     <span className="font-mono text-xs font-extrabold text-primary">{invoice.invoiceNo}</span>

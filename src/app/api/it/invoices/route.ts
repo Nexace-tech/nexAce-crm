@@ -66,6 +66,38 @@ export async function GET() {
 
     const invoices = await ITInvoice.find(query).sort({ createdAt: -1 }).lean();
 
+    // Query FinanceInvoices as well (e.g. Invoices created for this employee by HR or Finance)
+    const { FinanceInvoice } = await import("@/models/FinanceInvoice");
+    const financeQuery: Record<string, any> = { tenantId: tenantObjectId };
+
+    if (hrScope.isHR) {
+      if (hrScope.isIsolated && hrScope.allowedUserIds) {
+        financeQuery.createdBy = { $in: hrScope.allowedUserIds };
+      }
+    } else if (!isPrivileged) {
+      const userDoc = await User.findById(userObjectId).select("name email").lean();
+      const userEmail = (userDoc as any)?.email?.trim();
+      const userName = (userDoc as any)?.name?.trim() || session.userName?.trim();
+
+      const finOr: any[] = [
+        { createdBy: userObjectId },
+        { targetUserId: userObjectId },
+      ];
+      if (userEmail) {
+        const escapedEmail = userEmail.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        finOr.push({ businessEmail: new RegExp(`^${escapedEmail}$`, "i") });
+        finOr.push({ customerNo: new RegExp(`^${escapedEmail}$`, "i") });
+      }
+      if (userName) {
+        const escaped = userName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        finOr.push({ client: new RegExp(`^${escaped}$`, "i") });
+        finOr.push({ businessName: new RegExp(`^${escaped}$`, "i") });
+      }
+      financeQuery.$or = finOr;
+    }
+
+    const financeInvoices = await FinanceInvoice.find(financeQuery).sort({ createdAt: -1 }).lean();
+
     const tenantDoc = await Tenant.findById(tenantObjectId).select("signatureUrl").lean();
     const orgSignatureUrl = (tenantDoc as any)?.signatureUrl?.trim() || "";
 
@@ -76,7 +108,63 @@ export async function GET() {
       signatureUrl: inv.signatureUrl || (inv.status === "Paid" ? orgSignatureUrl : ""),
     }));
 
-    return NextResponse.json({ invoices: enrichedInvoices });
+    const mappedFinanceInvoices = financeInvoices.map((inv: any) => ({
+      _id: inv._id?.toString() || inv._id,
+      id: inv._id?.toString() || inv.id,
+      invoiceNo: inv.invoiceNo,
+      invoiceDate: inv.issuedDate || inv.invoiceDate || (inv.createdAt ? new Date(inv.createdAt).toISOString().split("T")[0] : new Date().toISOString().split("T")[0]),
+      dueDate: inv.dueDate || "",
+      customerNo: inv.customerNo || `EMP-${inv.client || "STAFF"}`,
+      businessName: inv.businessName || inv.client || "Employee",
+      businessEmail: inv.businessEmail || "",
+      businessAddress: "Employee / Internal Team",
+      billedToName: inv.billedToName || inv.venture || "NexAce Technologies",
+      billedToEmail: "finance@nexace.com",
+      items: inv.lineItems || [],
+      subtotal: inv.amount || 0,
+      taxRate: 0,
+      taxAmount: 0,
+      total: inv.amount || 0,
+      currency: inv.currency || "INR",
+      status: inv.status || "Pending",
+      notes: inv.notes || "",
+      signatureUrl: inv.signatureUrl || (inv.status === "Paid" ? orgSignatureUrl : ""),
+      approvedBy: inv.approvedBy || (inv.status === "Paid" ? (inv.paymentDetails?.paidBy || "Admin") : ""),
+      approvedAt: inv.approvedAt || (inv.status === "Paid" ? (inv.paymentDetails?.paidAt || inv.updatedAt) : ""),
+      approverRole: inv.approverRole || "HR",
+      paymentDetails: inv.paymentDetails || null,
+      bankDetails: inv.bankDetails || null,
+      shiftAttendance: inv.shiftAttendance || null,
+      timesheetEntries: inv.timesheetEntries || null,
+      timeline: inv.timeline || [],
+      rejectionReason: inv.rejectionReason || "",
+      rejectionRemark: inv.rejectionRemark || "",
+      objections: inv.objections || [],
+      rejectionHistory: inv.rejectionHistory || [],
+      revisionCount: inv.revisionCount || 0,
+      approvalStage: inv.approvalStage || "",
+      createdAt: inv.createdAt,
+      updatedAt: inv.updatedAt,
+    }));
+
+    // Merge and deduplicate by invoiceNo
+    const seen = new Set<string>();
+    const allInvoices: any[] = [];
+    for (const inv of [...enrichedInvoices, ...mappedFinanceInvoices]) {
+      const key = (inv.invoiceNo || "").toUpperCase();
+      if (!key || !seen.has(key)) {
+        if (key) seen.add(key);
+        allInvoices.push(inv);
+      }
+    }
+
+    allInvoices.sort((a, b) => {
+      const timeA = new Date(a.createdAt || a.invoiceDate || 0).getTime();
+      const timeB = new Date(b.createdAt || b.invoiceDate || 0).getTime();
+      return timeB - timeA;
+    });
+
+    return NextResponse.json({ invoices: allInvoices });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Internal Server Error";
     console.error("GET /api/it/invoices error:", error);

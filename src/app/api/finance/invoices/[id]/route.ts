@@ -4,6 +4,7 @@ import { FinanceInvoice, IInvoiceObjection } from "@/models/FinanceInvoice";
 import { ActivityLog } from "@/models/ActivityLog";
 import { Tenant } from "@/models/Tenant";
 import { User } from "@/models/User";
+import { Notification } from "@/models/Notification";
 import { requireTenantSession, isAuthError } from "@/lib/auth-guard";
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -258,32 +259,92 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     // Notify submitter/creator
     (async () => {
       try {
-        const { Notification } = await import("@/models/Notification");
-        if (invoice.createdBy) {
-          let title = `Invoice ${invoice.invoiceNo} Updated`;
-          let message = `Invoice ${invoice.invoiceNo} status changed to ${invoice.status}`;
-          if (invoice.status === "Approved") {
-            title = `✨ Invoice ${invoice.invoiceNo} Approved`;
-            message = `Your invoice ${invoice.invoiceNo} for ${invoice.client} has been approved by ${session.userName}.`;
-          } else if (invoice.status === "Rejected") {
-            title = `❌ Invoice ${invoice.invoiceNo} Needs Revision`;
-            message = `Your invoice was rejected by ${session.userName}. Reason: ${invoice.rejectionReason || "Discrepancy"}. Remark: ${invoice.rejectionRemark || "Please review and fix issues."}`;
-          } else if (invoice.status === "Paid") {
-            title = `✅ Invoice ${invoice.invoiceNo} Paid`;
-            message = `Payment for invoice ${invoice.invoiceNo} has been marked as settled by ${session.userName}.`;
+        const { User } = await import("@/models/User");
+        
+        // 1. Resolve the employee payee account
+        let employeeUser: any = null;
+        if (invoice.targetUserId) {
+          employeeUser = await User.findById(invoice.targetUserId).select("_id email name").lean();
+        }
+        if (!employeeUser) {
+          const payeeEmail = (invoice.businessEmail || invoice.customerNo || "").trim().toLowerCase();
+          const payeeName = (invoice.client || invoice.businessName || "").trim().toLowerCase();
+          const searchOr: any[] = [];
+          if (payeeEmail && payeeEmail.includes("@")) {
+            searchOr.push({ email: new RegExp(`^${payeeEmail}$`, "i") });
           }
+          if (payeeName && payeeName !== "ace consultancys" && payeeName !== "nexace") {
+            searchOr.push({ name: new RegExp(`^${payeeName}$`, "i") });
+          }
+          if (searchOr.length > 0) {
+            employeeUser = await User.findOne({
+              tenantId: tenantObjectId,
+              $or: searchOr,
+            }).select("_id email name").lean();
+          }
+        }
+
+        const payMethod = invoice.paymentDetails?.method || "Bank Transfer";
+        const hasReceipt = Boolean(invoice.paymentDetails?.screenshotUrl);
+        const currSym = invoice.currency === "INR" || !invoice.currency ? "₹" : `${invoice.currency} `;
+        const formattedAmount = `${currSym}${Number(invoice.amount || 0).toLocaleString("en-IN")}`;
+
+        // 2. Notify Employee Payee if found
+        if (employeeUser) {
+          let empTitle = `Invoice ${invoice.invoiceNo} Status: ${invoice.status}`;
+          let empMsg = `Your invoice ${invoice.invoiceNo} status is now ${invoice.status}.`;
+          if (invoice.status === "Approved") {
+            empTitle = `✨ Timesheets & Invoice Approved: ${invoice.invoiceNo}`;
+            empMsg = `Your invoice (${invoice.invoiceNo}) for ${formattedAmount} has been verified and approved by ${session.userName}. It is queued for disbursement.`;
+          } else if (invoice.status === "Paid") {
+            empTitle = `✅ Payout Processed: ${invoice.invoiceNo}`;
+            empMsg = `Your payment for invoice ${invoice.invoiceNo} (${formattedAmount}) has been settled via ${payMethod} by ${session.userName}.${hasReceipt ? " Payment receipt is attached." : ""}`;
+          } else if (invoice.status === "Rejected") {
+            empTitle = `❌ Invoice Returned: ${invoice.invoiceNo}`;
+            empMsg = `Your invoice ${invoice.invoiceNo} was returned by ${session.userName}. Reason: ${invoice.rejectionReason || "Discrepancy"}. Remark: ${invoice.rejectionRemark || "Please check objections and resubmit."}`;
+          }
+
+          await Notification.create({
+            tenantId: tenantObjectId,
+            recipientId: employeeUser._id,
+            title: empTitle,
+            message: empMsg,
+            type: "finance",
+            linkUrl: `/dashboard/settings?tab=invoice&invoiceNo=${encodeURIComponent(invoice.invoiceNo)}`,
+            read: false,
+          });
+        }
+
+        // 3. Notify Creator (HR/Admin) if different from the employee
+        const creatorIdStr = invoice.createdBy ? invoice.createdBy.toString() : "";
+        const empIdStr = employeeUser ? employeeUser._id.toString() : "";
+
+        if (creatorIdStr && creatorIdStr !== empIdStr && creatorIdStr !== userObjectId.toString()) {
+          let creatorTitle = `Invoice ${invoice.invoiceNo} Updated`;
+          let creatorMsg = `Invoice ${invoice.invoiceNo} for ${invoice.client} marked as ${invoice.status} by ${session.userName}.`;
+          if (invoice.status === "Approved") {
+            creatorTitle = `✨ Invoice ${invoice.invoiceNo} Approved`;
+            creatorMsg = `Invoice ${invoice.invoiceNo} for ${invoice.client} approved by ${session.userName}.`;
+          } else if (invoice.status === "Paid") {
+            creatorTitle = `✅ Invoice ${invoice.invoiceNo} Settled`;
+            creatorMsg = `Payment for invoice ${invoice.invoiceNo} (${invoice.client}) settled via ${payMethod} by ${session.userName}.`;
+          } else if (invoice.status === "Rejected") {
+            creatorTitle = `❌ Invoice ${invoice.invoiceNo} Rejected`;
+            creatorMsg = `Invoice ${invoice.invoiceNo} was rejected by ${session.userName}.`;
+          }
+
           await Notification.create({
             tenantId: tenantObjectId,
             recipientId: invoice.createdBy,
-            title,
-            message,
+            title: creatorTitle,
+            message: creatorMsg,
             type: "finance",
             linkUrl: `/dashboard/finance?tab=invoices&invoiceNo=${encodeURIComponent(invoice.invoiceNo)}`,
             read: false,
           });
         }
       } catch (notifErr) {
-        console.error("Finance invoice notification error:", notifErr);
+        console.error("Failed to send invoice status notification:", notifErr);
       }
     })();
 

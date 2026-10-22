@@ -94,6 +94,8 @@ export const FEATURE_ACTIONS: FeatureMeta[] = [
   { key: "viewTeamAvailability", name: "View Team Availability Roster", category: "Calendar & Time", subGroup: "Availability & Scheduling", description: "Access team-wide work availability roster, filter staff by department, and inspect member schedules", icon: "fa-solid fa-user-clock" },
   { key: "manageTeamAvailability", name: "Manage Team Work Availability", category: "Calendar & Time", subGroup: "Availability & Scheduling", description: "Record, edit, and coordinate work availability and shift hours for other team members and flexible staff", icon: "fa-solid fa-calendar-check" },
   { key: "logOwnAvailability", name: "Record Own Work Availability", category: "Calendar & Time", subGroup: "Availability & Scheduling", description: "Mark personal available dates, partial shift hours, and offline rest days", icon: "fa-solid fa-calendar-plus" },
+  { key: "manageHolidays", name: "Manage Company Holidays & Time Off", category: "Calendar & Time", subGroup: "Holiday Calendar & Time Off", description: "Create, edit, delete, auto-sync, and manage company official holidays", icon: "fa-solid fa-umbrella-beach" },
+  { key: "importHolidayExcel", name: "Import Holidays from Excel / CSV", category: "Calendar & Time", subGroup: "Holiday Calendar & Time Off", description: "Allow users with this role to bulk-upload .xlsx or .xls spreadsheets to populate company holidays", icon: "fa-solid fa-file-excel" },
 
   // OPS Portal
   { key: "viewClients", name: "View OPS Retainers & Control", category: "OPS Portal", subGroup: "Operations Retainers", description: "Browse active client retainers, accounts, and health status", icon: "fa-solid fa-list-check" },
@@ -331,7 +333,7 @@ const PRESET_TEMPLATES: RolePresetTemplate[] = [
     features: [
       "viewKpiWidgets", "viewShiftOverview", "viewAnnouncements",
       "viewTeamDirectory", "viewEmployeeProfiles", "editEmployeeProfiles", "inviteTeamMembers", "viewOrgChart", "reassignReportingLine",
-      "logOwnTimesheet", "editOwnTimesheet", "viewTeamTimesheets", "approveTimesheets", "exportTimesheets", "clockInOut", "canViewShiftClock", "viewShiftCalendar", "viewLoginHoursSummary", "approveAdditionalShiftTime", "viewTeamAvailability", "manageTeamAvailability", "logOwnAvailability",
+      "logOwnTimesheet", "editOwnTimesheet", "viewTeamTimesheets", "approveTimesheets", "exportTimesheets", "clockInOut", "canViewShiftClock", "viewShiftCalendar", "viewLoginHoursSummary", "approveAdditionalShiftTime", "viewTeamAvailability", "manageTeamAvailability", "logOwnAvailability", "manageHolidays", "importHolidayExcel",
       "viewOwnLeaves", "applyLeaves", "viewAllLeaves", "approveLeaves", "manageCompanyChecklists", "manageHRVault", "manageHRCases", "reassignHRPartner", "manageHRIsolation", "approveTimesheetsAndInvoices", "approveInvoices",
       "viewOwnAppraisals", "submitSelfReview", "viewManagerReviews", "createAppraisalCycles",
       "viewGoals", "sendKudos", "submitSurvey", "createPulseSurveys",

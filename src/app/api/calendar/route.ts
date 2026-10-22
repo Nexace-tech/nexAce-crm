@@ -181,18 +181,55 @@ export async function GET(request: Request) {
       .filter(Boolean);
 
     // ─────────────────────────────────────────────────────────────
-    // 4. Merge & sort all streams by startDate ascending
+    // 4. Official Company Holidays
     // ─────────────────────────────────────────────────────────────
-    const allEvents = [...explicitEvents, ...taskEvents, ...anniversaryEvents]
+    const { Holiday } = await import("@/models/Holiday");
+    const holidayQuery: any = { tenantId: tenantObjectId };
+    if (department && department !== "All") {
+      holidayQuery.$or = [
+        { applicableDepartments: "All" },
+        { applicableDepartments: department },
+        { applicableDepartments: { $size: 0 } },
+        { applicableDepartments: { $exists: false } },
+      ];
+    }
+    const holidays = await Holiday.find(holidayQuery).lean();
+    const holidayEvents = holidays.map((h: any) => ({
+      _id:         `holiday_${h._id}`,
+      title:       `🎉 ${h.title}`,
+      description: [
+        h.type ? `[${h.type} Holiday]` : null,
+        h.category ? `Category: ${h.category}` : null,
+        h.isHalfDay ? "Half Day" : null,
+        h.description,
+      ].filter(Boolean).join(" · "),
+      type:        "Holiday",
+      startDate:   h.date,
+      endDate:     h.date,
+      department:  (h.applicableDepartments && h.applicableDepartments[0]) || "All",
+      userId:      { name: "Company Holiday", _id: "company" },
+      isHoliday:   true,
+      holidayType: h.type,
+      holidayCategory: h.category,
+      isHalfDay:   h.isHalfDay,
+      isSynced:    true,
+      source:      "holiday",
+    }));
+
+    // ─────────────────────────────────────────────────────────────
+    // 5. Merge & sort all streams by startDate ascending
+    // ─────────────────────────────────────────────────────────────
+    const allEvents = [...explicitEvents, ...taskEvents, ...anniversaryEvents, ...holidayEvents]
       .sort((a, b) => new Date((a as any).startDate).getTime() - new Date((b as any).startDate).getTime());
 
     return NextResponse.json({
       events: allEvents,
       meta: {
-        total:     allEvents.length,
-        tasks:     taskEvents.length,
-        explicit:  explicitEvents.length,
+        total:         allEvents.length,
+        tasks:         taskEvents.length,
+        explicit:      explicitEvents.length,
         anniversaries: anniversaryEvents.length,
+        holidays:      holidayEvents.length,
         isElevated,
       },
     });

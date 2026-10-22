@@ -16,6 +16,7 @@ import {
 } from "recharts";
 import { useTheme } from "@/providers/theme-provider";
 import { cn } from "@/lib/utils";
+import { UpcomingHolidaysWidget } from "@/components/dashboard/UpcomingHolidaysWidget";
 
 // ─── Default Fallback Revenue Analytics Data ──────────────────────────────────
 const defaultWeeklyData = [
@@ -716,6 +717,9 @@ export function AdminDashboard({ user }: { user: any }) {
           </div>
         </div>
       </div>
+
+      {/* ── Upcoming Holidays Widget ───────────────────────────────────────── */}
+      <UpcomingHolidaysWidget className="mb-6" />
 
       {/* ── Feature Live Data Hub ───────────────────────────────────────────── */}
       <div className="bg-white dark:bg-[#161c24] rounded-2xl border border-slate-200 dark:border-[#232d3b] p-6 shadow-sm">

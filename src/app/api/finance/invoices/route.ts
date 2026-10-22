@@ -192,15 +192,33 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Client and invoice number are required" }, { status: 400 });
     }
 
+    const isHrOrAdminApproved = status === "Approved";
+    const initialApprovalStage = body.approvalStage || (isHrOrAdminApproved ? "PENDING_PAYMENT" : status === "Pending" ? "PENDING_REVIEW" : "DRAFT");
+
+    const defaultTimeline = [
+      {
+        stage: isHrOrAdminApproved ? "APPROVED" : "SUBMITTED",
+        status: status || "Draft",
+        actorName: session.userName || "User",
+        actorRole: session.role || "HR",
+        actorId: userObjectId,
+        note: isHrOrAdminApproved
+          ? `Invoice generated and verified by ${session.role || "HR"} on behalf of recipient. Ready for finance settlement.`
+          : "Invoice generated and submitted for HR attendance and timesheet verification.",
+        timestamp: new Date(),
+      },
+    ];
+
     const invoice = await FinanceInvoice.create({
       tenantId: tenantObjectId,
       createdBy: userObjectId,
+      targetUserId: body.targetUserId || null,
       invoiceNo: invoiceNo.trim(),
       client: client.trim(),
       amount: Number(amount) || 0,
-      currency: currency || "USD",
+      currency: currency || "INR",
       status: status || "Draft",
-      approvalStage: status === "Pending" ? "PENDING_REVIEW" : "DRAFT",
+      approvalStage: initialApprovalStage,
       issuedDate: issuedDate || new Date().toISOString().split("T")[0],
       dueDate: dueDate || "",
       category: category || "Services",
@@ -208,18 +226,38 @@ export async function POST(request: Request) {
       notes: notes || "",
       lineItems: lineItems || [],
       signatureUrl: body.signatureUrl || "",
-      timeline: [
-        {
-          stage: "SUBMITTED",
-          status: status || "Draft",
-          actorName: session.userName || "User",
-          actorRole: session.role || "Employee",
-          actorId: userObjectId,
-          note: "Invoice generated and submitted for HR attendance and timesheet verification.",
-          timestamp: new Date(),
-        },
-      ],
+      shiftAttendance: body.shiftAttendance || null,
+      timesheetEntries: body.timesheetEntries || null,
+      billedToName: body.billedToName || body.client || "",
+      businessName: body.businessName || "",
+      businessEmail: body.businessEmail || "",
+      customerNo: body.customerNo || "",
+      preferredPaymentMethod: body.preferredPaymentMethod || "Bank Transfer",
+      bankDetails: body.bankDetails || undefined,
+      approvedBy: isHrOrAdminApproved ? (body.approvedBy || session.userName || "HR") : "",
+      approvedAt: isHrOrAdminApproved ? (body.approvedAt || new Date().toISOString()) : "",
+      approverRole: isHrOrAdminApproved ? (body.approverRole || session.role || "HR") : "",
+      timeline: body.timeline && Array.isArray(body.timeline) && body.timeline.length > 0 ? body.timeline : defaultTimeline,
     });
+
+    // Notify employee payee if HR generated the invoice on their behalf
+    if (body.targetUserId && String(body.targetUserId) !== String(userObjectId)) {
+      try {
+        const { Notification } = await import("@/models/Notification");
+        const currSymbol = (currency === "INR" || !currency) ? "₹" : `${currency} `;
+        await Notification.create({
+          tenantId: tenantObjectId,
+          recipientId: body.targetUserId,
+          title: `✨ Monthly Invoice Issued: ${invoice.invoiceNo}`,
+          message: `${session.userName || "HR"} has generated and verified your invoice for ${currSymbol}${Number(invoice.amount || 0).toLocaleString("en-IN")}. It is now queued for payout disbursement.`,
+          type: "finance",
+          linkUrl: `/dashboard/settings?tab=invoice&invoiceNo=${encodeURIComponent(invoice.invoiceNo)}`,
+          read: false,
+        });
+      } catch (notifErr) {
+        console.error("Could not send creation notification to employee:", notifErr);
+      }
+    }
 
     await ActivityLog.create({
       tenantId: tenantObjectId,
@@ -227,7 +265,7 @@ export async function POST(request: Request) {
       userName: session.userName || "Admin",
       action: `Created invoice: ${invoice.invoiceNo}`,
       targetName: "FinanceInvoice",
-      details: `Client: ${invoice.client} | Amount: $${invoice.amount} | Status: ${invoice.status}`,
+      details: `Client: ${invoice.client} | Amount: ₹${invoice.amount} | Status: ${invoice.status}`,
     });
 
     return NextResponse.json({ invoice }, { status: 201 });

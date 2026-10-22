@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -77,11 +77,15 @@ interface Invoice {
   paymentDetails?: {
     method: "Bank Transfer" | "UPI" | "Cash";
     upiId?: string;
+    fromUpiId?: string;
+    toUpiId?: string;
     transactionId?: string;
     screenshotUrl?: string;
     paidAt?: string;
     paidBy?: string;
   };
+  preferredPaymentMethod?: "Bank Transfer" | "UPI" | "Cash";
+  targetUserId?: string;
   userUpiId?: string;
   signatureUrl?: string;
   approvedBy?: string;
@@ -176,11 +180,17 @@ interface AdminInvoicesTabProps {
 }
 
 export function AdminInvoicesTab({ showToast, scope = "internal" }: AdminInvoicesTabProps) {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const targetInvoiceNo = searchParams.get("invoiceNo") || searchParams.get("search");
   const targetInvoiceId = searchParams.get("invoiceId");
 
   const { can, isAdmin, isOPS } = usePermissions();
+  const { user } = useAuth();
+  const isHR = user?.role === "HR" || (Boolean(user?.role) && user!.role.trim().toLowerCase() === "hr");
+  const canIssueInvoice = Boolean(
+    isAdmin || isOPS || isHR || can("createInvoices") || can("approveTimesheetsAndInvoices")
+  );
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState(targetInvoiceNo || "");
@@ -193,8 +203,6 @@ export function AdminInvoicesTab({ showToast, scope = "internal" }: AdminInvoice
   // Payment modal state
   const [paymentModal, setPaymentModal] = useState<PaymentModalState>({ open: false, invoiceId: "", invoiceNo: "" });
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("Bank Transfer");
-  const { user } = useAuth();
-  const isHR = user?.role === "HR" || (Boolean(user?.role) && user!.role.trim().toLowerCase() === "hr");
   const canProcessPayment = Boolean((isAdmin || isOPS) && !isHR);
   const [timelineModalInvoice, setTimelineModalInvoice] = useState<Invoice | null>(null);
 
@@ -210,6 +218,7 @@ export function AdminInvoicesTab({ showToast, scope = "internal" }: AdminInvoice
   const [targetPayeeUpiId, setTargetPayeeUpiId] = useState<string>("");
 
   const [upiTxnId, setUpiTxnId] = useState("");
+  const [bankTxnRef, setBankTxnRef] = useState("");
   const [upiScreenshot, setUpiScreenshot] = useState<File | null>(null);
   const [upiScreenshotPreview, setUpiScreenshotPreview] = useState<string>("");
   const [confirmingPayment, setConfirmingPayment] = useState(false);
@@ -245,41 +254,53 @@ export function AdminInvoicesTab({ showToast, scope = "internal" }: AdminInvoice
       if (res.ok) {
         const data = await res.json();
         const rawInvoices = data.invoices || [];
-        const loadedInvoices: Invoice[] = rawInvoices.map((inv: any) => ({
-          _id: inv._id?.toString() || inv._id,
-          id: inv._id?.toString() || inv.id,
-          invoiceNo: inv.invoiceNo,
-          invoiceDate: inv.issuedDate || inv.invoiceDate || new Date().toISOString().split("T")[0],
-          dueDate: inv.dueDate || "",
-          customerNo: inv.customerNo || (inv.category === "Employee Invoice" ? `EMP-${inv.client}` : "EXT-CLIENT"),
-          businessName: inv.category === "Employee Invoice" ? (inv.client || "Employee") : (inv.venture || "Ace Consultancys"),
-          businessAddress: inv.businessAddress || (inv.category === "Employee Invoice" ? "Employee / Internal Team" : ""),
-          businessEmail: inv.businessEmail || "",
-          billedToName: inv.category === "Employee Invoice" ? (inv.venture || "Ace Consultancys") : (inv.client || "Client"),
-          billedToAddress: inv.billedToAddress || "",
-          billedToEmail: inv.billedToEmail || "",
-          items: inv.lineItems || inv.items || [{ description: inv.category || "Services", quantity: 1, unitPrice: inv.amount || 0, amount: inv.amount || 0 }],
-          subtotal: inv.amount || inv.subtotal || inv.total || 0,
-          taxRate: inv.taxRate || 0,
-          taxAmount: inv.taxAmount || 0,
-          total: inv.amount || inv.total || 0,
-          currency: inv.currency || "USD",
-          status: inv.status || "Draft",
-          notes: inv.notes || "",
-          createdAt: inv.createdAt,
-          updatedAt: inv.updatedAt,
-          paymentDetails: inv.paymentDetails,
-          bankDetails: inv.bankDetails,
-          signatureUrl: inv.signatureUrl,
-          approvedBy: inv.approvedBy,
-          approvedAt: inv.approvedAt,
-          timeline: inv.timeline || [],
-          rejectionHistory: inv.rejectionHistory || [],
-          revisionCount: inv.revisionCount || 0,
-          approvalStage: inv.approvalStage,
-          hrReview: inv.hrReview,
-          ...(inv as any),
-        }));
+        const loadedInvoices: Invoice[] = rawInvoices.map((inv: any) => {
+          const isEmp =
+            inv.category === "Employee Invoice" ||
+            inv.category === "Employee Payroll" ||
+            Boolean(inv.targetUserId) ||
+            ((inv.category || "").toLowerCase().includes("employee")) ||
+            ((inv.category || "").toLowerCase().includes("payroll"));
+
+          return {
+            _id: inv._id?.toString() || inv._id,
+            id: inv._id?.toString() || inv.id,
+            invoiceNo: inv.invoiceNo,
+            invoiceDate: inv.issuedDate || inv.invoiceDate || new Date().toISOString().split("T")[0],
+            dueDate: inv.dueDate || "",
+            customerNo: inv.customerNo || (isEmp ? (inv.businessEmail ? `EMP-${inv.businessEmail}` : `EMP-${inv.client || "STAFF"}`) : "EXT-CLIENT"),
+            businessName: inv.businessName || (isEmp ? (inv.client || "Employee") : (inv.client || inv.venture || "Ace Consultancys")),
+            businessAddress: inv.businessAddress || (isEmp ? "Employee / Internal Team" : ""),
+            businessEmail: inv.businessEmail || (isEmp ? (inv.customerNo || "") : "") || "",
+            billedToName: inv.billedToName || (isEmp ? (inv.venture || "NexAce Technologies") : (inv.client || "Client")),
+            billedToAddress: inv.billedToAddress || "",
+            billedToEmail: inv.billedToEmail || "",
+            items: inv.lineItems || inv.items || [{ description: inv.category || "Services", quantity: 1, unitPrice: inv.amount || 0, amount: inv.amount || 0 }],
+            subtotal: inv.amount || inv.subtotal || inv.total || 0,
+            taxRate: inv.taxRate || 0,
+            taxAmount: inv.taxAmount || 0,
+            total: inv.amount || inv.total || 0,
+            currency: inv.currency || "INR",
+            status: inv.status || "Draft",
+            notes: inv.notes || "",
+            createdAt: inv.createdAt,
+            updatedAt: inv.updatedAt,
+            paymentDetails: inv.paymentDetails,
+            bankDetails: inv.bankDetails || {},
+            userUpiId: inv.bankDetails?.upiId || inv.userUpiId || (inv as any).upiId || "",
+            preferredPaymentMethod: inv.preferredPaymentMethod || inv.paymentDetails?.method || "Bank Transfer",
+            targetUserId: inv.targetUserId?.toString() || inv.targetUserId,
+            signatureUrl: inv.signatureUrl,
+            approvedBy: inv.approvedBy,
+            approvedAt: inv.approvedAt,
+            timeline: inv.timeline || [],
+            rejectionHistory: inv.rejectionHistory || [],
+            revisionCount: inv.revisionCount || 0,
+            approvalStage: inv.approvalStage,
+            hrReview: inv.hrReview,
+            ...(inv as any),
+          };
+        });
         setInvoices(loadedInvoices);
 
         // Auto-open target invoice if requested via notification deep-link
@@ -396,22 +417,25 @@ export function AdminInvoicesTab({ showToast, scope = "internal" }: AdminInvoice
         return;
       }
 
-      setPaymentMethod("Bank Transfer");
-
-      // Default Paid From
-      setFromUpiId(orgUpiId || "nexace@okaxis");
-
-      // Default Paid To (Auto-pick payee UPI ID if available for this invoice/creator)
+      const preferred = (targetInv?.preferredPaymentMethod || targetInv?.paymentDetails?.method) as PaymentMethod | undefined;
       const invUserUpi = (
         targetInv?.userUpiId ||
         (targetInv as any)?.bankDetails?.upiId ||
         ""
       ).trim();
 
+      const defaultMethod: PaymentMethod = preferred || (invUserUpi ? "UPI" : "Bank Transfer");
+      setPaymentMethod(defaultMethod);
+
+      // Default Paid From
+      setFromUpiId(orgUpiId || "nexace@okaxis");
+
+      // Default Paid To (Auto-pick payee UPI ID if available for this invoice/creator)
       setTargetPayeeUpiId(invUserUpi);
       setToUpiId(invUserUpi);
 
       setUpiTxnId("");
+      setBankTxnRef("");
       setUpiScreenshot(null);
       setUpiScreenshotPreview("");
       setPaymentModal({ open: true, invoiceId, invoiceNo: invoiceNo || "" });
@@ -532,6 +556,14 @@ export function AdminInvoicesTab({ showToast, scope = "internal" }: AdminInvoice
           reader.readAsDataURL(upiScreenshot);
         });
       }
+
+      let effectiveTxnId = "";
+      if (paymentMethod === "UPI") {
+        effectiveTxnId = upiTxnId.trim();
+      } else if (paymentMethod === "Bank Transfer") {
+        effectiveTxnId = bankTxnRef.trim();
+      }
+
       await patchInvoice(paymentModal.invoiceId, {
         status: "Paid",
         paymentDetails: {
@@ -539,7 +571,7 @@ export function AdminInvoicesTab({ showToast, scope = "internal" }: AdminInvoice
           upiId: paymentMethod === "UPI" ? (effectiveToUpi || effectiveFromUpi) : "",
           fromUpiId: paymentMethod === "UPI" ? effectiveFromUpi : "",
           toUpiId: paymentMethod === "UPI" ? effectiveToUpi : "",
-          transactionId: paymentMethod === "UPI" ? upiTxnId.trim() : "",
+          transactionId: effectiveTxnId,
           screenshotUrl,
           paidAt: new Date().toISOString(),
         },
@@ -952,6 +984,18 @@ export function AdminInvoicesTab({ showToast, scope = "internal" }: AdminInvoice
               <i className={cn("fa-solid fa-rotate-right text-xs", loading && "fa-spin text-primary")} />
               <span className="hidden sm:inline">Refresh</span>
             </Button>
+
+            {canIssueInvoice && (
+              <Button
+                type="button"
+                onClick={() => router.push(`/dashboard/finance/invoices/new?from=${scope === "external" ? "external" : "hr"}`)}
+                className="gap-1.5 text-xs font-bold h-8 cursor-pointer bg-primary text-primary-foreground hover:bg-primary/90 shadow-2xs"
+                title="Issue invoice for team member or custom recipient"
+              >
+                <i className="fa-solid fa-file-invoice-dollar text-xs" />
+                <span>Issue Invoice</span>
+              </Button>
+            )}
           </div>
         </CardHeader>
 
@@ -1620,7 +1664,7 @@ export function AdminInvoicesTab({ showToast, scope = "internal" }: AdminInvoice
                         }
                       }}
                       className={cn(
-                        "flex flex-col items-center gap-2 p-3 rounded-xl border-2 text-xs font-semibold transition-all cursor-pointer",
+                        "flex flex-col items-center justify-center gap-1.5 p-2 rounded-xl border-2 text-xs font-semibold transition-all cursor-pointer min-h-[48px]",
                         paymentMethod === method
                           ? method === "UPI"
                             ? "border-emerald-500 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 shadow-xs"
@@ -1631,24 +1675,105 @@ export function AdminInvoicesTab({ showToast, scope = "internal" }: AdminInvoice
                       )}
                     >
                       <i className={cn(
-                        "fa-solid text-lg",
+                        "fa-solid text-base",
                         method === "UPI" ? "fa-qrcode" :
                         method === "Cash" ? "fa-money-bill-transfer" :
                         "fa-building-columns"
                       )} />
-                      {method}
+                      <span className="truncate text-[11px] font-bold">{method}</span>
                     </button>
                   ))}
                 </div>
               </div>
 
-              {/* Bank Transfer — info only */}
-              {paymentMethod === "Bank Transfer" && (
-                <div className="p-3 rounded-xl bg-sky-500/5 border border-sky-500/20 text-xs text-sky-700 dark:text-sky-300 flex items-start gap-2">
-                  <i className="fa-solid fa-circle-info mt-0.5 shrink-0" />
-                  <span>Confirm that the bank transfer has been received before approving. No additional details required.</span>
-                </div>
-              )}
+              {/* Bank Transfer — with Beneficiary Remittance Details & UTR Input */}
+              {paymentMethod === "Bank Transfer" && (() => {
+                const modalInvoice = invoices.find((i) => (i._id || i.id) === paymentModal.invoiceId);
+                const bDetails = modalInvoice?.bankDetails;
+                return (
+                  <div className="space-y-3">
+                    <div className="p-3.5 rounded-xl bg-sky-500/5 border border-sky-500/20 text-xs space-y-2.5">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-sky-700 dark:text-sky-300 flex items-center gap-1.5">
+                          <i className="fa-solid fa-building-columns text-sky-500" />
+                          Payee Bank Remittance Account
+                        </span>
+                        <span className="text-[10px] font-mono text-muted-foreground">
+                          {bDetails?.accountNo ? "Verified Account" : "Remittance Details"}
+                        </span>
+                      </div>
+
+                      <div className="bg-background/80 rounded-lg p-2.5 border border-sky-500/20 space-y-1.5 text-xs">
+                        <div className="flex justify-between items-center py-0.5 border-b border-border/40">
+                          <span className="text-muted-foreground">Beneficiary Name:</span>
+                          <span className="font-bold text-foreground">{bDetails?.accountName || modalInvoice?.businessName || "Payee"}</span>
+                        </div>
+                        <div className="flex justify-between items-center py-0.5 border-b border-border/40">
+                          <span className="text-muted-foreground">Bank Name:</span>
+                          <span className="font-semibold text-foreground">{bDetails?.bankName || "Corporate Banking Partner"}</span>
+                        </div>
+                        <div className="flex justify-between items-center py-0.5 border-b border-border/40">
+                          <span className="text-muted-foreground">Account Number:</span>
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-mono font-bold text-foreground">{bDetails?.accountNo || "—"}</span>
+                            {bDetails?.accountNo && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  navigator.clipboard.writeText(bDetails.accountNo!);
+                                  showToast("Account number copied", "success");
+                                }}
+                                className="text-[10px] text-primary hover:underline px-1 py-0.2 rounded bg-primary/10 cursor-pointer"
+                              >
+                                <i className="fa-solid fa-copy text-[9px]" /> Copy
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex justify-between items-center py-0.5 border-b border-border/40">
+                          <span className="text-muted-foreground">IFSC / Code:</span>
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-mono font-bold text-foreground">{bDetails?.ifscCode || "—"}</span>
+                            {bDetails?.ifscCode && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  navigator.clipboard.writeText(bDetails.ifscCode!);
+                                  showToast("IFSC code copied", "success");
+                                }}
+                                className="text-[10px] text-primary hover:underline px-1 py-0.2 rounded bg-primary/10 cursor-pointer"
+                              >
+                                <i className="fa-solid fa-copy text-[9px]" /> Copy
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                        {bDetails?.branch && (
+                          <div className="flex justify-between items-center py-0.5">
+                            <span className="text-muted-foreground">Branch:</span>
+                            <span className="font-medium text-foreground">{bDetails.branch}</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* UTR Reference # Input */}
+                      <div className="space-y-1 pt-1">
+                        <label className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                          <i className="fa-solid fa-receipt text-xs text-sky-500" />
+                          <span>NEFT / RTGS / IMPS Reference # (UTR)</span>
+                          <span className="text-[10px] text-muted-foreground font-normal">(Optional)</span>
+                        </label>
+                        <Input
+                          placeholder="e.g. CMS2849103829 or UTR-982104"
+                          value={bankTxnRef}
+                          onChange={(e) => setBankTxnRef(e.target.value)}
+                          className="h-8 text-xs font-mono bg-background"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* UPI — Paid From & Paid To + Transaction ID + Screenshot */}
               {paymentMethod === "UPI" && (

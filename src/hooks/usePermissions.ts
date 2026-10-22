@@ -82,6 +82,9 @@ export function usePermissions() {
       return false;
     }
     if (isSubAdminRole(user.role)) return true;
+    if (user.role === "HR" && (featureKey === "manageHolidays" || featureKey === "importHolidayExcel")) {
+      return true;
+    }
     return false;
   };
 

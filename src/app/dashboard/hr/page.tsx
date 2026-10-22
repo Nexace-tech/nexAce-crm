@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useSearchParams } from "next/navigation";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
@@ -117,6 +117,45 @@ export default function HRPage() {
   const [leaveTypeFilter, setLeaveTypeFilter] = useState("All");
   const [leavePage, setLeavePage] = useState(1);
   const [leaveItemsPerPage, setLeaveItemsPerPage] = useState(5);
+
+  // Holidays & Auto-Exclusion State
+  const [companyHolidays, setCompanyHolidays] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (activeTab === "leaves" || showLeaveForm) {
+      fetch("/api/holidays?year=all")
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (data?.holidays) setCompanyHolidays(data.holidays);
+        })
+        .catch((err) => console.error("Error loading company holidays for leave check:", err));
+    }
+  }, [activeTab, showLeaveForm]);
+
+  const overlappingHolidays = useMemo(() => {
+    if (!leaveStart || !leaveEnd || !companyHolidays.length) return [];
+    const start = new Date(leaveStart);
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(leaveEnd);
+    end.setHours(23, 59, 59, 999);
+    if (isNaN(start.getTime()) || isNaN(end.getTime()) || start > end) return [];
+
+    return companyHolidays.filter((h) => {
+      const hDate = new Date(h.date);
+      return hDate >= start && hDate <= end && h.type !== "Restricted";
+    });
+  }, [leaveStart, leaveEnd, companyHolidays]);
+
+  const leaveDurationInfo = useMemo(() => {
+    if (!leaveStart || !leaveEnd) return null;
+    const start = new Date(leaveStart);
+    const end = new Date(leaveEnd);
+    if (isNaN(start.getTime()) || isNaN(end.getTime()) || start > end) return null;
+    const totalDays = Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+    const holidayDays = overlappingHolidays.length;
+    const chargeableDays = Math.max(0, totalDays - holidayDays);
+    return { totalDays, holidayDays, chargeableDays };
+  }, [leaveStart, leaveEnd, overlappingHolidays]);
 
   const handleExportLeaveDetails = (leave: any, format: "csv" | "json" | "txt" = "csv") => {
     if (!leave) return;
@@ -3027,20 +3066,92 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
       {/* Leave Modal */}
       {showLeaveForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in" onClick={() => setShowLeaveForm(false)}>
-          <div className="w-full max-w-md bg-card border border-border rounded-xl p-6 shadow-2xl space-y-4" onClick={(e) => e.stopPropagation()}>
-            <h3 className="font-bold text-lg text-foreground">Request Leave</h3>
-            <form onSubmit={handleSubmitLeave} className="space-y-3">
-              <select value={leaveType} onChange={(e) => setLeaveType(e.target.value)} className="w-full h-9 px-3 text-sm bg-background border border-border rounded-md">
-                {["Casual", "Sick", "Earned", "Unpaid", "Maternity", "Paternity"].map((t) => <option key={t} value={t}>{t}</option>)}
-              </select>
-              <div className="grid grid-cols-2 gap-3">
-                <Input type="date" value={leaveStart} onChange={(e) => setLeaveStart(e.target.value)} required />
-                <Input type="date" value={leaveEnd} onChange={(e) => setLeaveEnd(e.target.value)} required />
+          <div className="w-full max-w-md bg-card border border-border rounded-2xl p-6 shadow-2xl space-y-4" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between border-b border-border pb-3">
+              <h3 className="font-bold text-base text-foreground flex items-center gap-2">
+                <i className="fa-solid fa-calendar-plus text-primary text-sm" /> Request Time-Off
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowLeaveForm(false)}
+                className="text-muted-foreground hover:text-foreground cursor-pointer transition-colors"
+              >
+                <i className="fa-solid fa-xmark text-sm" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmitLeave} className="space-y-3.5">
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-foreground">Leave Category</label>
+                <select value={leaveType} onChange={(e) => setLeaveType(e.target.value)} className="w-full h-9 px-3 text-xs bg-background border border-border rounded-md text-foreground cursor-pointer focus:outline-none focus:ring-1 focus:ring-primary">
+                  {["Casual", "Sick", "Earned", "Unpaid", "Maternity", "Paternity"].map((t) => <option key={t} value={t}>{t} Leave</option>)}
+                </select>
               </div>
-              <textarea value={leaveReason} onChange={(e) => setLeaveReason(e.target.value)} rows={3} required placeholder="Reason..." className="w-full p-2 text-sm bg-background border border-border rounded-md" />
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-foreground">Start Date</label>
+                  <Input type="date" value={leaveStart} onChange={(e) => setLeaveStart(e.target.value)} required />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-foreground">End Date</label>
+                  <Input type="date" value={leaveEnd} onChange={(e) => setLeaveEnd(e.target.value)} required />
+                </div>
+              </div>
+
+              {/* Automatic Holiday Overlap & Duration Breakdown Banner */}
+              {leaveDurationInfo && (
+                <div className="p-3 rounded-xl bg-muted/40 border border-border space-y-2 text-xs">
+                  <div className="flex items-center justify-between font-semibold text-foreground">
+                    <span>Duration Summary:</span>
+                    <span className="font-mono font-bold text-primary">{leaveDurationInfo.chargeableDays} Chargeable Day(s)</span>
+                  </div>
+                  <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                    <span>Requested: {leaveDurationInfo.totalDays} day(s)</span>
+                    {leaveDurationInfo.holidayDays > 0 ? (
+                      <span className="text-emerald-500 font-semibold flex items-center gap-1">
+                        <i className="fa-solid fa-umbrella-beach text-[10px]" />
+                        {leaveDurationInfo.holidayDays} Holiday(s) auto-excluded
+                      </span>
+                    ) : (
+                      <span>No holiday overlaps</span>
+                    )}
+                  </div>
+
+                  {overlappingHolidays.length > 0 && (
+                    <div className="pt-2 border-t border-border/60 space-y-1">
+                      <p className="font-bold text-emerald-500 flex items-center gap-1.5 text-[11px]">
+                        <i className="fa-solid fa-circle-check text-xs" /> Official Paid Holiday (Zero Quota Deduction):
+                      </p>
+                      {overlappingHolidays.map((h: any) => (
+                        <p key={h._id} className="text-[11px] text-emerald-600 dark:text-emerald-400 pl-2">
+                          • {h.title} ({new Date(h.date).toLocaleDateString()}) — Free paid company holiday
+                        </p>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-foreground">Reason for Leave</label>
+                <textarea
+                  value={leaveReason}
+                  onChange={(e) => setLeaveReason(e.target.value)}
+                  rows={3}
+                  required
+                  placeholder="Provide context or handover arrangements..."
+                  className="w-full p-2.5 text-xs bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-1 focus:ring-primary resize-none"
+                />
+              </div>
+
               <div className="flex justify-end gap-2 pt-2 border-t border-border">
-                <Button variant="outline" size="sm" type="button" onClick={() => setShowLeaveForm(false)}>Cancel</Button>
-                <Button color="primary" size="sm" type="submit">Submit Request</Button>
+                <Button variant="outline" size="sm" type="button" onClick={() => setShowLeaveForm(false)} className="cursor-pointer">
+                  Cancel
+                </Button>
+                <Button color="primary" size="sm" type="submit" className="cursor-pointer font-semibold gap-1.5">
+                  <i className="fa-solid fa-paper-plane text-xs" /> Submit Request
+                </Button>
               </div>
             </form>
           </div>

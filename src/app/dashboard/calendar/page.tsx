@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useMemo, Suspense, startTransition } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback, Suspense, startTransition } from "react";
 import Link from "next/link";
 import { useAuth } from "@/hooks/useAuth";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -22,16 +22,17 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { TeamShiftOverviewCard } from "@/components/dashboard/TeamShiftOverviewCard";
 import { TeamAvailabilityTab } from "@/components/calendar/TeamAvailabilityTab";
+import { CompanyHolidaysTab } from "@/components/calendar/CompanyHolidaysTab";
 
 import { AccessRestricted } from "@/components/ui/AccessRestricted";
 
 function CalendarPageContent() {
   const { user: currentUser, loading: authLoading } = useAuth();
   const { can, canAccessModule, isAdmin, isOPS, isHR, loading: permLoading } = usePermissions();
-  const [activeTab, setActiveTab] = useTabPersistence<"calendar" | "sprints" | "timesheets" | "attendance" | "availability">(
+  const [activeTab, setActiveTab] = useTabPersistence<"calendar" | "sprints" | "timesheets" | "attendance" | "availability" | "holidays">(
     "calendar_active_tab",
     "calendar",
-    ["calendar", "sprints", "timesheets", "attendance", "availability"]
+    ["calendar", "sprints", "timesheets", "attendance", "availability", "holidays"]
   );
 
   const [loading, setLoading] = useState(true);
@@ -39,12 +40,12 @@ function CalendarPageContent() {
 
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
 
-  const showToast = (message: string, type: "success" | "error" = "success") => {
+  const showToast = useCallback((message: string, type: "success" | "error" = "success") => {
     setToast({ message, type });
     setTimeout(() => {
       setToast(null);
     }, 3500);
-  };
+  }, []);
 
   useEffect(() => {
     setMounted(true);
@@ -1667,6 +1668,18 @@ function CalendarPageContent() {
               : "My Availability"}
           </button>
         )}
+
+        <button
+          onClick={() => setActiveTab("holidays")}
+          className={cn(
+            "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
+            activeTab === "holidays"
+              ? "border-primary text-primary bg-primary/10 rounded-t-md font-semibold -mb-px"
+              : "border-transparent text-muted-foreground hover:text-foreground"
+          )}
+        >
+          <i className="fa-solid fa-umbrella-beach text-sm" /> Company Holidays
+        </button>
       </div>
 
       {/* Tab 1: Calendar */}
@@ -4530,6 +4543,11 @@ function CalendarPageContent() {
           isOPS={isOPS}
           showToast={showToast}
         />
+      )}
+
+      {/* Tab 6: Official Company Holidays */}
+      {activeTab === "holidays" && (
+        <CompanyHolidaysTab onToast={showToast} />
       )}
 
       {/* Schedule Event Modal */}

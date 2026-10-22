@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { UpcomingHolidaysWidget } from "@/components/dashboard/UpcomingHolidaysWidget";
 
 export function HRDashboard({ user }: { user: any }) {
   const [directoryUsers, setDirectoryUsers] = useState<any[]>([]);
@@ -353,6 +354,8 @@ export function HRDashboard({ user }: { user: any }) {
 
         {/* Right Column: Quick Links + Department Breakdown + Recent Team */}
         <div className="space-y-6">
+          {/* Upcoming Company Holidays Widget */}
+          <UpcomingHolidaysWidget />
 
           {/* Quick Links */}
           <Card>

@@ -77,6 +77,9 @@ export async function GET(request: Request) {
 
     const { searchParams } = new URL(request.url);
     const limitParam    = searchParams.get("limit");
+    const userIdParam   = searchParams.get("userId");
+    const startStr      = searchParams.get("start") || searchParams.get("startDate");
+    const endStr        = searchParams.get("end") || searchParams.get("endDate");
 
     const dataScope = await getUserDataScope(session);
     const isElevatedRole = session.role === "Admin" || session.role === "OPS" || session.role === "Manager" || session.role === "HR" || dataScope.canViewFeature("viewTeamTimesheets");
@@ -84,6 +87,20 @@ export async function GET(request: Request) {
     const historyFilter: Record<string, unknown> = { tenantId: tenantObjectId };
     if (!isElevatedRole) {
       historyFilter.userId = userObjectId;
+    } else if (userIdParam) {
+      try {
+        historyFilter.userId = new mongoose.Types.ObjectId(userIdParam);
+      } catch {
+        historyFilter.userId = userIdParam;
+      }
+    }
+
+    if (startStr && endStr) {
+      const startDateObj = new Date(startStr);
+      startDateObj.setUTCHours(0, 0, 0, 0);
+      const endDateObj = new Date(endStr);
+      endDateObj.setUTCHours(23, 59, 59, 999);
+      historyFilter.date = { $gte: startDateObj, $lte: endDateObj };
     }
 
     let historyQuery = Attendance.find(historyFilter)

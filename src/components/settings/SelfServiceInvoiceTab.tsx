@@ -1439,9 +1439,13 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
           const invCustNo = (inv.customerNo || "").trim().toLowerCase();
           const invCreatedBy = String((inv as any).createdBy?._id || (inv as any).createdBy || "");
 
+          const invTargetId = String((inv as any).targetUserId?._id || (inv as any).targetUserId || "");
+
           return (
+            (userId && invTargetId && invTargetId === String(userId)) ||
             (userEmail && invEmail === userEmail) ||
             (userName && invBusinessName === userName) ||
+            (userEmail && invCustNo === userEmail) ||
             (userCleanName && invCustNo && invCustNo.includes(userCleanName)) ||
             (userId && invCreatedBy && invCreatedBy === String(userId) && (invCustNo.startsWith("emp-") || inv.invoiceNo?.startsWith("INV-EMP-") || inv.invoiceNo?.startsWith("INV-SAL-")))
           );

@@ -27,7 +27,7 @@ ios/App/Pods/
 ios/App/.symlinks/
 *.apk
 *.aab
-
+/plans
 
 .env.example
 src/lib/fcm.ts

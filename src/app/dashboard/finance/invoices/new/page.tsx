@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useAuth } from "@/hooks/useAuth";
 import { removeSignatureBackground } from "@/lib/signature";
 
 interface InternalEmployee {
@@ -18,6 +19,15 @@ interface InternalEmployee {
   employmentType?: string;
   salary?: number;
   role?: string;
+  bankDetails?: {
+    bankName?: string;
+    accountNo?: string;
+    ifscCode?: string;
+    upiId?: string;
+    accountName?: string;
+    branch?: string;
+  };
+  upiId?: string;
 }
 
 interface ExternalMember {
@@ -56,7 +66,7 @@ const SERVICE_CATEGORIES = [
   "Other",
 ];
 
-const CURRENCIES = ["USD", "INR", "EUR", "GBP", "AED", "PKR", "CAD", "AUD"];
+const CURRENCIES = ["INR", "USD", "EUR", "GBP", "AED", "PKR", "CAD", "AUD"];
 const VENTURES = ["Ace Consultancys", "NexAce Tech"];
 
 const CURSIVE_FONTS = [
@@ -70,8 +80,12 @@ function NewInvoiceContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialType = searchParams.get("type"); // "external" or "internal"
+  const fromSource = searchParams.get("from"); // "hr", "external", or default
 
   const { can, isAdmin, isOPS } = usePermissions();
+  const { user } = useAuth();
+  const isHR = user?.role === "HR" || (Boolean(user?.role) && user!.role.trim().toLowerCase() === "hr");
+  const canAccess = Boolean(isAdmin || isOPS || isHR || can("createInvoices") || can("approveTimesheetsAndInvoices"));
 
   // ── Digital Signature State ──
   const [profileSignature, setProfileSignature] = useState<string>("");
@@ -90,6 +104,11 @@ function NewInvoiceContent() {
 
   // Fetch user profile signature
   useEffect(() => {
+    if (user?.signatureUrl && !profileSignature) {
+      setProfileSignature(user.signatureUrl);
+      setSignatureUrl(user.signatureUrl);
+      setUseProfileSig(true);
+    }
     fetch("/api/users/signature")
       .then((res) => res.json())
       .then((data) => {
@@ -100,7 +119,7 @@ function NewInvoiceContent() {
         }
       })
       .catch(() => {});
-  }, []);
+  }, [user?.signatureUrl]);
 
   const effectiveSignature = useProfileSig && profileSignature ? profileSignature : signatureUrl;
 
@@ -233,7 +252,7 @@ function NewInvoiceContent() {
   const [customInvoiceNo, setCustomInvoiceNo] = useState("");
   const [isManualInvoiceNo, setIsManualInvoiceNo] = useState(false);
   const [billingPeriod, setBillingPeriod] = useState(new Date().toISOString().slice(0, 7)); // YYYY-MM
-  const [currency, setCurrency] = useState("USD");
+  const [currency, setCurrency] = useState("INR");
   const [venture, setVenture] = useState("Ace Consultancys");
   const [category, setCategory] = useState("Services");
   const [issuedDate, setIssuedDate] = useState(new Date().toISOString().split("T")[0]);
@@ -255,6 +274,191 @@ function NewInvoiceContent() {
   // Submission State
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+
+  // ── Remittance & Payment Details ──
+  const [preferredPaymentMethod, setPreferredPaymentMethod] = useState<"Bank Transfer" | "UPI" | "Cash">("Bank Transfer");
+  const [bankAccountName, setBankAccountName] = useState("");
+  const [bankName, setBankName] = useState("");
+  const [bankAccountNo, setBankAccountNo] = useState("");
+  const [bankIfsc, setBankIfsc] = useState("");
+  const [bankBranch, setBankBranch] = useState("");
+  const [upiId, setUpiId] = useState("");
+
+  // ── 1-Click Sync Attendance & Timesheets State ──
+  const [isSyncingAttendance, setIsSyncingAttendance] = useState(false);
+  const [syncedAttendanceData, setSyncedAttendanceData] = useState<{
+    totalHours: number;
+    regularHours: number;
+    overtimeHours: number;
+    daysWorked: number;
+    timesheetTasks: number;
+    records: any[];
+    timesheetRecords: any[];
+    syncedPeriod: string;
+  } | null>(null);
+
+  // ── Submission Approval Stage ──
+  const [submissionStage, setSubmissionStage] = useState<"Approved" | "Pending" | "Draft">(
+    fromSource === "hr" || isHR ? "Approved" : "Pending"
+  );
+
+  // ── 1-Click Attendance & Timesheet Synchronizer ──
+  const handleSyncAttendance = async (empToSync = selectedInternal) => {
+    if (!empToSync) return;
+    setIsSyncingAttendance(true);
+    setErrorMessage("");
+    try {
+      const parts = billingPeriod.split("-");
+      const year = parseInt(parts[0], 10);
+      const month = parseInt(parts[1], 10);
+      const startDate = `${billingPeriod}-01`;
+      const lastDay = new Date(year, month, 0).getDate();
+      const endDate = `${billingPeriod}-${String(lastDay).padStart(2, "0")}`;
+
+      const [attRes, tsRes] = await Promise.all([
+        fetch(`/api/attendance?userId=${empToSync._id}&start=${startDate}&end=${endDate}&limit=all`),
+        fetch(`/api/timesheets?userId=${empToSync._id}&start=${startDate}&end=${endDate}`),
+      ]);
+
+      let calculatedShiftHrs = 0;
+      let calculatedDaysCount = 0;
+      let calculatedOtHrs = 0;
+      let shiftRecords: any[] = [];
+
+      if (attRes.ok) {
+        const attJson = await attRes.json();
+        const allAtt: any[] = attJson.history || [];
+        const periodAtt = allAtt.filter((r: any) => {
+          const recUserId = r.userId?._id?.toString() || r.userId?.toString() || r.userId;
+          return !recUserId || recUserId === empToSync._id;
+        });
+
+        calculatedShiftHrs = periodAtt.reduce((sum: number, r: any) => {
+          let hrs = (Number(r.regularHours) || 0) + (Number(r.overtimeHours) || 0);
+          if (hrs === 0 && r.clockIn && !r.clockOut) {
+            const diffMs = Math.max(0, Date.now() - new Date(r.clockIn).getTime());
+            hrs = Math.round((diffMs / (1000 * 60 * 60)) * 10) / 10;
+          }
+          return sum + hrs;
+        }, 0);
+
+        calculatedDaysCount = periodAtt.filter((r: any) =>
+          (Number(r.regularHours) || 0) + (Number(r.overtimeHours) || 0) > 0 || r.clockIn
+        ).length;
+
+        calculatedOtHrs = periodAtt.reduce((sum: number, r: any) => sum + (Number(r.overtimeHours) || 0), 0);
+
+        shiftRecords = periodAtt.map((r: any) => {
+          let recordHrs = (Number(r.regularHours) || 0) + (Number(r.overtimeHours) || 0);
+          if (recordHrs === 0 && r.clockIn && !r.clockOut) {
+            const diffMs = Math.max(0, Date.now() - new Date(r.clockIn).getTime());
+            recordHrs = Math.round((diffMs / (1000 * 60 * 60)) * 10) / 10;
+          }
+          const recDate = r.date ? new Date(r.date).toISOString().split("T")[0] : "";
+          return {
+            date: recDate,
+            clockIn: r.clockIn ? new Date(r.clockIn).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—",
+            clockOut: r.clockOut ? new Date(r.clockOut).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : (r.clockIn ? "Working..." : "—"),
+            totalHours: Math.round(recordHrs * 10) / 10,
+            status: r.status || "Present",
+          };
+        });
+      }
+
+      let calculatedTsHrs = 0;
+      let timesheetRecords: any[] = [];
+
+      if (tsRes.ok) {
+        const tsJson = await tsRes.json();
+        const entries: any[] = tsJson.entries || [];
+        calculatedTsHrs = entries.reduce((sum: number, e: any) => sum + (Number(e.hours) || 0), 0);
+        timesheetRecords = entries.map((e: any) => ({
+          date: e.date ? new Date(e.date).toISOString().split("T")[0] : "",
+          hours: Number(e.hours) || 0,
+          projectName: e.projectName || "General Project",
+          taskDescription: e.taskDescription || "",
+          billable: Boolean(e.billable),
+        }));
+      }
+
+      const roundedShiftHrs = Math.round(calculatedShiftHrs * 10) / 10;
+      const roundedTsHrs = Math.round(calculatedTsHrs * 10) / 10;
+      const roundedOt = Math.round(calculatedOtHrs * 10) / 10;
+      const effectiveTotalHrs = roundedShiftHrs > 0 ? roundedShiftHrs : roundedTsHrs;
+      const regularHrs = Math.max(0, Math.round((effectiveTotalHrs - roundedOt) * 10) / 10);
+
+      setSyncedAttendanceData({
+        totalHours: effectiveTotalHrs,
+        regularHours: regularHrs,
+        overtimeHours: roundedOt,
+        daysWorked: calculatedDaysCount,
+        timesheetTasks: timesheetRecords.length,
+        records: shiftRecords,
+        timesheetRecords,
+        syncedPeriod: billingPeriod,
+      });
+
+      // Update form values based on synced hours
+      if (billingModel === "hourly") {
+        setHoursWorked(String(effectiveTotalHrs));
+      } else if (billingModel === "line-items") {
+        const baseRate = Number(hourlyRate) || (empToSync.salary ? Math.round(empToSync.salary / 160) : 25);
+        setLineItems([
+          {
+            id: `item-${Date.now()}-1`,
+            description: `Regular Shift Deliverables (${regularHrs} hrs)`,
+            quantity: regularHrs,
+            unitPrice: baseRate,
+            amount: regularHrs * baseRate,
+          },
+          ...(roundedOt > 0
+            ? [
+                {
+                  id: `item-${Date.now()}-2`,
+                  description: `Overtime Shift Allowance (${roundedOt} hrs)`,
+                  quantity: roundedOt,
+                  unitPrice: Math.round(baseRate * 1.5),
+                  amount: roundedOt * Math.round(baseRate * 1.5),
+                },
+              ]
+            : []),
+        ]);
+      }
+    } catch (err) {
+      console.error("Failed to sync attendance & timesheets:", err);
+      setErrorMessage("Could not sync attendance & timesheet data for this employee.");
+    } finally {
+      setIsSyncingAttendance(false);
+    }
+  };
+
+  const handleAddPresetAdjustment = (type: "overtime" | "bonus" | "reimbursement" | "deduction") => {
+    if (billingModel !== "line-items") {
+      setBillingModel("line-items");
+    }
+    const id = `item-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+    if (type === "overtime") {
+      setLineItems((prev) => [
+        ...prev,
+        { id, description: "Approved Overtime Shift Allowance", quantity: 1, unitPrice: 150, amount: 150 },
+      ]);
+    } else if (type === "bonus") {
+      setLineItems((prev) => [
+        ...prev,
+        { id, description: "Performance / Project Bonus", quantity: 1, unitPrice: 300, amount: 300 },
+      ]);
+    } else if (type === "reimbursement") {
+      setLineItems((prev) => [
+        ...prev,
+        { id, description: "Expense / Travel Reimbursement", quantity: 1, unitPrice: 100, amount: 100 },
+      ]);
+    } else if (type === "deduction") {
+      setLineItems((prev) => [
+        ...prev,
+        { id, description: "Unpaid Leave / Advance Deduction", quantity: 1, unitPrice: -100, amount: -100 },
+      ]);
+    }
+  };
 
   // ── Fetch candidate lists ──
   useEffect(() => {
@@ -292,6 +496,7 @@ function NewInvoiceContent() {
     setSelectedInternal(emp);
     setSelectedExternal(null);
     setCandidateSearch("");
+    setCurrency("INR");
     const isFreelance = (emp.employmentType || "").toLowerCase().includes("freelan") || (emp.employmentType || "").toLowerCase().includes("contract");
     if (isFreelance) {
       setBillingModel("hourly");
@@ -302,6 +507,24 @@ function NewInvoiceContent() {
       setFixedAmount(emp.salary ? String(emp.salary) : "");
       setCategory("Employee Payroll");
     }
+
+    // Auto-populate remittance credentials from employee profile
+    const b = emp.bankDetails;
+    setBankAccountName(b?.accountName || emp.name || "");
+    setBankName(b?.bankName || "");
+    setBankAccountNo(b?.accountNo || "");
+    setBankIfsc(b?.ifscCode || "");
+    setBankBranch(b?.branch || "");
+    const empUpi = (b?.upiId || emp.upiId || "").trim();
+    setUpiId(empUpi);
+
+    if (b?.accountNo) {
+      setPreferredPaymentMethod("Bank Transfer");
+    } else if (empUpi) {
+      setPreferredPaymentMethod("UPI");
+    } else {
+      setPreferredPaymentMethod("Bank Transfer");
+    }
   };
 
   const handleSelectExternal = (ext: ExternalMember) => {
@@ -311,7 +534,16 @@ function NewInvoiceContent() {
     setBillingModel("hourly");
     setHourlyRate(ext.hourlyRate ? String(ext.hourlyRate) : "");
     if (ext.currency) setCurrency(ext.currency);
+    else setCurrency("INR");
     setCategory(ext.serviceCategory || "External Contractor Payment");
+
+    setBankAccountName(ext.name || "");
+    setBankName("");
+    setBankAccountNo("");
+    setBankIfsc("");
+    setBankBranch("");
+    setUpiId("");
+    setPreferredPaymentMethod("Bank Transfer");
   };
 
   // ── Compute Total Amount ──
@@ -327,6 +559,15 @@ function NewInvoiceContent() {
     }
     return 0;
   }, [billingModel, fixedAmount, hoursWorked, hourlyRate, lineItems]);
+
+  const getCurrencySymbol = (curr: string = currency) => {
+    if (curr === "INR") return "₹";
+    if (curr === "USD") return "$";
+    if (curr === "EUR") return "€";
+    if (curr === "GBP") return "£";
+    if (curr === "AED") return "AED ";
+    return curr + " ";
+  };
 
   // ── Auto Invoice Number ──
   const suggestedInvoiceNo = useMemo(() => {
@@ -511,7 +752,8 @@ function NewInvoiceContent() {
         client: clientFormatted,
         amount: totalAmount,
         currency,
-        status: "Pending",
+        status: submissionStage,
+        approvalStage: submissionStage === "Approved" ? "PENDING_PAYMENT" : submissionStage === "Pending" ? "PENDING_REVIEW" : "DRAFT",
         issuedDate,
         dueDate,
         category: category || (recipientMode === "internal" ? "Employee Payroll" : "External Services"),
@@ -521,6 +763,52 @@ function NewInvoiceContent() {
           notes ||
           `${recipientInfo.badge} Invoice for period ${billingPeriod}. Recipient: ${recipientInfo.name}${recipientInfo.company ? ` (${recipientInfo.company})` : ""}.`,
         lineItems: computedLineItems,
+        shiftAttendance: syncedAttendanceData
+          ? {
+              totalHours: syncedAttendanceData.totalHours,
+              regularHours: syncedAttendanceData.regularHours,
+              overtimeHours: syncedAttendanceData.overtimeHours,
+              daysWorked: syncedAttendanceData.daysWorked,
+              records: syncedAttendanceData.records,
+            }
+          : undefined,
+        timesheetEntries: syncedAttendanceData
+          ? {
+              totalHours: syncedAttendanceData.totalHours,
+              totalEntries: syncedAttendanceData.timesheetTasks,
+              records: syncedAttendanceData.timesheetRecords,
+            }
+          : undefined,
+        billedToName: "NexAce Technologies",
+        businessName: recipientInfo.name,
+        customerNo: recipientMode === "internal" ? (selectedInternal?.email || "") : "",
+        targetUserId: recipientMode === "internal" ? selectedInternal?._id : undefined,
+        businessEmail: recipientMode === "internal" ? (selectedInternal?.email || "") : (recipientInfo.email || ""),
+        preferredPaymentMethod,
+        bankDetails: {
+          accountName: bankAccountName || selectedInternal?.bankDetails?.accountName || recipientInfo.name,
+          bankName: bankName || selectedInternal?.bankDetails?.bankName || "",
+          accountNo: bankAccountNo || selectedInternal?.bankDetails?.accountNo || "",
+          ifscCode: bankIfsc || selectedInternal?.bankDetails?.ifscCode || "",
+          branch: bankBranch || selectedInternal?.bankDetails?.branch || "",
+          upiId: upiId || selectedInternal?.bankDetails?.upiId || selectedInternal?.upiId || "",
+        },
+        approvedBy: submissionStage === "Approved" ? (user?.name || "HR Partner") : "",
+        approvedAt: submissionStage === "Approved" ? new Date().toISOString() : "",
+        approverRole: submissionStage === "Approved" ? (user?.role || "HR") : "",
+        timeline: [
+          {
+            stage: submissionStage === "Approved" ? "APPROVED" : "SUBMITTED",
+            status: submissionStage,
+            actorName: user?.name || "HR Partner",
+            actorRole: user?.role || "HR",
+            actorId: user?._id || (user as any)?.id,
+            note: fromSource === "hr"
+              ? `Invoice generated & ${submissionStage === "Approved" ? "verified" : "drafted"} by HR on behalf of ${recipientInfo.name}.${syncedAttendanceData ? ` Attendance synced: ${syncedAttendanceData.totalHours} hrs.` : ""}`
+              : `Invoice generated by ${user?.role || "Admin"}.${syncedAttendanceData ? ` Attendance synced: ${syncedAttendanceData.totalHours} hrs.` : ""}`,
+            timestamp: new Date().toISOString(),
+          },
+        ],
       };
 
       const res = await fetch("/api/finance/invoices", {
@@ -534,8 +822,9 @@ function NewInvoiceContent() {
         throw new Error(data.error || "Failed to create invoice.");
       }
 
-      // Navigate back to finance portal
-      router.push("/dashboard/finance?tab=invoices");
+      // Navigate back to origin portal
+      const targetUrl = fromSource === "hr" ? "/dashboard/hr?tab=invoices" : "/dashboard/finance?tab=invoices";
+      router.push(targetUrl);
     } catch (err: any) {
       setErrorMessage(err.message || "An unexpected error occurred while saving the invoice.");
     } finally {
@@ -549,8 +838,12 @@ function NewInvoiceContent() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border/70 pb-4">
         <div>
           <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
-            <Link href="/dashboard/finance" className="hover:text-primary transition-colors flex items-center gap-1">
-              <i className="fa-solid fa-coins text-[11px]" /> Finance Portal
+            <Link
+              href={fromSource === "hr" ? "/dashboard/hr?tab=invoices" : "/dashboard/finance"}
+              className="hover:text-primary transition-colors flex items-center gap-1"
+            >
+              <i className={cn("text-[11px]", fromSource === "hr" ? "fa-solid fa-file-invoice-dollar" : "fa-solid fa-coins")} />
+              {fromSource === "hr" ? "HR Portal (Timesheet & Approvals)" : "Finance Portal"}
             </Link>
             <i className="fa-solid fa-chevron-right text-[9px] opacity-40" />
             <span className="text-foreground font-semibold">New Invoice</span>
@@ -560,12 +853,14 @@ function NewInvoiceContent() {
             Generate Invoice
           </h1>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Create and disburse invoices for internal corporate team members or external vendors and contractors.
+            {fromSource === "hr"
+              ? "Generate verified employee payroll or custom contractor invoices directly for the HR Timesheet & Approval desk."
+              : "Create and disburse invoices for internal corporate team members or external vendors and contractors."}
           </p>
         </div>
 
         <div className="flex items-center gap-2.5 shrink-0">
-          <Link href="/dashboard/finance">
+          <Link href={fromSource === "hr" ? "/dashboard/hr?tab=invoices" : "/dashboard/finance"}>
             <Button variant="outline" size="sm" className="gap-2 font-semibold cursor-pointer">
               <i className="fa-solid fa-arrow-left text-xs" /> Back
             </Button>
@@ -693,32 +988,117 @@ function NewInvoiceContent() {
               {recipientMode === "internal" && (
                 <div className="space-y-3">
                   {selectedInternal ? (
-                    <div className="flex items-center justify-between p-3.5 rounded-xl border border-primary/30 bg-primary/5">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-primary/20 text-primary font-bold text-sm flex items-center justify-center">
-                          {selectedInternal.name.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2)}
+                    <>
+                      <div className="flex items-center justify-between p-3.5 rounded-xl border border-primary/30 bg-primary/5">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-full bg-primary/20 text-primary font-bold text-sm flex items-center justify-center">
+                            {selectedInternal.name.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2)}
+                          </div>
+                          <div>
+                            <p className="text-sm font-bold text-foreground">{selectedInternal.name}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {selectedInternal.email} {selectedInternal.department && `· ${selectedInternal.department}`}
+                            </p>
+                          </div>
                         </div>
-                        <div>
-                          <p className="text-sm font-bold text-foreground">{selectedInternal.name}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {selectedInternal.email} {selectedInternal.department && `· ${selectedInternal.department}`}
-                          </p>
+                        <div className="flex items-center gap-2">
+                          {selectedInternal.salary ? (
+                            <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 font-mono">
+                              ₹{selectedInternal.salary.toLocaleString("en-IN")}/mo
+                            </span>
+                          ) : null}
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
+                            {selectedInternal.employmentType || "Full-time"}
+                          </span>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setSelectedInternal(null);
+                              setSyncedAttendanceData(null);
+                            }}
+                            className="h-7 text-xs text-muted-foreground hover:text-rose-500"
+                          >
+                            <i className="fa-solid fa-rotate-left mr-1 text-[10px]" /> Change
+                          </Button>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
-                          {selectedInternal.employmentType || "Full-time"}
-                        </span>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setSelectedInternal(null)}
-                          className="h-7 text-xs text-muted-foreground hover:text-rose-500"
-                        >
-                          <i className="fa-solid fa-rotate-left mr-1 text-[10px]" /> Change
-                        </Button>
+
+                      {/* ── 1-Click Attendance & Timesheet Sync Card ── */}
+                      <div className="p-3.5 rounded-xl border border-emerald-500/30 bg-emerald-500/5 space-y-3">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                          <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 rounded-lg bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+                              <i className="fa-solid fa-arrows-rotate text-xs" />
+                            </div>
+                            <div>
+                              <h4 className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                                1-Click Attendance &amp; Timesheet Sync
+                                <span className="text-[10px] font-mono px-2 py-0.2 rounded-full bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 font-bold border border-emerald-500/30">
+                                  {billingPeriod}
+                                </span>
+                              </h4>
+                              <p className="text-[11px] text-muted-foreground">
+                                Auto-fetch verified shifts and logged timesheets for {selectedInternal.name} in this billing month.
+                              </p>
+                            </div>
+                          </div>
+
+                          <Button
+                            type="button"
+                            onClick={() => handleSyncAttendance(selectedInternal)}
+                            disabled={isSyncingAttendance}
+                            className="gap-1.5 h-8 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs shrink-0 cursor-pointer"
+                          >
+                            {isSyncingAttendance ? (
+                              <>
+                                <i className="fa-solid fa-spinner fa-spin text-[10px]" /> Syncing Data...
+                              </>
+                            ) : (
+                              <>
+                                <i className="fa-solid fa-wand-magic-sparkles text-[10px]" />
+                                {syncedAttendanceData ? "Re-sync Records" : "1-Click Sync Now"}
+                              </>
+                            )}
+                          </Button>
+                        </div>
+
+                        {syncedAttendanceData && (
+                          <div className="pt-2 border-t border-emerald-500/20 space-y-2">
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
+                              <div className="p-2 rounded-lg bg-background/80 border border-emerald-500/20">
+                                <span className="text-[10px] uppercase font-bold text-muted-foreground block">Total Hours</span>
+                                <span className="text-sm font-black text-emerald-600 dark:text-emerald-400 font-mono">
+                                  {syncedAttendanceData.totalHours} hrs
+                                </span>
+                              </div>
+                              <div className="p-2 rounded-lg bg-background/80 border border-emerald-500/20">
+                                <span className="text-[10px] uppercase font-bold text-muted-foreground block">Regular Hours</span>
+                                <span className="text-sm font-bold text-foreground font-mono">
+                                  {syncedAttendanceData.regularHours} hrs
+                                </span>
+                              </div>
+                              <div className="p-2 rounded-lg bg-background/80 border border-emerald-500/20">
+                                <span className="text-[10px] uppercase font-bold text-muted-foreground block">Overtime</span>
+                                <span className="text-sm font-bold text-amber-600 dark:text-amber-400 font-mono">
+                                  {syncedAttendanceData.overtimeHours} hrs
+                                </span>
+                              </div>
+                              <div className="p-2 rounded-lg bg-background/80 border border-emerald-500/20">
+                                <span className="text-[10px] uppercase font-bold text-muted-foreground block">Shifts / Tasks</span>
+                                <span className="text-sm font-bold text-foreground font-mono">
+                                  {syncedAttendanceData.daysWorked}d · {syncedAttendanceData.timesheetTasks}ts
+                                </span>
+                              </div>
+                            </div>
+                            <p className="text-[10px] text-emerald-700 dark:text-emerald-300 flex items-center gap-1.5 font-medium">
+                              <i className="fa-solid fa-circle-check text-emerald-500 text-xs shrink-0" />
+                              Verified records auto-applied. You can still adjust, override, or add bonuses and deductions below.
+                            </p>
+                          </div>
+                        )}
                       </div>
-                    </div>
+                    </>
                   ) : (
                     <div className="space-y-2">
                       <div className="relative">
@@ -759,8 +1139,8 @@ function NewInvoiceContent() {
                               </div>
                               <div className="flex items-center gap-2">
                                 {emp.salary ? (
-                                  <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
-                                    ${emp.salary.toLocaleString()}
+                                  <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 font-mono">
+                                    ₹{emp.salary.toLocaleString("en-IN")}
                                   </span>
                                 ) : null}
                                 <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground">
@@ -800,8 +1180,8 @@ function NewInvoiceContent() {
                       </div>
                       <div className="flex items-center gap-2">
                         {selectedExternal.hourlyRate ? (
-                          <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
-                            {selectedExternal.currency || "USD"} {selectedExternal.hourlyRate}/hr
+                          <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 font-mono">
+                            {getCurrencySymbol(selectedExternal.currency || "INR")}{selectedExternal.hourlyRate}/hr
                           </span>
                         ) : null}
                         <Button
@@ -857,8 +1237,8 @@ function NewInvoiceContent() {
                               </div>
                               <div className="flex items-center gap-2">
                                 {ext.hourlyRate ? (
-                                  <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
-                                    {ext.currency || "USD"} {ext.hourlyRate}/hr
+                                  <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 font-mono">
+                                    {getCurrencySymbol(ext.currency || "INR")}{ext.hourlyRate}/hr
                                   </span>
                                 ) : null}
                                 <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20">
@@ -975,6 +1355,123 @@ function NewInvoiceContent() {
             </CardContent>
           </Card>
 
+          {/* ── Remittance & Payment Credentials (Bank / UPI) ── */}
+          <Card className="border-border/80 shadow-xs">
+            <CardHeader className="pb-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <CardTitle className="text-sm font-bold flex items-center gap-2">
+                  <i className="fa-solid fa-building-columns text-primary text-xs" />
+                  Beneficiary Remittance &amp; Payment Details
+                </CardTitle>
+                <div className="flex items-center gap-2">
+                  {selectedInternal?.bankDetails?.accountNo || selectedInternal?.bankDetails?.upiId ? (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 flex items-center gap-1">
+                      <i className="fa-solid fa-circle-check text-[9px]" /> Auto-loaded from Employee Profile
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-muted text-muted-foreground border flex items-center gap-1">
+                      <i className="fa-solid fa-pencil text-[9px]" /> Manual / Editable Credentials
+                    </span>
+                  )}
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4 pt-0">
+              {/* Preferred Channel Selector: 3 Channels */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                  <i className="fa-solid fa-money-check-dollar text-xs text-primary" />
+                  <span>Preferred Payout Channel</span>
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  {(["Bank Transfer", "UPI", "Cash"] as const).map((method) => (
+                    <button
+                      key={method}
+                      type="button"
+                      onClick={() => setPreferredPaymentMethod(method)}
+                      className={cn(
+                        "py-2 px-2.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer min-h-[38px]",
+                        preferredPaymentMethod === method
+                          ? "border-primary bg-primary/10 text-primary shadow-xs ring-1 ring-primary/30"
+                          : "border-border/80 bg-background hover:bg-muted/40 text-muted-foreground"
+                      )}
+                    >
+                      <i className={cn(
+                        "fa-solid text-xs",
+                        method === "Bank Transfer" ? "fa-building-columns" :
+                        method === "UPI" ? "fa-qrcode" : "fa-money-bill-wave"
+                      )} />
+                      <span className="truncate">{method}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Bank Details Input Grid */}
+              <div className="p-3.5 rounded-xl border border-border/80 bg-muted/20 space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-muted-foreground">Beneficiary / Account Name</label>
+                    <Input
+                      value={bankAccountName}
+                      onChange={(e) => setBankAccountName(e.target.value)}
+                      placeholder="e.g. Ashish Sharma"
+                      className="h-8 text-xs bg-background"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-muted-foreground">Bank Name</label>
+                    <Input
+                      value={bankName}
+                      onChange={(e) => setBankName(e.target.value)}
+                      placeholder="e.g. HDFC Bank, ICICI Bank"
+                      className="h-8 text-xs bg-background"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-muted-foreground">Account Number</label>
+                    <Input
+                      value={bankAccountNo}
+                      onChange={(e) => setBankAccountNo(e.target.value)}
+                      placeholder="e.g. 50100234891234"
+                      className="h-8 text-xs font-mono bg-background"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-muted-foreground">IFSC / Swift Code</label>
+                    <Input
+                      value={bankIfsc}
+                      onChange={(e) => setBankIfsc(e.target.value.toUpperCase())}
+                      placeholder="e.g. HDFC0000128"
+                      className="h-8 text-xs font-mono uppercase bg-background"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-muted-foreground">Branch (Optional)</label>
+                    <Input
+                      value={bankBranch}
+                      onChange={(e) => setBankBranch(e.target.value)}
+                      placeholder="e.g. Cyber City Branch, Gurgaon"
+                      className="h-8 text-xs bg-background"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-muted-foreground flex items-center justify-between">
+                      <span>UPI ID / VPA</span>
+                      <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold">1-Click QR enabled</span>
+                    </label>
+                    <Input
+                      value={upiId}
+                      onChange={(e) => setUpiId(e.target.value)}
+                      placeholder="e.g. ashish@okhdfcbank"
+                      className="h-8 text-xs font-mono bg-background"
+                    />
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
           {/* 2. Billing Model & Line Items */}
           <Card className="border-border/80 shadow-xs">
             <CardHeader className="pb-4">
@@ -1055,10 +1552,10 @@ function NewInvoiceContent() {
                     <div className="p-3 bg-emerald-500/5 border border-emerald-500/20 rounded-xl flex items-center justify-between">
                       <span className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
                         <i className="fa-solid fa-calculator text-emerald-500" />
-                        Calculation: {hoursWorked} hrs × {currency} {hourlyRate}/hr
+                        Calculation: {hoursWorked} hrs × {getCurrencySymbol()}{hourlyRate}/hr
                       </span>
-                      <span className="text-sm font-black text-emerald-600 dark:text-emerald-400">
-                        {currency} {totalAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                      <span className="text-sm font-black text-emerald-600 dark:text-emerald-400 font-mono">
+                        {getCurrencySymbol()}{totalAmount.toLocaleString(currency === "INR" ? "en-IN" : "en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </span>
                     </div>
                   )}
@@ -1082,7 +1579,7 @@ function NewInvoiceContent() {
                   {selectedInternal?.salary && (
                     <p className="text-[11px] text-emerald-600 dark:text-emerald-400">
                       <i className="fa-solid fa-circle-info mr-1" />
-                      Auto-populated from employee monthly salary (${selectedInternal.salary.toLocaleString()})
+                      Auto-populated from employee monthly salary (₹{selectedInternal.salary.toLocaleString("en-IN")})
                     </p>
                   )}
                 </div>
@@ -1135,7 +1632,7 @@ function NewInvoiceContent() {
                           />
                         </div>
                         <div className="col-span-2 text-right font-mono font-bold text-foreground">
-                          {currency} {item.amount.toLocaleString()}
+                          {getCurrencySymbol()}{item.amount.toLocaleString(currency === "INR" ? "en-IN" : "en-US")}
                         </div>
                       </div>
                     ))}
@@ -1151,6 +1648,47 @@ function NewInvoiceContent() {
                   </Button>
                 </div>
               )}
+
+              {/* Quick Compensation Adjustments Presets */}
+              <div className="pt-3 border-t border-border/60 space-y-2">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground block">
+                  Quick Compensation Adjustments (Manual Line Items)
+                </span>
+                <div className="flex flex-wrap gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => handleAddPresetAdjustment("overtime")}
+                    className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-background hover:bg-muted border border-border text-foreground transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs"
+                  >
+                    <i className="fa-solid fa-clock text-amber-500 text-xs" />
+                    + Overtime Allowance
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleAddPresetAdjustment("bonus")}
+                    className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-background hover:bg-muted border border-border text-foreground transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs"
+                  >
+                    <i className="fa-solid fa-award text-emerald-500 text-xs" />
+                    + Performance Bonus
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleAddPresetAdjustment("reimbursement")}
+                    className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-background hover:bg-muted border border-border text-foreground transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs"
+                  >
+                    <i className="fa-solid fa-receipt text-blue-500 text-xs" />
+                    + Expense Reimbursement
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleAddPresetAdjustment("deduction")}
+                    className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-background hover:bg-muted border border-border text-rose-600 dark:text-rose-400 transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs"
+                  >
+                    <i className="fa-solid fa-minus-circle text-rose-500 text-xs" />
+                    - Leave Deduction
+                  </button>
+                </div>
+              </div>
             </CardContent>
           </Card>
 
@@ -1265,6 +1803,86 @@ function NewInvoiceContent() {
                   placeholder="Payment instructions, deliverables completed, bank details or project milestones..."
                   className="w-full rounded-md border border-input bg-background text-xs p-3 text-foreground resize-none focus:outline-none focus:ring-1 focus:ring-primary"
                 />
+              </div>
+
+              {/* Initial Approval Stage on Submission */}
+              <div className="space-y-2 pt-2 border-t border-border/50">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                    <i className="fa-solid fa-shield-check text-primary text-xs" />
+                    Approval Stage Routing
+                  </label>
+                  <span className="text-[10px] text-muted-foreground font-mono">
+                    {fromSource === "hr" ? "HR Desk Mode" : "Finance Desk Mode"}
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+                  <label
+                    className={cn(
+                      "p-2.5 rounded-xl border flex items-center gap-2.5 cursor-pointer transition-all",
+                      submissionStage === "Approved"
+                        ? "bg-teal-500/10 border-teal-500 ring-1 ring-teal-500/30 text-teal-700 dark:text-teal-300 font-bold"
+                        : "bg-background border-border/80 hover:bg-muted/40 text-muted-foreground"
+                    )}
+                  >
+                    <input
+                      type="radio"
+                      name="submissionStage"
+                      value="Approved"
+                      checked={submissionStage === "Approved"}
+                      onChange={() => setSubmissionStage("Approved")}
+                      className="text-teal-600 focus:ring-teal-500 accent-teal-600"
+                    />
+                    <div>
+                      <span className="block text-xs font-bold text-foreground">Approved by HR</span>
+                      <span className="text-[10px] text-muted-foreground font-normal">Direct to Finance settlement</span>
+                    </div>
+                  </label>
+
+                  <label
+                    className={cn(
+                      "p-2.5 rounded-xl border flex items-center gap-2.5 cursor-pointer transition-all",
+                      submissionStage === "Pending"
+                        ? "bg-amber-500/10 border-amber-500 ring-1 ring-amber-500/30 text-amber-700 dark:text-amber-300 font-bold"
+                        : "bg-background border-border/80 hover:bg-muted/40 text-muted-foreground"
+                    )}
+                  >
+                    <input
+                      type="radio"
+                      name="submissionStage"
+                      value="Pending"
+                      checked={submissionStage === "Pending"}
+                      onChange={() => setSubmissionStage("Pending")}
+                      className="text-amber-600 focus:ring-amber-500 accent-amber-600"
+                    />
+                    <div>
+                      <span className="block text-xs font-bold text-foreground">Pending Review</span>
+                      <span className="text-[10px] text-muted-foreground font-normal">Standard review pipeline</span>
+                    </div>
+                  </label>
+
+                  <label
+                    className={cn(
+                      "p-2.5 rounded-xl border flex items-center gap-2.5 cursor-pointer transition-all",
+                      submissionStage === "Draft"
+                        ? "bg-slate-500/10 border-slate-500 ring-1 ring-slate-500/30 text-slate-700 dark:text-slate-300 font-bold"
+                        : "bg-background border-border/80 hover:bg-muted/40 text-muted-foreground"
+                    )}
+                  >
+                    <input
+                      type="radio"
+                      name="submissionStage"
+                      value="Draft"
+                      checked={submissionStage === "Draft"}
+                      onChange={() => setSubmissionStage("Draft")}
+                      className="text-slate-600 focus:ring-slate-500 accent-slate-600"
+                    />
+                    <div>
+                      <span className="block text-xs font-bold text-foreground">Save as Draft</span>
+                      <span className="text-[10px] text-muted-foreground font-normal">Draft in workspace</span>
+                    </div>
+                  </label>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -1662,12 +2280,19 @@ function NewInvoiceContent() {
               <div className="p-4 bg-primary/10 border border-primary/20 rounded-2xl flex items-center justify-between">
                 <div>
                   <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Total Payable</p>
-                  <p className="text-xl font-black text-primary">
-                    {currency} {totalAmount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  <p className="text-xl font-black text-primary font-mono">
+                    {getCurrencySymbol()}{totalAmount.toLocaleString(currency === "INR" ? "en-IN" : "en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </p>
                 </div>
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
-                  Pending
+                <span className={cn(
+                  "text-[10px] font-bold px-2 py-0.5 rounded-full border",
+                  submissionStage === "Approved"
+                    ? "bg-teal-500/10 text-teal-600 dark:text-teal-400 border-teal-500/20"
+                    : submissionStage === "Draft"
+                      ? "bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/20"
+                      : "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"
+                )}>
+                  {submissionStage === "Approved" ? "Approved by HR" : submissionStage === "Draft" ? "Draft" : "Pending Review"}
                 </span>
               </div>
 

@@ -46,6 +46,7 @@ interface UserProfile {
     facebook?: string;
   };
   forcePasswordReset?: boolean;
+  signatureUrl?: string;
 }
 
 interface AuthContextType {

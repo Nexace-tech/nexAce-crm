@@ -9,6 +9,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { cn, formatISTDate, formatISTTime, getISTDateString } from "@/lib/utils";
 import { NativeService } from "@/lib/native/nativeService";
 import { CombinedPdfExportModal } from "@/components/dashboard/CombinedPdfExportModal";
+import { UpcomingHolidaysWidget } from "@/components/dashboard/UpcomingHolidaysWidget";
 
 export function EmployeeDashboard({ user }: { user: any }) {
   const { can } = usePermissions();
@@ -1203,6 +1204,9 @@ export function EmployeeDashboard({ user }: { user: any }) {
 
         {/* Right Column (1 span): Announcements & Team Leave Requests */}
         <div className="space-y-6">
+          {/* Upcoming Holidays Widget */}
+          <UpcomingHolidaysWidget />
+
           <Card>
             <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-3">
               <div className="min-w-0 flex-1">

@@ -39,6 +39,14 @@ export interface IFinanceInvoice extends Document {
   }>;
   notes?: string;
   signatureUrl?: string;
+  shiftAttendance?: any;
+  timesheetEntries?: any;
+  targetUserId?: mongoose.Types.ObjectId;
+  billedToName?: string;
+  businessName?: string;
+  businessEmail?: string;
+  customerNo?: string;
+  preferredPaymentMethod?: "Bank Transfer" | "UPI" | "Cash" | "Credit Card" | "Cheque";
   approvedBy?: string;
   approvedAt?: string;
   approverRole?: string;
@@ -58,9 +66,11 @@ export interface IFinanceInvoice extends Document {
   revisionCount?: number;
   timeline?: IFinanceInvoiceTimelineEvent[];
   bankDetails?: {
+    accountName?: string;
     bankName?: string;
     accountNo?: string;
     ifscCode?: string;
+    branch?: string;
     upiId?: string;
   };
   paymentDetails?: {
@@ -86,7 +96,7 @@ const FinanceInvoiceSchema = new Schema<IFinanceInvoice>(
     invoiceNo: { type: String, required: true },
     client: { type: String, required: true },
     amount: { type: Number, required: true, default: 0 },
-    currency: { type: String, default: "USD" },
+    currency: { type: String, default: "INR" },
     status: {
       type: String,
       enum: ["Draft", "Pending", "Approved", "Rejected", "Paid", "Overdue", "Cancelled"],
@@ -111,6 +121,18 @@ const FinanceInvoiceSchema = new Schema<IFinanceInvoice>(
     ],
     notes: { type: String },
     signatureUrl: { type: String, default: "" },
+    shiftAttendance: { type: Schema.Types.Mixed, default: null },
+    timesheetEntries: { type: Schema.Types.Mixed, default: null },
+    targetUserId: { type: Schema.Types.ObjectId, ref: "User", default: null },
+    billedToName: { type: String, default: "" },
+    businessName: { type: String, default: "" },
+    businessEmail: { type: String, default: "" },
+    customerNo: { type: String, default: "" },
+    preferredPaymentMethod: {
+      type: String,
+      enum: ["Bank Transfer", "UPI", "Cash", "Credit Card", "Cheque"],
+      default: "Bank Transfer",
+    },
     approvedBy: { type: String, default: "" },
     approvedAt: { type: String, default: "" },
     approverRole: { type: String, default: "" },
@@ -158,9 +180,11 @@ const FinanceInvoiceSchema = new Schema<IFinanceInvoice>(
       },
     ],
     bankDetails: {
+      accountName: { type: String, default: "", trim: true },
       bankName: { type: String, default: "", trim: true },
       accountNo: { type: String, default: "", trim: true },
       ifscCode: { type: String, default: "", trim: true },
+      branch: { type: String, default: "", trim: true },
       upiId: { type: String, default: "", trim: true },
     },
     paymentDetails: {
