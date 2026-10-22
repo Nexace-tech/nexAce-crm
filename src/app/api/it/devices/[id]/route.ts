@@ -3,9 +3,9 @@ import { connectToDatabase } from "@/lib/db";
 import { ITDevice } from "@/models/ITDevice";
 import { ActivityLog } from "@/models/ActivityLog";
 import { requireTenantSession, isAuthError } from "@/lib/auth-guard";
+import { getUserDataScope } from "@/lib/dataScope";
+import { isSubAdminRole } from "@/lib/roles";
 import mongoose from "mongoose";
-
-const PRIVILEGED = ["Admin", "OPS", "Sub Admin"];
 
 export async function PATCH(
   request: Request,
@@ -24,7 +24,12 @@ export async function PATCH(
 
     await connectToDatabase();
 
-    const isPrivileged = ["Admin", "OPS", "Sub Admin", "Manager", "HR"].includes(session.role);
+    const dataScope = await getUserDataScope(session);
+    const isPrivileged =
+      dataScope.role === "Admin" ||
+      dataScope.role === "OPS" ||
+      isSubAdminRole(dataScope.role) ||
+      dataScope.canViewFeature("manageITDevices");
 
     // Fetch the existing record first
     const existing = await ITDevice.findOne({ _id: id, tenantId: tenantObjectId }).lean() as any;
@@ -125,7 +130,12 @@ export async function DELETE(
 
     await connectToDatabase();
 
-    const isPrivileged = PRIVILEGED.includes(session.role);
+    const dataScope = await getUserDataScope(session);
+    const isPrivileged =
+      dataScope.role === "Admin" ||
+      dataScope.role === "OPS" ||
+      isSubAdminRole(dataScope.role) ||
+      dataScope.canViewFeature("manageITDevices");
 
     // Fetch first to verify ownership
     const existing = await ITDevice.findOne({ _id: id, tenantId: tenantObjectId }).lean() as any;

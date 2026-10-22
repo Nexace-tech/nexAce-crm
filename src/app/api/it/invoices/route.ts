@@ -4,6 +4,8 @@ import { ITInvoice } from "@/models/ITInvoice";
 import { ActivityLog } from "@/models/ActivityLog";
 import { Notification } from "@/models/Notification";
 import { requireTenantSession, isAuthError } from "@/lib/auth-guard";
+import { getUserDataScope } from "@/lib/dataScope";
+import { isSubAdminRole } from "@/lib/roles";
 import { sendEmail } from "@/lib/mail";
 import { User } from "@/models/User";
 import { Tenant } from "@/models/Tenant";
@@ -15,7 +17,13 @@ export async function GET() {
     if (isAuthError(authResult)) return authResult;
     const { tenantObjectId, userObjectId, session } = authResult;
 
-    const isPrivileged = ["Admin", "OPS", "Sub Admin"].includes(session.role);
+    const dataScope = await getUserDataScope(session);
+    const canManageInvoices =
+      dataScope.role === "Admin" ||
+      dataScope.role === "OPS" ||
+      isSubAdminRole(dataScope.role) ||
+      dataScope.canViewFeature("manageITInvoices");
+    const isPrivileged = canManageInvoices;
 
     await connectToDatabase();
 
@@ -37,11 +45,13 @@ export async function GET() {
     const { getHRAccessScope } = await import("@/lib/hrIsolation");
     const hrScope = await getHRAccessScope(session, tenantObjectId, userObjectId);
 
-    if (hrScope.isHR) {
+    if (canManageInvoices) {
+      // Privileged manager sees all invoices across the company
+    } else if (hrScope.isHR) {
       if (hrScope.isIsolated && hrScope.allowedUserIds) {
         query.createdBy = { $in: hrScope.allowedUserIds };
       }
-    } else if (!isPrivileged) {
+    } else {
       const userDoc = await User.findById(userObjectId).select("name email").lean();
       const userEmail = (userDoc as { email?: string; name?: string } | null)?.email?.trim();
       const userName = (userDoc as { email?: string; name?: string } | null)?.name?.trim() || session.userName?.trim();

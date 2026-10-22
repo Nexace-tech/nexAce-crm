@@ -3,6 +3,8 @@ import { connectToDatabase } from "@/lib/db";
 import { ITSubscription } from "@/models/ITSubscription";
 import { ActivityLog } from "@/models/ActivityLog";
 import { requireTenantSession, isAuthError } from "@/lib/auth-guard";
+import { getUserDataScope } from "@/lib/dataScope";
+import { isSubAdminRole } from "@/lib/roles";
 import mongoose from "mongoose";
 
 export async function PATCH(
@@ -19,7 +21,12 @@ export async function PATCH(
       return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
     }
 
-    const isPrivileged = ["Admin", "OPS", "Sub Admin"].includes(session.role);
+    const dataScope = await getUserDataScope(session);
+    const isPrivileged =
+      dataScope.role === "Admin" ||
+      dataScope.role === "OPS" ||
+      isSubAdminRole(dataScope.role) ||
+      dataScope.canViewFeature("manageITSubscriptions");
 
     await connectToDatabase();
 
@@ -102,7 +109,12 @@ export async function DELETE(
       return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
     }
 
-    const isPrivileged = ["Admin", "OPS", "Sub Admin"].includes(session.role);
+    const dataScope = await getUserDataScope(session);
+    const isPrivileged =
+      dataScope.role === "Admin" ||
+      dataScope.role === "OPS" ||
+      isSubAdminRole(dataScope.role) ||
+      dataScope.canViewFeature("manageITSubscriptions");
 
     await connectToDatabase();
 

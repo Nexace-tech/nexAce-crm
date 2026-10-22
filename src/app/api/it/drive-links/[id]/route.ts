@@ -3,9 +3,9 @@ import { connectToDatabase } from "@/lib/db";
 import { ITDriveLink } from "@/models/ITDriveLink";
 import { ActivityLog } from "@/models/ActivityLog";
 import { requireTenantSession, isAuthError } from "@/lib/auth-guard";
+import { getUserDataScope } from "@/lib/dataScope";
+import { isSubAdminRole } from "@/lib/roles";
 import mongoose from "mongoose";
-
-const PRIVILEGED = ["Admin", "OPS", "Sub Admin", "Manager", "HR"];
 
 /** PATCH: Update a drive link */
 export async function PATCH(
@@ -24,7 +24,13 @@ export async function PATCH(
 
     await connectToDatabase();
 
-    const isPrivileged = PRIVILEGED.includes(session.role);
+    const dataScope = await getUserDataScope(session);
+    const isPrivileged =
+      dataScope.role === "Admin" ||
+      dataScope.role === "OPS" ||
+      isSubAdminRole(dataScope.role) ||
+      dataScope.canViewFeature("manageITAccess") ||
+      dataScope.canViewFeature("viewITPortal");
     const existing = await ITDriveLink.findOne({ _id: id, tenantId: tenantObjectId }).lean() as any;
 
     if (!existing) {
@@ -120,7 +126,13 @@ export async function DELETE(
 
     await connectToDatabase();
 
-    const isPrivileged = PRIVILEGED.includes(session.role);
+    const dataScope = await getUserDataScope(session);
+    const isPrivileged =
+      dataScope.role === "Admin" ||
+      dataScope.role === "OPS" ||
+      isSubAdminRole(dataScope.role) ||
+      dataScope.canViewFeature("manageITAccess") ||
+      dataScope.canViewFeature("viewITPortal");
     const existing = await ITDriveLink.findOne({ _id: id, tenantId: tenantObjectId }).lean() as any;
 
     if (!existing) {

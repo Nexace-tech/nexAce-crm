@@ -3,6 +3,8 @@ import { connectToDatabase } from "@/lib/db";
 import { ITAccessEntry } from "@/models/ITAccessEntry";
 import { ActivityLog } from "@/models/ActivityLog";
 import { requireTenantSession, isAuthError } from "@/lib/auth-guard";
+import { getUserDataScope } from "@/lib/dataScope";
+import { isSubAdminRole } from "@/lib/roles";
 import mongoose from "mongoose";
 
 export async function PATCH(
@@ -10,9 +12,23 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const authResult = await requireTenantSession(["Admin", "OPS", "Sub Admin"]);
+    const authResult = await requireTenantSession();
     if (isAuthError(authResult)) return authResult;
     const { tenantObjectId, userObjectId, session } = authResult;
+
+    const dataScope = await getUserDataScope(session);
+    const canManage =
+      dataScope.role === "Admin" ||
+      dataScope.role === "OPS" ||
+      isSubAdminRole(dataScope.role) ||
+      dataScope.canViewFeature("manageITAccess");
+
+    if (!canManage) {
+      return NextResponse.json(
+        { error: "Forbidden: You do not have permission to modify IT access keys" },
+        { status: 403 }
+      );
+    }
 
     const { id } = await params;
     if (!mongoose.Types.ObjectId.isValid(id)) {
@@ -66,9 +82,23 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const authResult = await requireTenantSession(["Admin", "OPS", "Sub Admin"]);
+    const authResult = await requireTenantSession();
     if (isAuthError(authResult)) return authResult;
     const { tenantObjectId, userObjectId, session } = authResult;
+
+    const dataScope = await getUserDataScope(session);
+    const canManage =
+      dataScope.role === "Admin" ||
+      dataScope.role === "OPS" ||
+      isSubAdminRole(dataScope.role) ||
+      dataScope.canViewFeature("manageITAccess");
+
+    if (!canManage) {
+      return NextResponse.json(
+        { error: "Forbidden: You do not have permission to delete IT access keys" },
+        { status: 403 }
+      );
+    }
 
     const { id } = await params;
     if (!mongoose.Types.ObjectId.isValid(id)) {

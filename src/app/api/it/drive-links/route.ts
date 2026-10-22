@@ -3,6 +3,8 @@ import { connectToDatabase } from "@/lib/db";
 import { ITDriveLink } from "@/models/ITDriveLink";
 import { ActivityLog } from "@/models/ActivityLog";
 import { requireTenantSession, isAuthError } from "@/lib/auth-guard";
+import { getUserDataScope } from "@/lib/dataScope";
+import { isSubAdminRole } from "@/lib/roles";
 
 const SEED_DRIVE_LINKS = [
   { name: "Premium Tools Tracker", category: "Ops/Admin", venture: "Ace Consultancy", platform: "Google Sheets", link: "https://docs.google.com/spreadsheets/d/1suXL", owner: "Ace", accessLevel: "Edit - Team", shareScope: "All Users", sharedWith: [], lastUpdated: "2026-07-28", reviewFrequency: "Monthly", notes: "Tracks premium tool subscriptions" },
@@ -20,7 +22,13 @@ export async function GET() {
     if (isAuthError(authResult)) return authResult;
     const { tenantObjectId, userObjectId, session } = authResult;
 
-    const isPrivileged = ["Admin", "OPS", "Sub Admin"].includes(session.role);
+    const dataScope = await getUserDataScope(session);
+    const isPrivileged =
+      dataScope.role === "Admin" ||
+      dataScope.role === "OPS" ||
+      isSubAdminRole(dataScope.role) ||
+      dataScope.canViewFeature("manageITAccess") ||
+      dataScope.canViewFeature("viewITPortal");
 
     await connectToDatabase();
     let links = await ITDriveLink.find({ tenantId: tenantObjectId }).sort({ createdAt: -1 }).lean();
@@ -90,7 +98,13 @@ export async function POST(request: Request) {
 
     await connectToDatabase();
 
-    const isPrivileged = ["Admin", "OPS", "Sub Admin"].includes(session.role);
+    const dataScope = await getUserDataScope(session);
+    const isPrivileged =
+      dataScope.role === "Admin" ||
+      dataScope.role === "OPS" ||
+      isSubAdminRole(dataScope.role) ||
+      dataScope.canViewFeature("manageITAccess") ||
+      dataScope.canViewFeature("viewITPortal");
     // Non-privileged users are always set as the owner of their registered links
     const resolvedOwner = isPrivileged && (owner || "").trim() ? owner.trim() : (session.userName || "Ace");
     const resolvedShareScope = ["All Users", "Specific Users", "Private"].includes(shareScope)

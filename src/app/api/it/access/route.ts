@@ -3,6 +3,8 @@ import { connectToDatabase } from "@/lib/db";
 import { ITAccessEntry } from "@/models/ITAccessEntry";
 import { ActivityLog } from "@/models/ActivityLog";
 import { requireTenantSession, isAuthError } from "@/lib/auth-guard";
+import { getUserDataScope } from "@/lib/dataScope";
+import { isSubAdminRole } from "@/lib/roles";
 
 const SEED_ACCESS_ENTRIES = [
   { tool: "Slack", category: "Communication", assignee: "Ahmed Raza", role: "Admin", accessLevel: "Full Access", dateGranted: "2025-01-10", status: "Active" },
@@ -25,7 +27,12 @@ export async function GET() {
     if (isAuthError(authResult)) return authResult;
     const { tenantObjectId, userObjectId, session } = authResult;
 
-    const isPrivileged = ["Admin", "OPS", "Sub Admin"].includes(session.role);
+    const dataScope = await getUserDataScope(session);
+    const isPrivileged =
+      dataScope.role === "Admin" ||
+      dataScope.role === "OPS" ||
+      isSubAdminRole(dataScope.role) ||
+      dataScope.canViewFeature("manageITAccess");
 
     await connectToDatabase();
     let entries = await ITAccessEntry.find({ tenantId: tenantObjectId }).sort({ createdAt: -1 }).lean();
@@ -56,9 +63,23 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const authResult = await requireTenantSession(["Admin", "OPS", "Sub Admin"]);
+    const authResult = await requireTenantSession();
     if (isAuthError(authResult)) return authResult;
     const { tenantObjectId, userObjectId, session } = authResult;
+
+    const dataScope = await getUserDataScope(session);
+    const canManage =
+      dataScope.role === "Admin" ||
+      dataScope.role === "OPS" ||
+      isSubAdminRole(dataScope.role) ||
+      dataScope.canViewFeature("manageITAccess");
+
+    if (!canManage) {
+      return NextResponse.json(
+        { error: "Forbidden: You do not have permission to grant or create access keys" },
+        { status: 403 }
+      );
+    }
 
     const body = await request.json();
     const { tool, category, assignee, role, accessLevel, dateGranted, status } = body;

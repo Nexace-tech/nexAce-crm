@@ -4160,7 +4160,23 @@ const TABS: { key: TabKey; label: string; icon: string }[] = [
 export default function ITCommandCenterPage() {
   const { can, isAdmin, isOPS, canAccessModule, loading: permLoading } = usePermissions();
   const { user } = useAuth();
-  const isPrivileged = isAdmin || isOPS;
+
+  // Dynamic granular permissions for each IT Portal module:
+  const canManageDevices = isAdmin || isOPS || can("manageITDevices");
+  const canManageAccess = isAdmin || isOPS || can("manageITAccess");
+  const canManageSubscriptions = isAdmin || isOPS || can("manageITSubscriptions");
+  const canManageInvoices = isAdmin || isOPS || can("manageITInvoices");
+  const canManageDrive = isAdmin || isOPS || can("viewITPortal") || can("manageITAccess") || can("viewDriveFiles");
+
+  const isPrivileged =
+    isAdmin ||
+    isOPS ||
+    canManageDevices ||
+    canManageAccess ||
+    canManageSubscriptions ||
+    canManageInvoices ||
+    canManageDrive;
+
   const [activeTab, setActiveTab] = useTabPersistence<TabKey>("it_command_center_tab", "overview", ["overview", "drive", "access", "subscriptions", "devices", "invoices"]);
   const [autoOpenAddTab, setAutoOpenAddTab] = useState<TabKey | null>(null);
 
@@ -4403,15 +4419,15 @@ export default function ITCommandCenterPage() {
   const visibleTabs = useMemo(() => {
     return TABS.filter((tab) => {
       if (tab.key === "overview") return true;
-      if (tab.key === "drive") return isAdmin || isOPS || can("viewDriveFiles");
-      if (tab.key === "access") return isAdmin || isOPS || can("manageITAccess") || can("viewITPortal");
-      if (tab.key === "subscriptions") return isAdmin || isOPS || can("manageITSubscriptions") || can("viewITPortal");
-      if (tab.key === "devices") return isAdmin || isOPS || can("manageITDevices") || can("viewITPortal");
-      // Invoices tab: accessible to privileged users or any user with IT portal access
-      if (tab.key === "invoices") return isPrivileged || can("manageITInvoices") || can("viewITPortal");
+      if (tab.key === "drive") return canManageDrive;
+      if (tab.key === "access") return canManageAccess || can("viewITPortal");
+      if (tab.key === "subscriptions") return canManageSubscriptions || can("viewITPortal");
+      if (tab.key === "devices") return canManageDevices || can("viewITPortal");
+      // Invoices tab: accessible to privileged users or any user with IT portal access or manageITInvoices
+      if (tab.key === "invoices") return canManageInvoices || can("viewITPortal");
       return true;
     });
-  }, [isAdmin, isOPS, isPrivileged, can]);
+  }, [canManageDrive, canManageAccess, canManageSubscriptions, canManageDevices, canManageInvoices, can]);
 
   const handleExportTabCSV = () => {
     let headers: string[] = [];
@@ -4470,7 +4486,7 @@ export default function ITCommandCenterPage() {
 
   // ─── Server already returns user-scoped data — apply defensive client filter ─
   const userInvoicesCount = useMemo(() => {
-    if (isPrivileged) return invoices.length;
+    if (canManageInvoices) return invoices.length;
     const u = (user?.name || "").trim().toLowerCase();
     const em = (user?.email || "").trim().toLowerCase();
     return invoices.filter((inv) => {
@@ -4478,12 +4494,12 @@ export default function ITCommandCenterPage() {
       const billedEm = (inv.billedToEmail || "").trim().toLowerCase();
       return (u && (billed === u || billed.includes(u))) || (em && billedEm === em);
     }).length;
-  }, [invoices, isPrivileged, user?.name, user?.email]);
+  }, [invoices, canManageInvoices, user?.name, user?.email]);
 
   const totalRecords = links.length + access.length + subs.length + devices.length + userInvoicesCount;
   const overallLoading = loadingLinks && loadingAccess && loadingSubs && loadingDevices && loadingInvoices;
 
-  if (!permLoading && !canAccessModule("it") && !can("viewITPortal")) {
+  if (!permLoading && !canAccessModule("it") && !can("viewITPortal") && !isPrivileged) {
     return <AccessRestricted moduleName="IT Portal" icon="fa-solid fa-laptop-code" />;
   }
 
@@ -4551,7 +4567,7 @@ export default function ITCommandCenterPage() {
       {/* Tab Content */}
       <div>
         {activeTab === "overview" && <OverviewTab access={access} subscriptions={subs} devices={devices} loading={overallLoading} onNavigate={(tab) => setActiveTab(tab)} onQuickAction={handleQuickAction} allowedTabs={visibleTabs.map((t) => t.key).filter((k) => k !== "overview")} />}
-        {activeTab === "drive" && <DriveLinksTab links={links} loading={loadingLinks} onAdd={addLink} onEdit={editLink} onDelete={deleteLink} autoOpenAdd={autoOpenAddTab === "drive"} userName={user?.name} isPrivileged={isPrivileged} teamMembers={teamMembers} />}
+        {activeTab === "drive" && <DriveLinksTab links={links} loading={loadingLinks} onAdd={addLink} onEdit={editLink} onDelete={deleteLink} autoOpenAdd={autoOpenAddTab === "drive"} userName={user?.name} isPrivileged={canManageDrive} teamMembers={teamMembers} />}
         {activeTab === "access" && <AccessTab access={access} loading={loadingAccess} onAdd={addAccess} onEdit={editAccess} onDelete={deleteAccess} onToggleStatus={toggleAccessStatus} autoOpenAdd={autoOpenAddTab === "access"} teamMembers={teamMembers} />}
         {activeTab === "subscriptions" && (
           <SubscriptionsTab
@@ -4566,7 +4582,7 @@ export default function ITCommandCenterPage() {
             teamMembers={teamMembers}
           />
         )}
-        {activeTab === "devices" && <DevicesTab devices={devices} allDevices={devices} nextAssetTags={nextAssetTags} loading={loadingDevices} onAdd={addDevice} onEdit={editDevice} onDelete={deleteDevice} autoOpenAdd={autoOpenAddTab === "devices"} userName={user?.name} userDepartment={user?.department} isPrivileged={isPrivileged} teamMembers={teamMembers} />}
+        {activeTab === "devices" && <DevicesTab devices={devices} allDevices={devices} nextAssetTags={nextAssetTags} loading={loadingDevices} onAdd={addDevice} onEdit={editDevice} onDelete={deleteDevice} autoOpenAdd={autoOpenAddTab === "devices"} userName={user?.name} userDepartment={user?.department} isPrivileged={canManageDevices} teamMembers={teamMembers} />}
         {activeTab === "invoices" && (
           <InvoicesTab
             invoices={invoices}
@@ -4575,7 +4591,7 @@ export default function ITCommandCenterPage() {
             onEdit={editInvoice}
             onDelete={deleteInvoice}
             autoOpenAdd={autoOpenAddTab === "invoices"}
-            isPrivileged={isPrivileged}
+            isPrivileged={canManageInvoices}
             userName={user?.name}
             userEmail={user?.email}
           />

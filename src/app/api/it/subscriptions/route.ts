@@ -4,8 +4,10 @@ import { ITSubscription } from "@/models/ITSubscription";
 import { ActivityLog } from "@/models/ActivityLog";
 import { Notification } from "@/models/Notification";
 import { User } from "@/models/User";
-import { sendEmail } from "@/lib/mail";
 import { requireTenantSession, isAuthError } from "@/lib/auth-guard";
+import { getUserDataScope } from "@/lib/dataScope";
+import { isSubAdminRole } from "@/lib/roles";
+import { sendEmail } from "@/lib/mail";
 import mongoose from "mongoose";
 
 const SEED_SUBSCRIPTIONS = [
@@ -120,7 +122,12 @@ export async function GET() {
     if (isAuthError(authResult)) return authResult;
     const { tenantObjectId, userObjectId, session } = authResult;
 
-    const isPrivileged = ["Admin", "OPS", "Sub Admin"].includes(session.role);
+    const dataScope = await getUserDataScope(session);
+    const isPrivileged =
+      dataScope.role === "Admin" ||
+      dataScope.role === "OPS" ||
+      isSubAdminRole(dataScope.role) ||
+      dataScope.canViewFeature("manageITSubscriptions");
 
     await connectToDatabase();
 

@@ -4,6 +4,8 @@ import { connectToDatabase } from "@/lib/db";
 import { ITDevice } from "@/models/ITDevice";
 import { ActivityLog } from "@/models/ActivityLog";
 import { requireTenantSession, isAuthError } from "@/lib/auth-guard";
+import { getUserDataScope } from "@/lib/dataScope";
+import { isSubAdminRole } from "@/lib/roles";
 
 const DEVICE_TYPE_CODE: Record<string, string> = {
   Laptop: "LAP",
@@ -72,7 +74,12 @@ export async function GET(request: Request) {
       return NextResponse.json({ nextTag });
     }
 
-    const isPrivileged = ["Admin", "OPS", "Sub Admin", "Manager"].includes(session.role);
+    const dataScope = await getUserDataScope(session);
+    const isPrivileged =
+      dataScope.role === "Admin" ||
+      dataScope.role === "OPS" ||
+      isSubAdminRole(dataScope.role) ||
+      dataScope.canViewFeature("manageITDevices");
 
     let devices = await ITDevice.find({ tenantId: tenantObjectId }).sort({ createdAt: -1 }).lean();
 
@@ -132,7 +139,12 @@ export async function POST(request: Request) {
       status,
     } = body;
 
-    const isPrivileged = ["Admin", "OPS", "Sub Admin", "Manager", "HR"].includes(session.role);
+    const dataScope = await getUserDataScope(session);
+    const isPrivileged =
+      dataScope.role === "Admin" ||
+      dataScope.role === "OPS" ||
+      isSubAdminRole(dataScope.role) ||
+      dataScope.canViewFeature("manageITDevices");
 
     // Non-privileged users can only register devices assigned to themselves
     if (!isPrivileged) {

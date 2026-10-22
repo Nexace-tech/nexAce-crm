@@ -106,12 +106,26 @@ export function usePermissions() {
       return false;
     }
 
-    // IT Portal: accessible if either module permission "it" or feature permission "viewITPortal" is granted
+    // IT Portal: accessible if module permission "it" or any IT feature permission is granted
     if (moduleKey === "it") {
-      if (modulePermissions["it"] === true || featurePermissions["viewITPortal"] === true) {
+      if (
+        modulePermissions["it"] === true ||
+        featurePermissions["viewITPortal"] === true ||
+        featurePermissions["manageITDevices"] === true ||
+        featurePermissions["manageITAccess"] === true ||
+        featurePermissions["manageITSubscriptions"] === true ||
+        featurePermissions["manageITInvoices"] === true
+      ) {
         return true;
       }
-      if (modulePermissions["it"] === false && !featurePermissions["viewITPortal"]) {
+      if (
+        modulePermissions["it"] === false &&
+        !featurePermissions["viewITPortal"] &&
+        !featurePermissions["manageITDevices"] &&
+        !featurePermissions["manageITAccess"] &&
+        !featurePermissions["manageITSubscriptions"] &&
+        !featurePermissions["manageITInvoices"]
+      ) {
         return false;
       }
     }
