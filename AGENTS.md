@@ -2,12 +2,20 @@
 
 - **FontAwesome Icons Only**: ALWAYS use FontAwesome 6 icon classes (`<i className="fa-solid fa-..." />`) by default for all UI components, buttons, tabs, tables, cards, and navigation items. Do NOT use Lucide icons or raw SVG/emoji icon substitutes unless explicitly requested.
 
-# Mobile Responsiveness Rule
+# Mandatory UI/UX Mobile Responsiveness Rule (Strictly Enforced)
 
-- **Mobile First & Fully Responsive**: ALL UI components, modals, popups, dropdowns, tables, cards, headers, and views MUST be 100% mobile-responsive across all screen sizes (mobile, tablet, desktop).
-  - Floating dialogs, popups, and dropdown menus must adapt seamlessly to mobile viewports (use safe insets like `inset-x-3.5`, max-width containment, and React Portals where necessary to escape parent `transform` or `overflow` traps).
-  - Horizontal tab bars, filter pills, and chips must support smooth touch scrolling, active option auto-centering, and never be awkwardly truncated.
-  - Ensure all tap targets are touch-friendly (minimum 36-44px), text wraps or truncates safely (`break-words`, `truncate`), and prevent horizontal page overflow.
+- **Automatic Mobile Responsiveness on ANY UI/UX Change**: Whenever ANY UI/UX modification, new feature, screen, modal, card, table, navigation, or design enhancement is made, you MUST AUTOMATICALLY implement it as 100% mobile-responsive across all screen sizes (mobile, tablet, desktop) from the very first edit. Do NOT produce desktop-only or non-responsive code that requires follow-up fixes.
+  - **Modals & Dialogs**: ALL modals must be viewport-contained (`max-h-[90vh]` or `max-h-[92vh] flex flex-col`), with fixed/shrink-0 headers & footers, scrollable content bodies (`overflow-y-auto overscroll-contain`), and safe insets (`p-3 sm:p-4`, `inset-x-3.5`).
+  - **Dropdowns & Popups**: Custom dropdowns and select menus must stay within the viewport (`max-h-48` to `max-h-56 overflow-y-auto overscroll-contain`), never bleed off screen, and avoid trapping parent scroll.
+  - **Tables**: Every tabular view MUST be wrapped in a touch-scrolling container (`overflow-x-auto`) with a safe column minimum width (e.g. `min-w-[640px]`) so columns never squash illegibly or cause page-level horizontal overflow.
+  - **Navigation, Tabs & Filter Pills**: Horizontal tabs, filter pills, chips, and category selectors must support smooth touch swiping (`overflow-x-auto no-scrollbar`), flex wrapping, or touch auto-scroll without being clipped or awkwardly truncated.
+  - **Touch Targets**: All interactive elements (buttons, inputs, toggles, chips, icon buttons) MUST meet touch-friendly tap target minimums (36px to 44px minimum height/width, e.g., `min-h-[38px] sm:min-h-[40px]`, `w-8 h-8` to `w-10 h-10`).
+  - **Responsive Grids & Stacks**: Multi-column grids must adaptively collapse on mobile (e.g., `grid-cols-1 md:grid-cols-2 lg:grid-cols-3`, `grid-cols-2 lg:grid-cols-4`, `flex-col sm:flex-row`).
+  - **Overflow & Text Truncation**: Guard all dynamic text and card titles with `truncate` or `break-words` and responsive text sizing (`text-[10px] sm:text-xs`) to prevent layout blowout on narrow ($<375\text{px}$) devices.
+
+# Mandatory Plans Storage Rule (Strictly Enforced)
+
+- **Auto-Create All Plans Inside `/plans`**: Whenever creating ANY implementation plan, architectural specification, feature roadmap, technical design document, or change proposal, you MUST ALWAYS create and persist the markdown document directly inside the project's root `plans/` directory (e.g. `plans/<feature_name>_plan.md`). Never create plan documents in arbitrary folders, root workspace, or only as ephemeral scratch files without saving them in `plans/`.
 
 <!-- BEGIN:nextjs-agent-rules -->
 
