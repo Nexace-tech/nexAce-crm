@@ -153,10 +153,13 @@ export function CompanyCelebrationsTab({
   // ─────────────────────────────────────────────────────────────
   const loadRosterAndData = useCallback(async () => {
     try {
-      // 1. Fetch general birthday overview
+      // 1. Fetch general birthday overview & annual 12-month roster
       const bdayRes = await fetch("/api/birthdays");
       let todayList: any[] = [];
       let upcomingList: any[] = [];
+      let rosterMap: Record<number, CelebrantItem[]> = {};
+      for (let m = 1; m <= 12; m++) rosterMap[m] = [];
+
       if (bdayRes.ok) {
         const bdayData = await bdayRes.json();
         todayList = [
@@ -167,74 +170,51 @@ export function CompanyCelebrationsTab({
           ...(bdayData.upcomingBirthdays || []),
           ...(bdayData.upcomingAnniversaries || []),
         ];
+
+        if (bdayData.roster) {
+          Object.keys(bdayData.roster).forEach((monthKey) => {
+            const mNum = parseInt(monthKey, 10);
+            rosterMap[mNum] = (bdayData.roster[mNum] || []).map((item: any) => ({
+              ...item,
+              month: mNum,
+              isToday: mNum === currentMonthIdx + 1 && item.day === todayDay,
+            }));
+          });
+        }
       }
 
-      // 2. Fetch admin roster if elevated, else build monthly map from current data
-      let rosterMap: Record<number, CelebrantItem[]> = {};
-      for (let m = 1; m <= 12; m++) rosterMap[m] = [];
-
+      // 2. If elevated role, fetch company-wide wishes moderation feed & stats
       if (canModerate) {
-        const adminRes = await fetch("/api/birthdays/admin");
-        if (adminRes.ok) {
-          const adminData = await adminRes.json();
-          if (adminData.roster) {
-            Object.keys(adminData.roster).forEach((monthKey) => {
-              const mNum = parseInt(monthKey, 10);
-              rosterMap[mNum] = (adminData.roster[mNum] || []).map((item: any) => ({
-                ...item,
-                month: mNum,
-                isToday: mNum === currentMonthIdx + 1 && item.day === todayDay,
-              }));
-            });
-          }
-          if (Array.isArray(adminData.wishes)) {
-            setAllWishesFeed(adminData.wishes);
-          }
-          if (adminData.stats) {
+        try {
+          const adminRes = await fetch("/api/birthdays/admin");
+          if (adminRes.ok) {
+            const adminData = await adminRes.json();
+            if (Array.isArray(adminData.wishes)) {
+              setAllWishesFeed(adminData.wishes);
+            }
+            if (adminData.roster && Object.keys(adminData.roster).length > 0) {
+              Object.keys(adminData.roster).forEach((monthKey) => {
+                const mNum = parseInt(monthKey, 10);
+                if (Array.isArray(adminData.roster[mNum]) && adminData.roster[mNum].length > 0) {
+                  rosterMap[mNum] = adminData.roster[mNum].map((item: any) => ({
+                    ...item,
+                    month: mNum,
+                    isToday: mNum === currentMonthIdx + 1 && item.day === todayDay,
+                  }));
+                }
+              });
+            }
             setStats({
               todayTotal: todayList.length,
               upcomingTotal: upcomingList.length,
-              totalWishes: adminData.stats.totalWishes || adminData.wishes?.length || 0,
-              activeCelebrants: adminData.stats.activeUsers || 0,
+              totalWishes: adminData.stats?.totalWishes || adminData.wishes?.length || 0,
+              activeCelebrants: adminData.stats?.activeUsers || 0,
             });
           }
+        } catch (adminErr) {
+          console.warn("Admin wishes feed unavailable:", adminErr);
         }
       } else {
-        // Build for regular team member using today & upcoming
-        const currentMonthNum = currentMonthIdx + 1;
-        todayList.forEach((c) => {
-          rosterMap[currentMonthNum].push({
-            userId: c.userId,
-            name: c.name,
-            photoUrl: c.photoUrl,
-            department: c.department || "General",
-            role: c.role || "Team Member",
-            phone: c.phone,
-            day: todayDay,
-            month: currentMonthNum,
-            type: c.type,
-            label: c.type === "birthday" ? "Birthday" : (c.milestoneText || "Work Anniversary"),
-            isToday: true,
-          });
-        });
-        upcomingList.forEach((c) => {
-          const d = c.date ? new Date(c.date) : new Date();
-          const mNum = d.getMonth() + 1;
-          rosterMap[mNum].push({
-            userId: c.userId,
-            name: c.name,
-            photoUrl: c.photoUrl,
-            department: c.department || "General",
-            role: c.role || "Team Member",
-            phone: c.phone,
-            day: d.getDate(),
-            month: mNum,
-            type: c.type,
-            label: c.type === "birthday" ? "Birthday" : (c.milestoneText || "Work Anniversary"),
-            isToday: false,
-            daysRemaining: c.daysRemaining,
-          });
-        });
         setStats({
           todayTotal: todayList.length,
           upcomingTotal: upcomingList.length,
@@ -245,7 +225,7 @@ export function CompanyCelebrationsTab({
 
       setRosterByMonth(rosterMap);
 
-      // Select initial celebrant if provided or pick first from active month
+      // Auto-select initial celebrant
       const activeMonthList = rosterMap[selectedMonth] || [];
       if (initialSelectedUserId) {
         let found: CelebrantItem | null = null;
@@ -259,16 +239,19 @@ export function CompanyCelebrationsTab({
         }
         if (found) setSelectedCelebrant(found);
         else if (activeMonthList.length > 0) setSelectedCelebrant(activeMonthList[0]);
-      } else if (!selectedCelebrant && activeMonthList.length > 0) {
-        // Prefer today's celebrant if exists
+      } else if (activeMonthList.length > 0) {
+        // Auto-select today's celebrant or first in month
         const todayItem = activeMonthList.find((c) => c.isToday) || activeMonthList[0];
-        setSelectedCelebrant(todayItem);
+        setSelectedCelebrant((prev) => {
+          if (prev && activeMonthList.some((c) => c.userId === prev.userId)) return prev;
+          return todayItem;
+        });
       }
     } catch (err) {
       console.error("Failed to load celebrations roster:", err);
       onToast("Unable to load celebration roster", "error");
     }
-  }, [canModerate, currentMonthIdx, initialSelectedUserId, onToast, selectedMonth, selectedCelebrant, todayDay]);
+  }, [canModerate, currentMonthIdx, initialSelectedUserId, onToast, selectedMonth, todayDay]);
 
   useEffect(() => {
     loadRosterAndData();
