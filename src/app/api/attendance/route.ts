@@ -52,25 +52,55 @@ export async function GET(request: Request) {
     const { start: dayStart, end: dayEnd } = getISTDayRange();
 
     // Use range query so both old (UTC-midnight) and new (IST-midnight) records are found
-    const todayAttendance = await Attendance.findOne({
+    let todayAttendance = await Attendance.findOne({
       userId:   userObjectId,
       tenantId: tenantObjectId,
       date: { $gte: dayStart, $lt: dayEnd },
-    }).sort({ clockIn: -1 }); // prefer the latest if duplicates somehow exist
+    })
+      .populate("extensionApprovedBy", "name email role photoUrl")
+      .sort({ clockIn: -1 }); // prefer the latest if duplicates somehow exist
+
+    // Overnight shift support: if no record exists for today, look for an active unclosed shift from the last 24h
+    if (!todayAttendance) {
+      const yesterdayStart = new Date(dayStart.getTime() - 24 * 60 * 60 * 1000);
+      const unclosedYesterday = await Attendance.findOne({
+        userId:   userObjectId,
+        tenantId: tenantObjectId,
+        date:     { $gte: yesterdayStart, $lt: dayStart },
+        clockOut: { $exists: false },
+      })
+        .populate("extensionApprovedBy", "name email role photoUrl")
+        .sort({ clockIn: -1 });
+
+      if (unclosedYesterday) {
+        todayAttendance = unclosedYesterday;
+      }
+    }
 
     const tenant = await Tenant.findById(tenantObjectId).lean();
     const dynamicTargetHours = Number(tenant?.targetShiftHours) || SHIFT_TARGET_HOURS;
     const dynamicMaxShiftHours = Number(tenant?.maxShiftHours) || MAX_SHIFT_HOURS;
 
-    // Auto-clock out active session if it has exceeded dynamicMaxShiftHours
+    // Auto-clock out active session if actual worked hours exceed maximum allowed hours
     if (todayAttendance && !todayAttendance.clockOut) {
-      const clockInTime = new Date(todayAttendance.originalClockIn || todayAttendance.clockIn).getTime();
-      const elapsedHours = (Date.now() - clockInTime) / (1000 * 60 * 60);
-      if (elapsedHours >= dynamicMaxShiftHours) {
-        todayAttendance.clockOut = new Date(clockInTime + dynamicMaxShiftHours * 3600 * 1000);
+      const priorWorkedHours = (todayAttendance.regularHours || 0) + (todayAttendance.overtimeHours || 0);
+      const activeSegmentStart = todayAttendance.lastResumedAt
+        ? new Date(todayAttendance.lastResumedAt).getTime()
+        : new Date(todayAttendance.clockIn).getTime();
+      const currentSegmentHours = Math.max(0, (Date.now() - activeSegmentStart) / (1000 * 60 * 60));
+      const totalWorkedHours = priorWorkedHours + currentSegmentHours;
+
+      // If shift extension is approved, expand the max shift hours limit
+      const effectiveMaxHours = todayAttendance.extensionApproved
+        ? dynamicMaxShiftHours + (Number(todayAttendance.extensionAllocatedHours) || 1.0)
+        : dynamicMaxShiftHours;
+
+      if (totalWorkedHours >= effectiveMaxHours) {
+        const remainingNeededHours = Math.max(0, effectiveMaxHours - priorWorkedHours);
+        todayAttendance.clockOut = new Date(activeSegmentStart + remainingNeededHours * 3600 * 1000);
         todayAttendance.lastResumedAt = undefined;
-        todayAttendance.regularHours = dynamicTargetHours;
-        todayAttendance.overtimeHours = Number(Math.max(0, dynamicMaxShiftHours - dynamicTargetHours).toFixed(2));
+        todayAttendance.regularHours = Number(Math.min(effectiveMaxHours, dynamicTargetHours).toFixed(2));
+        todayAttendance.overtimeHours = Number(Math.max(0, effectiveMaxHours - dynamicTargetHours).toFixed(2));
         await todayAttendance.save();
       }
     }
@@ -105,6 +135,7 @@ export async function GET(request: Request) {
 
     let historyQuery = Attendance.find(historyFilter)
       .populate("userId", "name email role department photoUrl shiftName shiftTime employmentType")
+      .populate("extensionApprovedBy", "name email role photoUrl")
       .sort({ date: -1, clockIn: -1 });
 
     if (limitParam !== "all") {
@@ -167,16 +198,30 @@ export async function POST(request: Request) {
     if (action === "in") {
       // Prevent duplicate clock-ins: check the FULL IST day range, not just exact date.
       // This catches any record regardless of what date normalization was used when it was stored.
-      const existing = await Attendance.findOne({
+      let existing = await Attendance.findOne({
         userId:   userObjectId,
         tenantId: tenantObjectId,
         date:     { $gte: dayStart, $lt: dayEnd },
-      });
+      }).populate("extensionApprovedBy", "name email role photoUrl");
+
+      // Check for unclosed active shift from yesterday (<24h)
+      if (!existing) {
+        const yesterdayStart = new Date(dayStart.getTime() - 24 * 60 * 60 * 1000);
+        const unclosedYesterday = await Attendance.findOne({
+          userId:   userObjectId,
+          tenantId: tenantObjectId,
+          date:     { $gte: yesterdayStart, $lt: dayStart },
+          clockOut: { $exists: false },
+        }).populate("extensionApprovedBy", "name email role photoUrl");
+        if (unclosedYesterday) {
+          existing = unclosedYesterday;
+        }
+      }
 
       if (existing) {
         // If already clocked in and shift is active
         if (!existing.clockOut) {
-          return NextResponse.json({ error: "You are already clocked in for today" }, { status: 400 });
+          return NextResponse.json({ error: "You are already clocked in for an active shift" }, { status: 400 });
         }
 
         const tenant = await Tenant.findById(tenantObjectId).lean();
@@ -185,14 +230,18 @@ export async function POST(request: Request) {
         const isElevatedStaff = session.role === "Admin" || session.role === "OPS" || session.role === "HR" || dataScope.canViewFeature("approveAdditionalShiftTime");
         const workedHoursSoFar = (existing.regularHours || 0) + (existing.overtimeHours || 0);
 
-        if (workedHoursSoFar >= dynamicMaxShiftHours && !isElevatedStaff && !existing.extensionApproved) {
+        const effectiveMaxHours = existing.extensionApproved
+          ? dynamicMaxShiftHours + (Number(existing.extensionAllocatedHours) || 1.0)
+          : dynamicMaxShiftHours;
+
+        if (workedHoursSoFar >= effectiveMaxHours && !isElevatedStaff && !existing.extensionApproved) {
           return NextResponse.json({
             error: `Maximum shift limit reached (${dynamicMaxShiftHours}h). You cannot resume without Admin, OPS, or HR approval. Please raise an additional shift time request.`,
             maxLimitReached: true
           }, { status: 403 });
         }
 
-        // If user already clocked out earlier today, automatically resume / merge shift:
+        // If user already clocked out earlier, automatically resume / merge shift:
         // Keep existing.clockIn intact (original clock-in), start new segment with lastResumedAt
         if (!existing.originalClockIn) {
           existing.originalClockIn = existing.clockIn;
@@ -203,6 +252,7 @@ export async function POST(request: Request) {
           existing.clockInLocation = sanitizedLocation;
         }
         await existing.save();
+        await existing.populate("extensionApprovedBy", "name email role photoUrl");
         return NextResponse.json({ success: true, attendance: existing, message: "Shift resumed and merged with today's record!" });
       }
 
@@ -222,14 +272,33 @@ export async function POST(request: Request) {
 
     } else if (action === "out") {
       // Find today's record using range — immune to stored date format
-      const record = await Attendance.findOne({
+      let record = await Attendance.findOne({
         userId:   userObjectId,
         tenantId: tenantObjectId,
         date:     { $gte: dayStart, $lt: dayEnd },
-      }).sort({ clockIn: -1 });
+      })
+        .populate("extensionApprovedBy", "name email role photoUrl")
+        .sort({ clockIn: -1 });
+
+      // Overnight shift support: If no active record for today, look for an unclosed active shift from yesterday (<24h)
+      if (!record || record.clockOut) {
+        const yesterdayStart = new Date(dayStart.getTime() - 24 * 60 * 60 * 1000);
+        const unclosedYesterday = await Attendance.findOne({
+          userId:   userObjectId,
+          tenantId: tenantObjectId,
+          date:     { $gte: yesterdayStart, $lt: dayStart },
+          clockOut: { $exists: false },
+        })
+          .populate("extensionApprovedBy", "name email role photoUrl")
+          .sort({ clockIn: -1 });
+
+        if (unclosedYesterday) {
+          record = unclosedYesterday;
+        }
+      }
 
       if (!record) {
-        return NextResponse.json({ error: "No clock-in record found for today" }, { status: 400 });
+        return NextResponse.json({ error: "No active clock-in record found for today or overnight shift" }, { status: 400 });
       }
       if (record.clockOut) {
         return NextResponse.json({ error: "You have already clocked out for today" }, { status: 400 });
@@ -257,26 +326,46 @@ export async function POST(request: Request) {
       const dynamicTargetHours = Number(tenant?.targetShiftHours) || SHIFT_TARGET_HOURS;
       const dynamicMaxShiftHours = Number(tenant?.maxShiftHours) || MAX_SHIFT_HOURS;
 
+      // Allow extended hours if shift extension was approved
+      const effectiveMaxHours = record.extensionApproved
+        ? dynamicMaxShiftHours + (Number(record.extensionAllocatedHours) || 1.0)
+        : dynamicMaxShiftHours;
+
       // Hard sanity guard: total worked hours on a single day can NEVER exceed elapsed time since clock-in
       const maxPossibleHours = Math.max(0, (now.getTime() - new Date(record.clockIn).getTime()) / (1000 * 60 * 60));
-      // Enforce the dynamic max shift hours cap
-      const safeTotal = Math.min(totalAccumulated, maxPossibleHours, dynamicMaxShiftHours);
+      // Enforce the dynamic max shift hours cap (with extension if approved)
+      const safeTotal = Math.min(totalAccumulated, maxPossibleHours, effectiveMaxHours);
 
       record.clockOut      = now;
       record.lastResumedAt = undefined;
       record.regularHours  = Number(Math.min(safeTotal, dynamicTargetHours).toFixed(2));
       record.overtimeHours = Number(Math.max(0, safeTotal - dynamicTargetHours).toFixed(2));
       await record.save();
+      await record.populate("extensionApprovedBy", "name email role photoUrl");
 
       return NextResponse.json({ success: true, attendance: record });
 
     } else if (action === "resume") {
       // Find today's record using range
-      const record = await Attendance.findOne({
+      let record = await Attendance.findOne({
         userId:   userObjectId,
         tenantId: tenantObjectId,
         date:     { $gte: dayStart, $lt: dayEnd },
-      }).sort({ clockIn: -1 });
+      })
+        .populate("extensionApprovedBy", "name email role photoUrl")
+        .sort({ clockIn: -1 });
+
+      if (!record) {
+        const yesterdayStart = new Date(dayStart.getTime() - 24 * 60 * 60 * 1000);
+        const unclosedYesterday = await Attendance.findOne({
+          userId:   userObjectId,
+          tenantId: tenantObjectId,
+          date:     { $gte: yesterdayStart, $lt: dayStart },
+        })
+          .populate("extensionApprovedBy", "name email role photoUrl")
+          .sort({ clockIn: -1 });
+        if (unclosedYesterday) record = unclosedYesterday;
+      }
 
       if (!record) {
         return NextResponse.json({ error: "No clock-in record found for today" }, { status: 400 });
@@ -291,7 +380,11 @@ export async function POST(request: Request) {
       const isElevatedStaff = session.role === "Admin" || session.role === "OPS" || session.role === "HR" || dataScope.canViewFeature("approveAdditionalShiftTime");
       const workedHoursSoFar = (record.regularHours || 0) + (record.overtimeHours || 0);
 
-      if (workedHoursSoFar >= dynamicMaxShiftHours && !isElevatedStaff && !record.extensionApproved) {
+      const effectiveMaxHours = record.extensionApproved
+        ? dynamicMaxShiftHours + (Number(record.extensionAllocatedHours) || 2.0)
+        : dynamicMaxShiftHours;
+
+      if (workedHoursSoFar >= effectiveMaxHours && !isElevatedStaff && !record.extensionApproved) {
         return NextResponse.json({
           error: `Maximum shift limit reached (${dynamicMaxShiftHours}h). You cannot resume without Admin, OPS, or HR approval. Please raise an additional shift time request.`,
           maxLimitReached: true
@@ -308,6 +401,7 @@ export async function POST(request: Request) {
       record.lastResumedAt = now;
       record.clockOut      = undefined;
       await record.save();
+      await record.populate("extensionApprovedBy", "name email role photoUrl");
 
       return NextResponse.json({ success: true, attendance: record, message: "Shift resumed successfully!" });
 
@@ -333,30 +427,59 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "Attendance record not found" }, { status: 404 });
       }
 
+      let allocatedHours = 1.0;
+      if (body.allocatedHours !== undefined && !isNaN(Number(body.allocatedHours)) && Number(body.allocatedHours) > 0) {
+        allocatedHours = Number(body.allocatedHours);
+      } else if (recordToApprove.extensionRequestedHours && recordToApprove.extensionRequestedHours > 0) {
+        allocatedHours = Number(recordToApprove.extensionRequestedHours);
+      }
+
       recordToApprove.extensionApproved = true;
       recordToApprove.extensionApprovedBy = userObjectId;
       recordToApprove.extensionApprovedAt = now;
+      recordToApprove.extensionAllocatedHours = allocatedHours;
       recordToApprove.extensionRequested = false;
       await recordToApprove.save();
+      await recordToApprove.populate("extensionApprovedBy", "name email role photoUrl");
 
-      return NextResponse.json({ success: true, message: "Shift extension approved! User can now resume their shift." });
+      return NextResponse.json({
+        success: true,
+        message: `Shift extension (+${allocatedHours}h) approved! User can now resume their shift.`,
+        attendance: recordToApprove,
+      });
 
     } else if (action === "request_extension") {
-      const record = await Attendance.findOne({
+      let record = await Attendance.findOne({
         userId: userObjectId,
         tenantId: tenantObjectId,
         date: { $gte: dayStart, $lt: dayEnd },
       }).sort({ clockIn: -1 });
 
       if (!record) {
+        const yesterdayStart = new Date(dayStart.getTime() - 24 * 60 * 60 * 1000);
+        const unclosedYesterday = await Attendance.findOne({
+          userId: userObjectId,
+          tenantId: tenantObjectId,
+          date: { $gte: yesterdayStart, $lt: dayStart },
+          clockOut: { $exists: false },
+        }).sort({ clockIn: -1 });
+        if (unclosedYesterday) record = unclosedYesterday;
+      }
+
+      if (!record) {
         return NextResponse.json({ error: "No attendance record found for today" }, { status: 400 });
       }
 
+      const requestedHours = Math.max(0.5, Math.min(8, Number(body.requestedHours) || 1.0));
       record.extensionRequested = true;
+      record.extensionRequestedHours = requestedHours;
       record.extensionReason = String(reason || "").trim();
       await record.save();
 
-      return NextResponse.json({ success: true, message: "Shift extension request recorded successfully." });
+      return NextResponse.json({
+        success: true,
+        message: `Shift extension (+${requestedHours}h) request recorded successfully.`,
+      });
     }
 
     return NextResponse.json({ error: "Invalid action" }, { status: 400 });

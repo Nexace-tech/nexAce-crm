@@ -17,6 +17,10 @@ import {
 import { useTheme } from "@/providers/theme-provider";
 import { cn } from "@/lib/utils";
 import { UpcomingHolidaysWidget } from "@/components/dashboard/UpcomingHolidaysWidget";
+import { UpcomingCelebrationsWidget } from "@/components/dashboard/UpcomingCelebrationsWidget";
+import { BirthdayCelebrationBanner } from "@/components/dashboard/BirthdayCelebrationBanner";
+import { BirthdayWishesModal, BirthdayWishItem } from "@/components/dashboard/BirthdayWishesModal";
+import { HRCelebrationHub } from "@/components/dashboard/HRCelebrationHub";
 
 // ─── Default Fallback Revenue Analytics Data ──────────────────────────────────
 const defaultWeeklyData = [
@@ -113,6 +117,16 @@ export function AdminDashboard({ user }: { user: any }) {
 
   // Active Feature Tab in the workspace feature hub
   const [featureTab, setFeatureTab] = useState<"projects" | "goals" | "timesheets" | "activity">("projects");
+
+  // Celebration state
+  const [celebrationData, setCelebrationData] = useState<{
+    isMyBirthday: boolean;
+    isMyAnniversary: boolean;
+    wishesCount: number;
+    receivedWishes: BirthdayWishItem[];
+    milestoneText?: string;
+  } | null>(null);
+  const [isWishesModalOpen, setIsWishesModalOpen] = useState(false);
 
   const [loading, setLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -269,6 +283,20 @@ export function AdminDashboard({ user }: { user: any }) {
 
   return (
     <div className="space-y-6">
+      {/* ── Birthday & Work Anniversary Hero Celebration Banner ── */}
+      {celebrationData && (celebrationData.isMyBirthday || celebrationData.isMyAnniversary) && (
+        <BirthdayCelebrationBanner
+          isMyBirthday={celebrationData.isMyBirthday}
+          isMyAnniversary={celebrationData.isMyAnniversary}
+          userName={user?.name || "Team Member"}
+          milestoneText={celebrationData.milestoneText}
+          wishesCount={celebrationData.wishesCount}
+          onOpenWishes={() => setIsWishesModalOpen(true)}
+          onThankEveryone={async () => {
+            await fetch("/api/birthdays/thank-all", { method: "POST" });
+          }}
+        />
+      )}
 
       {/* ── Page Title & Action Bar ────────────────────────────────────────── */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3.5">
@@ -718,8 +746,19 @@ export function AdminDashboard({ user }: { user: any }) {
         </div>
       </div>
 
-      {/* ── Upcoming Holidays Widget ───────────────────────────────────────── */}
-      <UpcomingHolidaysWidget className="mb-6" />
+      {/* ── Celebrations & Holidays Row ─────────────────────────────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        <UpcomingCelebrationsWidget
+          currentUserId={user?.id || user?._id}
+          currentUserName={user?.name}
+          currentUserRole={user?.role}
+          onCelebrationStateLoaded={(data) => setCelebrationData(data)}
+        />
+        <UpcomingHolidaysWidget />
+      </div>
+
+      {/* ── Celebration & Culture Hub (Admin / HR Management) ───────────────── */}
+      <HRCelebrationHub className="mb-6" />
 
       {/* ── Feature Live Data Hub ───────────────────────────────────────────── */}
       <div className="bg-white dark:bg-[#161c24] rounded-2xl border border-slate-200 dark:border-[#232d3b] p-6 shadow-sm">
@@ -1032,6 +1071,18 @@ export function AdminDashboard({ user }: { user: any }) {
       <Link href="/dashboard/settings" className="fixed right-0 top-1/2 -translate-y-1/2 w-10 h-10 bg-[#00c5a0] rounded-l-lg flex items-center justify-center shadow-lg shadow-[#00c5a0]/30 z-50 hover:bg-[#00b08e] transition-colors" title="Customize Theme & Settings">
         <i className="fa-solid fa-gear text-slate-950 text-base" />
       </Link>
+
+      {/* ── Received Celebration Wishes Modal ── */}
+      {celebrationData && (
+        <BirthdayWishesModal
+          isOpen={isWishesModalOpen}
+          onClose={() => setIsWishesModalOpen(false)}
+          wishes={celebrationData.receivedWishes}
+          currentUserId={user?.id || user?._id || ""}
+          currentUserName={user?.name || "You"}
+          currentUserRole={user?.role}
+        />
+      )}
     </div>
   );
 }

@@ -288,6 +288,13 @@ export async function PUT(request: Request, { params }: RouteParams) {
           upiId: (body.bankDetails.upiId || "").trim(),
         };
       }
+      if (body.preferences !== undefined) {
+        user.preferences = {
+          showBirthdayOnDashboard: body.preferences.showBirthdayOnDashboard !== undefined ? Boolean(body.preferences.showBirthdayOnDashboard) : true,
+          showAnniversaryOnDashboard: body.preferences.showAnniversaryOnDashboard !== undefined ? Boolean(body.preferences.showAnniversaryOnDashboard) : true,
+          receiveBirthdayEmails: body.preferences.receiveBirthdayEmails !== undefined ? Boolean(body.preferences.receiveBirthdayEmails) : true,
+        };
+      }
     }
 
     await user.save();
@@ -308,6 +315,9 @@ export async function PUT(request: Request, { params }: RouteParams) {
         ifscCode: (body.bankDetails.ifscCode || "").trim().toUpperCase(),
         upiId: (body.bankDetails.upiId || "").trim(),
       };
+    }
+    if (body.preferences !== undefined) {
+      directUpdate.preferences = user.preferences;
     }
     if (Object.keys(directUpdate).length > 0) {
       await User.updateOne({ _id: user._id }, { $set: directUpdate });

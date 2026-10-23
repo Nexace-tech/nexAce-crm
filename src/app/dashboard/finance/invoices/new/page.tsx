@@ -337,7 +337,7 @@ function NewInvoiceContent() {
           let hrs = (Number(r.regularHours) || 0) + (Number(r.overtimeHours) || 0);
           if (hrs === 0 && r.clockIn && !r.clockOut) {
             const diffMs = Math.max(0, Date.now() - new Date(r.clockIn).getTime());
-            hrs = Math.round((diffMs / (1000 * 60 * 60)) * 10) / 10;
+            hrs = Math.min(Math.round((diffMs / (1000 * 60 * 60)) * 10) / 10, 8.0);
           }
           return sum + hrs;
         }, 0);
@@ -352,7 +352,7 @@ function NewInvoiceContent() {
           let recordHrs = (Number(r.regularHours) || 0) + (Number(r.overtimeHours) || 0);
           if (recordHrs === 0 && r.clockIn && !r.clockOut) {
             const diffMs = Math.max(0, Date.now() - new Date(r.clockIn).getTime());
-            recordHrs = Math.round((diffMs / (1000 * 60 * 60)) * 10) / 10;
+            recordHrs = Math.min(Math.round((diffMs / (1000 * 60 * 60)) * 10) / 10, 8.0);
           }
           const recDate = r.date ? new Date(r.date).toISOString().split("T")[0] : "";
           return {

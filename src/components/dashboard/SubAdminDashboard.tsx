@@ -13,6 +13,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TeamShiftOverviewCard } from "@/components/dashboard/TeamShiftOverviewCard";
+import { UpcomingCelebrationsWidget } from "@/components/dashboard/UpcomingCelebrationsWidget";
+import { HRCelebrationHub } from "@/components/dashboard/HRCelebrationHub";
 
 /* ══════════════════════════════════════════════════════
    Animated count-up hook
@@ -818,6 +820,12 @@ export function SubAdminDashboard({ user }: { user: any }) {
 
         {/* Right narrow column */}
         <div className="space-y-6">
+          {/* Celebrations Widget */}
+          <UpcomingCelebrationsWidget
+            currentUserId={user?.id || user?._id}
+            currentUserName={user?.name}
+            currentUserRole={user?.role}
+          />
 
           {/* Today's Schedule */}
           <Card>
@@ -1154,6 +1162,9 @@ export function SubAdminDashboard({ user }: { user: any }) {
           </CardContent>
         </Card>
       </div>
+
+      {/* ── Celebration & Culture Hub (OPS / HR Management) ── */}
+      <HRCelebrationHub className="mt-6" />
     </div>
   );
 }

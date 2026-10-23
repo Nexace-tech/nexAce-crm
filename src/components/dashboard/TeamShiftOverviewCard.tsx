@@ -413,12 +413,15 @@ export function TeamShiftOverviewCard() {
       ? (myAttendance.clockIn && !myAttendance.clockOut)
       : myRecord?.isClockedIn
   );
+  const isShiftPaused = Boolean(
+    !isCurrentlyClockedIn && myAttendance?.clockIn && myAttendance?.clockOut
+  );
 
   const handleQuickClockAction = async () => {
     setClocking(true);
     try {
       NativeService.haptic("medium");
-      const action = isCurrentlyClockedIn ? "out" : "in";
+      const action = isCurrentlyClockedIn ? "out" : (isShiftPaused ? "resume" : "in");
 
       const res = await fetch("/api/attendance", {
         method: "POST",
@@ -490,14 +493,18 @@ export function TeamShiftOverviewCard() {
                 "cursor-pointer text-xs font-bold gap-1.5 h-8 px-3 transition-all shadow-xs",
                 isCurrentlyClockedIn
                   ? "bg-rose-600 hover:bg-rose-700 text-white"
+                  : isShiftPaused
+                  ? "bg-amber-600 hover:bg-amber-700 text-white"
                   : "bg-emerald-600 hover:bg-emerald-700 text-white"
               )}
             >
-              <i className={cn("fa-solid text-xs", isCurrentlyClockedIn ? "fa-stopwatch" : "fa-fingerprint")} />
+              <i className={cn("fa-solid text-xs", isCurrentlyClockedIn ? "fa-stopwatch" : isShiftPaused ? "fa-play" : "fa-fingerprint")} />
               {clocking ? (
                 <i className="fa-solid fa-spinner fa-spin text-xs" />
               ) : isCurrentlyClockedIn ? (
                 "Clock Out"
+              ) : isShiftPaused ? (
+                "Resume Shift"
               ) : (
                 "Clock In"
               )}

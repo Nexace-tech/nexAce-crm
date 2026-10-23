@@ -42,22 +42,27 @@ export interface IUser extends Document {
     instagram?: string;
     facebook?: string;
   };
-   lastActiveAt?: Date;
-   forcePasswordReset?: boolean;
-   deviceTokens?: string[];
-   onboardedBy?: {
-     hrId?: mongoose.Types.ObjectId;
-     hrName?: string;
-     date?: Date;
-   };
-   documentsSubmitted?: boolean;
-   documentsConfirmedBy?: {
-     hrId?: mongoose.Types.ObjectId;
-     hrName?: string;
-     confirmedAt?: Date;
-   };
-   createdAt: Date;
- }
+  lastActiveAt?: Date;
+  forcePasswordReset?: boolean;
+  deviceTokens?: string[];
+  onboardedBy?: {
+    hrId?: mongoose.Types.ObjectId;
+    hrName?: string;
+    date?: Date;
+  };
+  documentsSubmitted?: boolean;
+  documentsConfirmedBy?: {
+    hrId?: mongoose.Types.ObjectId;
+    hrName?: string;
+    confirmedAt?: Date;
+  };
+  preferences?: {
+    showBirthdayOnDashboard?: boolean;
+    showAnniversaryOnDashboard?: boolean;
+    receiveBirthdayEmails?: boolean;
+  };
+  createdAt: Date;
+}
 
 const UserSchema: Schema = new Schema({
   name: { type: String, required: true, trim: true },
@@ -101,21 +106,26 @@ const UserSchema: Schema = new Schema({
     instagram: { type: String, default: "" },
     facebook: { type: String, default: "" }
   },
-   lastActiveAt: { type: Date, default: Date.now },
-   forcePasswordReset: { type: Boolean, default: false },
-   deviceTokens: [{ type: String }],
-   onboardedBy: {
-     hrId: { type: Schema.Types.ObjectId, ref: "User" },
-     hrName: { type: String, default: "" },
-     date: { type: Date }
-   },
-   documentsSubmitted: { type: Boolean, default: false },
-   documentsConfirmedBy: {
-     hrId: { type: Schema.Types.ObjectId, ref: "User" },
-     hrName: { type: String, default: "" },
-     confirmedAt: { type: Date }
-   },
-   createdAt: { type: Date, default: Date.now }
+  lastActiveAt: { type: Date, default: Date.now },
+  forcePasswordReset: { type: Boolean, default: false },
+  deviceTokens: [{ type: String }],
+  onboardedBy: {
+    hrId: { type: Schema.Types.ObjectId, ref: "User" },
+    hrName: { type: String, default: "" },
+    date: { type: Date }
+  },
+  documentsSubmitted: { type: Boolean, default: false },
+  documentsConfirmedBy: {
+    hrId: { type: Schema.Types.ObjectId, ref: "User" },
+    hrName: { type: String, default: "" },
+    confirmedAt: { type: Date }
+  },
+  preferences: {
+    showBirthdayOnDashboard: { type: Boolean, default: true },
+    showAnniversaryOnDashboard: { type: Boolean, default: true },
+    receiveBirthdayEmails: { type: Boolean, default: true }
+  },
+  createdAt: { type: Date, default: Date.now }
 });
 
 // Compound unique index — same email may exist in different tenants but not within the same one.
@@ -125,7 +135,7 @@ UserSchema.index({ email: 1, tenantId: 1 }, { unique: true });
 UserSchema.index({ tenantId: 1, role: 1 });
 
 // Force invalidate in-memory Mongoose model cache if schema updated
-if (mongoose.models.User && (!mongoose.models.User.schema.path("salary") || !mongoose.models.User.schema.path("bankDetails") || !mongoose.models.User.schema.path("resumeUrl") || !mongoose.models.User.schema.path("signatureUrl") || !mongoose.models.User.schema.path("hrId") || !mongoose.models.User.schema.path("documentsSubmitted") || !mongoose.models.User.schema.path("onboardedBy") || !mongoose.models.User.schema.path("dob"))) {
+if (mongoose.models.User && (!mongoose.models.User.schema.path("salary") || !mongoose.models.User.schema.path("bankDetails") || !mongoose.models.User.schema.path("resumeUrl") || !mongoose.models.User.schema.path("signatureUrl") || !mongoose.models.User.schema.path("hrId") || !mongoose.models.User.schema.path("documentsSubmitted") || !mongoose.models.User.schema.path("onboardedBy") || !mongoose.models.User.schema.path("dob") || !mongoose.models.User.schema.path("preferences"))) {
   delete (mongoose.models as any).User;
 }
 

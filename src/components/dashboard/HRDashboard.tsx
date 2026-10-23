@@ -6,6 +6,10 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { UpcomingHolidaysWidget } from "@/components/dashboard/UpcomingHolidaysWidget";
+import { UpcomingCelebrationsWidget } from "@/components/dashboard/UpcomingCelebrationsWidget";
+import { BirthdayCelebrationBanner } from "@/components/dashboard/BirthdayCelebrationBanner";
+import { BirthdayWishesModal, BirthdayWishItem } from "@/components/dashboard/BirthdayWishesModal";
+import { HRCelebrationHub } from "@/components/dashboard/HRCelebrationHub";
 
 export function HRDashboard({ user }: { user: any }) {
   const [directoryUsers, setDirectoryUsers] = useState<any[]>([]);
@@ -14,6 +18,16 @@ export function HRDashboard({ user }: { user: any }) {
   const [checklists, setChecklists] = useState<any[]>([]);
   const [appraisals, setAppraisals] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Celebration state
+  const [celebrationData, setCelebrationData] = useState<{
+    isMyBirthday: boolean;
+    isMyAnniversary: boolean;
+    wishesCount: number;
+    receivedWishes: BirthdayWishItem[];
+    milestoneText?: string;
+  } | null>(null);
+  const [isWishesModalOpen, setIsWishesModalOpen] = useState(false);
 
   useEffect(() => {
     async function fetchHRData() {
@@ -77,6 +91,20 @@ export function HRDashboard({ user }: { user: any }) {
 
   return (
     <div className="space-y-8 animate-in fade-in">
+      {/* ── Birthday & Work Anniversary Hero Celebration Banner ── */}
+      {celebrationData && (celebrationData.isMyBirthday || celebrationData.isMyAnniversary) && (
+        <BirthdayCelebrationBanner
+          isMyBirthday={celebrationData.isMyBirthday}
+          isMyAnniversary={celebrationData.isMyAnniversary}
+          userName={user?.name || "Team Member"}
+          milestoneText={celebrationData.milestoneText}
+          wishesCount={celebrationData.wishesCount}
+          onOpenWishes={() => setIsWishesModalOpen(true)}
+          onThankEveryone={async () => {
+            await fetch("/api/birthdays/thank-all", { method: "POST" });
+          }}
+        />
+      )}
       {/* Welcome Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gradient-to-r from-purple-500/10 via-purple-500/5 to-transparent p-6 rounded-2xl border border-purple-500/20">
         <div>
@@ -352,8 +380,16 @@ export function HRDashboard({ user }: { user: any }) {
           </Card>
         </div>
 
-        {/* Right Column: Quick Links + Department Breakdown + Recent Team */}
+        {/* Right Column: Celebrations + Quick Links + Department Breakdown */}
         <div className="space-y-6">
+          {/* Upcoming Celebrations Engine Widget */}
+          <UpcomingCelebrationsWidget
+            currentUserId={user?.id || user?._id}
+            currentUserName={user?.name}
+            currentUserRole={user?.role}
+            onCelebrationStateLoaded={(data) => setCelebrationData(data)}
+          />
+
           {/* Upcoming Company Holidays Widget */}
           <UpcomingHolidaysWidget />
 
@@ -452,6 +488,21 @@ export function HRDashboard({ user }: { user: any }) {
           </Card>
         </div>
       </div>
+
+      {/* ── HR Celebration & Culture Hub ── */}
+      <HRCelebrationHub />
+
+      {/* ── Received Celebration Wishes Modal ── */}
+      {celebrationData && (
+        <BirthdayWishesModal
+          isOpen={isWishesModalOpen}
+          onClose={() => setIsWishesModalOpen(false)}
+          wishes={celebrationData.receivedWishes}
+          currentUserId={user?.id || user?._id || ""}
+          currentUserName={user?.name || "You"}
+          currentUserRole={user?.role}
+        />
+      )}
     </div>
   );
 }

@@ -181,6 +181,50 @@ export async function GET(request: Request) {
       .filter(Boolean);
 
     // ─────────────────────────────────────────────────────────────
+    // 3b. Employee Birthdays (Strict Age-Confidentiality: Month & Day only)
+    // ─────────────────────────────────────────────────────────────
+    const birthdayQuery: any = {
+      tenantId: tenantObjectId,
+      dob: { $exists: true, $ne: null },
+      "preferences.showBirthdayOnDashboard": { $ne: false },
+      status: { $ne: "Suspended" },
+    };
+    if (department && department !== "All") {
+      birthdayQuery.department = department;
+    }
+    const birthdayMembers = await User.find(birthdayQuery)
+      .select("name department photoUrl dob role")
+      .lean();
+
+    const birthdayEvents = birthdayMembers
+      .map((member) => {
+        const rawDob = new Date(member.dob!);
+        if (isNaN(rawDob.getTime())) return null;
+
+        let bdayThisYear = new Date(currentYear, rawDob.getMonth(), rawDob.getDate());
+        // Handle Feb 29 leap day fallback
+        if (rawDob.getMonth() === 1 && rawDob.getDate() === 29 && !((currentYear % 4 === 0 && currentYear % 100 !== 0) || currentYear % 400 === 0)) {
+          bdayThisYear = new Date(currentYear, 1, 28);
+        }
+
+        if (bdayThisYear < windowStart || bdayThisYear > windowEnd) return null;
+
+        return {
+          _id:         `bday_${member._id}`,
+          title:       `🎂 ${member.name}'s Birthday`,
+          description: `Wish ${member.name} a wonderful celebration! 🎉`,
+          type:        "Birthday",
+          startDate:   bdayThisYear,
+          endDate:     bdayThisYear,
+          department:  member.department || "All",
+          userId:      member,
+          isSynced:    true,
+          source:      "birthday",
+        };
+      })
+      .filter(Boolean);
+
+    // ─────────────────────────────────────────────────────────────
     // 4. Official Company Holidays
     // ─────────────────────────────────────────────────────────────
     const { Holiday } = await import("@/models/Holiday");
@@ -219,7 +263,7 @@ export async function GET(request: Request) {
     // ─────────────────────────────────────────────────────────────
     // 5. Merge & sort all streams by startDate ascending
     // ─────────────────────────────────────────────────────────────
-    const allEvents = [...explicitEvents, ...taskEvents, ...anniversaryEvents, ...holidayEvents]
+    const allEvents = [...explicitEvents, ...taskEvents, ...anniversaryEvents, ...birthdayEvents, ...holidayEvents]
       .sort((a, b) => new Date((a as any).startDate).getTime() - new Date((b as any).startDate).getTime());
 
     return NextResponse.json({
@@ -229,6 +273,7 @@ export async function GET(request: Request) {
         tasks:         taskEvents.length,
         explicit:      explicitEvents.length,
         anniversaries: anniversaryEvents.length,
+        birthdays:     birthdayEvents.length,
         holidays:      holidayEvents.length,
         isElevated,
       },

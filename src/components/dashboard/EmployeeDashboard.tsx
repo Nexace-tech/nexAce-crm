@@ -10,10 +10,14 @@ import { cn, formatISTDate, formatISTTime, getISTDateString } from "@/lib/utils"
 import { NativeService } from "@/lib/native/nativeService";
 import { CombinedPdfExportModal } from "@/components/dashboard/CombinedPdfExportModal";
 import { UpcomingHolidaysWidget } from "@/components/dashboard/UpcomingHolidaysWidget";
+import { UpcomingCelebrationsWidget } from "@/components/dashboard/UpcomingCelebrationsWidget";
+import { BirthdayCelebrationBanner } from "@/components/dashboard/BirthdayCelebrationBanner";
+import { BirthdayWishesModal, BirthdayWishItem } from "@/components/dashboard/BirthdayWishesModal";
 
 export function EmployeeDashboard({ user }: { user: any }) {
   const { can } = usePermissions();
   const [clockedIn, setClockedIn] = useState(false);
+  const [todayAttendanceRecord, setTodayAttendanceRecord] = useState<any | null>(null);
   const [clockTime, setClockTime] = useState<string | null>(null);
   const [clockInIso, setClockInIso] = useState<string | null>(null);
   const [elapsedTime, setElapsedTime] = useState("00:00:00");
@@ -22,6 +26,16 @@ export function EmployeeDashboard({ user }: { user: any }) {
   const [timesheets, setTimesheets] = useState<any[]>([]);
   const [sprints, setSprints] = useState<any[]>([]);
   const [teamLeaves, setTeamLeaves] = useState<any[]>([]);
+
+  // Celebration state
+  const [celebrationData, setCelebrationData] = useState<{
+    isMyBirthday: boolean;
+    isMyAnniversary: boolean;
+    wishesCount: number;
+    receivedWishes: BirthdayWishItem[];
+    milestoneText?: string;
+  } | null>(null);
+  const [isWishesModalOpen, setIsWishesModalOpen] = useState(false);
   const [announcements, setAnnouncements] = useState<any[]>([]);
   const [onboardingChecklist, setOnboardingChecklist] = useState<any | null>(null);
   const [employeeDocs, setEmployeeDocs] = useState<any[]>([]);
@@ -60,6 +74,7 @@ export function EmployeeDashboard({ user }: { user: any }) {
       const res = await fetch("/api/attendance");
       if (res.ok) {
         const data = await res.json();
+        setTodayAttendanceRecord(data.attendance || null);
         if (data.attendance && data.attendance.clockIn && !data.attendance.clockOut) {
           setClockedIn(true);
           setClockInIso(data.attendance.clockIn);
@@ -77,24 +92,49 @@ export function EmployeeDashboard({ user }: { user: any }) {
     }
   };
 
-  // Live stopwatch interval for active shift duration
+  // Live stopwatch interval for active shift duration (break-aware & synchronized with calendar)
   useEffect(() => {
-    if (!clockedIn || !clockInIso) {
-      setElapsedTime("00:00:00");
+    if (!clockedIn || !todayAttendanceRecord) {
+      if (todayAttendanceRecord?.clockIn && todayAttendanceRecord?.clockOut) {
+        const totalWorkedHrs = (todayAttendanceRecord.regularHours || 0) + (todayAttendanceRecord.overtimeHours || 0);
+        const totalSecs = Math.round(totalWorkedHrs * 3600);
+        const hrs = Math.floor(totalSecs / 3600);
+        const mins = Math.floor((totalSecs % 3600) / 60);
+        const secs = totalSecs % 60;
+        const pad = (n: number) => String(n).padStart(2, "0");
+        setElapsedTime(`${pad(hrs)}:${pad(mins)}:${pad(secs)}`);
+      } else {
+        setElapsedTime("00:00:00");
+      }
       return;
     }
-    const startTime = new Date(clockInIso).getTime();
-    const interval = setInterval(() => {
-      const diffMs = Math.max(0, Date.now() - startTime);
-      const totalSecs = Math.floor(diffMs / 1000);
+
+    const clockInTime = new Date(todayAttendanceRecord.originalClockIn || todayAttendanceRecord.clockIn).getTime();
+
+    const updateTimer = () => {
+      const maxElapsedSecs = Math.max(0, Math.floor((Date.now() - clockInTime) / 1000));
+      let totalSecs: number;
+
+      if (todayAttendanceRecord.lastResumedAt) {
+        const priorSecs = Math.round(((todayAttendanceRecord.regularHours || 0) + (todayAttendanceRecord.overtimeHours || 0)) * 3600);
+        const segmentStart = new Date(todayAttendanceRecord.lastResumedAt).getTime();
+        const currentSegmentSecs = Math.max(0, Math.floor((Date.now() - segmentStart) / 1000));
+        totalSecs = Math.min(priorSecs + currentSegmentSecs, maxElapsedSecs);
+      } else {
+        totalSecs = maxElapsedSecs;
+      }
+
       const hrs = Math.floor(totalSecs / 3600);
       const mins = Math.floor((totalSecs % 3600) / 60);
       const secs = totalSecs % 60;
       const pad = (n: number) => String(n).padStart(2, "0");
       setElapsedTime(`${pad(hrs)}:${pad(mins)}:${pad(secs)}`);
-    }, 1000);
+    };
+
+    updateTimer();
+    const interval = setInterval(updateTimer, 1000);
     return () => clearInterval(interval);
-  }, [clockedIn, clockInIso]);
+  }, [clockedIn, todayAttendanceRecord]);
 
   useEffect(() => {
     async function fetchEmployeeData() {
@@ -114,6 +154,7 @@ export function EmployeeDashboard({ user }: { user: any }) {
         // Process attendance
         if (attRes.ok) {
           const data = await attRes.json();
+          setTodayAttendanceRecord(data.attendance || null);
           if (data.attendance && data.attendance.clockIn && !data.attendance.clockOut) {
             setClockedIn(true);
             setClockInIso(data.attendance.clockIn);
@@ -201,7 +242,8 @@ export function EmployeeDashboard({ user }: { user: any }) {
   };
 
   const handleToggleClock = async () => {
-    const action = clockedIn ? "out" : "in";
+    const isPaused = !clockedIn && Boolean(todayAttendanceRecord?.clockIn && todayAttendanceRecord?.clockOut);
+    const action = clockedIn ? "out" : (isPaused ? "resume" : "in");
     try {
       NativeService.haptic("medium");
       setClocking(true);
@@ -215,9 +257,11 @@ export function EmployeeDashboard({ user }: { user: any }) {
         NativeService.haptic("success");
         await fetchAttendanceStatus();
         showToast(
-          action === "in"
-            ? "Successfully clocked in!"
-            : "Successfully clocked out for today.",
+          action === "out"
+            ? "Successfully clocked out for today."
+            : isPaused
+            ? "Shift resumed successfully!"
+            : "Successfully clocked in!",
           "success"
         );
       } else {
@@ -470,6 +514,20 @@ export function EmployeeDashboard({ user }: { user: any }) {
 
   return (
     <div className="space-y-8 animate-in fade-in">
+      {/* ── Birthday & Work Anniversary Hero Celebration Banner ── */}
+      {celebrationData && (celebrationData.isMyBirthday || celebrationData.isMyAnniversary) && (
+        <BirthdayCelebrationBanner
+          isMyBirthday={celebrationData.isMyBirthday}
+          isMyAnniversary={celebrationData.isMyAnniversary}
+          userName={user?.name || "Team Member"}
+          milestoneText={celebrationData.milestoneText}
+          wishesCount={celebrationData.wishesCount}
+          onOpenWishes={() => setIsWishesModalOpen(true)}
+          onThankEveryone={async () => {
+            await fetch("/api/birthdays/thank-all", { method: "POST" });
+          }}
+        />
+      )}
       {/* Toast Notification */}
       {toast && (
         <div
@@ -960,73 +1018,182 @@ export function EmployeeDashboard({ user }: { user: any }) {
                   <span className="hidden sm:inline">Export Shift Logs</span>
                 </Button>
 
-                <Button
-                  id="attendance-widget"
-                  data-attendance-widget="true"
-                  color={clockedIn ? "destructive" : "primary"}
-                  size="sm"
-                  onClick={handleToggleClock}
-                  disabled={clocking}
-                  className="gap-2 font-semibold shadow-md cursor-pointer h-9 px-3.5 shrink-0 text-xs sm:text-sm"
-                >
-                  {clocking ? (
-                    <>
-                      <i className="fa-solid fa-spinner fa-spin text-xs" /> Syncing...
-                    </>
-                  ) : clockedIn ? (
-                    <>
-                      <i className="fa-solid fa-square text-xs" /> Clock Out
-                    </>
-                  ) : (
-                    <>
-                      <i className="fa-solid fa-play text-xs" /> Clock In Now
-                    </>
-                  )}
-                </Button>
+                {(() => {
+                  const isShiftPaused = !clockedIn && Boolean(todayAttendanceRecord?.clockIn && todayAttendanceRecord?.clockOut);
+                  return (
+                    <Button
+                      id="attendance-widget"
+                      data-attendance-widget="true"
+                      color={clockedIn ? "destructive" : isShiftPaused ? "warning" : "primary"}
+                      size="sm"
+                      onClick={handleToggleClock}
+                      disabled={clocking}
+                      className="gap-2 font-semibold shadow-md cursor-pointer h-9 px-3.5 shrink-0 text-xs sm:text-sm"
+                    >
+                      {clocking ? (
+                        <>
+                          <i className="fa-solid fa-spinner fa-spin text-xs" /> Syncing...
+                        </>
+                      ) : clockedIn ? (
+                        <>
+                          <i className="fa-solid fa-square text-xs" /> Clock Out
+                        </>
+                      ) : isShiftPaused ? (
+                        <>
+                          <i className="fa-solid fa-play text-xs" /> Resume Shift
+                        </>
+                      ) : (
+                        <>
+                          <i className="fa-solid fa-play text-xs" /> Clock In Now
+                        </>
+                      )}
+                    </Button>
+                  );
+                })()}
               </div>
             </CardHeader>
 
             <CardContent className="space-y-4">
-              <div className="p-3.5 sm:p-4 bg-muted/40 rounded-xl border border-border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
-                <div className="space-y-1.5 w-full sm:w-auto">
-                  <div className="flex items-center justify-between sm:justify-start gap-2 flex-wrap">
-                    <span className="font-bold text-foreground text-sm sm:text-base leading-snug">
-                      {user?.shiftName || "Standard Day Shift"}
-                    </span>
-                    <Badge color={clockedIn ? "success" : "secondary"} className="shrink-0 text-xs px-2.5 py-0.5 font-semibold">
-                      {clockedIn ? "🟢 Shift Active" : "⚪ Off Shift"}
-                    </Badge>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground pt-0.5">
-                    <span>
-                      Timing: <strong className="font-mono text-foreground whitespace-nowrap">{user?.shiftTime || "09:00 AM - 05:00 PM"}</strong>
-                    </span>
-                    <span className="text-muted-foreground/40 hidden xs:inline">•</span>
-                    <span className="whitespace-nowrap">
-                      Target: <strong className="font-mono text-foreground">8.0 Hours</strong>
-                    </span>
-                  </div>
-                </div>
+              {(() => {
+                const isShiftPaused = !clockedIn && Boolean(todayAttendanceRecord?.clockIn && todayAttendanceRecord?.clockOut);
+                const loggedWorkedHours = ((todayAttendanceRecord?.regularHours || 0) + (todayAttendanceRecord?.overtimeHours || 0)).toFixed(1);
 
-                {clockedIn && (
-                  <div className="text-left sm:text-right flex flex-row sm:flex-col items-center sm:items-end justify-between w-full sm:w-auto pt-2.5 sm:pt-0 border-t sm:border-0 border-border/70">
-                    <div>
-                      <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Active Duration</p>
-                      <p className="font-mono font-extrabold text-base sm:text-lg text-emerald-500 tracking-tight flex items-center gap-1.5">
-                        <i className="fa-solid fa-stopwatch text-sm animate-pulse" /> {elapsedTime}
-                      </p>
+                return (
+                  <>
+                    <div className="p-3.5 sm:p-4 bg-muted/40 rounded-xl border border-border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
+                      <div className="space-y-1.5 w-full sm:w-auto">
+                        <div className="flex items-center justify-between sm:justify-start gap-2 flex-wrap">
+                          <span className="font-bold text-foreground text-sm sm:text-base leading-snug">
+                            {user?.shiftName || "Standard Day Shift"}
+                          </span>
+                          <Badge
+                            color={clockedIn ? "success" : isShiftPaused ? "warning" : "secondary"}
+                            className="shrink-0 text-xs px-2.5 py-0.5 font-semibold"
+                          >
+                            {clockedIn
+                              ? "🟢 Shift Active"
+                              : isShiftPaused
+                              ? `🟡 Shift Paused (${loggedWorkedHours}h logged)`
+                              : "⚪ Off Shift"}
+                          </Badge>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground pt-0.5">
+                          <span>
+                            Timing: <strong className="font-mono text-foreground whitespace-nowrap">{user?.shiftTime || "09:00 AM - 05:00 PM"}</strong>
+                          </span>
+                          <span className="text-muted-foreground/40 hidden xs:inline">•</span>
+                          <span className="whitespace-nowrap">
+                            Target: <strong className="font-mono text-foreground">8.0 Hours</strong>
+                          </span>
+                        </div>
+                      </div>
+
+                      {clockedIn && (
+                        <div className="text-left sm:text-right flex flex-row sm:flex-col items-center sm:items-end justify-between w-full sm:w-auto pt-2.5 sm:pt-0 border-t sm:border-0 border-border/70">
+                          <div>
+                            <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">Active Duration</p>
+                            <p className="font-mono font-extrabold text-base sm:text-lg text-emerald-500 tracking-tight flex items-center gap-1.5">
+                              <i className="fa-solid fa-stopwatch text-sm animate-pulse" /> {elapsedTime}
+                            </p>
+                          </div>
+                          {clockTime && (
+                            <div className="text-right">
+                              <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider sm:hidden">Clocked In</p>
+                              <p className="text-[11px] text-muted-foreground font-medium mt-0.5">
+                                Started at <strong className="font-mono text-foreground">{clockTime}</strong>
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
-                    {clockTime && (
-                      <div className="text-right">
-                        <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider sm:hidden">Clocked In</p>
-                        <p className="text-[11px] text-muted-foreground font-medium mt-0.5">
-                          Started at <strong className="font-mono text-foreground">{clockTime}</strong>
-                        </p>
+
+                    {/* Shift Extension Audit Record Banner */}
+                    {todayAttendanceRecord?.extensionApproved && (() => {
+                      const approver = typeof todayAttendanceRecord.extensionApprovedBy === "object" ? todayAttendanceRecord.extensionApprovedBy : null;
+                      const approverName = approver?.name || "Operations / Admin";
+                      const approverRole = approver?.role || "Admin";
+                      const allocated = Number(todayAttendanceRecord.extensionAllocatedHours) || 2.0;
+                      const approvedAtStr = todayAttendanceRecord.extensionApprovedAt
+                        ? formatISTDate(todayAttendanceRecord.extensionApprovedAt) + " " + formatISTTime(todayAttendanceRecord.extensionApprovedAt)
+                        : "Approved";
+
+                      return (
+                        <div className="p-3.5 sm:p-4 rounded-xl bg-gradient-to-br from-emerald-500/10 via-emerald-500/5 to-card border border-emerald-500/30 space-y-2.5 shadow-xs">
+                          <div className="flex items-center justify-between gap-2 pb-2 border-b border-emerald-500/20">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <div className="w-7 h-7 rounded-lg bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-xs border border-emerald-500/30 shrink-0">
+                                <i className="fa-solid fa-clock-rotate-left" />
+                              </div>
+                              <div className="min-w-0">
+                                <span className="text-xs font-bold text-foreground truncate block">Additional Shift Time Approved</span>
+                                <p className="text-[10px] text-muted-foreground truncate">Authorized extra working hours for today&apos;s shift</p>
+                              </div>
+                            </div>
+                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 shrink-0 flex items-center gap-1">
+                              <i className="fa-solid fa-check text-[9px]" /> +{allocated.toFixed(1)}h Active
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+                            <div className="p-2 sm:p-2.5 rounded-lg bg-background/80 border border-border/60">
+                              <span className="text-[10px] uppercase font-bold text-muted-foreground block mb-0.5">Approved By</span>
+                              <div className="flex items-center gap-1.5 mt-0.5">
+                                <div className="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-600 font-bold flex items-center justify-center text-[10px] shrink-0">
+                                  {approver?.photoUrl ? (
+                                    <img src={approver.photoUrl} alt="" className="w-5 h-5 rounded-full object-cover" />
+                                  ) : (
+                                    approverName.charAt(0)
+                                  )}
+                                </div>
+                                <span className="font-semibold text-foreground truncate text-[11px] sm:text-xs">{approverName}</span>
+                                <span className="text-[9px] px-1 py-0.2 bg-muted text-muted-foreground rounded uppercase font-medium shrink-0">
+                                  {approverRole}
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="p-2 sm:p-2.5 rounded-lg bg-background/80 border border-border/60">
+                              <span className="text-[10px] uppercase font-bold text-muted-foreground block mb-0.5">Extra Time Granted</span>
+                              <span className="font-mono font-extrabold text-emerald-600 dark:text-emerald-400 text-xs sm:text-sm block">
+                                +{allocated.toFixed(1)} Hours
+                              </span>
+                            </div>
+
+                            <div className="p-2 sm:p-2.5 rounded-lg bg-background/80 border border-border/60">
+                              <span className="text-[10px] uppercase font-bold text-muted-foreground block mb-0.5">Approved At</span>
+                              <span className="font-mono text-foreground text-[11px] sm:text-xs block">
+                                {approvedAtStr}
+                              </span>
+                            </div>
+                          </div>
+
+                          {todayAttendanceRecord.extensionReason && (
+                            <div className="p-2 rounded-lg bg-background/60 border border-border/50 text-[11px] text-muted-foreground">
+                              <strong className="text-foreground">Reason:</strong> &ldquo;{todayAttendanceRecord.extensionReason}&rdquo;
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
+
+                    {/* Pending Extension Request Banner */}
+                    {todayAttendanceRecord?.extensionRequested && !todayAttendanceRecord?.extensionApproved && (
+                      <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/25 flex items-center justify-between gap-2 text-xs">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <i className="fa-solid fa-clock-rotate-left text-amber-500 shrink-0" />
+                          <span className="text-amber-700 dark:text-amber-300 font-medium truncate">
+                            Extension Request Submitted (+{todayAttendanceRecord?.extensionRequestedHours ? (todayAttendanceRecord.extensionRequestedHours >= 1 ? `${todayAttendanceRecord.extensionRequestedHours.toFixed(1)}h` : `${Math.round(todayAttendanceRecord.extensionRequestedHours * 60)}m`) : "1.0h"}) &amp; Pending Approval
+                          </span>
+                        </div>
+                        <Badge color="warning" className="text-[10px] shrink-0 font-semibold px-2 py-0.5">
+                          Pending
+                        </Badge>
                       </div>
                     )}
-                  </div>
-                )}
-              </div>
+                  </>
+                );
+              })()}
 
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3 text-center text-xs">
                 <div className="p-2.5 sm:p-3 rounded-lg bg-card border border-border space-y-0.5 min-w-0">
@@ -1202,8 +1369,16 @@ export function EmployeeDashboard({ user }: { user: any }) {
           </Card>
         </div>
 
-        {/* Right Column (1 span): Announcements & Team Leave Requests */}
+        {/* Right Column (1 span): Celebrations, Announcements & Holidays */}
         <div className="space-y-6">
+          {/* Upcoming Celebrations Widget */}
+          <UpcomingCelebrationsWidget
+            currentUserId={user?.id || user?._id}
+            currentUserName={user?.name}
+            currentUserRole={user?.role}
+            onCelebrationStateLoaded={(data) => setCelebrationData(data)}
+          />
+
           {/* Upcoming Holidays Widget */}
           <UpcomingHolidaysWidget />
 
@@ -1386,6 +1561,18 @@ export function EmployeeDashboard({ user }: { user: any }) {
         initialTimesheets={timesheets}
         onSuccessToast={(msg) => showToast(msg, "success")}
       />
+
+      {/* ── Received Celebration Wishes Modal ── */}
+      {celebrationData && (
+        <BirthdayWishesModal
+          isOpen={isWishesModalOpen}
+          onClose={() => setIsWishesModalOpen(false)}
+          wishes={celebrationData.receivedWishes}
+          currentUserId={user?.id || user?._id || ""}
+          currentUserName={user?.name || "You"}
+          currentUserRole={user?.role}
+        />
+      )}
     </div>
   );
 }

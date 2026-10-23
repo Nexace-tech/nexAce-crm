@@ -76,6 +76,9 @@ function SettingsPageContent() {
   const [bio, setBio] = useState("");
   const [skills, setSkills] = useState("");
   const [dob, setDob] = useState("");
+  const [showBirthdayOnDashboard, setShowBirthdayOnDashboard] = useState(true);
+  const [showAnniversaryOnDashboard, setShowAnniversaryOnDashboard] = useState(true);
+  const [receiveBirthdayEmails, setReceiveBirthdayEmails] = useState(true);
 
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [photoBroken, setPhotoBroken] = useState(false);
@@ -244,6 +247,9 @@ function SettingsPageContent() {
       setResumeFileName(user.resumeFileName || "");
       setResumeFileSize(user.resumeFileSize || 0);
       setResumeUpdatedAt(user.resumeUpdatedAt || null);
+      setShowBirthdayOnDashboard((user as any).preferences?.showBirthdayOnDashboard !== false);
+      setShowAnniversaryOnDashboard((user as any).preferences?.showAnniversaryOnDashboard !== false);
+      setReceiveBirthdayEmails((user as any).preferences?.receiveBirthdayEmails !== false);
       // Only load user-level signature for non-admin/non-OPS users
       if (user.role?.toLowerCase() !== "admin" && user.role?.toLowerCase() !== "ops") {
         setSignatureUrl((user as any).signatureUrl || "");
@@ -797,6 +803,11 @@ function SettingsPageContent() {
         ifscCode: ifscCode.trim().toUpperCase(),
         upiId: upiId.trim(),
       },
+      preferences: {
+        showBirthdayOnDashboard,
+        showAnniversaryOnDashboard,
+        receiveBirthdayEmails,
+      },
       code: ""
     };
 
@@ -856,6 +867,11 @@ function SettingsPageContent() {
         accountNo: accountNo.trim(),
         ifscCode: ifscCode.trim().toUpperCase(),
         upiId: upiId.trim(),
+      },
+      preferences: {
+        showBirthdayOnDashboard,
+        showAnniversaryOnDashboard,
+        receiveBirthdayEmails,
       },
       code: ""
     };
@@ -2334,6 +2350,65 @@ function SettingsPageContent() {
                   rows={3}
                   className="w-full px-3 py-2 text-sm bg-background border border-border rounded-md text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary resize-y"
                 />
+              </div>
+
+              {/* ═══ Celebration & Privacy Preferences ═══ */}
+              <div className="pt-4 border-t border-border">
+                <div className="rounded-2xl border border-border/80 bg-card p-4 sm:p-5 shadow-xs space-y-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-pink-500/10 border border-pink-500/20 flex items-center justify-center text-pink-500 shrink-0">
+                      <i className="fa-solid fa-cake-candles text-base" />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-sm text-foreground">Celebration &amp; Privacy Preferences</h4>
+                      <p className="text-xs text-muted-foreground mt-0.5">Control how your birthdays and work anniversaries appear to teammates.</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3 pt-1">
+                    {/* Birthday Display Toggle */}
+                    <div className="flex items-center justify-between p-3 rounded-xl border border-border/60 bg-muted/20 gap-3">
+                      <div>
+                        <p className="text-xs font-semibold text-foreground">Show Birthday on Dashboard &amp; Calendar</p>
+                        <p className="text-[11px] text-muted-foreground mt-0.5">Colleagues can celebrate and send you wishes on your birthday. Your age and birth year are strictly confidential and never displayed.</p>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={showBirthdayOnDashboard}
+                        onChange={(e) => setShowBirthdayOnDashboard(e.target.checked)}
+                        className="w-4 h-4 rounded text-primary focus:ring-primary accent-indigo-600 cursor-pointer shrink-0"
+                      />
+                    </div>
+
+                    {/* Anniversary Display Toggle */}
+                    <div className="flex items-center justify-between p-3 rounded-xl border border-border/60 bg-muted/20 gap-3">
+                      <div>
+                        <p className="text-xs font-semibold text-foreground">Show Work Anniversary on Dashboard &amp; Calendar</p>
+                        <p className="text-[11px] text-muted-foreground mt-0.5">Displays your company tenure milestones (e.g. 1 Year, 3 Years Veteran) to celebrate with your team.</p>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={showAnniversaryOnDashboard}
+                        onChange={(e) => setShowAnniversaryOnDashboard(e.target.checked)}
+                        className="w-4 h-4 rounded text-primary focus:ring-primary accent-indigo-600 cursor-pointer shrink-0"
+                      />
+                    </div>
+
+                    {/* Celebration Emails Toggle */}
+                    <div className="flex items-center justify-between p-3 rounded-xl border border-border/60 bg-muted/20 gap-3">
+                      <div>
+                        <p className="text-xs font-semibold text-foreground">Celebration Email Notifications</p>
+                        <p className="text-[11px] text-muted-foreground mt-0.5">Receive celebratory morning e-cards and instant email alerts when colleagues wish you with photo attachments.</p>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={receiveBirthdayEmails}
+                        onChange={(e) => setReceiveBirthdayEmails(e.target.checked)}
+                        className="w-4 h-4 rounded text-primary focus:ring-primary accent-indigo-600 cursor-pointer shrink-0"
+                      />
+                    </div>
+                  </div>
+                </div>
               </div>
 
 
