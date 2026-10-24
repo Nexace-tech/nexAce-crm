@@ -25,6 +25,7 @@ export function HRDashboard({ user }: { user: any }) {
     isMyAnniversary: boolean;
     wishesCount: number;
     receivedWishes: BirthdayWishItem[];
+    sentWishes?: BirthdayWishItem[];
     milestoneText?: string;
   } | null>(null);
   const [isWishesModalOpen, setIsWishesModalOpen] = useState(false);
@@ -498,6 +499,7 @@ export function HRDashboard({ user }: { user: any }) {
           isOpen={isWishesModalOpen}
           onClose={() => setIsWishesModalOpen(false)}
           wishes={celebrationData.receivedWishes}
+          sentWishes={celebrationData.sentWishes}
           currentUserId={user?.id || user?._id || ""}
           currentUserName={user?.name || "You"}
           currentUserRole={user?.role}

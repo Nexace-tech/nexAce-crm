@@ -158,37 +158,78 @@ export async function POST(request: Request) {
 }
 
 /**
- * GET: Fetch celebration wishes for a specific recipient (or current user if omitted).
+ * GET: Fetch celebration wishes with flexible scope:
+ * - scope="received" (default): Wishes received by recipientId (or session user)
+ * - scope="sent": Wishes sent by session user to teammates
+ * - scope="company": All celebratory wishes across the organization
+ * - year: "all" or specific number (defaults to "all" to preserve complete celebration history)
  */
 export async function GET(request: Request) {
   try {
     const authResult = await requireTenantSession();
     if (isAuthError(authResult)) return authResult;
-    const { session, tenantObjectId } = authResult;
+    const { session, tenantObjectId, userObjectId } = authResult;
 
     const { searchParams } = new URL(request.url);
-    const recipientId = searchParams.get("recipientId") || session.userId;
+    const scope = searchParams.get("scope") || "received";
+    const recipientId = searchParams.get("recipientId");
     const yearParam = searchParams.get("year");
-    const year = yearParam ? parseInt(yearParam, 10) : new Date().getFullYear();
-
-    if (!mongoose.Types.ObjectId.isValid(recipientId)) {
-      return NextResponse.json({ error: "Invalid recipientId format" }, { status: 400 });
-    }
 
     await connectToDatabase();
 
-    const wishes = await BirthdayWish.find({
-      tenantId: tenantObjectId,
-      recipientId: new mongoose.Types.ObjectId(recipientId),
-      year,
-    })
+    const query: any = { tenantId: tenantObjectId };
+
+    if (yearParam && yearParam !== "all") {
+      const parsedYear = parseInt(yearParam, 10);
+      if (!isNaN(parsedYear)) {
+        query.year = parsedYear;
+      }
+    }
+
+    if (scope === "sent") {
+      query.senderId = userObjectId;
+    } else if (scope === "company") {
+      // Company-wide celebration feed across tenant
+    } else {
+      // Received wishes
+      const targetRecipientId = recipientId || session.userId;
+      if (!mongoose.Types.ObjectId.isValid(targetRecipientId)) {
+        return NextResponse.json({ error: "Invalid recipientId format" }, { status: 400 });
+      }
+      query.recipientId = new mongoose.Types.ObjectId(targetRecipientId);
+    }
+
+    const rawWishes = await BirthdayWish.find(query)
+      .populate("recipientId", "name photoUrl department")
       .sort({ createdAt: -1 })
+      .limit(200)
       .lean();
+
+    const formattedWishes = rawWishes.map((w: any) => ({
+      _id: w._id.toString(),
+      recipientId: w.recipientId?._id?.toString() || w.recipientId?.toString(),
+      recipientName: w.recipientId?.name || "Colleague",
+      recipientPhotoUrl: w.recipientId?.photoUrl || "",
+      recipientDepartment: w.recipientId?.department || "",
+      senderId: w.senderId.toString(),
+      senderName: w.senderName,
+      senderPhotoUrl: w.senderPhotoUrl || "",
+      senderDepartment: w.senderDepartment || "",
+      message: w.message,
+      sticker: w.sticker,
+      type: w.type,
+      attachments: w.attachments || [],
+      reactions: w.reactions || [],
+      year: w.year,
+      acknowledged: w.acknowledged,
+      createdAt: w.createdAt,
+    }));
 
     return NextResponse.json({
       success: true,
-      wishes,
-      count: wishes.length,
+      wishes: formattedWishes,
+      count: formattedWishes.length,
+      scope,
     });
   } catch (error: any) {
     console.error("[GET /api/birthdays/wish] Error:", error);
@@ -212,53 +253,88 @@ export async function DELETE(request: Request) {
     if (isAuthError(authResult)) return authResult;
     const { session, tenantObjectId } = authResult;
 
-    const { searchParams } = new URL(request.url);
-    const wishId = searchParams.get("id");
+    const normRole = (session.role || "").trim().toLowerCase();
+    const isElevated = ["admin", "hr", "ops", "sub admin", "subadmin", "manager"].includes(normRole);
 
-    if (!wishId || !mongoose.Types.ObjectId.isValid(wishId)) {
-      return NextResponse.json({ error: "A valid wish ID is required" }, { status: 400 });
+    let targetIds: string[] = [];
+    const { searchParams } = new URL(request.url);
+    const queryId = searchParams.get("id");
+    const queryIds = searchParams.get("ids");
+
+    if (queryIds) {
+      targetIds = queryIds.split(",").map((s) => s.trim()).filter(Boolean);
+    } else if (queryId) {
+      targetIds = [queryId.trim()];
+    } else {
+      // Check if IDs provided in JSON body
+      try {
+        const body = await request.json();
+        if (Array.isArray(body?.ids)) {
+          targetIds = body.ids.map((s: any) => String(s).trim()).filter(Boolean);
+        } else if (body?.id) {
+          targetIds = [String(body.id).trim()];
+        }
+      } catch {
+        // Body is optional if query params are present
+      }
+    }
+
+    // Filter valid mongo IDs
+    const validIds = targetIds.filter((id) => mongoose.Types.ObjectId.isValid(id));
+    if (validIds.length === 0) {
+      return NextResponse.json({ error: "One or more valid wish IDs are required." }, { status: 400 });
     }
 
     await connectToDatabase();
 
-    const wish = await BirthdayWish.findOne({
-      _id: new mongoose.Types.ObjectId(wishId),
+    const objectIds = validIds.map((id) => new mongoose.Types.ObjectId(id));
+    const targetWishes = await BirthdayWish.find({
+      _id: { $in: objectIds },
       tenantId: tenantObjectId,
     });
 
-    if (!wish) {
-      return NextResponse.json({ error: "Wish not found" }, { status: 404 });
+    if (!targetWishes || targetWishes.length === 0) {
+      return NextResponse.json({ error: "No matching celebration wishes found to delete." }, { status: 404 });
     }
 
-    const isSender = wish.senderId.toString() === session.userId;
-    const isRecipient = wish.recipientId.toString() === session.userId;
-    const isElevated = ["Admin", "HR", "OPS"].includes(session.role);
+    // Authorization verification
+    const allowedWishes = targetWishes.filter((wish) => {
+      const isSender = wish.senderId.toString() === session.userId;
+      const isRecipient = wish.recipientId.toString() === session.userId;
+      return isSender || isRecipient || isElevated;
+    });
 
-    if (!isSender && !isRecipient && !isElevated) {
+    if (allowedWishes.length === 0) {
       return NextResponse.json(
-        { error: "You are not authorized to delete this celebration wish." },
+        { error: "You are not authorized to delete the requested celebration wish(es)." },
         { status: 403 }
       );
     }
 
-    // Attempt to clean up attached files from disk if local
-    if (Array.isArray(wish.attachments)) {
-      const { unlink } = await import("fs/promises");
-      const path = await import("path");
-      for (const att of wish.attachments) {
-        if (att.url && att.url.startsWith("/uploads/birthdays/")) {
-          const filePath = path.join(process.cwd(), "public", att.url);
-          unlink(filePath).catch(() => {});
+    // Clean up local disk attachments if present
+    const { unlink } = await import("fs/promises");
+    const path = await import("path");
+    for (const wish of allowedWishes) {
+      if (Array.isArray(wish.attachments)) {
+        for (const att of wish.attachments) {
+          if (att.url && att.url.startsWith("/uploads/birthdays/")) {
+            const filePath = path.join(process.cwd(), "public", att.url);
+            unlink(filePath).catch(() => {});
+          }
         }
       }
     }
 
-    await BirthdayWish.deleteOne({ _id: wish._id });
+    const allowedIds = allowedWishes.map((w) => w._id);
+    await BirthdayWish.deleteMany({ _id: { $in: allowedIds } });
+
+    const deletedStringIds = allowedIds.map((id) => id.toString());
 
     return NextResponse.json({
       success: true,
-      message: "Celebration wish deleted successfully.",
-      deletedId: wishId,
+      message: `Successfully deleted ${deletedStringIds.length} celebration wish${deletedStringIds.length > 1 ? "es" : ""}.`,
+      deletedIds: deletedStringIds,
+      deletedCount: deletedStringIds.length,
     });
   } catch (error: any) {
     console.error("[DELETE /api/birthdays/wish] Error:", error);

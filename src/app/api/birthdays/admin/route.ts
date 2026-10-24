@@ -99,14 +99,13 @@ export async function GET(request: Request) {
       monthlyRoster[m].sort((a, b) => a.day - b.day);
     }
 
-    // 3. Fetch Company-Wide Wishes Feed for this year
+    // 3. Fetch Company-Wide Wishes Feed across all history
     const wishesFeed = await BirthdayWish.find({
       tenantId: tenantObjectId,
-      year: currentYear,
     })
       .populate("recipientId", "name email department photoUrl")
       .sort({ createdAt: -1 })
-      .limit(60)
+      .limit(500)
       .lean();
 
     const formattedWishes = wishesFeed.map((w: any) => ({
@@ -122,8 +121,11 @@ export async function GET(request: Request) {
       message: w.message,
       sticker: w.sticker,
       type: w.type,
+      attachments: w.attachments || [],
       attachmentsCount: (w.attachments || []).length,
+      reactions: w.reactions || [],
       reactionsCount: (w.reactions || []).length,
+      year: w.year,
       acknowledged: w.acknowledged,
       createdAt: w.createdAt,
     }));
@@ -137,8 +139,10 @@ export async function GET(request: Request) {
       currentMonth,
       monthlyRoster,
       wishesFeed: formattedWishes,
+      wishes: formattedWishes,
       stats: {
         totalWishesThisYear: formattedWishes.length,
+        totalWishes: formattedWishes.length,
         thisMonthCelebrations: thisMonthCelebrationsCount,
         totalTeamMembers: teamMembers.length,
       },

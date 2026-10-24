@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { SendBirthdayWishModal, SendWishCelebrant } from "./SendBirthdayWishModal";
 import { BirthdayWishesModal, BirthdayWishItem } from "./BirthdayWishesModal";
+import { CelebrationsConfettiCanvas } from "@/components/calendar/CelebrationsConfettiCanvas";
 
 export interface CelebrationItem {
   userId: string;
@@ -42,6 +43,7 @@ export function UpcomingCelebrationsWidget({
     isMyAnniversary: boolean;
     wishesCount: number;
     receivedWishes: BirthdayWishItem[];
+    sentWishes?: BirthdayWishItem[];
     milestoneText?: string;
   }) => void;
 }) {
@@ -54,7 +56,11 @@ export function UpcomingCelebrationsWidget({
   const [todayAnniversaries, setTodayAnniversaries] = useState<CelebrationItem[]>([]);
   const [upcomingAnniversaries, setUpcomingAnniversaries] = useState<CelebrationItem[]>([]);
   const [receivedWishes, setReceivedWishes] = useState<BirthdayWishItem[]>([]);
+  const [sentWishes, setSentWishes] = useState<BirthdayWishItem[]>([]);
   const [wishesSentThisYear, setWishesSentThisYear] = useState<SentWishRecord[]>([]);
+
+  // Confetti Particle Explosion
+  const [confettiTrigger, setConfettiTrigger] = useState<number | null>(null);
 
   // Modals state
   const [selectedCelebrant, setSelectedCelebrant] = useState<SendWishCelebrant | null>(null);
@@ -71,6 +77,7 @@ export function UpcomingCelebrationsWidget({
         setTodayAnniversaries(data.todayAnniversaries || []);
         setUpcomingAnniversaries(data.upcomingAnniversaries || []);
         setReceivedWishes(data.receivedWishes || []);
+        setSentWishes(data.sentWishes || []);
         setWishesSentThisYear(data.wishesSentThisYear || []);
 
         if (onCelebrationStateLoaded) {
@@ -82,6 +89,7 @@ export function UpcomingCelebrationsWidget({
             isMyAnniversary: !!data.isMyAnniversary,
             wishesCount: (data.receivedWishes || []).length,
             receivedWishes: data.receivedWishes || [],
+            sentWishes: data.sentWishes || [],
             milestoneText: myAnniv?.milestoneText,
           });
         }
@@ -119,14 +127,31 @@ export function UpcomingCelebrationsWidget({
 
     const greetingText =
       item.type === "anniversary"
-        ? `🏆 *Happy Work Anniversary, ${item.name}!* ✨ Wishing you continued milestones, growth, and triumphs with the team! 🥂👏`
-        : `🎉 *Happy Birthday, ${item.name}!* 🎂✨ Wishing you a fantastic day filled with joy, laughter, and great memories! 🎈🎁`;
+        ? `🏆 Happy Work Anniversary, ${item.name}! ✨ Wishing you continued milestones, growth, and triumphs with our team! 🥂👏`
+        : `🎂 Happy Birthday, ${item.name}! ✨ Wishing you a fantastic day filled with joy, laughter, and great memories! 🎈🎁`;
 
-    const waUrl = cleanPhone
-      ? `https://wa.me/${cleanPhone}?text=${encodeURIComponent(greetingText)}`
-      : `https://wa.me/?text=${encodeURIComponent(greetingText)}`;
+    // 1. Copy raw text directly to clipboard
+    if (typeof navigator !== "undefined" && navigator.clipboard) {
+      navigator.clipboard.writeText(greetingText).catch(() => {});
+    }
 
-    window.open(waUrl, "_blank", "noopener,noreferrer");
+    // 2. Direct routing without wa.me 302 redirect emoji corruption
+    const isMobile =
+      typeof navigator !== "undefined" &&
+      /Android|iPhone|iPad|iPod|Opera Mini|IEMobile|WPDesktop/i.test(navigator.userAgent);
+
+    const encodedText = encodeURIComponent(greetingText);
+    if (isMobile) {
+      const mobileUrl = cleanPhone
+        ? `whatsapp://send?phone=${cleanPhone}&text=${encodedText}`
+        : `whatsapp://send?text=${encodedText}`;
+      window.location.href = mobileUrl;
+    } else {
+      const webUrl = cleanPhone
+        ? `https://web.whatsapp.com/send?phone=${cleanPhone}&text=${encodedText}`
+        : `https://web.whatsapp.com/send?text=${encodedText}`;
+      window.open(webUrl, "_blank", "noopener,noreferrer");
+    }
   };
 
   const isWishAlreadySent = (userId: string, type: "birthday" | "anniversary") => {
@@ -138,176 +163,190 @@ export function UpcomingCelebrationsWidget({
   const currentTodayList = activeTab === "birthday" ? todayBirthdays : todayAnniversaries;
   const currentUpcomingList = activeTab === "birthday" ? upcomingBirthdays : upcomingAnniversaries;
   const isFridayToday = new Date().getDay() === 5;
+  const totalCelebrationsToday = todayBirthdays.length + todayAnniversaries.length;
 
   return (
     <>
       <div
-        className={`rounded-2xl border border-border bg-card p-4 sm:p-5 shadow-xs transition-all flex flex-col justify-between ${className}`}
+        className={`relative overflow-hidden rounded-2xl border border-border/70 bg-gradient-to-br from-card via-card to-pink-500/[0.03] p-4 sm:p-5 shadow-sm hover:shadow-md hover:border-pink-500/30 transition-all duration-300 flex flex-col justify-between ${className}`}
       >
+        {/* Confetti Explosion Canvas */}
+        <CelebrationsConfettiCanvas triggerKey={confettiTrigger} duration={3600} />
+
         {/* Header & Dual Tabs */}
-        <div>
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-border/60 gap-3">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-pink-500/10 text-pink-500 flex items-center justify-center text-sm shrink-0">
+        <div className="pb-3.5 border-b border-border/60 space-y-2.5">
+          {/* Top Bar: Icon + Title + Live Badge + Confetti Popper */}
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-pink-500 via-rose-500 to-indigo-600 text-white flex items-center justify-center text-sm shadow-xs shrink-0">
                 <i className="fa-solid fa-cake-candles" />
               </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="font-bold text-sm sm:text-base text-foreground">
-                    Celebrations Engine
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="font-extrabold text-sm sm:text-base text-foreground tracking-tight truncate">
+                    Celebrations
                   </h3>
-                  {todayBirthdays.length + todayAnniversaries.length > 0 && (
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-pink-500/10 text-pink-600 dark:text-pink-400 border border-pink-500/20">
-                      {todayBirthdays.length + todayAnniversaries.length} Today!
+                  {totalCelebrationsToday > 0 && (
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-pink-500/15 text-pink-600 dark:text-pink-400 border border-pink-500/30 shadow-2xs shrink-0 whitespace-nowrap">
+                      {totalCelebrationsToday} Today! 🎉
                     </span>
                   )}
                 </div>
-                <p className="text-[11px] text-muted-foreground hidden sm:block">
-                  Birthdays &amp; work anniversary recognition
-                </p>
               </div>
             </div>
 
-            {/* Tab Switcher */}
-            <div className="flex items-center gap-1 bg-muted/60 p-1 rounded-xl self-start sm:self-auto">
-              <button
-                type="button"
-                onClick={() => setActiveTab("birthday")}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 min-h-[34px] ${
-                  activeTab === "birthday"
-                    ? "bg-card text-foreground shadow-xs border border-border"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                <i className="fa-solid fa-cake-candles text-amber-500" />
-                <span>Birthdays</span>
-                {todayBirthdays.length > 0 && (
-                  <span className="w-2 h-2 rounded-full bg-pink-500 animate-pulse" />
-                )}
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setActiveTab("anniversary")}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 min-h-[34px] ${
-                  activeTab === "anniversary"
-                    ? "bg-card text-foreground shadow-xs border border-border"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                <i className="fa-solid fa-award text-indigo-500" />
-                <span>Anniversaries</span>
-                {todayAnniversaries.length > 0 && (
-                  <span className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse" />
-                )}
-              </button>
-            </div>
+            {/* Confetti Popper Button */}
+            <button
+              type="button"
+              onClick={() => setConfettiTrigger(Date.now())}
+              className="w-8 h-8 rounded-xl bg-pink-500/10 hover:bg-pink-500/20 text-pink-600 dark:text-pink-400 border border-pink-500/20 flex items-center justify-center transition-all hover:scale-110 active:scale-95 cursor-pointer shadow-2xs shrink-0"
+              title="Celebrate with Confetti!"
+            >
+              <i className="fa-solid fa-wand-magic-sparkles text-xs" />
+            </button>
           </div>
 
-          {/* Widget Content Body */}
-          <div className="pt-4 space-y-4">
-            {loading ? (
-              <div className="py-8 text-center text-muted-foreground flex flex-col items-center justify-center gap-2">
-                <i className="fa-solid fa-spinner fa-spin text-lg text-indigo-500" />
-                <span className="text-xs">Loading celebrations...</span>
-              </div>
-            ) : (
-              <>
-                {/* 1. Today Celebrants Section */}
-                {currentTodayList.length > 0 && (
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-1.5 text-xs font-bold text-foreground">
-                      <span className="w-2 h-2 rounded-full bg-pink-500 animate-ping" />
-                      <span>Celebrating Today! 🥳</span>
-                    </div>
+          {/* Full-Width Segmented Tab Switcher (50% / 50% Grid) */}
+          <div className="grid grid-cols-2 p-1 bg-muted/60 rounded-xl border border-border/50 gap-1 w-full">
+            <button
+              type="button"
+              onClick={() => setActiveTab("birthday")}
+              className={`w-full py-1.5 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 min-h-[34px] cursor-pointer ${
+                activeTab === "birthday"
+                  ? "bg-card text-foreground shadow-xs border border-border"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <i className="fa-solid fa-cake-candles text-amber-500 text-xs shrink-0" />
+              <span className="truncate">Birthdays</span>
+              {todayBirthdays.length > 0 && (
+                <span className="w-2 h-2 rounded-full bg-pink-500 animate-pulse shrink-0" />
+              )}
+            </button>
 
-                    <div className="space-y-2.5">
-                      {currentTodayList.map((item) => {
-                        const isSelf = item.userId === currentUserId;
-                        const alreadySent = isWishAlreadySent(item.userId, item.type);
+            <button
+              type="button"
+              onClick={() => setActiveTab("anniversary")}
+              className={`w-full py-1.5 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 min-h-[34px] cursor-pointer ${
+                activeTab === "anniversary"
+                  ? "bg-card text-foreground shadow-xs border border-border"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <i className="fa-solid fa-award text-indigo-500 text-xs shrink-0" />
+              <span className="truncate">Anniversaries</span>
+              {todayAnniversaries.length > 0 && (
+                <span className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse shrink-0" />
+              )}
+            </button>
+          </div>
+        </div>
 
-                        return (
-                          <div
-                            key={item.userId}
-                            className="p-3.5 rounded-2xl border border-pink-500/30 bg-gradient-to-r from-pink-500/10 via-purple-500/5 to-transparent flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs"
-                          >
-                            <div className="flex items-center gap-3">
-                              <div className="relative">
-                                {item.photoUrl ? (
-                                  <img
-                                    src={item.photoUrl}
-                                    alt={item.name}
-                                    className="w-11 h-11 rounded-full object-cover border-2 border-pink-500"
-                                  />
-                                ) : (
-                                  <div className="w-11 h-11 rounded-full bg-pink-500 text-white font-bold flex items-center justify-center text-sm shadow-xs">
-                                    {item.name.slice(0, 2).toUpperCase()}
-                                  </div>
-                                )}
-                                <span className="absolute -bottom-1 -right-1 text-xs">
-                                  {activeTab === "anniversary" ? "🏆" : "🎂"}
-                                </span>
-                              </div>
+        {/* Widget Content Body */}
+        <div className="pt-3.5 space-y-4">
+          {loading ? (
+            <div className="py-8 text-center text-muted-foreground flex flex-col items-center justify-center gap-2">
+              <i className="fa-solid fa-spinner fa-spin text-lg text-indigo-500" />
+              <span className="text-xs font-medium">Loading celebrations...</span>
+            </div>
+          ) : (
+            <>
+              {/* 1. Today Celebrants Section */}
+              {currentTodayList.length > 0 && (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 text-xs font-extrabold text-foreground">
+                    <span className="w-2.5 h-2.5 rounded-full bg-pink-500 animate-ping" />
+                    <span>Celebrating Today! 🥳</span>
+                  </div>
 
-                              <div>
-                                <div className="flex items-center gap-2">
-                                  <h4 className="font-bold text-sm text-foreground">
-                                    {item.name}
-                                  </h4>
-                                  {isSelf && (
-                                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-pink-500 text-white">
-                                      You!
-                                    </span>
-                                  )}
+                  <div className="space-y-2.5">
+                    {currentTodayList.map((item) => {
+                      const isSelf = item.userId === currentUserId;
+                      const alreadySent = isWishAlreadySent(item.userId, item.type);
+
+                      return (
+                        <div
+                          key={item.userId}
+                          className="p-3 rounded-xl border border-pink-500/30 bg-gradient-to-r from-pink-500/15 via-purple-500/10 to-indigo-500/5 flex items-center justify-between gap-2.5 shadow-xs hover:shadow-md transition-all duration-200"
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div className="relative shrink-0">
+                              {item.photoUrl ? (
+                                <img
+                                  src={item.photoUrl}
+                                  alt={item.name}
+                                  className="w-10 h-10 rounded-full object-cover ring-2 ring-pink-500/70 ring-offset-2 ring-offset-background animate-pulse shadow-md"
+                                />
+                              ) : (
+                                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-pink-500 to-purple-600 text-white font-bold flex items-center justify-center text-xs shadow-md ring-2 ring-pink-500/60 ring-offset-2 ring-offset-background animate-pulse">
+                                  {item.name.slice(0, 2).toUpperCase()}
                                 </div>
-                                <p className="text-xs text-muted-foreground mt-0.5">
-                                  {item.milestoneText ? item.milestoneText : item.department}
-                                </p>
-                              </div>
+                              )}
+                              <span className="absolute -bottom-1 -right-1 text-xs drop-shadow-xs">
+                                {activeTab === "anniversary" ? "🏆" : "🎂"}
+                              </span>
                             </div>
 
-                            {/* Actions for Colleagues */}
-                            {!isSelf && (
-                              <div className="flex items-center gap-2 w-full sm:w-auto shrink-0">
-                                <button
-                                  type="button"
-                                  onClick={() => handleWhatsAppQuickShare(item)}
-                                  className="w-9 h-9 rounded-xl border border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20 flex items-center justify-center transition-all"
-                                  title="Send instant WhatsApp greeting"
-                                >
-                                  <i className="fa-brands fa-whatsapp text-sm" />
-                                </button>
-
-                                {alreadySent ? (
-                                  <span className="min-h-[36px] px-3 py-1.5 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 text-xs font-semibold flex items-center gap-1.5">
-                                    <i className="fa-solid fa-check text-xs" />
-                                    <span>Wish Sent</span>
+                            <div className="min-w-0 truncate">
+                              <div className="flex items-center gap-1.5">
+                                <h4 className="font-extrabold text-xs sm:text-sm text-foreground truncate">
+                                  {item.name}
+                                </h4>
+                                {isSelf && (
+                                  <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-full bg-pink-500 text-white shadow-2xs shrink-0">
+                                    You!
                                   </span>
-                                ) : (
-                                  <button
-                                    type="button"
-                                    onClick={() => handleOpenSendWish(item)}
-                                    className="flex-1 sm:flex-initial min-h-[36px] px-3.5 py-1.5 rounded-xl bg-pink-600 hover:bg-pink-700 text-white text-xs font-semibold shadow-xs flex items-center justify-center gap-1.5 transition-all"
-                                  >
-                                    <i className="fa-solid fa-gift text-xs" />
-                                    <span>Send Wish</span>
-                                  </button>
                                 )}
                               </div>
-                            )}
+                              <p className="text-[11px] text-muted-foreground mt-0.5 flex items-center gap-1 truncate">
+                                <span className="w-1.5 h-1.5 rounded-full bg-pink-500 shrink-0" />
+                                <span className="truncate">{item.milestoneText ? item.milestoneText : item.department}</span>
+                              </p>
+                            </div>
                           </div>
-                        );
-                      })}
-                    </div>
+
+                          {/* Actions for Colleagues */}
+                          {!isSelf && (
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => handleWhatsAppQuickShare(item)}
+                                className="w-8 h-8 rounded-lg border border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20 flex items-center justify-center transition-all hover:scale-105 active:scale-95 cursor-pointer shadow-2xs shrink-0"
+                                title="Send instant WhatsApp greeting"
+                              >
+                                <i className="fa-brands fa-whatsapp text-sm" />
+                              </button>
+
+                              {alreadySent ? (
+                                <span className="min-h-[32px] px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 text-[11px] font-bold flex items-center gap-1 shadow-2xs whitespace-nowrap">
+                                  <i className="fa-solid fa-check text-[10px]" />
+                                  <span>Wish Sent</span>
+                                </span>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenSendWish(item)}
+                                  className="min-h-[32px] px-3 py-1 rounded-lg bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-700 hover:to-rose-700 text-white text-[11px] font-bold shadow-xs hover:shadow-md flex items-center justify-center gap-1.5 transition-all hover:scale-[1.02] active:scale-95 cursor-pointer whitespace-nowrap"
+                                >
+                                  <i className="fa-solid fa-gift text-xs" />
+                                  <span>Send Wish</span>
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
-                )}
+                </div>
+              )}
 
                 {/* Friday Weekend Banner Highlight */}
                 {isFridayToday &&
                   currentUpcomingList.some((u) => u.isWeekend && u.daysRemaining <= 2) && (
-                    <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-400 text-xs flex items-center gap-2">
-                      <i className="fa-solid fa-bell shrink-0" />
-                      <span>
+                    <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/25 text-amber-700 dark:text-amber-400 text-xs flex items-center gap-2.5 shadow-2xs">
+                      <i className="fa-solid fa-bell text-sm shrink-0 text-amber-500" />
+                      <span className="font-medium">
                         Colleagues are celebrating this weekend! Send your wishes early or wish them on WhatsApp.
                       </span>
                     </div>
@@ -315,37 +354,44 @@ export function UpcomingCelebrationsWidget({
 
                 {/* 2. Upcoming List (1 to 14 Days) */}
                 <div className="space-y-2">
-                  <div className="flex items-center justify-between text-xs font-semibold text-muted-foreground">
-                    <span>Upcoming (Next 14 Days)</span>
-                    <span>{currentUpcomingList.length}</span>
+                  <div className="flex items-center justify-between text-xs font-bold text-muted-foreground">
+                    <span className="flex items-center gap-1.5">
+                      <i className="fa-solid fa-calendar-days text-indigo-500 text-[11px]" />
+                      <span>Upcoming (Next 14 Days)</span>
+                    </span>
+                    <span className="px-2 py-0.5 rounded-full bg-muted text-[10px] font-bold">
+                      {currentUpcomingList.length}
+                    </span>
                   </div>
 
                   {currentUpcomingList.length === 0 ? (
-                    <div className="p-4 rounded-xl border border-dashed border-border/70 text-center text-xs text-muted-foreground">
-                      No upcoming {activeTab === "birthday" ? "birthdays" : "anniversaries"} in the next 14 days.
+                    <div className="p-5 rounded-2xl border border-dashed border-border/70 text-center text-xs text-muted-foreground space-y-1 bg-muted/10">
+                      <i className="fa-solid fa-calendar-check text-2xl text-muted-foreground/40 mb-1 block" />
+                      <p className="font-semibold text-foreground">All clear for the next two weeks!</p>
+                      <p className="text-[11px]">No upcoming {activeTab === "birthday" ? "birthdays" : "anniversaries"} in the next 14 days.</p>
                     </div>
                   ) : (
                     <div className="divide-y divide-border/40 max-h-56 overflow-y-auto overscroll-contain pr-1">
                       {currentUpcomingList.map((item) => (
                         <div
                           key={item.userId}
-                          className="py-2.5 flex items-center justify-between gap-3 group"
+                          className="py-2.5 flex items-center justify-between gap-3 group hover:bg-muted/30 px-2 rounded-xl transition-colors"
                         >
                           <div className="flex items-center gap-2.5 min-w-0">
                             {item.photoUrl ? (
                               <img
                                 src={item.photoUrl}
                                 alt={item.name}
-                                className="w-8 h-8 rounded-full object-cover shrink-0"
+                                className="w-8 h-8 rounded-full object-cover shrink-0 border border-border"
                               />
                             ) : (
-                              <div className="w-8 h-8 rounded-full bg-muted text-muted-foreground font-semibold flex items-center justify-center text-xs shrink-0">
+                              <div className="w-8 h-8 rounded-full bg-muted text-muted-foreground font-bold flex items-center justify-center text-xs shrink-0 border border-border">
                                 {item.name.slice(0, 2).toUpperCase()}
                               </div>
                             )}
 
                             <div className="truncate">
-                              <h5 className="font-semibold text-xs text-foreground truncate">
+                              <h5 className="font-bold text-xs text-foreground truncate group-hover:text-primary transition-colors">
                                 {item.name}
                               </h5>
                               <p className="text-[11px] text-muted-foreground truncate">
@@ -356,10 +402,10 @@ export function UpcomingCelebrationsWidget({
 
                           <div className="flex items-center gap-2 shrink-0">
                             <span
-                              className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${
+                              className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full ${
                                 item.daysRemaining === 1
-                                  ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20"
-                                  : "bg-muted text-muted-foreground"
+                                  ? "bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30"
+                                  : "bg-muted text-muted-foreground border border-border/50"
                               }`}
                             >
                               {item.displayDate}
@@ -370,8 +416,8 @@ export function UpcomingCelebrationsWidget({
                               <button
                                 type="button"
                                 onClick={() => handleOpenSendWish(item)}
-                                className="w-7 h-7 rounded-lg border border-border/80 hover:border-indigo-500/50 hover:bg-indigo-500/10 text-muted-foreground hover:text-indigo-600 flex items-center justify-center transition-all opacity-80 group-hover:opacity-100"
-                                title="Send celebration wish"
+                                className="w-8 h-8 rounded-lg border border-border/80 hover:border-pink-500/50 hover:bg-pink-500/10 text-muted-foreground hover:text-pink-600 flex items-center justify-center transition-all cursor-pointer opacity-80 group-hover:opacity-100"
+                                title="Send celebration wish early"
                               >
                                 <i className="fa-solid fa-gift text-xs" />
                               </button>
@@ -385,21 +431,25 @@ export function UpcomingCelebrationsWidget({
               </>
             )}
           </div>
-        </div>
 
-        {/* Footer Link / View Received Wishes */}
-        {receivedWishes.length > 0 && (
-          <div className="pt-3 border-t border-border/60 mt-3 flex items-center justify-between">
-            <button
-              type="button"
-              onClick={() => setWishesModalOpen(true)}
-              className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1.5"
-            >
-              <i className="fa-solid fa-envelope-open-text" />
-              <span>View Wishes Received ({receivedWishes.length})</span>
-            </button>
-          </div>
-        )}
+        {/* Footer Link / View Celebration Wishes History Wall */}
+        <div className="pt-3 border-t border-border/60 mt-3 flex items-center justify-between flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setWishesModalOpen(true)}
+            className="px-3 py-1.5 rounded-xl bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 text-xs font-bold flex items-center gap-2 cursor-pointer transition-all hover:scale-[1.02] shadow-2xs min-h-[36px]"
+          >
+            <i className="fa-solid fa-comments text-indigo-500" />
+            <span>Wishes History Wall</span>
+            <span className="px-1.5 py-0.2 rounded-md bg-indigo-500/20 text-[10px] font-bold text-indigo-700 dark:text-indigo-300">
+              {receivedWishes.length + sentWishes.length}
+            </span>
+          </button>
+
+          <span className="text-[11px] text-muted-foreground font-medium">
+            {receivedWishes.length} Received · {sentWishes.length} Sent
+          </span>
+        </div>
       </div>
 
       {/* Send Wish Modal */}
@@ -407,14 +457,18 @@ export function UpcomingCelebrationsWidget({
         isOpen={sendModalOpen}
         onClose={() => setSendModalOpen(false)}
         celebrant={selectedCelebrant}
-        onWishSent={fetchCelebrations}
+        onWishSent={() => {
+          setConfettiTrigger(Date.now());
+          fetchCelebrations();
+        }}
       />
 
-      {/* Received Wishes Modal */}
+      {/* Received & Sent Wishes History Modal */}
       <BirthdayWishesModal
         isOpen={wishesModalOpen}
         onClose={() => setWishesModalOpen(false)}
         wishes={receivedWishes}
+        sentWishes={sentWishes}
         currentUserId={currentUserId || ""}
         currentUserName={currentUserName || "You"}
         currentUserRole={currentUserRole}

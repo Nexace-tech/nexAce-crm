@@ -89,7 +89,9 @@ export const FEATURE_ACTIONS: FeatureMeta[] = [
   { key: "manageShifts", name: "Manage Shift Schedules", category: "Calendar & Time", subGroup: "Shifts & Punch Clock", description: "Create, edit, and assign shift slots to employees", icon: "fa-solid fa-calendar-plus" },
   { key: "viewShiftCalendar", name: "View Team Shift Calendar", category: "Calendar & Time", subGroup: "Shifts & Punch Clock", description: "Access full team shift calendar and roster overview", icon: "fa-solid fa-calendar-days" },
   { key: "canViewShiftClock", name: "Access Shift Clock Tab", category: "Calendar & Time", subGroup: "Shifts & Punch Clock", description: "View the Shift Clock & Attendance tab in Calendar (Admin, OPS & HR by default)", icon: "fa-solid fa-fingerprint" },
+  { key: "viewAllShiftExtensions", name: "View All Shift Extensions Desk", category: "Calendar & Time", subGroup: "Shifts & Punch Clock", description: "Access the dedicated Shift Extensions desk to inspect all employee extension records, justification reasons, and audit trails", icon: "fa-solid fa-clock-rotate-left" },
   { key: "approveAdditionalShiftTime", name: "Approve Additional Shift Time", category: "Calendar & Time", subGroup: "Shifts & Punch Clock", description: "Review and approve employee requests to extend shift time past the 10-hour limit", icon: "fa-solid fa-clock-rotate-left" },
+  { key: "exportShiftExtensions", name: "Export Shift Extensions Data", category: "Calendar & Time", subGroup: "Shifts & Punch Clock", description: "Download CSV/Excel reports of shift extension history for payroll, overtime, and labor compliance", icon: "fa-solid fa-file-csv" },
   { key: "viewLoginHoursSummary", name: "View Login & Hours Summary", category: "Calendar & Time", subGroup: "Timesheets & Hours Logging", description: "Access aggregated employee login times, clock-in/out records, and working hours summary report", icon: "fa-solid fa-user-clock" },
   { key: "viewTeamAvailability", name: "View Team Availability Roster", category: "Calendar & Time", subGroup: "Availability & Scheduling", description: "Access team-wide work availability roster, filter staff by department, and inspect member schedules", icon: "fa-solid fa-user-clock" },
   { key: "manageTeamAvailability", name: "Manage Team Work Availability", category: "Calendar & Time", subGroup: "Availability & Scheduling", description: "Record, edit, and coordinate work availability and shift hours for other team members and flexible staff", icon: "fa-solid fa-calendar-check" },
@@ -311,7 +313,7 @@ const PRESET_TEMPLATES: RolePresetTemplate[] = [
     features: [
       "viewKpiWidgets", "viewShiftOverview", "viewRecentActivity", "viewAnnouncements",
       "viewTeamDirectory", "viewEmployeeProfiles", "viewOrgChart", "reassignReportingLine",
-      "logOwnTimesheet", "editOwnTimesheet", "viewTeamTimesheets", "approveTimesheets", "exportTimesheets", "manageShifts", "viewShiftCalendar", "clockInOut", "canViewShiftClock", "viewLoginHoursSummary", "approveAdditionalShiftTime",
+      "logOwnTimesheet", "editOwnTimesheet", "viewTeamTimesheets", "approveTimesheets", "exportTimesheets", "manageShifts", "viewShiftCalendar", "clockInOut", "canViewShiftClock", "viewAllShiftExtensions", "approveAdditionalShiftTime", "exportShiftExtensions", "viewLoginHoursSummary",
       "viewTeamAvailability", "manageTeamAvailability", "logOwnAvailability",
       "viewProjects", "createProjects", "deleteProjects", "assignTasksToOthers", "changeTaskStatus", "commentOnTasks", "deleteTaskComments", "manageProjectWiki", "viewProjectGantt", "exportProjectData",
       "createSprints", "moveBetweenSprints", "completeSprints", "deleteSprints",
@@ -333,7 +335,7 @@ const PRESET_TEMPLATES: RolePresetTemplate[] = [
     features: [
       "viewKpiWidgets", "viewShiftOverview", "viewAnnouncements",
       "viewTeamDirectory", "viewEmployeeProfiles", "editEmployeeProfiles", "inviteTeamMembers", "viewOrgChart", "reassignReportingLine",
-      "logOwnTimesheet", "editOwnTimesheet", "viewTeamTimesheets", "approveTimesheets", "exportTimesheets", "clockInOut", "canViewShiftClock", "viewShiftCalendar", "viewLoginHoursSummary", "approveAdditionalShiftTime", "viewTeamAvailability", "manageTeamAvailability", "logOwnAvailability", "manageHolidays", "importHolidayExcel",
+      "logOwnTimesheet", "editOwnTimesheet", "viewTeamTimesheets", "approveTimesheets", "exportTimesheets", "clockInOut", "canViewShiftClock", "viewAllShiftExtensions", "approveAdditionalShiftTime", "exportShiftExtensions", "viewShiftCalendar", "viewLoginHoursSummary", "viewTeamAvailability", "manageTeamAvailability", "logOwnAvailability", "manageHolidays", "importHolidayExcel",
       "viewOwnLeaves", "applyLeaves", "viewAllLeaves", "approveLeaves", "manageCompanyChecklists", "manageHRVault", "manageHRCases", "reassignHRPartner", "manageHRIsolation", "approveTimesheetsAndInvoices", "approveInvoices",
       "viewOwnAppraisals", "submitSelfReview", "viewManagerReviews", "createAppraisalCycles",
       "viewGoals", "sendKudos", "submitSurvey", "createPulseSurveys",

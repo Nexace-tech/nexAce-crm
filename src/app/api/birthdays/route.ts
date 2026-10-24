@@ -43,34 +43,68 @@ export async function GET(request: Request) {
     const isMyBirthday = birthdayResults.today.some((u) => u.userId === session.userId);
     const isMyAnniversary = anniversaryResults.today.some((u) => u.userId === session.userId);
 
-    // 3. Fetch wishes received by the requesting user for this calendar year
+    // 3. Fetch wishes received by the requesting user across all history
     const receivedWishes = await BirthdayWish.find({
       tenantId: tenantObjectId,
       recipientId: userObjectId,
-      year: currentYear,
     })
       .sort({ createdAt: -1 })
       .lean();
 
-    // 4. Fetch list of wishes already sent by this user this year
+    // 4. Fetch list of wishes sent by this user across all history (populated with recipient details)
     const sentWishes = await BirthdayWish.find({
       tenantId: tenantObjectId,
       senderId: userObjectId,
-      year: currentYear,
     })
-      .select("recipientId type")
+      .populate("recipientId", "name photoUrl department")
+      .sort({ createdAt: -1 })
       .lean();
 
-    const wishesSentThisYear = sentWishes.map((w: any) => ({
-      recipientId: w.recipientId.toString(),
-      type: w.type as "birthday" | "anniversary",
+    const formattedSentWishes = sentWishes.map((w: any) => ({
+      _id: w._id.toString(),
+      recipientId: w.recipientId?._id?.toString() || w.recipientId?.toString(),
+      recipientName: w.recipientId?.name || "Colleague",
+      recipientPhotoUrl: w.recipientId?.photoUrl || "",
+      recipientDepartment: w.recipientId?.department || "",
+      senderId: w.senderId.toString(),
+      senderName: w.senderName,
+      senderPhotoUrl: w.senderPhotoUrl,
+      senderDepartment: w.senderDepartment,
+      message: w.message,
+      sticker: w.sticker,
+      type: w.type,
+      attachments: w.attachments || [],
+      reactions: w.reactions || [],
+      year: w.year,
+      acknowledged: w.acknowledged,
+      createdAt: w.createdAt,
     }));
+
+    const wishesSentThisYear = sentWishes
+      .filter((w: any) => w.year === currentYear)
+      .map((w: any) => ({
+        recipientId: (w.recipientId?._id || w.recipientId).toString(),
+        type: w.type as "birthday" | "anniversary",
+      }));
 
     // Find my celebration details if today is my day
     const myBirthdayItem = birthdayResults.today.find((u) => u.userId === session.userId) || null;
     const myAnniversaryItem = anniversaryResults.today.find((u) => u.userId === session.userId) || null;
 
-    // 5. Build 12-month Annual Roster for whole organization
+    // 5. Aggregate wish counts per recipient for this calendar year
+    const wishCounts = await BirthdayWish.aggregate([
+      { $match: { tenantId: tenantObjectId, year: currentYear } },
+      { $group: { _id: { recipientId: "$recipientId", type: "$type" }, count: { $sum: 1 } } },
+    ]);
+    const wishCountMap: Record<string, number> = {};
+    for (const item of wishCounts) {
+      if (item._id?.recipientId) {
+        const key = `${item._id.recipientId.toString()}_${item._id.type}`;
+        wishCountMap[key] = item.count;
+      }
+    }
+
+    // 6. Build 12-month Annual Roster for whole organization
     const monthlyRoster: Record<number, Array<{
       userId: string;
       name: string;
@@ -82,6 +116,7 @@ export async function GET(request: Request) {
       month: number;
       type: "birthday" | "anniversary";
       label: string;
+      wishesCount: number;
     }>> = {};
 
     for (let m = 1; m <= 12; m++) {
@@ -93,8 +128,9 @@ export async function GET(request: Request) {
       if ((member as any).preferences?.showBirthdayOnDashboard !== false && member.dob) {
         const md = getMonthAndDay(member.dob);
         if (md) {
+          const uId = member._id.toString();
           monthlyRoster[md.month].push({
-            userId: member._id.toString(),
+            userId: uId,
             name: member.name,
             photoUrl: member.photoUrl,
             department: member.department || "General",
@@ -104,6 +140,7 @@ export async function GET(request: Request) {
             month: md.month,
             type: "birthday",
             label: `Birthday (Day ${md.day})`,
+            wishesCount: wishCountMap[`${uId}_birthday`] || 0,
           });
         }
       }
@@ -117,8 +154,9 @@ export async function GET(request: Request) {
         if (yearsCompleted >= 1) {
           const md = getMonthAndDay(member.joinDate);
           if (md) {
+            const uId = member._id.toString();
             monthlyRoster[md.month].push({
-              userId: member._id.toString(),
+              userId: uId,
               name: member.name,
               photoUrl: member.photoUrl,
               department: member.department || "General",
@@ -128,6 +166,7 @@ export async function GET(request: Request) {
               month: md.month,
               type: "anniversary",
               label: `${getAnniversaryMilestone(yearsCompleted)} (Day ${md.day})`,
+              wishesCount: wishCountMap[`${uId}_anniversary`] || 0,
             });
           }
         }
@@ -153,12 +192,14 @@ export async function GET(request: Request) {
       todayAnniversaries: anniversaryResults.today,
       upcomingAnniversaries: anniversaryResults.upcoming,
       receivedWishes,
+      sentWishes: formattedSentWishes,
       wishesSentThisYear,
       roster: monthlyRoster,
       stats: {
         todayTotal: birthdayResults.today.length + anniversaryResults.today.length,
         upcomingTotal: birthdayResults.upcoming.length + anniversaryResults.upcoming.length,
         receivedWishesCount: receivedWishes.length,
+        sentWishesCount: formattedSentWishes.length,
       },
     });
   } catch (error: any) {

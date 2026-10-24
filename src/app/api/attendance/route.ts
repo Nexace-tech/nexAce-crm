@@ -112,7 +112,7 @@ export async function GET(request: Request) {
     const endStr        = searchParams.get("end") || searchParams.get("endDate");
 
     const dataScope = await getUserDataScope(session);
-    const isElevatedRole = session.role === "Admin" || session.role === "OPS" || session.role === "Manager" || session.role === "HR" || dataScope.canViewFeature("viewTeamTimesheets");
+    const isElevatedRole = session.role === "Admin" || session.role === "OPS" || session.role === "Manager" || session.role === "HR" || dataScope.canViewFeature("viewTeamTimesheets") || dataScope.canViewFeature("viewAllShiftExtensions") || dataScope.canViewFeature("approveAdditionalShiftTime");
 
     const historyFilter: Record<string, unknown> = { tenantId: tenantObjectId };
     if (!isElevatedRole) {

@@ -124,6 +124,7 @@ export function AdminDashboard({ user }: { user: any }) {
     isMyAnniversary: boolean;
     wishesCount: number;
     receivedWishes: BirthdayWishItem[];
+    sentWishes?: BirthdayWishItem[];
     milestoneText?: string;
   } | null>(null);
   const [isWishesModalOpen, setIsWishesModalOpen] = useState(false);
@@ -1072,12 +1073,13 @@ export function AdminDashboard({ user }: { user: any }) {
         <i className="fa-solid fa-gear text-slate-950 text-base" />
       </Link>
 
-      {/* ── Received Celebration Wishes Modal ── */}
+      {/* ── Received & Sent Celebration Wishes Modal ── */}
       {celebrationData && (
         <BirthdayWishesModal
           isOpen={isWishesModalOpen}
           onClose={() => setIsWishesModalOpen(false)}
           wishes={celebrationData.receivedWishes}
+          sentWishes={celebrationData.sentWishes}
           currentUserId={user?.id || user?._id || ""}
           currentUserName={user?.name || "You"}
           currentUserRole={user?.role}

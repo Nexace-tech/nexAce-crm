@@ -24,16 +24,17 @@ import { TeamShiftOverviewCard } from "@/components/dashboard/TeamShiftOverviewC
 import { TeamAvailabilityTab } from "@/components/calendar/TeamAvailabilityTab";
 import { CompanyHolidaysTab } from "@/components/calendar/CompanyHolidaysTab";
 import { CompanyCelebrationsTab } from "@/components/calendar/CompanyCelebrationsTab";
+import { ShiftExtensionsDesk } from "@/components/calendar/ShiftExtensionsDesk";
 
 import { AccessRestricted } from "@/components/ui/AccessRestricted";
 
 function CalendarPageContent() {
   const { user: currentUser, loading: authLoading } = useAuth();
   const { can, canAccessModule, isAdmin, isOPS, isHR, loading: permLoading } = usePermissions();
-  const [activeTab, setActiveTab] = useTabPersistence<"calendar" | "sprints" | "timesheets" | "attendance" | "availability" | "holidays" | "celebrations">(
+  const [activeTab, setActiveTab] = useTabPersistence<"calendar" | "sprints" | "timesheets" | "attendance" | "availability" | "holidays" | "celebrations" | "extensions">(
     "calendar_active_tab",
     "calendar",
-    ["calendar", "sprints", "timesheets", "attendance", "availability", "holidays", "celebrations"]
+    ["calendar", "sprints", "timesheets", "attendance", "availability", "holidays", "celebrations", "extensions"]
   );
   const [selectedCelebrantUserId, setSelectedCelebrantUserId] = useState<string | null>(null);
 
@@ -551,7 +552,7 @@ function CalendarPageContent() {
       setAttendanceLoading(true);
       const params = new URLSearchParams();
       if (loadAll) params.append("limit", "all");
-      if (isAdmin || isOPS || isHR || can("viewTeamTimesheets") || can("viewLoginHoursSummary")) params.append("allUsers", "true");
+      if (isAdmin || isOPS || isHR || can("viewTeamTimesheets") || can("viewLoginHoursSummary") || can("viewAllShiftExtensions") || can("approveAdditionalShiftTime")) params.append("allUsers", "true");
       const url = `/api/attendance?${params.toString()}`;
       const res = await fetch(url);
       if (res.ok) {
@@ -582,7 +583,7 @@ function CalendarPageContent() {
           }
           await fetchTimesheets(projs, selectedTimesheetUser);
         }
-        else if (activeTab === "attendance") {
+        else if (activeTab === "attendance" || activeTab === "extensions") {
           await fetchAttendance(true);
           if (isAdmin || isOPS || isHR || can("viewLoginHoursSummary")) {
             await fetchLoginHoursSummary();
@@ -1733,6 +1734,25 @@ function CalendarPageContent() {
         >
           <i className="fa-solid fa-cake-candles text-sm text-amber-500" /> Celebrations & Wishes
         </button>
+
+        {(isAdmin || isOPS || isHR || can("viewAllShiftExtensions") || can("approveAdditionalShiftTime")) && (
+          <button
+            onClick={() => setActiveTab("extensions")}
+            className={cn(
+              "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
+              activeTab === "extensions"
+                ? "border-primary text-primary bg-primary/10 rounded-t-md font-semibold -mb-px"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <i className="fa-solid fa-clock-rotate-left text-sm text-indigo-400" /> Shift Extensions
+            {attendanceHistory.filter((log: any) => log.extensionRequested && !log.extensionApproved).length > 0 && (
+              <span className="px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-amber-500 text-white animate-pulse">
+                {attendanceHistory.filter((log: any) => log.extensionRequested && !log.extensionApproved).length}
+              </span>
+            )}
+          </button>
+        )}
       </div>
 
       {/* Tab 1: Calendar */}
@@ -3526,6 +3546,16 @@ function CalendarPageContent() {
                       </p>
                     </div>
                   </div>
+
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setActiveTab("extensions")}
+                    className="gap-2 text-xs font-semibold border-amber-500/40 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 cursor-pointer shrink-0"
+                  >
+                    <i className="fa-solid fa-up-right-from-square text-xs" />
+                    Open Shift Extensions Screen
+                  </Button>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
@@ -4659,6 +4689,19 @@ function CalendarPageContent() {
         <CompanyCelebrationsTab
           onToast={showToast}
           initialSelectedUserId={selectedCelebrantUserId}
+        />
+      )}
+
+      {/* Tab 8: Dedicated Shift Extensions Desk Screen */}
+      {activeTab === "extensions" && (
+        <ShiftExtensionsDesk
+          attendanceHistory={attendanceHistory}
+          onRefresh={() => fetchAttendance(true)}
+          onToast={showToast}
+          canApprove={Boolean(isAdmin || isOPS || isHR || can("approveAdditionalShiftTime"))}
+          canExport={Boolean(isAdmin || isOPS || isHR || can("exportShiftExtensions"))}
+          currentUserId={currentUser?._id}
+          onBackToClock={() => setActiveTab("attendance")}
         />
       )}
 
