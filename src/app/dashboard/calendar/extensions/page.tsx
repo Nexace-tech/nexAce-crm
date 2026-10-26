@@ -135,7 +135,9 @@ function ShiftExtensionsPageContent() {
         canApprove={canApprove}
         canExport={canExport}
         currentUserId={currentUser?._id}
-        onBackToClock={() => router.push("/dashboard/calendar")}
+        currentUserRole={currentUser?.role}
+        currentUserDepartment={currentUser?.department}
+        onBackToClock={() => router.push("/dashboard/calendar?tab=attendance")}
       />
     </div>
   );

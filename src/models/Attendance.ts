@@ -27,6 +27,10 @@ export interface IAttendance extends Document {
   extensionApprovedBy?: mongoose.Types.ObjectId;
   extensionApprovedAt?: Date;
   extensionAllocatedHours?: number;
+  extensionRejected?: boolean;
+  extensionRejectedBy?: mongoose.Types.ObjectId;
+  extensionRejectedAt?: Date;
+  extensionRejectionReason?: string;
   tenantId: mongoose.Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
@@ -59,12 +63,16 @@ const AttendanceSchema = new Schema<IAttendance>(
       default: "Present",
     },
     extensionRequested: { type: Boolean, default: false },
-    extensionRequestedHours: { type: Number, default: 1 },
+    extensionRequestedHours: { type: Number, default: 0 },
     extensionReason: { type: String, default: "" },
     extensionApproved: { type: Boolean, default: false },
     extensionApprovedBy: { type: Schema.Types.ObjectId, ref: "User" },
     extensionApprovedAt: { type: Date },
-    extensionAllocatedHours: { type: Number, default: 1 },
+    extensionAllocatedHours: { type: Number, default: 0 },
+    extensionRejected: { type: Boolean, default: false },
+    extensionRejectedBy: { type: Schema.Types.ObjectId, ref: "User" },
+    extensionRejectedAt: { type: Date },
+    extensionRejectionReason: { type: String, default: "" },
     tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true },
   },
   { timestamps: true }
@@ -76,5 +84,19 @@ AttendanceSchema.index({ userId: 1, date: 1 }, { unique: true });
 AttendanceSchema.index({ tenantId: 1, date: -1 });
 AttendanceSchema.index({ tenantId: 1, userId: 1, date: -1 });
 
+// Force invalidate in-memory Mongoose model cache if schema updated in dev / hot-reload
+if (
+  mongoose.models.Attendance &&
+  (!mongoose.models.Attendance.schema.path("extensionRejectedBy") ||
+    !mongoose.models.Attendance.schema.path("extensionApprovedBy") ||
+    !mongoose.models.Attendance.schema.path("extensionRejected") ||
+    !mongoose.models.Attendance.schema.path("extensionAllocatedHours") ||
+    !mongoose.models.Attendance.schema.path("extensionRejectionReason"))
+) {
+  delete (mongoose.models as any).Attendance;
+}
+
 export const Attendance: Model<IAttendance> =
-  mongoose.models.Attendance || mongoose.model<IAttendance>("Attendance", AttendanceSchema);
+  (mongoose.models.Attendance as Model<IAttendance>) ||
+  mongoose.model<IAttendance>("Attendance", AttendanceSchema);
+

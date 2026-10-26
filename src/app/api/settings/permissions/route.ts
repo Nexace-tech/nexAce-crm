@@ -123,7 +123,7 @@ export const DEFAULT_FEATURE_PERMISSIONS: Record<string, Record<string, boolean>
     // Team
     viewTeamDirectory: true, viewEmployeeProfiles: true, editEmployeeProfiles: false, inviteTeamMembers: false, deactivateEmployees: false, reassignReportingLine: true, viewSalaryData: false, viewOrgChart: true,
     // Calendar & Time
-    logOwnTimesheet: true, editOwnTimesheet: true, viewTeamTimesheets: true, approveTimesheets: true, exportTimesheets: true, manageShifts: true, viewShiftCalendar: true, clockInOut: true, canViewShiftClock: true, viewAllShiftExtensions: true, approveAdditionalShiftTime: false, exportShiftExtensions: true, viewLoginHoursSummary: false, viewTeamAvailability: true, manageTeamAvailability: true, logOwnAvailability: true, manageHolidays: false, importHolidayExcel: false,
+    logOwnTimesheet: true, editOwnTimesheet: true, viewTeamTimesheets: true, approveTimesheets: true, exportTimesheets: true, manageShifts: true, viewShiftCalendar: true, clockInOut: true, canViewShiftClock: true, viewAllShiftExtensions: true, approveAdditionalShiftTime: true, exportShiftExtensions: true, viewLoginHoursSummary: false, viewTeamAvailability: true, manageTeamAvailability: true, logOwnAvailability: true, manageHolidays: false, importHolidayExcel: false,
     // Projects
     viewProjects: true, createProjects: true, deleteProjects: false, assignTasksToOthers: true, changeTaskStatus: true, commentOnTasks: true, deleteTaskComments: false, manageProjectWiki: true, viewProjectGantt: true, exportProjectData: true,
     // Sprints

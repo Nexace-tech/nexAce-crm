@@ -21,6 +21,12 @@ export function EmployeeDashboard({ user }: { user: any }) {
   const [clockTime, setClockTime] = useState<string | null>(null);
   const [clockInIso, setClockInIso] = useState<string | null>(null);
   const [elapsedTime, setElapsedTime] = useState("00:00:00");
+  const [extensionCountdown, setExtensionCountdown] = useState<{
+    remainingSecs: number;
+    formatted: string;
+    isUnder10Min: boolean;
+    isExpired: boolean;
+  } | null>(null);
   const [clocking, setClocking] = useState(false);
   const [tasks, setTasks] = useState<any[]>([]);
   const [timesheets, setTimesheets] = useState<any[]>([]);
@@ -107,6 +113,7 @@ export function EmployeeDashboard({ user }: { user: any }) {
       } else {
         setElapsedTime("00:00:00");
       }
+      setExtensionCountdown(null);
       return;
     }
 
@@ -130,6 +137,32 @@ export function EmployeeDashboard({ user }: { user: any }) {
       const secs = totalSecs % 60;
       const pad = (n: number) => String(n).padStart(2, "0");
       setElapsedTime(`${pad(hrs)}:${pad(mins)}:${pad(secs)}`);
+
+      // Live extension countdown calculation
+      if (todayAttendanceRecord.extensionApproved && !todayAttendanceRecord.clockOut) {
+        const allocatedHrs = Number(todayAttendanceRecord.extensionAllocatedHours) || 0;
+        const baseShiftHours = todayAttendanceRecord.targetHours || 8;
+        const totalAuthorizedSecs = Math.round((baseShiftHours + allocatedHrs) * 3600);
+        const remainingSecs = Math.max(0, totalAuthorizedSecs - totalSecs);
+        const remHrs = Math.floor(remainingSecs / 3600);
+        const remMins = Math.floor((remainingSecs % 3600) / 60);
+        const remS = remainingSecs % 60;
+        const isExpired = remainingSecs === 0;
+        const formatted = isExpired
+          ? "Expired"
+          : remHrs > 0
+            ? `${remHrs}h ${pad(remMins)}m ${pad(remS)}s`
+            : `${pad(remMins)}m ${pad(remS)}s`;
+
+        setExtensionCountdown({
+          remainingSecs,
+          formatted,
+          isUnder10Min: !isExpired && remainingSecs <= 600,
+          isExpired,
+        });
+      } else {
+        setExtensionCountdown(null);
+      }
     };
 
     updateTimer();
@@ -1114,7 +1147,7 @@ export function EmployeeDashboard({ user }: { user: any }) {
                       const approver = typeof todayAttendanceRecord.extensionApprovedBy === "object" ? todayAttendanceRecord.extensionApprovedBy : null;
                       const approverName = approver?.name || "Operations / Admin";
                       const approverRole = approver?.role || "Admin";
-                      const allocated = Number(todayAttendanceRecord.extensionAllocatedHours) || 2.0;
+                      const allocated = Number(todayAttendanceRecord.extensionAllocatedHours) || 0;
                       const approvedAtStr = todayAttendanceRecord.extensionApprovedAt
                         ? formatISTDate(todayAttendanceRecord.extensionApprovedAt) + " " + formatISTTime(todayAttendanceRecord.extensionApprovedAt)
                         : "Approved";
@@ -1131,9 +1164,34 @@ export function EmployeeDashboard({ user }: { user: any }) {
                                 <p className="text-[10px] text-muted-foreground truncate">Authorized extra working hours for today&apos;s shift</p>
                               </div>
                             </div>
-                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 shrink-0 flex items-center gap-1">
-                              <i className="fa-solid fa-check text-[9px]" /> +{allocated.toFixed(1)}h Active
-                            </span>
+                            <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+                              {extensionCountdown && (
+                                <span
+                                  className={cn(
+                                    "px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold border shrink-0 flex items-center gap-1.5 transition-all shadow-xs",
+                                    extensionCountdown.isExpired
+                                      ? "bg-rose-500/20 text-rose-600 dark:text-rose-400 border-rose-500/30"
+                                      : extensionCountdown.isUnder10Min
+                                        ? "bg-amber-500/25 text-amber-600 dark:text-amber-400 border-amber-500/40 animate-pulse font-extrabold"
+                                        : "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
+                                  )}
+                                  title={extensionCountdown.isExpired ? "Extension limit reached" : "Live remaining extension time"}
+                                >
+                                  <i className={cn(
+                                    "fa-solid text-[9px]",
+                                    extensionCountdown.isExpired
+                                      ? "fa-triangle-exclamation"
+                                      : extensionCountdown.isUnder10Min
+                                        ? "fa-hourglass-half"
+                                        : "fa-stopwatch"
+                                  )} />
+                                  <span>{extensionCountdown.formatted}</span>
+                                </span>
+                              )}
+                              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 shrink-0 flex items-center gap-1">
+                                <i className="fa-solid fa-check text-[9px]" /> +{allocated.toFixed(1)}h Active
+                              </span>
+                            </div>
                           </div>
 
                           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
@@ -1184,7 +1242,7 @@ export function EmployeeDashboard({ user }: { user: any }) {
                         <div className="flex items-center gap-2 min-w-0">
                           <i className="fa-solid fa-clock-rotate-left text-amber-500 shrink-0" />
                           <span className="text-amber-700 dark:text-amber-300 font-medium truncate">
-                            Extension Request Submitted (+{todayAttendanceRecord?.extensionRequestedHours ? (todayAttendanceRecord.extensionRequestedHours >= 1 ? `${todayAttendanceRecord.extensionRequestedHours.toFixed(1)}h` : `${Math.round(todayAttendanceRecord.extensionRequestedHours * 60)}m`) : "1.0h"}) &amp; Pending Approval
+                            Extension Request Submitted {todayAttendanceRecord?.extensionRequestedHours ? `(+${todayAttendanceRecord.extensionRequestedHours >= 1 ? `${todayAttendanceRecord.extensionRequestedHours.toFixed(1)}h` : `${Math.round(todayAttendanceRecord.extensionRequestedHours * 60)}m`}) ` : ""}&amp; Pending Approval
                           </span>
                         </div>
                         <Badge color="warning" className="text-[10px] shrink-0 font-semibold px-2 py-0.5">
@@ -1192,6 +1250,51 @@ export function EmployeeDashboard({ user }: { user: any }) {
                         </Badge>
                       </div>
                     )}
+
+                    {/* Declined Extension Request Feedback Banner */}
+                    {todayAttendanceRecord?.extensionRejected && !todayAttendanceRecord?.extensionApproved && !todayAttendanceRecord?.extensionRequested && (() => {
+                      const rejector = typeof todayAttendanceRecord.extensionRejectedBy === "object" ? todayAttendanceRecord.extensionRejectedBy : null;
+                      const rejectorName = rejector?.name || "Operations / Admin";
+                      const rejectorRole = rejector?.role || "Admin";
+                      const reason = todayAttendanceRecord.extensionRejectionReason || "Operational policy limits exceeded.";
+
+                      return (
+                        <div className="p-3.5 rounded-xl bg-gradient-to-br from-rose-500/10 via-rose-500/5 to-card border border-rose-500/30 space-y-2 text-xs shadow-xs animate-in fade-in">
+                          <div className="flex items-center justify-between gap-2 pb-1.5 border-b border-rose-500/20">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <div className="w-6 h-6 rounded-lg bg-rose-500/20 text-rose-600 dark:text-rose-400 flex items-center justify-center text-xs border border-rose-500/30 shrink-0">
+                                <i className="fa-solid fa-circle-xmark" />
+                              </div>
+                              <div className="min-w-0">
+                                <span className="text-xs font-bold text-foreground truncate block">Extension Request Declined</span>
+                                <p className="text-[10px] text-muted-foreground truncate">
+                                  Reviewed by {rejectorName} ({rejectorRole})
+                                </p>
+                              </div>
+                            </div>
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-500/30 shrink-0">
+                              Declined
+                            </span>
+                          </div>
+
+                          <div className="p-2 rounded-lg bg-background/80 border border-border/60 text-[11px] text-muted-foreground">
+                            <strong className="text-foreground">Feedback Note:</strong> &ldquo;{reason}&rdquo;
+                          </div>
+
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1">
+                            <span className="text-[10px] text-muted-foreground">
+                              Need more time? You may submit a revised request from Attendance.
+                            </span>
+                            <Link
+                              href="/dashboard/calendar"
+                              className="px-2.5 py-1 rounded-lg bg-rose-500/15 hover:bg-rose-500/25 text-rose-700 dark:text-rose-300 border border-rose-500/30 font-semibold text-[11px] inline-flex items-center gap-1.5 transition-colors shrink-0 min-h-[36px] self-start sm:self-auto"
+                            >
+                              <i className="fa-solid fa-arrow-right text-[10px]" /> Open Calendar
+                            </Link>
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </>
                 );
               })()}

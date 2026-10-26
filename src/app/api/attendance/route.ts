@@ -3,6 +3,7 @@ import { getSession } from "@/lib/session";
 import { connectToDatabase } from "@/lib/db";
 import { Attendance } from "@/models/Attendance";
 import { Tenant } from "@/models/Tenant";
+import { Notification } from "@/models/Notification";
 import { getUserDataScope } from "@/lib/dataScope";
 import mongoose from "mongoose";
 
@@ -33,6 +34,18 @@ function getTodayDateNormalized(): Date {
 const SHIFT_TARGET_HOURS = 8.0;  // Regular hours target (before overtime kicks in)
 const MAX_SHIFT_HOURS     = 10.0; // Hard cap — shift auto-clocks out at 10h
 
+const POPULATE_EXTENSION_APPROVER = {
+  path: "extensionApprovedBy",
+  select: "name email role photoUrl",
+  strictPopulate: false,
+};
+
+const POPULATE_EXTENSION_REJECTOR = {
+  path: "extensionRejectedBy",
+  select: "name email role photoUrl",
+  strictPopulate: false,
+};
+
 /**
  * GET: Returns the current user's today-attendance, shift metadata, and history.
  * Supports ?allUsers=true for Admins/Managers.
@@ -57,7 +70,8 @@ export async function GET(request: Request) {
       tenantId: tenantObjectId,
       date: { $gte: dayStart, $lt: dayEnd },
     })
-      .populate("extensionApprovedBy", "name email role photoUrl")
+      .populate(POPULATE_EXTENSION_APPROVER)
+      .populate(POPULATE_EXTENSION_REJECTOR)
       .sort({ clockIn: -1 }); // prefer the latest if duplicates somehow exist
 
     // Overnight shift support: if no record exists for today, look for an active unclosed shift from the last 24h
@@ -69,7 +83,8 @@ export async function GET(request: Request) {
         date:     { $gte: yesterdayStart, $lt: dayStart },
         clockOut: { $exists: false },
       })
-        .populate("extensionApprovedBy", "name email role photoUrl")
+        .populate(POPULATE_EXTENSION_APPROVER)
+        .populate(POPULATE_EXTENSION_REJECTOR)
         .sort({ clockIn: -1 });
 
       if (unclosedYesterday) {
@@ -92,7 +107,7 @@ export async function GET(request: Request) {
 
       // If shift extension is approved, expand the max shift hours limit
       const effectiveMaxHours = todayAttendance.extensionApproved
-        ? dynamicMaxShiftHours + (Number(todayAttendance.extensionAllocatedHours) || 1.0)
+        ? dynamicMaxShiftHours + (Number(todayAttendance.extensionAllocatedHours) || 0)
         : dynamicMaxShiftHours;
 
       if (totalWorkedHours >= effectiveMaxHours) {
@@ -135,7 +150,8 @@ export async function GET(request: Request) {
 
     let historyQuery = Attendance.find(historyFilter)
       .populate("userId", "name email role department photoUrl shiftName shiftTime employmentType")
-      .populate("extensionApprovedBy", "name email role photoUrl")
+      .populate(POPULATE_EXTENSION_APPROVER)
+      .populate(POPULATE_EXTENSION_REJECTOR)
       .sort({ date: -1, clockIn: -1 });
 
     if (limitParam !== "all") {
@@ -177,8 +193,8 @@ export async function POST(request: Request) {
     const body = await request.json().catch(() => ({}));
     const { action, location, targetAttendanceId, targetUserId, reason } = body;
 
-    if (!action || !["in", "out", "resume", "request_extension", "approve_extension"].includes(action)) {
-      return NextResponse.json({ error: "Action must be 'in', 'out', 'resume', 'request_extension', or 'approve_extension'" }, { status: 400 });
+    if (!action || !["in", "out", "resume", "request_extension", "approve_extension", "reject_extension", "bulk_approve_extensions"].includes(action)) {
+      return NextResponse.json({ error: "Action must be 'in', 'out', 'resume', 'request_extension', 'approve_extension', 'reject_extension', or 'bulk_approve_extensions'" }, { status: 400 });
     }
 
     await connectToDatabase();
@@ -202,7 +218,9 @@ export async function POST(request: Request) {
         userId:   userObjectId,
         tenantId: tenantObjectId,
         date:     { $gte: dayStart, $lt: dayEnd },
-      }).populate("extensionApprovedBy", "name email role photoUrl");
+      })
+        .populate(POPULATE_EXTENSION_APPROVER)
+        .populate(POPULATE_EXTENSION_REJECTOR);
 
       // Check for unclosed active shift from yesterday (<24h)
       if (!existing) {
@@ -212,7 +230,9 @@ export async function POST(request: Request) {
           tenantId: tenantObjectId,
           date:     { $gte: yesterdayStart, $lt: dayStart },
           clockOut: { $exists: false },
-        }).populate("extensionApprovedBy", "name email role photoUrl");
+        })
+          .populate(POPULATE_EXTENSION_APPROVER)
+          .populate(POPULATE_EXTENSION_REJECTOR);
         if (unclosedYesterday) {
           existing = unclosedYesterday;
         }
@@ -227,16 +247,16 @@ export async function POST(request: Request) {
         const tenant = await Tenant.findById(tenantObjectId).lean();
         const dynamicMaxShiftHours = Number(tenant?.maxShiftHours) || MAX_SHIFT_HOURS;
         const dataScope = await getUserDataScope(session);
-        const isElevatedStaff = session.role === "Admin" || session.role === "OPS" || session.role === "HR" || dataScope.canViewFeature("approveAdditionalShiftTime");
+        const isElevatedStaff = session.role === "Admin" || session.role === "OPS" || session.role === "Manager" || session.role === "HR" || dataScope.canViewFeature("approveAdditionalShiftTime");
         const workedHoursSoFar = (existing.regularHours || 0) + (existing.overtimeHours || 0);
 
         const effectiveMaxHours = existing.extensionApproved
-          ? dynamicMaxShiftHours + (Number(existing.extensionAllocatedHours) || 1.0)
+          ? dynamicMaxShiftHours + (Number(existing.extensionAllocatedHours) || 0)
           : dynamicMaxShiftHours;
 
         if (workedHoursSoFar >= effectiveMaxHours && !isElevatedStaff && !existing.extensionApproved) {
           return NextResponse.json({
-            error: `Maximum shift limit reached (${dynamicMaxShiftHours}h). You cannot resume without Admin, OPS, or HR approval. Please raise an additional shift time request.`,
+            error: `Maximum shift limit reached (${dynamicMaxShiftHours}h). You cannot resume without Admin, OPS, Manager, or HR approval. Please raise an additional shift time request.`,
             maxLimitReached: true
           }, { status: 403 });
         }
@@ -252,7 +272,8 @@ export async function POST(request: Request) {
           existing.clockInLocation = sanitizedLocation;
         }
         await existing.save();
-        await existing.populate("extensionApprovedBy", "name email role photoUrl");
+        await existing.populate(POPULATE_EXTENSION_APPROVER);
+        await existing.populate(POPULATE_EXTENSION_REJECTOR);
         return NextResponse.json({ success: true, attendance: existing, message: "Shift resumed and merged with today's record!" });
       }
 
@@ -277,7 +298,8 @@ export async function POST(request: Request) {
         tenantId: tenantObjectId,
         date:     { $gte: dayStart, $lt: dayEnd },
       })
-        .populate("extensionApprovedBy", "name email role photoUrl")
+        .populate(POPULATE_EXTENSION_APPROVER)
+        .populate(POPULATE_EXTENSION_REJECTOR)
         .sort({ clockIn: -1 });
 
       // Overnight shift support: If no active record for today, look for an unclosed active shift from yesterday (<24h)
@@ -289,7 +311,8 @@ export async function POST(request: Request) {
           date:     { $gte: yesterdayStart, $lt: dayStart },
           clockOut: { $exists: false },
         })
-          .populate("extensionApprovedBy", "name email role photoUrl")
+          .populate(POPULATE_EXTENSION_APPROVER)
+          .populate(POPULATE_EXTENSION_REJECTOR)
           .sort({ clockIn: -1 });
 
         if (unclosedYesterday) {
@@ -328,7 +351,7 @@ export async function POST(request: Request) {
 
       // Allow extended hours if shift extension was approved
       const effectiveMaxHours = record.extensionApproved
-        ? dynamicMaxShiftHours + (Number(record.extensionAllocatedHours) || 1.0)
+        ? dynamicMaxShiftHours + (Number(record.extensionAllocatedHours) || 0)
         : dynamicMaxShiftHours;
 
       // Hard sanity guard: total worked hours on a single day can NEVER exceed elapsed time since clock-in
@@ -341,7 +364,8 @@ export async function POST(request: Request) {
       record.regularHours  = Number(Math.min(safeTotal, dynamicTargetHours).toFixed(2));
       record.overtimeHours = Number(Math.max(0, safeTotal - dynamicTargetHours).toFixed(2));
       await record.save();
-      await record.populate("extensionApprovedBy", "name email role photoUrl");
+      await record.populate(POPULATE_EXTENSION_APPROVER);
+      await record.populate(POPULATE_EXTENSION_REJECTOR);
 
       return NextResponse.json({ success: true, attendance: record });
 
@@ -352,7 +376,8 @@ export async function POST(request: Request) {
         tenantId: tenantObjectId,
         date:     { $gte: dayStart, $lt: dayEnd },
       })
-        .populate("extensionApprovedBy", "name email role photoUrl")
+        .populate(POPULATE_EXTENSION_APPROVER)
+        .populate(POPULATE_EXTENSION_REJECTOR)
         .sort({ clockIn: -1 });
 
       if (!record) {
@@ -362,7 +387,8 @@ export async function POST(request: Request) {
           tenantId: tenantObjectId,
           date:     { $gte: yesterdayStart, $lt: dayStart },
         })
-          .populate("extensionApprovedBy", "name email role photoUrl")
+          .populate(POPULATE_EXTENSION_APPROVER)
+          .populate(POPULATE_EXTENSION_REJECTOR)
           .sort({ clockIn: -1 });
         if (unclosedYesterday) record = unclosedYesterday;
       }
@@ -377,16 +403,16 @@ export async function POST(request: Request) {
       const tenant = await Tenant.findById(tenantObjectId).lean();
       const dynamicMaxShiftHours = Number(tenant?.maxShiftHours) || MAX_SHIFT_HOURS;
       const dataScope = await getUserDataScope(session);
-      const isElevatedStaff = session.role === "Admin" || session.role === "OPS" || session.role === "HR" || dataScope.canViewFeature("approveAdditionalShiftTime");
+      const isElevatedStaff = session.role === "Admin" || session.role === "OPS" || session.role === "HR" || session.role === "Manager" || dataScope.canViewFeature("approveAdditionalShiftTime");
       const workedHoursSoFar = (record.regularHours || 0) + (record.overtimeHours || 0);
 
       const effectiveMaxHours = record.extensionApproved
-        ? dynamicMaxShiftHours + (Number(record.extensionAllocatedHours) || 2.0)
+        ? dynamicMaxShiftHours + (Number(record.extensionAllocatedHours) || 0)
         : dynamicMaxShiftHours;
 
       if (workedHoursSoFar >= effectiveMaxHours && !isElevatedStaff && !record.extensionApproved) {
         return NextResponse.json({
-          error: `Maximum shift limit reached (${dynamicMaxShiftHours}h). You cannot resume without Admin, OPS, or HR approval. Please raise an additional shift time request.`,
+          error: `Maximum shift limit reached (${dynamicMaxShiftHours}h). You cannot resume without Admin, OPS, HR, or Manager approval. Please raise an additional shift time request.`,
           maxLimitReached: true
         }, { status: 403 });
       }
@@ -401,15 +427,16 @@ export async function POST(request: Request) {
       record.lastResumedAt = now;
       record.clockOut      = undefined;
       await record.save();
-      await record.populate("extensionApprovedBy", "name email role photoUrl");
+      await record.populate(POPULATE_EXTENSION_APPROVER);
+      await record.populate(POPULATE_EXTENSION_REJECTOR);
 
       return NextResponse.json({ success: true, attendance: record, message: "Shift resumed successfully!" });
 
     } else if (action === "approve_extension") {
       const dataScope = await getUserDataScope(session);
-      const isElevatedStaff = session.role === "Admin" || session.role === "OPS" || session.role === "HR" || dataScope.canViewFeature("approveAdditionalShiftTime");
+      const isElevatedStaff = session.role === "Admin" || session.role === "OPS" || session.role === "HR" || session.role === "Manager" || dataScope.canViewFeature("approveAdditionalShiftTime");
       if (!isElevatedStaff) {
-        return NextResponse.json({ error: "Forbidden: Only Admin, OPS, or HR can approve shift time extensions" }, { status: 403 });
+        return NextResponse.json({ error: "Forbidden: Only Admin, OPS, HR, or Managers can approve shift time extensions" }, { status: 403 });
       }
 
       const filter: Record<string, unknown> = { tenantId: tenantObjectId };
@@ -439,13 +466,150 @@ export async function POST(request: Request) {
       recordToApprove.extensionApprovedAt = now;
       recordToApprove.extensionAllocatedHours = allocatedHours;
       recordToApprove.extensionRequested = false;
+      recordToApprove.extensionRejected = false;
+      recordToApprove.extensionRejectionReason = "";
       await recordToApprove.save();
-      await recordToApprove.populate("extensionApprovedBy", "name email role photoUrl");
+      await recordToApprove.populate(POPULATE_EXTENSION_APPROVER);
+      await recordToApprove.populate(POPULATE_EXTENSION_REJECTOR);
+
+      // Send closed-loop in-app notification to employee
+      try {
+        await Notification.create({
+          recipientId: recordToApprove.userId,
+          tenantId: tenantObjectId,
+          title: "✅ Shift Extension Approved",
+          message: `Your manager approved a shift extension (+${allocatedHours}h). You can now resume your shift.`,
+          type: "hr",
+          linkUrl: "/dashboard/calendar",
+        });
+      } catch (notifErr) {
+        console.error("Failed to send extension approval notification:", notifErr);
+      }
 
       return NextResponse.json({
         success: true,
         message: `Shift extension (+${allocatedHours}h) approved! User can now resume their shift.`,
         attendance: recordToApprove,
+      });
+
+    } else if (action === "reject_extension") {
+      const dataScope = await getUserDataScope(session);
+      const isElevatedStaff = session.role === "Admin" || session.role === "OPS" || session.role === "HR" || session.role === "Manager" || dataScope.canViewFeature("approveAdditionalShiftTime");
+      if (!isElevatedStaff) {
+        return NextResponse.json({ error: "Forbidden: Only Admin, OPS, HR, or Managers can decline shift time extensions" }, { status: 403 });
+      }
+
+      const filter: Record<string, unknown> = { tenantId: tenantObjectId };
+      if (targetAttendanceId) {
+        filter._id = new mongoose.Types.ObjectId(targetAttendanceId);
+      } else if (targetUserId) {
+        filter.userId = new mongoose.Types.ObjectId(targetUserId);
+        filter.date = { $gte: dayStart, $lt: dayEnd };
+      } else {
+        return NextResponse.json({ error: "targetAttendanceId or targetUserId is required" }, { status: 400 });
+      }
+
+      const recordToReject = await Attendance.findOne(filter);
+      if (!recordToReject) {
+        return NextResponse.json({ error: "Attendance record not found" }, { status: 404 });
+      }
+
+      const rejectionReason = String(body.reason || "").trim() || "Shift extension request declined by manager.";
+
+      recordToReject.extensionRequested = false;
+      recordToReject.extensionRejected = true;
+      recordToReject.extensionRejectedBy = userObjectId;
+      recordToReject.extensionRejectedAt = now;
+      recordToReject.extensionRejectionReason = rejectionReason;
+      if (!recordToReject.extensionApproved) {
+        recordToReject.extensionApproved = false;
+      }
+      await recordToReject.save();
+      await recordToReject.populate(POPULATE_EXTENSION_APPROVER);
+      await recordToReject.populate(POPULATE_EXTENSION_REJECTOR);
+
+      // Send closed-loop notification to employee
+      try {
+        await Notification.create({
+          recipientId: recordToReject.userId,
+          tenantId: tenantObjectId,
+          title: "❌ Shift Extension Declined",
+          message: `Your shift extension request was declined. Reason: "${rejectionReason}"`,
+          type: "hr",
+          linkUrl: "/dashboard/calendar",
+        });
+      } catch (notifErr) {
+        console.error("Failed to send extension decline notification:", notifErr);
+      }
+
+      return NextResponse.json({
+        success: true,
+        message: "Shift extension request has been declined.",
+        attendance: recordToReject,
+      });
+
+    } else if (action === "bulk_approve_extensions") {
+      const dataScope = await getUserDataScope(session);
+      const isElevatedStaff = session.role === "Admin" || session.role === "OPS" || session.role === "HR" || session.role === "Manager" || dataScope.canViewFeature("approveAdditionalShiftTime");
+      if (!isElevatedStaff) {
+        return NextResponse.json({ error: "Forbidden: Only Admin, OPS, HR, or Managers can approve shift extensions" }, { status: 403 });
+      }
+
+      const { attendanceIds } = body;
+      if (!Array.isArray(attendanceIds) || attendanceIds.length === 0) {
+        return NextResponse.json({ error: "attendanceIds array is required" }, { status: 400 });
+      }
+
+      const validObjectIds = attendanceIds
+        .filter((id: string) => mongoose.Types.ObjectId.isValid(id))
+        .map((id: string) => new mongoose.Types.ObjectId(id));
+
+      const recordsToApprove = await Attendance.find({
+        _id: { $in: validObjectIds },
+        tenantId: tenantObjectId,
+        extensionRequested: true,
+      });
+
+      let approvedCount = 0;
+      const notificationsToCreate = [];
+
+      for (const rec of recordsToApprove) {
+        const allocated = rec.extensionRequestedHours && rec.extensionRequestedHours > 0
+          ? Number(rec.extensionRequestedHours)
+          : (Number(body.allocatedHours) || 1.0);
+
+        rec.extensionApproved = true;
+        rec.extensionApprovedBy = userObjectId;
+        rec.extensionApprovedAt = now;
+        rec.extensionAllocatedHours = allocated;
+        rec.extensionRequested = false;
+        rec.extensionRejected = false;
+        rec.extensionRejectionReason = "";
+        await rec.save();
+        approvedCount++;
+
+        notificationsToCreate.push({
+          recipientId: rec.userId,
+          tenantId: tenantObjectId,
+          title: "✅ Shift Extension Approved",
+          message: `Your manager approved a shift extension (+${allocated}h). You can now resume your shift.`,
+          type: "hr",
+          linkUrl: "/dashboard/calendar",
+        });
+      }
+
+      if (notificationsToCreate.length > 0) {
+        try {
+          await Notification.insertMany(notificationsToCreate);
+        } catch (notifErr) {
+          console.error("Failed to send bulk extension notifications:", notifErr);
+        }
+      }
+
+      return NextResponse.json({
+        success: true,
+        message: `Successfully approved ${approvedCount} shift extension request(s).`,
+        count: approvedCount,
       });
 
     } else if (action === "request_extension") {
@@ -474,6 +638,8 @@ export async function POST(request: Request) {
       record.extensionRequested = true;
       record.extensionRequestedHours = requestedHours;
       record.extensionReason = String(reason || "").trim();
+      record.extensionRejected = false;
+      record.extensionRejectionReason = "";
       await record.save();
 
       return NextResponse.json({

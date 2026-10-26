@@ -31,10 +31,10 @@ import { AccessRestricted } from "@/components/ui/AccessRestricted";
 function CalendarPageContent() {
   const { user: currentUser, loading: authLoading } = useAuth();
   const { can, canAccessModule, isAdmin, isOPS, isHR, loading: permLoading } = usePermissions();
-  const [activeTab, setActiveTab] = useTabPersistence<"calendar" | "sprints" | "timesheets" | "attendance" | "availability" | "holidays" | "celebrations" | "extensions">(
+  const [activeTab, setActiveTab] = useTabPersistence<"calendar" | "sprints" | "timesheets" | "attendance" | "availability" | "holidays" | "celebrations">(
     "calendar_active_tab",
     "calendar",
-    ["calendar", "sprints", "timesheets", "attendance", "availability", "holidays", "celebrations", "extensions"]
+    ["calendar", "sprints", "timesheets", "attendance", "availability", "holidays", "celebrations"]
   );
   const [selectedCelebrantUserId, setSelectedCelebrantUserId] = useState<string | null>(null);
 
@@ -52,7 +52,17 @@ function CalendarPageContent() {
 
   useEffect(() => {
     setMounted(true);
-  }, []);
+    if (typeof window !== "undefined") {
+      const sp = new URLSearchParams(window.location.search);
+      if (sp.get("tab") === "extensions") {
+        setActiveTab("attendance");
+        setTimeout(() => {
+          const el = document.getElementById("shift-extensions-desk-section");
+          el?.scrollIntoView({ behavior: "smooth" });
+        }, 350);
+      }
+    }
+  }, [setActiveTab]);
 
   // Calendar States
   const [events, setEvents] = useState<any[]>([]);
@@ -583,7 +593,7 @@ function CalendarPageContent() {
           }
           await fetchTimesheets(projs, selectedTimesheetUser);
         }
-        else if (activeTab === "attendance" || activeTab === "extensions") {
+        else if (activeTab === "attendance") {
           await fetchAttendance(true);
           if (isAdmin || isOPS || isHR || can("viewLoginHoursSummary")) {
             await fetchLoginHoursSummary();
@@ -1734,25 +1744,6 @@ function CalendarPageContent() {
         >
           <i className="fa-solid fa-cake-candles text-sm text-amber-500" /> Celebrations & Wishes
         </button>
-
-        {(isAdmin || isOPS || isHR || can("viewAllShiftExtensions") || can("approveAdditionalShiftTime")) && (
-          <button
-            onClick={() => setActiveTab("extensions")}
-            className={cn(
-              "px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap",
-              activeTab === "extensions"
-                ? "border-primary text-primary bg-primary/10 rounded-t-md font-semibold -mb-px"
-                : "border-transparent text-muted-foreground hover:text-foreground"
-            )}
-          >
-            <i className="fa-solid fa-clock-rotate-left text-sm text-indigo-400" /> Shift Extensions
-            {attendanceHistory.filter((log: any) => log.extensionRequested && !log.extensionApproved).length > 0 && (
-              <span className="px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-amber-500 text-white animate-pulse">
-                {attendanceHistory.filter((log: any) => log.extensionRequested && !log.extensionApproved).length}
-              </span>
-            )}
-          </button>
-        )}
       </div>
 
       {/* Tab 1: Calendar */}
@@ -3181,7 +3172,7 @@ function CalendarPageContent() {
                     const approver = typeof attendanceToday.extensionApprovedBy === "object" ? attendanceToday.extensionApprovedBy : null;
                     const approverName = approver?.name || "Operations / Admin";
                     const approverRole = approver?.role || "Admin";
-                    const allocatedHours = attendanceToday.extensionAllocatedHours || 2.0;
+                    const allocatedHours = Number(attendanceToday.extensionAllocatedHours) || 0;
                     const timeStr = attendanceToday.extensionApprovedAt
                       ? formatISTTime(attendanceToday.extensionApprovedAt)
                       : "";
@@ -3194,7 +3185,7 @@ function CalendarPageContent() {
                           </div>
                           <div className="min-w-0">
                             <div className="font-bold flex items-center gap-1.5 flex-wrap">
-                              <span>Extra Time Allocated (+{allocatedHours.toFixed(1)} hrs)</span>
+                              <span>Extra Time Allocated{allocatedHours > 0 ? ` (+${allocatedHours.toFixed(1)} hrs)` : ""}</span>
                               <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30">
                                 Approved by {approverName} ({approverRole})
                               </span>
@@ -3207,6 +3198,50 @@ function CalendarPageContent() {
                         <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-emerald-500/20 border border-emerald-500/30 shrink-0">
                           Authorized
                         </span>
+                      </div>
+                    );
+                  })()}
+
+                  {/* Declined Shift Extension Feedback Banner for Employee */}
+                  {Boolean(attendanceToday?.extensionRejected && !attendanceToday?.extensionApproved && !attendanceToday?.extensionRequested) && (() => {
+                    const rejector = typeof attendanceToday.extensionRejectedBy === "object" ? attendanceToday.extensionRejectedBy : null;
+                    const rejectorName = rejector?.name || "Operations / Admin";
+                    const rejectorRole = rejector?.role || "Reviewer";
+                    const timeStr = attendanceToday.extensionRejectedAt
+                      ? formatISTTime(attendanceToday.extensionRejectedAt)
+                      : "";
+
+                    return (
+                      <div className="w-full p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/25 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-rose-700 dark:text-rose-300 shadow-2xs animate-in fade-in">
+                        <div className="flex items-start gap-2.5 min-w-0">
+                          <div className="w-7 h-7 rounded-lg bg-rose-500/20 text-rose-600 dark:text-rose-400 flex items-center justify-center text-xs shrink-0 border border-rose-500/30 mt-0.5">
+                            <i className="fa-solid fa-circle-xmark" />
+                          </div>
+                          <div className="min-w-0">
+                            <div className="font-bold flex items-center gap-1.5 flex-wrap">
+                              <span>Extension Request Declined</span>
+                              <span className="text-[10px] px-1.5 py-0.2 rounded bg-rose-500/20 text-rose-700 dark:text-rose-300 border border-rose-500/30">
+                                Reviewed by {rejectorName} ({rejectorRole})
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-muted-foreground mt-0.5 italic">
+                              &ldquo;{attendanceToday.extensionRejectionReason || "Operational workload concluded for today."}&rdquo;
+                            </p>
+                            {timeStr && (
+                              <span className="text-[10px] text-muted-foreground/80 block mt-0.5">
+                                Reviewed {timeStr}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setShowAdditionalTimeModal(true)}
+                          className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 text-rose-800 dark:text-rose-200 shrink-0 cursor-pointer transition-colors flex items-center gap-1.5 min-h-[38px]"
+                        >
+                          <i className="fa-solid fa-rotate-right" />
+                          <span>Submit Revised Request</span>
+                        </button>
                       </div>
                     );
                   })()}
@@ -3323,14 +3358,28 @@ function CalendarPageContent() {
                                   </p>
                                 </div>
                                 {!additionalTimeRequested ? (
-                                  <Button
-                                    color="primary"
-                                    size="sm"
-                                    onClick={() => setShowAdditionalTimeModal(true)}
-                                    className="gap-2 font-semibold text-xs cursor-pointer shadow-xs"
-                                  >
-                                    <i className="fa-solid fa-plus-circle text-xs" /> Raise Request for Additional Shift Time
-                                  </Button>
+                                  <div className="flex flex-col items-center gap-2 w-full max-w-sm">
+                                    {attendanceToday?.extensionRejected && !attendanceToday?.extensionApproved && (
+                                      <div className="w-full text-left p-2.5 rounded-lg bg-rose-500/10 border border-rose-500/25 text-[11px] text-rose-700 dark:text-rose-300">
+                                        <div className="flex items-center gap-1.5 font-semibold text-rose-800 dark:text-rose-200">
+                                          <i className="fa-solid fa-circle-xmark text-xs" />
+                                          <span>Prior Request Declined</span>
+                                        </div>
+                                        <p className="mt-0.5 text-muted-foreground italic">
+                                          &ldquo;{attendanceToday.extensionRejectionReason || "Operational limits reached."}&rdquo;
+                                        </p>
+                                      </div>
+                                    )}
+                                    <Button
+                                      color="primary"
+                                      size="sm"
+                                      onClick={() => setShowAdditionalTimeModal(true)}
+                                      className="gap-2 font-semibold text-xs cursor-pointer shadow-xs w-full justify-center min-h-[38px]"
+                                    >
+                                      <i className={cn("fa-solid text-xs", attendanceToday?.extensionRejected ? "fa-rotate-right" : "fa-plus-circle")} />
+                                      {attendanceToday?.extensionRejected ? "Submit Revised Extension Request" : "Raise Request for Additional Shift Time"}
+                                    </Button>
+                                  </div>
                                 ) : (
                                   <div className="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400 font-medium bg-amber-500/10 border border-amber-500/20 px-3 py-1.5 rounded-lg">
                                     <i className="fa-solid fa-clock-rotate-left text-xs" />
@@ -3495,12 +3544,26 @@ function CalendarPageContent() {
                               </span>
                             </div>
                             {!additionalTimeRequested ? (
-                              <button
-                                onClick={() => setShowAdditionalTimeModal(true)}
-                                className="mt-0.5 w-full text-center py-1.5 px-3 rounded-lg border border-current/30 bg-current/10 hover:bg-current/20 font-semibold transition-colors cursor-pointer text-[11px] flex items-center justify-center gap-1.5"
-                              >
-                                <i className="fa-solid fa-plus-circle" /> Raise Request for Additional Shift Time
-                              </button>
+                              <div className="space-y-1.5 w-full mt-0.5">
+                                {attendanceToday?.extensionRejected && !attendanceToday?.extensionApproved && (
+                                  <div className="text-left p-2 rounded-lg bg-rose-500/10 border border-rose-500/25 text-[10px] text-rose-700 dark:text-rose-300">
+                                    <span className="font-semibold flex items-center gap-1">
+                                      <i className="fa-solid fa-circle-xmark" /> Declined:
+                                    </span>
+                                    <span className="italic opacity-90 truncate block mt-0.5">
+                                      &ldquo;{attendanceToday.extensionRejectionReason || "Operational limits reached."}&rdquo;
+                                    </span>
+                                  </div>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => setShowAdditionalTimeModal(true)}
+                                  className="w-full text-center py-1.5 px-3 rounded-lg border border-current/30 bg-current/10 hover:bg-current/20 font-semibold transition-colors cursor-pointer text-[11px] flex items-center justify-center gap-1.5 min-h-[38px]"
+                                >
+                                  <i className={cn("fa-solid", attendanceToday?.extensionRejected ? "fa-rotate-right" : "fa-plus-circle")} />
+                                  <span>{attendanceToday?.extensionRejected ? "Submit Revised Extension Request" : "Raise Request for Additional Shift Time"}</span>
+                                </button>
+                              </div>
                             ) : (
                               <div className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
                                 <i className="fa-solid fa-circle-check" />
@@ -3550,11 +3613,14 @@ function CalendarPageContent() {
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => setActiveTab("extensions")}
+                    onClick={() => {
+                      const el = document.getElementById("shift-extensions-desk-section");
+                      el?.scrollIntoView({ behavior: "smooth" });
+                    }}
                     className="gap-2 text-xs font-semibold border-amber-500/40 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 cursor-pointer shrink-0"
                   >
-                    <i className="fa-solid fa-up-right-from-square text-xs" />
-                    Open Shift Extensions Screen
+                    <i className="fa-solid fa-arrow-down text-xs" />
+                    Jump to Shift Extensions Desk
                   </Button>
                 </div>
 
@@ -4110,13 +4176,13 @@ function CalendarPageContent() {
                                       {log.extensionApproved && (() => {
                                         const approver = typeof log.extensionApprovedBy === "object" ? log.extensionApprovedBy : null;
                                         const approverName = approver?.name || "Admin/HR";
-                                        const allocated = log.extensionAllocatedHours || 2.0;
+                                        const allocated = Number(log.extensionAllocatedHours) || 0;
                                         return (
                                           <span
                                             className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 whitespace-nowrap cursor-help shadow-2xs"
-                                            title={`Extension of +${allocated}h approved by ${approverName}`}
+                                            title={allocated > 0 ? `Extension of +${allocated.toFixed(1)}h approved by ${approverName}` : `Extension approved by ${approverName}`}
                                           >
-                                            <i className="fa-solid fa-shield-check text-[9px]" /> +{allocated}h Ext.
+                                            <i className="fa-solid fa-shield-check text-[9px]" /> {allocated > 0 ? `+${allocated.toFixed(1)}h Ext.` : "Ext. Approved"}
                                           </span>
                                         );
                                       })()}
@@ -4220,7 +4286,7 @@ function CalendarPageContent() {
                                         >
                                           <i className="fa-solid fa-clock-rotate-left text-[10px]" />
                                           <span className="hidden sm:inline">
-                                            Approve (+{log.extensionRequestedHours ? (log.extensionRequestedHours >= 1 ? `${log.extensionRequestedHours.toFixed(1)}h` : `${Math.round(log.extensionRequestedHours * 60)}m`) : "1.0h"})
+                                            {log.extensionRequestedHours ? `Approve (+${log.extensionRequestedHours >= 1 ? `${log.extensionRequestedHours.toFixed(1)}h` : `${Math.round(log.extensionRequestedHours * 60)}m`})` : "Approve Extension"}
                                           </span>
                                         </Button>
                                       )}
@@ -4313,6 +4379,22 @@ function CalendarPageContent() {
               </Card>
             );
           })()}
+
+          {/* Dedicated Shift Extensions Desk — Inside Shift Clock directly after Shift Attendance Logs & History */}
+          {(isAdmin || isOPS || isHR || can("viewAllShiftExtensions") || can("approveAdditionalShiftTime")) && (
+            <div id="shift-extensions-desk-section" className="scroll-mt-6">
+              <ShiftExtensionsDesk
+                attendanceHistory={attendanceHistory}
+                onRefresh={() => fetchAttendance(true)}
+                onToast={showToast}
+                canApprove={Boolean(isAdmin || isOPS || isHR || can("approveAdditionalShiftTime"))}
+                canExport={Boolean(isAdmin || isOPS || isHR || can("exportShiftExtensions"))}
+                currentUserId={currentUser?._id}
+                currentUserRole={currentUser?.role}
+                currentUserDepartment={currentUser?.department}
+              />
+            </div>
+          )}
 
           {/* ─── Login & Hours Summary (Admin/OPS/HR) ─── */}
           {(isAdmin || isOPS || isHR || can("viewLoginHoursSummary")) && (
@@ -4692,18 +4774,7 @@ function CalendarPageContent() {
         />
       )}
 
-      {/* Tab 8: Dedicated Shift Extensions Desk Screen */}
-      {activeTab === "extensions" && (
-        <ShiftExtensionsDesk
-          attendanceHistory={attendanceHistory}
-          onRefresh={() => fetchAttendance(true)}
-          onToast={showToast}
-          canApprove={Boolean(isAdmin || isOPS || isHR || can("approveAdditionalShiftTime"))}
-          canExport={Boolean(isAdmin || isOPS || isHR || can("exportShiftExtensions"))}
-          currentUserId={currentUser?._id}
-          onBackToClock={() => setActiveTab("attendance")}
-        />
-      )}
+
 
       {/* Schedule Event Modal */}
       {showEventModal && (
@@ -4970,15 +5041,17 @@ function CalendarPageContent() {
       {/* Additional Shift Time Request Modal */}
       {showAdditionalTimeModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in" onClick={() => setShowAdditionalTimeModal(false)}>
-          <div className="w-full max-w-md bg-card border border-border rounded-xl shadow-2xl animate-in zoom-in-95 overflow-hidden" onClick={(e) => e.stopPropagation()}>
+          <div className="w-full max-w-md bg-card border border-border rounded-xl shadow-2xl animate-in zoom-in-95 overflow-hidden max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
             {/* Header */}
-            <div className="px-5 py-4 border-b border-border bg-amber-500/5 flex items-center justify-between">
+            <div className="px-5 py-4 border-b border-border bg-amber-500/5 flex items-center justify-between shrink-0">
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-xl bg-amber-500/15 text-amber-500 flex items-center justify-center text-base">
                   <i className="fa-solid fa-clock-rotate-left" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-foreground">Request Additional Shift Time</h3>
+                  <h3 className="text-sm font-bold text-foreground">
+                    {attendanceToday?.extensionRejected ? "Submit Revised Extension Request" : "Request Additional Shift Time"}
+                  </h3>
                   <p className="text-[11px] text-muted-foreground">Submit for Admin / OPS / HR approval</p>
                 </div>
               </div>
@@ -4988,7 +5061,24 @@ function CalendarPageContent() {
             </div>
 
             {/* Body */}
-            <div className="px-5 py-4 space-y-4">
+            <div className="px-5 py-4 space-y-4 overflow-y-auto overscroll-contain">
+              {/* Prior Decline Alert if employee is submitting a revised request */}
+              {Boolean(attendanceToday?.extensionRejected && !attendanceToday?.extensionApproved && !additionalTimeRequested) && (
+                <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/25 text-xs text-rose-700 dark:text-rose-300 space-y-1 animate-in fade-in">
+                  <div className="font-semibold flex items-center gap-1.5">
+                    <i className="fa-solid fa-circle-exclamation text-rose-600 dark:text-rose-400" />
+                    <span>Previous Extension Request Declined</span>
+                  </div>
+                  {attendanceToday.extensionRejectionReason && (
+                    <p className="text-[11px] text-muted-foreground italic bg-background/50 p-2 rounded border border-rose-500/15">
+                      &ldquo;{attendanceToday.extensionRejectionReason}&rdquo;
+                    </p>
+                  )}
+                  <p className="text-[10px] text-muted-foreground">
+                    Please specify additional details below to help reviewers reconsider your revised extension request.
+                  </p>
+                </div>
+              )}
               {/* Current worked hours info */}
               <div className="flex items-center justify-between p-3 rounded-lg bg-muted/40 border border-border/60 text-xs">
                 <div className="flex items-center gap-2 text-muted-foreground">
@@ -5070,7 +5160,7 @@ function CalendarPageContent() {
             </div>
 
             {/* Footer */}
-            <div className="px-5 py-4 border-t border-border flex items-center justify-end gap-2">
+            <div className="px-5 py-4 border-t border-border flex items-center justify-end gap-2 shrink-0">
               <Button variant="outline" size="sm" onClick={() => setShowAdditionalTimeModal(false)} className="cursor-pointer">
                 Cancel
               </Button>
@@ -5338,7 +5428,7 @@ function CalendarPageContent() {
                           <i className="fa-solid fa-clock-rotate-left" /> Shift Extension Requested
                         </span>
                         <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30">
-                          +{selectedAttendanceLog.extensionRequestedHours ? (selectedAttendanceLog.extensionRequestedHours >= 1 ? `${selectedAttendanceLog.extensionRequestedHours.toFixed(1)}h` : `${Math.round(selectedAttendanceLog.extensionRequestedHours * 60)}m`) : "1.0h"} Requested
+                          {selectedAttendanceLog.extensionRequestedHours ? `+${selectedAttendanceLog.extensionRequestedHours >= 1 ? `${selectedAttendanceLog.extensionRequestedHours.toFixed(1)}h` : `${Math.round(selectedAttendanceLog.extensionRequestedHours * 60)}m`} Requested` : "Extension Requested"}
                         </span>
                       </div>
                       {selectedAttendanceLog.extensionReason ? (
@@ -5356,7 +5446,7 @@ function CalendarPageContent() {
                     const approver = typeof selectedAttendanceLog.extensionApprovedBy === "object" ? selectedAttendanceLog.extensionApprovedBy : null;
                     const approverName = approver?.name || "Operations / Admin";
                     const approverRole = approver?.role || "Admin";
-                    const allocated = selectedAttendanceLog.extensionAllocatedHours || 2.0;
+                    const allocated = Number(selectedAttendanceLog.extensionAllocatedHours) || 0;
                     const approvedAtStr = selectedAttendanceLog.extensionApprovedAt
                       ? formatISTDate(selectedAttendanceLog.extensionApprovedAt) + " " + formatISTTime(selectedAttendanceLog.extensionApprovedAt)
                       : "Approved";
@@ -5392,7 +5482,7 @@ function CalendarPageContent() {
 
                           <div className="p-2.5 rounded-lg bg-background/80 border border-border/60">
                             <span className="text-[10px] uppercase font-bold text-muted-foreground block mb-0.5">Extra Time Granted</span>
-                            <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400 text-sm">+{allocated.toFixed(1)} hrs</span>
+                            <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400 text-sm">{allocated > 0 ? `+${allocated.toFixed(1)} hrs` : "Authorized"}</span>
                             <span className="text-[10px] text-muted-foreground block mt-0.5">Shift cap extended</span>
                           </div>
 
@@ -5556,7 +5646,7 @@ function CalendarPageContent() {
                 <div className="flex items-center gap-2 pt-1 text-[11px]">
                   <span className="text-muted-foreground">Requested Duration:</span>
                   <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400 px-2 py-0.5 rounded-md bg-emerald-500/10 border border-emerald-500/20">
-                    +{approvalModalReq.extensionRequestedHours ? (approvalModalReq.extensionRequestedHours >= 1 ? `${approvalModalReq.extensionRequestedHours.toFixed(1)}h` : `${Math.round(approvalModalReq.extensionRequestedHours * 60)}m`) : "1.0h"}
+                    {approvalModalReq.extensionRequestedHours ? `+${approvalModalReq.extensionRequestedHours >= 1 ? `${approvalModalReq.extensionRequestedHours.toFixed(1)}h` : `${Math.round(approvalModalReq.extensionRequestedHours * 60)}m`}` : "Unspecified"}
                   </span>
                 </div>
                 {approvalModalReq.extensionReason ? (
