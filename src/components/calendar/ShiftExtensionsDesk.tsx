@@ -218,7 +218,7 @@ export function ShiftExtensionsDesk({
 
   // 1-Click Quick Approve Handler
   const handleQuickApprove = async (req: any) => {
-    const hours = req.extensionRequestedHours || 2.0;
+    const hours = Number(req.extensionRequestedHours) > 0 ? Number(req.extensionRequestedHours) : 1.0;
     setIsQuickApproving(req._id);
     try {
       const res = await fetch("/api/attendance", {
@@ -226,6 +226,7 @@ export function ShiftExtensionsDesk({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "approve_extension",
+          targetAttendanceId: req._id,
           attendanceId: req._id,
           allocatedHours: hours,
         }),
@@ -253,6 +254,7 @@ export function ShiftExtensionsDesk({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "approve_extension",
+          targetAttendanceId: approvalModalReq._id,
           attendanceId: approvalModalReq._id,
           allocatedHours: extensionHoursToAllocate,
         }),
@@ -283,7 +285,9 @@ export function ShiftExtensionsDesk({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "reject_extension",
+          targetAttendanceId: declineModalReq._id,
           attendanceId: declineModalReq._id,
+          reason: declineReason.trim(),
           rejectionReason: declineReason.trim(),
         }),
       });
@@ -1173,33 +1177,40 @@ export function ShiftExtensionsDesk({
 
                       {/* Requested Extra & Reason */}
                       <td className="py-3 px-4 max-w-[220px]">
-                        {log.extensionRequested ? (
-                          <>
-                            <div className="flex items-center gap-1.5 mb-0.5">
-                              <span className="font-mono font-bold text-xs text-amber-500">
-                                +{log.extensionRequestedHours || 0}h
-                              </span>
-                              <span className="text-[10px] text-muted-foreground">requested</span>
-                            </div>
-                            {log.extensionReason ? (
-                              <p className="text-[11px] text-foreground/80 italic truncate" title={log.extensionReason}>
-                                "{log.extensionReason}"
-                              </p>
-                            ) : (
-                              <span className="text-[10px] text-muted-foreground/60">No note provided</span>
-                            )}
-                          </>
-                        ) : isApproved ? (
-                          <div>
-                            <div className="flex items-center gap-1.5 mb-0.5">
-                              <i className="fa-solid fa-user-shield text-[10px] text-primary" />
-                              <span className="text-[11px] font-medium text-foreground">Direct Allocation</span>
-                            </div>
-                            <span className="text-[10px] text-muted-foreground">Allocated by Manager</span>
-                          </div>
-                        ) : (
-                          <span className="font-mono text-xs text-muted-foreground/50">--</span>
-                        )}
+                        {(() => {
+                          const wasRequested = Boolean((log.extensionRequestedHours && Number(log.extensionRequestedHours) > 0) || log.extensionReason || log.extensionRequested);
+                          if (wasRequested) {
+                            return (
+                              <>
+                                <div className="flex items-center gap-1.5 mb-0.5">
+                                  <span className="font-mono font-bold text-xs text-amber-500">
+                                    +{Number(log.extensionRequestedHours || 1.0).toFixed(1)}h
+                                  </span>
+                                  <span className="text-[10px] text-muted-foreground">requested</span>
+                                </div>
+                                {log.extensionReason ? (
+                                  <p className="text-[11px] text-foreground/80 italic truncate" title={log.extensionReason}>
+                                    "{log.extensionReason}"
+                                  </p>
+                                ) : (
+                                  <span className="text-[10px] text-muted-foreground/60">No note provided</span>
+                                )}
+                              </>
+                            );
+                          }
+                          if (isApproved) {
+                            return (
+                              <div>
+                                <div className="flex items-center gap-1.5 mb-0.5">
+                                  <i className="fa-solid fa-user-shield text-[10px] text-primary" />
+                                  <span className="text-[11px] font-medium text-foreground">Direct Allocation</span>
+                                </div>
+                                <span className="text-[10px] text-muted-foreground">Allocated by Manager</span>
+                              </div>
+                            );
+                          }
+                          return <span className="font-mono text-xs text-muted-foreground/50">--</span>;
+                        })()}
                       </td>
 
                       {/* Allocated Extra Hours */}
@@ -1306,7 +1317,7 @@ export function ShiftExtensionsDesk({
                                 variant="outline"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  setExtensionHoursToAllocate(log.extensionRequestedHours || 2.0);
+                                  setExtensionHoursToAllocate(Number(log.extensionRequestedHours) > 0 ? Number(log.extensionRequestedHours) : 1.0);
                                   setApprovalModalReq(log);
                                 }}
                                 className="h-7 px-2 rounded-lg text-xs font-semibold border-emerald-500/40 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 cursor-pointer shadow-xs gap-1"
@@ -1449,7 +1460,9 @@ export function ShiftExtensionsDesk({
                     <div>
                       <span className="text-[10px] text-muted-foreground block">Requested</span>
                       <strong className="text-amber-500 font-mono">
-                        {log.extensionRequested ? `+${log.extensionRequestedHours || 0}h` : "--"}
+                        {Boolean((log.extensionRequestedHours && Number(log.extensionRequestedHours) > 0) || log.extensionReason || log.extensionRequested)
+                          ? `+${Number(log.extensionRequestedHours || 1.0).toFixed(1)}h`
+                          : "--"}
                       </strong>
                     </div>
                     <div>
@@ -2071,12 +2084,14 @@ export function ShiftExtensionsDesk({
                     </div>
                     <div className="mt-1.5">
                       <div className="text-base sm:text-lg font-bold font-mono text-amber-500">
-                        {inspectingRecord.extensionRequested
-                          ? `+${Number(inspectingRecord.extensionRequestedHours || 0).toFixed(1)} hrs`
+                        {Boolean((inspectingRecord.extensionRequestedHours && Number(inspectingRecord.extensionRequestedHours) > 0) || inspectingRecord.extensionReason || inspectingRecord.extensionRequested)
+                          ? `+${Number(inspectingRecord.extensionRequestedHours || 1.0).toFixed(1)} hrs`
                           : "Direct Grant"}
                       </div>
                       <div className="text-[10px] text-muted-foreground mt-0.5">
-                        {inspectingRecord.extensionRequested ? "By Team Member" : "Direct Allocation"}
+                        {Boolean((inspectingRecord.extensionRequestedHours && Number(inspectingRecord.extensionRequestedHours) > 0) || inspectingRecord.extensionReason || inspectingRecord.extensionRequested)
+                          ? "By Team Member"
+                          : "Direct Allocation"}
                       </div>
                     </div>
                   </div>
@@ -2243,7 +2258,7 @@ export function ShiftExtensionsDesk({
                     </div>
 
                     {/* Event 2: Extension Request & Justification */}
-                    {(inspectingRecord.extensionRequested || inspectingRecord.extensionReason) && (
+                    {Boolean((inspectingRecord.extensionRequestedHours && Number(inspectingRecord.extensionRequestedHours) > 0) || inspectingRecord.extensionReason || inspectingRecord.extensionRequested) && (
                       <div className="relative">
                         <div className="absolute -left-6 sm:-left-7 top-0.5 w-5 h-5 rounded-full bg-amber-500/20 text-amber-500 border border-amber-500/40 flex items-center justify-center text-[9px]">
                           <i className="fa-solid fa-paper-plane" />

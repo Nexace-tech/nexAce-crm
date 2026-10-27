@@ -4,6 +4,7 @@ import { connectToDatabase } from "@/lib/db";
 import { Attendance } from "@/models/Attendance";
 import { Tenant } from "@/models/Tenant";
 import { Notification } from "@/models/Notification";
+import { User } from "@/models/User";
 import { getUserDataScope } from "@/lib/dataScope";
 import mongoose from "mongoose";
 
@@ -191,7 +192,10 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json().catch(() => ({}));
-    const { action, location, targetAttendanceId, targetUserId, reason } = body;
+    const { action, location } = body;
+    const targetAttendanceId = body.targetAttendanceId || body.attendanceId || body.recordId || body.id;
+    const targetUserId = body.targetUserId || body.userId;
+    const reason = body.reason || body.rejectionReason || body.extensionReason || "";
 
     if (!action || !["in", "out", "resume", "request_extension", "approve_extension", "reject_extension", "bulk_approve_extensions"].includes(action)) {
       return NextResponse.json({ error: "Action must be 'in', 'out', 'resume', 'request_extension', 'approve_extension', 'reject_extension', or 'bulk_approve_extensions'" }, { status: 400 });
@@ -441,9 +445,15 @@ export async function POST(request: Request) {
 
       const filter: Record<string, unknown> = { tenantId: tenantObjectId };
       if (targetAttendanceId) {
-        filter._id = new mongoose.Types.ObjectId(targetAttendanceId);
+        if (!mongoose.Types.ObjectId.isValid(String(targetAttendanceId))) {
+          return NextResponse.json({ error: "Invalid targetAttendanceId format" }, { status: 400 });
+        }
+        filter._id = new mongoose.Types.ObjectId(String(targetAttendanceId));
       } else if (targetUserId) {
-        filter.userId = new mongoose.Types.ObjectId(targetUserId);
+        if (!mongoose.Types.ObjectId.isValid(String(targetUserId))) {
+          return NextResponse.json({ error: "Invalid targetUserId format" }, { status: 400 });
+        }
+        filter.userId = new mongoose.Types.ObjectId(String(targetUserId));
         filter.date = { $gte: dayStart, $lt: dayEnd };
       } else {
         return NextResponse.json({ error: "targetAttendanceId or targetUserId is required" }, { status: 400 });
@@ -501,9 +511,15 @@ export async function POST(request: Request) {
 
       const filter: Record<string, unknown> = { tenantId: tenantObjectId };
       if (targetAttendanceId) {
-        filter._id = new mongoose.Types.ObjectId(targetAttendanceId);
+        if (!mongoose.Types.ObjectId.isValid(String(targetAttendanceId))) {
+          return NextResponse.json({ error: "Invalid targetAttendanceId format" }, { status: 400 });
+        }
+        filter._id = new mongoose.Types.ObjectId(String(targetAttendanceId));
       } else if (targetUserId) {
-        filter.userId = new mongoose.Types.ObjectId(targetUserId);
+        if (!mongoose.Types.ObjectId.isValid(String(targetUserId))) {
+          return NextResponse.json({ error: "Invalid targetUserId format" }, { status: 400 });
+        }
+        filter.userId = new mongoose.Types.ObjectId(String(targetUserId));
         filter.date = { $gte: dayStart, $lt: dayEnd };
       } else {
         return NextResponse.json({ error: "targetAttendanceId or targetUserId is required" }, { status: 400 });
@@ -514,7 +530,7 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "Attendance record not found" }, { status: 404 });
       }
 
-      const rejectionReason = String(body.reason || "").trim() || "Shift extension request declined by manager.";
+      const rejectionReason = String(body.reason || body.rejectionReason || reason || "").trim() || "Shift extension request declined by manager.";
 
       recordToReject.extensionRequested = false;
       recordToReject.extensionRejected = true;
@@ -555,7 +571,7 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "Forbidden: Only Admin, OPS, HR, or Managers can approve shift extensions" }, { status: 403 });
       }
 
-      const { attendanceIds } = body;
+      const attendanceIds = body.attendanceIds || body.targetAttendanceIds || body.ids;
       if (!Array.isArray(attendanceIds) || attendanceIds.length === 0) {
         return NextResponse.json({ error: "attendanceIds array is required" }, { status: 400 });
       }
@@ -635,16 +651,66 @@ export async function POST(request: Request) {
       }
 
       const requestedHours = Math.max(0.5, Math.min(8, Number(body.requestedHours) || 1.0));
+      const submittedReason = String(reason || body.reason || "").trim() || "Shift extension requested for ongoing tasks.";
+
       record.extensionRequested = true;
       record.extensionRequestedHours = requestedHours;
-      record.extensionReason = String(reason || "").trim();
+      record.extensionReason = submittedReason;
       record.extensionRejected = false;
       record.extensionRejectionReason = "";
       await record.save();
 
+      // Retrieve requesting employee details for enriched notifications
+      const employee = await User.findById(userObjectId).select("name department role");
+      const employeeName = employee?.name || session.userName || "Team Member";
+      const employeeDept = employee?.department || "";
+
+      // 1. Dispatch in-app notifications to Admin, OPS, HR, and Department Manager
+      try {
+        const reviewerQuery: Record<string, unknown> = {
+          tenantId: tenantObjectId,
+          _id: { $ne: userObjectId },
+          status: { $ne: "Suspended" },
+          $or: [
+            { role: { $in: ["Admin", "SuperAdmin", "OPS", "HR"] } },
+            ...(employeeDept ? [{ role: "Manager", department: employeeDept }] : [{ role: "Manager" }]),
+          ],
+        };
+
+        const reviewers = await User.find(reviewerQuery).select("_id role");
+
+        if (reviewers.length > 0) {
+          const reviewerNotifications = reviewers.map((rev) => ({
+            recipientId: rev._id,
+            tenantId: tenantObjectId,
+            title: `⏱ Shift Extension Request (+${requestedHours.toFixed(1)}h) — ${employeeName}`,
+            message: `${employeeName}${employeeDept ? ` (${employeeDept})` : ""} requested +${requestedHours.toFixed(1)}h shift extension: "${submittedReason}". Please review and authorize.`,
+            type: "hr",
+            linkUrl: "/dashboard/calendar/extensions",
+            adminOnly: ["Admin", "SuperAdmin", "OPS"].includes(rev.role),
+          }));
+
+          await Notification.insertMany(reviewerNotifications);
+        }
+
+        // 2. Dispatch confirmation notification to the employee
+        await Notification.create({
+          recipientId: userObjectId,
+          tenantId: tenantObjectId,
+          title: `⏱ Shift Extension Request Submitted (+${requestedHours.toFixed(1)}h)`,
+          message: `Your request for +${requestedHours.toFixed(1)}h additional shift time was submitted and forwarded to Admin, OPS, and HR for approval.`,
+          type: "hr",
+          linkUrl: "/dashboard/calendar",
+        });
+      } catch (notifErr) {
+        console.error("Failed to dispatch extension request notifications:", notifErr);
+      }
+
       return NextResponse.json({
         success: true,
-        message: `Shift extension (+${requestedHours}h) request recorded successfully.`,
+        message: `Shift extension (+${requestedHours.toFixed(1)}h) request recorded successfully.`,
+        requestedHours,
+        attendance: record,
       });
     }
 

@@ -58,6 +58,12 @@ export function EmployeeDashboard({ user }: { user: any }) {
   const [showPdfExportModal, setShowPdfExportModal] = useState(false);
   const exportMenuRef = useRef<HTMLDivElement>(null);
 
+  // Shift Extension Request State
+  const [showExtensionModal, setShowExtensionModal] = useState(false);
+  const [extensionRequestedHours, setExtensionRequestedHours] = useState(1.0);
+  const [extensionReason, setExtensionReason] = useState("");
+  const [submittingExtension, setSubmittingExtension] = useState(false);
+
   const showToast = (message: string, type: "success" | "error" = "success") => {
     setToast({ message, type });
     setTimeout(() => {
@@ -96,6 +102,36 @@ export function EmployeeDashboard({ user }: { user: any }) {
       }
     } catch (err) {
       console.error("Failed to fetch attendance status:", err);
+    }
+  };
+
+  const handleSubmitExtensionRequest = async () => {
+    if (!extensionReason.trim()) {
+      showToast("Please provide a reason for the extension request", "error");
+      return;
+    }
+    setSubmittingExtension(true);
+    try {
+      const res = await fetch("/api/attendance", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "request_extension",
+          requestedHours: extensionRequestedHours,
+          reason: extensionReason.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to submit request");
+
+      showToast(`Shift extension (+${extensionRequestedHours.toFixed(1)}h) submitted for Admin, OPS, and HR approval!`, "success");
+      setShowExtensionModal(false);
+      setExtensionReason("");
+      await fetchAttendanceStatus();
+    } catch (err: any) {
+      showToast(err.message || "Failed to submit extension request", "error");
+    } finally {
+      setSubmittingExtension(false);
     }
   };
 
@@ -1052,6 +1088,21 @@ export function EmployeeDashboard({ user }: { user: any }) {
                   <span className="hidden sm:inline">Export Shift Logs</span>
                 </Button>
 
+                {/* Request Shift Extension Button */}
+                {Boolean(clockedIn || (todayAttendanceRecord?.clockIn && todayAttendanceRecord?.clockOut)) &&
+                  !todayAttendanceRecord?.extensionRequested && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setShowExtensionModal(true)}
+                      className="gap-1.5 font-semibold border-amber-500/40 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 cursor-pointer h-9 px-3 shrink-0 text-xs shadow-xs"
+                      title="Request additional shift hours"
+                    >
+                      <i className="fa-solid fa-clock-rotate-left text-xs" />
+                      <span className="hidden sm:inline">Request Extension</span>
+                    </Button>
+                  )}
+
                 {(() => {
                   const isShiftPaused = !clockedIn && Boolean(todayAttendanceRecord?.clockIn && todayAttendanceRecord?.clockOut);
                   return (
@@ -1283,14 +1334,28 @@ export function EmployeeDashboard({ user }: { user: any }) {
 
                           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1">
                             <span className="text-[10px] text-muted-foreground">
-                              Need more time? You may submit a revised request from Attendance.
+                              Need more time? You may submit an amended duration or revised request.
                             </span>
-                            <Link
-                              href="/dashboard/calendar"
-                              className="px-2.5 py-1 rounded-lg bg-rose-500/15 hover:bg-rose-500/25 text-rose-700 dark:text-rose-300 border border-rose-500/30 font-semibold text-[11px] inline-flex items-center gap-1.5 transition-colors shrink-0 min-h-[36px] self-start sm:self-auto"
-                            >
-                              <i className="fa-solid fa-arrow-right text-[10px]" /> Open Calendar
-                            </Link>
+                            <div className="flex items-center gap-2 shrink-0 self-start sm:self-auto">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setExtensionRequestedHours(1);
+                                  setExtensionReason("");
+                                  setShowExtensionModal(true);
+                                }}
+                                className="px-3 py-1.5 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-700 dark:text-rose-200 border border-rose-500/40 font-bold text-[11px] inline-flex items-center gap-1.5 transition-colors cursor-pointer min-h-[36px]"
+                              >
+                                <i className="fa-solid fa-clock-rotate-left text-[11px]" />
+                                <span>Submit Revised Request</span>
+                              </button>
+                              <Link
+                                href="/dashboard/calendar"
+                                className="px-2.5 py-1.5 rounded-lg bg-muted/80 hover:bg-muted text-muted-foreground hover:text-foreground border border-border font-medium text-[11px] inline-flex items-center gap-1 transition-colors min-h-[36px]"
+                              >
+                                <i className="fa-solid fa-calendar-days text-[10px]" />
+                              </Link>
+                            </div>
                           </div>
                         </div>
                       );
@@ -1677,6 +1742,159 @@ export function EmployeeDashboard({ user }: { user: any }) {
           currentUserName={user?.name || "You"}
           currentUserRole={user?.role}
         />
+      )}
+
+      {/* ── Shift Extension Request Modal ── */}
+      {showExtensionModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/75 backdrop-blur-xs animate-in fade-in"
+          onClick={() => setShowExtensionModal(false)}
+        >
+          <div
+            className="w-full max-w-md bg-card border border-border rounded-2xl shadow-2xl overflow-hidden max-h-[92vh] flex flex-col text-foreground animate-in zoom-in-95"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="p-4 sm:p-5 border-b border-border/80 bg-amber-500/5 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-500/15 text-amber-500 flex items-center justify-center text-base border border-amber-500/25 shrink-0 shadow-xs">
+                  <i className="fa-solid fa-clock-rotate-left" />
+                </div>
+                <div>
+                  <h3 className="text-sm sm:text-base font-bold text-foreground">
+                    {todayAttendanceRecord?.extensionRejected ? "Submit Revised Shift Extension" : "Request Additional Shift Time"}
+                  </h3>
+                  <p className="text-[11px] text-muted-foreground">Submit for Admin, OPS, and HR authorization</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowExtensionModal(false)}
+                className="w-8 h-8 rounded-full bg-muted/80 hover:bg-muted text-muted-foreground hover:text-foreground flex items-center justify-center text-xs cursor-pointer min-h-[36px]"
+              >
+                <i className="fa-solid fa-xmark text-sm" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="p-4 sm:p-5 space-y-4 overflow-y-auto overscroll-contain flex-1 text-xs">
+              {/* Prior Rejection Alert if applicable */}
+              {Boolean(todayAttendanceRecord?.extensionRejected && !todayAttendanceRecord?.extensionApproved) && (
+                <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/25 text-rose-700 dark:text-rose-300 space-y-1">
+                  <div className="font-semibold flex items-center gap-1.5">
+                    <i className="fa-solid fa-circle-exclamation text-rose-600 dark:text-rose-400" />
+                    <span>Prior Extension Request Declined</span>
+                  </div>
+                  {todayAttendanceRecord?.extensionRejectionReason && (
+                    <p className="text-[11px] text-muted-foreground italic bg-background/50 p-2 rounded border border-rose-500/15">
+                      &ldquo;{todayAttendanceRecord.extensionRejectionReason}&rdquo;
+                    </p>
+                  )}
+                  <p className="text-[10px] text-muted-foreground">
+                    Please provide an amended duration or clear justification below.
+                  </p>
+                </div>
+              )}
+
+              {/* Duration Presets */}
+              <div className="space-y-2">
+                <label className="text-xs font-semibold text-foreground flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <i className="fa-solid fa-stopwatch text-primary text-xs" />
+                    <span>Choose Extension Duration:</span>
+                  </span>
+                  <span className="font-mono text-emerald-600 dark:text-emerald-400 font-bold text-xs">
+                    +{extensionRequestedHours >= 1 ? `${extensionRequestedHours.toFixed(1)} hrs` : `${Math.round(extensionRequestedHours * 60)} mins`}
+                  </span>
+                </label>
+
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { hours: 0.5, label: "30 Mins", sub: "Wrap-up" },
+                    { hours: 1.0, label: "1 Hour", sub: "Standard" },
+                    { hours: 2.0, label: "2 Hours", sub: "Deep Focus" },
+                  ].map((preset) => (
+                    <button
+                      key={preset.hours}
+                      type="button"
+                      onClick={() => setExtensionRequestedHours(preset.hours)}
+                      className={cn(
+                        "py-2.5 px-2 rounded-xl text-xs font-bold font-mono border transition-all cursor-pointer flex flex-col items-center justify-center gap-0.5 min-h-[44px]",
+                        extensionRequestedHours === preset.hours
+                          ? "bg-primary text-primary-foreground border-primary shadow-xs"
+                          : "bg-card border-border/80 text-foreground hover:border-primary/50"
+                      )}
+                    >
+                      <span className="text-xs sm:text-sm">+{preset.label}</span>
+                      <span className="text-[9px] font-normal opacity-80">{preset.sub}</span>
+                    </button>
+                  ))}
+                </div>
+
+                <div className="flex items-center justify-between gap-3 pt-1">
+                  <span className="text-[11px] text-muted-foreground">Custom duration:</span>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      min="0.5"
+                      max="6"
+                      step="0.5"
+                      value={extensionRequestedHours}
+                      onChange={(e) => setExtensionRequestedHours(Math.max(0.5, Math.min(6, Number(e.target.value) || 1)))}
+                      className="w-24 px-2.5 py-1.5 rounded-lg border border-border bg-input text-xs font-mono font-bold text-foreground text-center"
+                    />
+                    <span className="text-xs text-muted-foreground">hours</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Reason */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                  <i className="fa-solid fa-message-lines text-primary text-xs" />
+                  Reason / Justification <span className="text-destructive">*</span>
+                </label>
+                <textarea
+                  value={extensionReason}
+                  onChange={(e) => setExtensionReason(e.target.value)}
+                  placeholder="Explain why additional shift time is needed (e.g. critical client bug fix, testing handover, deployment)..."
+                  rows={3}
+                  className="w-full text-xs resize-none rounded-xl border border-border bg-input px-3 py-2 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 transition-colors"
+                />
+              </div>
+
+              <div className="p-3 rounded-xl bg-primary/5 border border-primary/20 text-[11px] text-muted-foreground flex items-start gap-2">
+                <i className="fa-solid fa-shield-check text-primary text-xs mt-0.5 shrink-0" />
+                <p>
+                  This request will be routed directly to <strong>Admin</strong>, <strong>OPS</strong>, <strong>HR</strong>, and your <strong>Department Manager</strong>. You will receive an in-app alert upon decision.
+                </p>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="p-3.5 sm:p-4 border-t border-border/80 flex items-center justify-end gap-2.5 shrink-0 bg-muted/20">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setShowExtensionModal(false)}
+                className="min-h-[38px] text-xs cursor-pointer"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                disabled={submittingExtension || !extensionReason.trim()}
+                onClick={handleSubmitExtensionRequest}
+                className="min-h-[38px] px-4 rounded-xl text-xs font-bold bg-primary hover:bg-primary/90 text-primary-foreground cursor-pointer shadow-xs gap-1.5 disabled:opacity-50"
+              >
+                <i className={cn("fa-solid text-xs", submittingExtension ? "fa-spinner fa-spin" : "fa-paper-plane")} />
+                <span>{submittingExtension ? "Submitting..." : `Submit Request (+${extensionRequestedHours.toFixed(1)}h)`}</span>
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

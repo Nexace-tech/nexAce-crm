@@ -5173,8 +5173,8 @@ function CalendarPageContent() {
                   if (!additionalTimeReason.trim()) return;
                   setSubmittingAdditionalTime(true);
                   try {
-                    // 1. Record extension request in database
-                    await fetch("/api/attendance", {
+                    // 1. Record extension request in database and dispatch reviewer notifications
+                    const res = await fetch("/api/attendance", {
                       method: "POST",
                       headers: { "Content-Type": "application/json" },
                       body: JSON.stringify({
@@ -5184,30 +5184,21 @@ function CalendarPageContent() {
                       }),
                     });
 
-                    // 2. Submit broadcast notification to Admin, OPS, and HR
+                    const data = await res.json();
+                    if (!res.ok) {
+                      throw new Error(data.error || "Failed to submit extension request");
+                    }
+
                     const durationStr = requestedExtensionHours >= 1
                       ? `+${requestedExtensionHours.toFixed(1)}h`
                       : `${Math.round(requestedExtensionHours * 60)} mins`;
 
-                    await fetch("/api/notifications", {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({
-                        title: `⏱ Shift Extension Request (${durationStr}) — ${currentUser?.name || "Team Member"}`,
-                        message: `Requested ${durationStr} additional shift time: "${additionalTimeReason.trim()}"`,
-                        type: "shift_extension",
-                        broadcast: true,
-                      }),
-                    });
-
                     setAdditionalTimeRequested(true);
                     setShowAdditionalTimeModal(false);
-                    showToast(`Additional shift time request (${durationStr}) submitted for approval!`, "success");
+                    showToast(`Additional shift time request (${durationStr}) submitted for Admin, OPS, and HR approval!`, "success");
                     await fetchAttendance();
-                  } catch {
-                    showToast("Request submitted. Admin/OPS/HR will be notified.", "success");
-                    setAdditionalTimeRequested(true);
-                    setShowAdditionalTimeModal(false);
+                  } catch (err: any) {
+                    showToast(err.message || "Failed to submit request", "error");
                   } finally {
                     setSubmittingAdditionalTime(false);
                   }
