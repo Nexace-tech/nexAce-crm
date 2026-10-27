@@ -25,6 +25,7 @@ import { TeamAvailabilityTab } from "@/components/calendar/TeamAvailabilityTab";
 import { CompanyHolidaysTab } from "@/components/calendar/CompanyHolidaysTab";
 import { CompanyCelebrationsTab } from "@/components/calendar/CompanyCelebrationsTab";
 import { ShiftExtensionsDesk } from "@/components/calendar/ShiftExtensionsDesk";
+import { AttendanceRegularizationDesk } from "@/components/calendar/AttendanceRegularizationDesk";
 
 import { AccessRestricted } from "@/components/ui/AccessRestricted";
 
@@ -58,6 +59,12 @@ function CalendarPageContent() {
         setActiveTab("attendance");
         setTimeout(() => {
           const el = document.getElementById("shift-extensions-desk-section");
+          el?.scrollIntoView({ behavior: "smooth" });
+        }, 350);
+      } else if (sp.get("tab") === "regularization") {
+        setActiveTab("attendance");
+        setTimeout(() => {
+          const el = document.getElementById("attendance-regularization-desk-section");
           el?.scrollIntoView({ behavior: "smooth" });
         }, 350);
       }
@@ -4395,6 +4402,20 @@ function CalendarPageContent() {
               />
             </div>
           )}
+
+          {/* Dedicated Attendance Regularization Desk */}
+          <div id="attendance-regularization-desk-section" className="scroll-mt-6">
+            <AttendanceRegularizationDesk
+              attendanceHistory={attendanceHistory}
+              onRefresh={() => fetchAttendance(true)}
+              onToast={showToast}
+              canApprove={Boolean(isAdmin || isOPS || isHR || can("approveRegularization") || can("approveAdditionalShiftTime"))}
+              canExport={Boolean(isAdmin || isOPS || isHR || can("exportAttendance") || can("exportShiftExtensions"))}
+              currentUserId={currentUser?._id}
+              currentUserRole={currentUser?.role}
+              currentUserDepartment={currentUser?.department}
+            />
+          </div>
 
           {/* ─── Login & Hours Summary (Admin/OPS/HR) ─── */}
           {(isAdmin || isOPS || isHR || can("viewLoginHoursSummary")) && (

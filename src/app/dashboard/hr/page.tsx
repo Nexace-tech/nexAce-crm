@@ -15,6 +15,8 @@ import { isSubAdminRole } from "@/lib/roles";
 import { HRTasksTab } from "@/components/hr/HRTasksTab";
 import { AccessRestricted } from "@/components/ui/AccessRestricted";
 import { AdminInvoicesTab } from "@/components/settings/AdminInvoicesTab";
+import { EmployeeLeaveDesk } from "@/components/hr/EmployeeLeaveDesk";
+import { EmployeeSalarySlipsDesk } from "@/components/hr/EmployeeSalarySlipsDesk";
 
 interface LeaveData {
   _id: string; userId: string; userName: string;
@@ -40,11 +42,11 @@ export default function HRPage() {
   const { user, loading: authLoading } = useAuth();
   const { can, isAdmin, isOPS, canAccessModule, loading: permLoading } = usePermissions();
   const [activeTab, setActiveTab] = useTabPersistence<
-    "directory" | "tasks" | "checklists" | "invoices" | "leaves" | "vault" | "cases" | "appraisals" | "probation" | "sandbox"
+    "directory" | "tasks" | "checklists" | "invoices" | "leaves" | "payslips" | "vault" | "cases" | "appraisals" | "probation" | "sandbox"
   >(
     "hr_active_tab_v2",
     "directory",
-    ["directory", "tasks", "checklists", "invoices", "leaves", "vault", "cases", "appraisals", "probation", "sandbox"]
+    ["directory", "tasks", "checklists", "invoices", "leaves", "payslips", "vault", "cases", "appraisals", "probation", "sandbox"]
   );
 
   const searchParams = useSearchParams();
@@ -552,7 +554,7 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
       const tabParam = params.get("tab");
-      if (tabParam && ["directory", "tasks", "checklists", "invoices", "leaves", "vault", "cases", "appraisals", "probation", "sandbox"].includes(tabParam)) {
+      if (tabParam && ["directory", "tasks", "checklists", "invoices", "leaves", "payslips", "vault", "cases", "appraisals", "probation", "sandbox"].includes(tabParam)) {
         setActiveTab(tabParam as any);
       }
     }
@@ -1170,13 +1172,50 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
             </div>
           )}
           {(can("applyLeave") || isAdmin || isOPS) && (
-            <Button variant="outline" size="sm" onClick={() => { setActiveTab("leaves"); setShowLeaveForm(true); }} className="gap-2 cursor-pointer">
-              <i className="fa-solid fa-calendar-days text-xs" /> Request Leave
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => { setActiveTab("leaves"); setShowLeaveForm(true); }}
+              className="gap-2 cursor-pointer h-9 px-3 rounded-xl border-border hover:bg-emerald-50 hover:text-emerald-600 dark:hover:bg-emerald-950/30 transition-all font-semibold"
+            >
+              <i className="fa-solid fa-calendar-plus text-xs text-emerald-500" />
+              <span>Request Leave</span>
+            </Button>
+          )}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              if (typeof window !== "undefined") {
+                window.location.href = "/dashboard/calendar/regularization";
+              }
+            }}
+            className="gap-2 cursor-pointer h-9 px-3 rounded-xl border-border hover:bg-sky-50 hover:text-sky-600 dark:hover:bg-sky-950/30 transition-all font-semibold"
+            title="Submit or review attendance regularization requests"
+          >
+            <i className="fa-solid fa-clock-rotate-left text-xs text-sky-500" />
+            <span>Regularize Punch</span>
+          </Button>
+          {Boolean(user) && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setActiveTab("payslips")}
+              className="gap-2 cursor-pointer h-9 px-3 rounded-xl border-border hover:bg-teal-50 hover:text-teal-600 dark:hover:bg-teal-950/30 transition-all font-semibold"
+            >
+              <i className="fa-solid fa-wallet text-xs text-teal-500" />
+              <span>My Payslips</span>
             </Button>
           )}
           {(can("createHRCases") || isAdmin || isOPS) && (
-            <Button color="primary" size="sm" onClick={() => { setActiveTab("cases"); setShowCaseForm(true); }} className="gap-2 cursor-pointer">
-              <i className="fa-solid fa-plus text-xs" /> Submit Case
+            <Button
+              color="primary"
+              size="sm"
+              onClick={() => { setActiveTab("cases"); setShowCaseForm(true); }}
+              className="gap-2 cursor-pointer h-9 px-3.5 rounded-xl font-bold shadow-xs transition-all"
+            >
+              <i className="fa-solid fa-plus text-xs" />
+              <span>Submit Case</span>
             </Button>
           )}
         </div>
@@ -1188,7 +1227,7 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
           <Card 
             onClick={() => setActiveTab("directory")} 
             className={cn(
-              "border-l-4 border-l-primary hover:shadow-md hover:translate-y-[-2px] transition-all cursor-pointer",
+              "border-l-4 border-l-primary hover:shadow-md hover:translate-y-[-2px] transition-all cursor-pointer rounded-2xl",
               activeTab === "directory" ? "bg-primary/5 ring-1 ring-primary/30" : ""
             )}
           >
@@ -1206,7 +1245,7 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
           <Card 
             onClick={() => setActiveTab("checklists")} 
             className={cn(
-              "border-l-4 border-l-emerald-500 hover:shadow-md hover:translate-y-[-2px] transition-all cursor-pointer",
+              "border-l-4 border-l-emerald-500 hover:shadow-md hover:translate-y-[-2px] transition-all cursor-pointer rounded-2xl",
               activeTab === "checklists" ? "bg-emerald-500/5 ring-1 ring-emerald-500/30" : ""
             )}
           >
@@ -1224,7 +1263,7 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
           <Card 
             onClick={() => setActiveTab("leaves")} 
             className={cn(
-              "border-l-4 border-l-amber-500 hover:shadow-md hover:translate-y-[-2px] transition-all cursor-pointer",
+              "border-l-4 border-l-amber-500 hover:shadow-md hover:translate-y-[-2px] transition-all cursor-pointer rounded-2xl",
               activeTab === "leaves" ? "bg-amber-500/5 ring-1 ring-amber-500/30" : ""
             )}
           >
@@ -1242,7 +1281,7 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
           <Card 
             onClick={() => setActiveTab("cases")} 
             className={cn(
-              "border-l-4 border-l-sky-500 hover:shadow-md hover:translate-y-[-2px] transition-all cursor-pointer",
+              "border-l-4 border-l-sky-500 hover:shadow-md hover:translate-y-[-2px] transition-all cursor-pointer rounded-2xl",
               activeTab === "cases" ? "bg-sky-500/5 ring-1 ring-sky-500/30" : ""
             )}
           >
@@ -1258,108 +1297,152 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
       </div>
 
       {/* Interactive Tab Navigation Bar with Smooth Scroll Controls */}
-      <div className="relative flex items-center bg-card border border-border/80 rounded-xl p-1 shadow-2xs">
+      <div className="relative flex items-center bg-card/80 backdrop-blur-md border border-border/80 rounded-2xl p-1.5 shadow-xs">
         <button
           type="button"
           onClick={() => {
             const container = document.getElementById("hr-tab-bar");
-            if (container) container.scrollBy({ left: -220, behavior: "smooth" });
+            if (container) container.scrollBy({ left: -240, behavior: "smooth" });
           }}
-          className="h-9 w-8 rounded-lg hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors cursor-pointer shrink-0"
+          className="h-9 w-8 rounded-xl hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors cursor-pointer shrink-0"
           title="Scroll Left"
         >
           <i className="fa-solid fa-chevron-left text-xs" />
         </button>
 
-        <div id="hr-tab-bar" className="flex-1 flex space-x-1 overflow-x-auto no-scrollbar scroll-smooth py-0.5 px-1">
+        <div id="hr-tab-bar" className="flex-1 flex space-x-1.5 overflow-x-auto no-scrollbar scroll-smooth py-0.5 px-1">
           {/* Employee Directory — guarded */}
           {(isManagerOrAdmin || can("viewHRDirectory") || Boolean(user)) && (
             <button onClick={() => setActiveTab("directory")} className={cn(
-              "px-4 py-2 text-xs font-semibold rounded-lg transition-all flex items-center gap-2 cursor-pointer shrink-0",
+              "px-3.5 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-2 cursor-pointer shrink-0 min-h-[38px]",
               activeTab === "directory" ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
             )}>
-              <i className="fa-solid fa-address-book text-xs" /> Employee Directory
+              <i className="fa-solid fa-users-viewfinder text-xs" />
+              <span>Employee Directory</span>
             </button>
           )}
           {/* HR Tasks & Workflows — manager/admin only */}
           {isManagerOrAdmin && (
             <button onClick={() => setActiveTab("tasks")} className={cn(
-              "px-4 py-2 text-xs font-semibold rounded-lg transition-all flex items-center gap-2 cursor-pointer shrink-0",
+              "px-3.5 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-2 cursor-pointer shrink-0 min-h-[38px]",
               activeTab === "tasks" ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
             )}>
-              <i className="fa-solid fa-list-check text-xs text-indigo-400" /> HR Tasks & Workflows
+              <i className="fa-solid fa-list-check text-xs text-indigo-400" />
+              <span>Tasks &amp; Workflows</span>
             </button>
           )}
           {/* Onboarding / Offboarding — guarded */}
           {(isManagerOrAdmin || can("viewHROnboarding") || Boolean(user)) && (
             <button onClick={() => setActiveTab("checklists")} className={cn(
-              "px-4 py-2 text-xs font-semibold rounded-lg transition-all flex items-center gap-2 cursor-pointer shrink-0",
+              "px-3.5 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-2 cursor-pointer shrink-0 min-h-[38px]",
               activeTab === "checklists" ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
             )}>
-              <i className="fa-solid fa-list-check text-xs" /> Onboarding / Offboarding
+              <i className="fa-solid fa-clipboard-check text-xs text-emerald-400" />
+              <span>Onboarding / Offboarding</span>
+              {checklists.filter((c) => c.status === "In Progress").length > 0 && (
+                <span className={cn(
+                  "px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold",
+                  activeTab === "checklists" ? "bg-white/20 text-white" : "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400"
+                )}>
+                  {checklists.filter((c) => c.status === "In Progress").length}
+                </span>
+              )}
             </button>
           )}
           {/* Timesheet & Invoice Approvals — only HR and OPS and Admin can see */}
           {(isAdmin || isOPS || user?.role === "HR" || can("approveTimesheetsAndInvoices")) && (
             <button onClick={() => setActiveTab("invoices")} className={cn(
-              "px-4 py-2 text-xs font-semibold rounded-lg transition-all flex items-center gap-2 cursor-pointer shrink-0",
+              "px-3.5 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-2 cursor-pointer shrink-0 min-h-[38px]",
               activeTab === "invoices" ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
             )}>
-              <i className="fa-solid fa-file-invoice-dollar text-xs text-emerald-500" /> Timesheet &amp; Invoice Approvals
+              <i className="fa-solid fa-file-invoice-dollar text-xs text-emerald-500" />
+              <span>Timesheet Approvals</span>
             </button>
           )}
           {/* Leave Management — guarded */}
-          {(isManagerOrAdmin || can("applyLeave") || can("viewOwnLeaveStatus") || can("viewTeamLeave") || Boolean(user)) && (
+          {(isManagerOrAdmin || can("viewAllLeaves") || can("viewOwnLeaves") || can("applyLeaves") || can("viewLeaveBalances") || Boolean(user)) && (
             <button onClick={() => setActiveTab("leaves")} className={cn(
-              "px-4 py-2 text-xs font-semibold rounded-lg transition-all flex items-center gap-2 cursor-pointer shrink-0",
+              "px-3.5 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-2 cursor-pointer shrink-0 min-h-[38px]",
               activeTab === "leaves" ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
             )}>
-              <i className="fa-solid fa-calendar-days text-xs" /> Leave Management
+              <i className="fa-solid fa-calendar-days text-xs text-amber-500" />
+              <span>Leave Management</span>
+              {leaves.filter((l) => l.status === "Pending").length > 0 && (
+                <span className={cn(
+                  "px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold",
+                  activeTab === "leaves" ? "bg-white/20 text-white" : "bg-amber-500/20 text-amber-600 dark:text-amber-400"
+                )}>
+                  {leaves.filter((l) => l.status === "Pending").length}
+                </span>
+              )}
+            </button>
+          )}
+          {/* Salary & Payslips — employee self-service */}
+          {(isAdmin || isOPS || can("viewSalarySlips") || Boolean(user)) && (
+            <button onClick={() => setActiveTab("payslips")} className={cn(
+              "px-3.5 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-2 cursor-pointer shrink-0 min-h-[38px]",
+              activeTab === "payslips" ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+            )}>
+              <i className="fa-solid fa-wallet text-xs text-emerald-400" />
+              <span>Salary &amp; Payslips</span>
             </button>
           )}
           {/* Document Vault — guarded */}
           {(isManagerOrAdmin || can("viewHRVault") || Boolean(user)) && (
             <button onClick={() => setActiveTab("vault")} className={cn(
-              "px-4 py-2 text-xs font-semibold rounded-lg transition-all flex items-center gap-2 cursor-pointer shrink-0",
+              "px-3.5 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-2 cursor-pointer shrink-0 min-h-[38px]",
               activeTab === "vault" ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
             )}>
-              <i className="fa-solid fa-shield-halved text-xs text-emerald-500" /> Document Vault
+              <i className="fa-solid fa-shield-halved text-xs text-teal-400" />
+              <span>Document Vault</span>
             </button>
           )}
           {/* Help Desk — guarded */}
           {(isManagerOrAdmin || can("viewHRCases") || can("createHRCases") || Boolean(user)) && (
             <button onClick={() => setActiveTab("cases")} className={cn(
-              "px-4 py-2 text-xs font-semibold rounded-lg transition-all flex items-center gap-2 cursor-pointer shrink-0",
+              "px-3.5 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-2 cursor-pointer shrink-0 min-h-[38px]",
               activeTab === "cases" ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
             )}>
-              <i className="fa-solid fa-circle-question text-xs text-amber-500" /> Help Desk
+              <i className="fa-solid fa-circle-question text-xs text-sky-400" />
+              <span>Help Desk</span>
+              {cases.filter((c) => c.status === "Open" || c.status === "In Progress").length > 0 && (
+                <span className={cn(
+                  "px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold",
+                  activeTab === "cases" ? "bg-white/20 text-white" : "bg-sky-500/20 text-sky-600 dark:text-sky-400"
+                )}>
+                  {cases.filter((c) => c.status === "Open" || c.status === "In Progress").length}
+                </span>
+              )}
             </button>
           )}
           {/* Appraisals & KRAs — guarded */}
           {(isManagerOrAdmin || can("viewAppraisals") || Boolean(user)) && (
             <button onClick={() => setActiveTab("appraisals")} className={cn(
-              "px-4 py-2 text-xs font-semibold rounded-lg transition-all flex items-center gap-2 cursor-pointer shrink-0",
+              "px-3.5 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-2 cursor-pointer shrink-0 min-h-[38px]",
               activeTab === "appraisals" ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
             )}>
-              <i className="fa-solid fa-award text-xs text-indigo-500" /> Appraisals & KRAs
+              <i className="fa-solid fa-award text-xs text-indigo-400" />
+              <span>Appraisals &amp; KRAs</span>
             </button>
           )}
           {/* Review Cycle & Probation — guarded */}
           {(isManagerOrAdmin || can("viewProbation") || Boolean(user)) && (
             <button onClick={() => setActiveTab("probation")} className={cn(
-              "px-4 py-2 text-xs font-semibold rounded-lg transition-all flex items-center gap-2 cursor-pointer shrink-0",
+              "px-3.5 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-2 cursor-pointer shrink-0 min-h-[38px]",
               activeTab === "probation" ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
             )}>
-              <i className="fa-solid fa-clock text-xs text-sky-500" /> Review Cycle & Probation
+              <i className="fa-solid fa-clock text-xs text-sky-400" />
+              <span>Review Cycle &amp; Probation</span>
             </button>
           )}
           {/* HR Sandbox — manager/admin only */}
           {isManagerOrAdmin && (
             <button onClick={() => setActiveTab("sandbox")} className={cn(
-              "px-4 py-2 text-xs font-semibold rounded-lg transition-all flex items-center gap-2 cursor-pointer shrink-0",
+              "px-3.5 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-2 cursor-pointer shrink-0 min-h-[38px]",
               activeTab === "sandbox" ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
             )}>
-              <i className="fa-solid fa-sliders text-xs text-purple-500" /> HR Sandbox
+              <i className="fa-solid fa-sliders text-xs text-purple-400" />
+              <span>HR Sandbox</span>
             </button>
           )}
         </div>
@@ -2233,250 +2316,19 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
       )}
 
       {/* TAB 3: LEAVE MANAGEMENT — guarded */}
-      {activeTab === "leaves" && (isManagerOrAdmin || can("applyLeave") || can("viewOwnLeaveStatus") || can("viewTeamLeave")) && (
-        <div className="space-y-4">
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-muted/20 p-3 rounded-lg border border-border">
-            <div className="flex items-center gap-2 w-full sm:w-auto">
-              <i className="fa-solid fa-magnifying-glass text-muted-foreground text-sm" />
-              <Input
-                placeholder="Search by employee name..."
-                value={leaveSearchQuery}
-                onChange={(e) => {
-                  setLeaveSearchQuery(e.target.value);
-                  setLeavePage(1);
-                }}
-                className="w-full sm:w-64 h-9"
-              />
-            </div>
-            <div className="flex items-center gap-3 w-full sm:w-auto flex-wrap">
-              <select
-                value={leaveStatusFilter}
-                onChange={(e) => {
-                  setLeaveStatusFilter(e.target.value);
-                  setLeavePage(1);
-                }}
-                className="h-9 px-3 text-xs bg-background border border-border rounded-md text-foreground cursor-pointer"
-              >
-                <option value="All">All Statuses</option>
-                <option value="Approved">Approved</option>
-                <option value="Pending">Pending</option>
-                <option value="Rejected">Rejected</option>
-              </select>
+      {activeTab === "leaves" && (isManagerOrAdmin || can("viewAllLeaves") || can("viewOwnLeaves") || can("applyLeaves") || can("viewLeaveBalances") || Boolean(user)) && (
+        <EmployeeLeaveDesk
+          currentUserId={user?._id}
+          currentUserRole={user?.role}
+          currentUserName={user?.name}
+          canApproveLeaves={Boolean(isManagerOrAdmin || can("approveLeaves") || can("approveLeave"))}
+          onToast={showToast}
+        />
+      )}
 
-              <select
-                value={leaveTypeFilter}
-                onChange={(e) => {
-                  setLeaveTypeFilter(e.target.value);
-                  setLeavePage(1);
-                }}
-                className="h-9 px-3 text-xs bg-background border border-border rounded-md text-foreground cursor-pointer"
-              >
-                <option value="All">All Types</option>
-                <option value="Casual">Casual Leave</option>
-                <option value="Sick">Sick Leave</option>
-                <option value="Earned">Earned Leave</option>
-                <option value="Unpaid">Unpaid Leave</option>
-              </select>
-
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  const filtered = leaves.filter((l) => {
-                    const matchesSearch = !leaveSearchQuery || (l.userName && l.userName.toLowerCase().includes(leaveSearchQuery.toLowerCase()));
-                    const matchesStatus = leaveStatusFilter === "All" || l.status === leaveStatusFilter;
-                    const matchesType = leaveTypeFilter === "All" || l.type === leaveTypeFilter;
-                    return matchesSearch && matchesStatus && matchesType;
-                  });
-                  handleExportAllLeaves(filtered);
-                }}
-                className="gap-1.5 cursor-pointer font-semibold text-xs text-emerald-500 border-emerald-500/40 hover:bg-emerald-500/10"
-              >
-                <i className="fa-solid fa-file-excel text-xs" /> Export Data
-              </Button>
-
-              <Button color="primary" size="sm" onClick={() => setShowLeaveForm(true)} className="gap-1.5 cursor-pointer">
-                <i className="fa-solid fa-plus text-xs" /> Request Time-Off
-              </Button>
-            </div>
-          </div>
-
-          {/* Leave Summary Cards — all dynamic from real leave records */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <Card className="p-4 text-center">
-              <p className="text-xs text-muted-foreground font-semibold uppercase">Casual Leave Taken</p>
-              <p className="text-2xl font-bold text-primary mt-1">
-                {leaves.filter((l) => l.type === "Casual" && l.status === "Approved").length} Day(s)
-              </p>
-            </Card>
-            <Card className="p-4 text-center">
-              <p className="text-xs text-muted-foreground font-semibold uppercase">Sick Leave Taken</p>
-              <p className="text-2xl font-bold text-emerald-500 mt-1">
-                {leaves.filter((l) => l.type === "Sick" && l.status === "Approved").length} Day(s)
-              </p>
-            </Card>
-            <Card className="p-4 text-center">
-              <p className="text-xs text-muted-foreground font-semibold uppercase">Earned Leave Taken</p>
-              <p className="text-2xl font-bold text-amber-500 mt-1">
-                {leaves.filter((l) => l.type === "Earned" && l.status === "Approved").length} Day(s)
-              </p>
-            </Card>
-            <Card className="p-4 text-center">
-              <p className="text-xs text-muted-foreground font-semibold uppercase">Total Approved Leaves</p>
-              <p className="text-2xl font-bold text-indigo-400 mt-1">
-                {leaves.filter((l) => l.status === "Approved").length} Record(s)
-              </p>
-            </Card>
-          </div>
-
-          {/* Leave Records List */}
-          {(() => {
-            const filteredLeaves = leaves.filter((l) => {
-              const matchesSearch = !leaveSearchQuery || (l.userName && l.userName.toLowerCase().includes(leaveSearchQuery.toLowerCase()));
-              const matchesStatus = leaveStatusFilter === "All" || l.status === leaveStatusFilter;
-              const matchesType = leaveTypeFilter === "All" || l.type === leaveTypeFilter;
-              return matchesSearch && matchesStatus && matchesType;
-            });
-
-            const totalLeavePages = Math.ceil(filteredLeaves.length / leaveItemsPerPage) || 1;
-            const currentPage = Math.min(leavePage, totalLeavePages);
-            const paginatedLeaves = filteredLeaves.slice((currentPage - 1) * leaveItemsPerPage, currentPage * leaveItemsPerPage);
-
-            return (
-              <div className="space-y-3">
-                {paginatedLeaves.map((l) => (
-                  <Card key={l._id} className="hover:shadow-md transition-all">
-                    <CardContent className="p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                      <div className="flex items-center gap-4 flex-1">
-                        <div className="h-10 w-10 rounded-full bg-primary/20 text-primary font-bold flex items-center justify-center text-sm border border-primary/30 shrink-0">
-                          {l.userName?.charAt(0) || "?"}
-                        </div>
-                        <div className="space-y-1 flex-1 min-w-0">
-                          <div className="flex items-center justify-between gap-2 flex-wrap w-full">
-                            <p className="font-bold text-sm text-foreground">{l.userName}</p>
-                            <div className="flex items-center gap-1.5 ml-auto">
-                              <Badge color="primary" variant="soft">{l.type} Leave</Badge>
-                              <Badge color={l.status === "Approved" ? "success" : l.status === "Rejected" ? "destructive" : "warning"}>
-                                {l.status}
-                              </Badge>
-                            </div>
-                          </div>
-                          <div className="flex items-center justify-between gap-2 flex-wrap">
-                            <p className="text-xs text-muted-foreground font-medium flex items-center gap-2">
-                              <i className="fa-solid fa-calendar-days text-xs text-primary" />
-                              {new Date(l.startDate).toLocaleDateString()} — {new Date(l.endDate).toLocaleDateString()}
-                            </p>
-                            {l.status === "Approved" && (
-                              <p className="text-[11px] font-semibold text-emerald-500 flex items-center gap-1 ml-auto">
-                                <i className="fa-solid fa-circle-check text-xs" />
-                                Approved {l.approverName ? `by ${l.approverName}` : "by Admin"}
-                                {l.updatedAt ? ` on ${new Date(l.updatedAt).toLocaleDateString()} at ${new Date(l.updatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: true })}` : ""}
-                              </p>
-                            )}
-                            {l.status === "Rejected" && (
-                              <p className="text-[11px] font-semibold text-rose-500 flex items-center gap-1 ml-auto">
-                                <i className="fa-solid fa-circle-xmark text-xs" />
-                                Declined {l.approverName ? `by ${l.approverName}` : "by Admin"}
-                                {l.updatedAt ? ` on ${new Date(l.updatedAt).toLocaleDateString()} at ${new Date(l.updatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: true })}` : ""}
-                              </p>
-                            )}
-                          </div>
-                          <p className="text-xs text-muted-foreground italic">"{l.reason}"</p>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-2 shrink-0 flex-wrap">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => setSelectedLeaveDetails(l)}
-                          className="gap-1.5 text-xs font-semibold cursor-pointer"
-                        >
-                          <i className="fa-solid fa-file-lines text-xs text-primary" /> Show Details
-                        </Button>
-
-                        {isManagerOrAdmin && l.status === "Pending" && (
-                          <>
-                            <Button size="sm" color="primary" onClick={() => handleApproveRejectLeave(l._id, "Approved")} className="gap-1 cursor-pointer">
-                              <i className="fa-solid fa-circle-check text-xs" /> Approve
-                            </Button>
-                            <Button size="sm" variant="outline" onClick={() => handleApproveRejectLeave(l._id, "Rejected")} className="gap-1 text-destructive cursor-pointer">
-                              <i className="fa-solid fa-xmark text-xs" /> Reject
-                            </Button>
-                          </>
-                        )}
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-
-                {filteredLeaves.length === 0 && (
-                  <div className="text-center py-10 text-muted-foreground border border-dashed rounded-xl">
-                    <i className="fa-solid fa-calendar-xmark text-4xl mb-2 text-muted-foreground/40 block" />
-                    <p className="text-sm font-semibold text-foreground">No leave records found</p>
-                  </div>
-                )}
-
-                {/* Pagination Controls Bar */}
-                {filteredLeaves.length > 0 && (
-                  <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-3.5 bg-card border border-border/80 rounded-xl shadow-2xs">
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <span>Showing</span>
-                      <span className="font-bold text-foreground">
-                        {Math.min((currentPage - 1) * leaveItemsPerPage + 1, filteredLeaves.length)} - {Math.min(currentPage * leaveItemsPerPage, filteredLeaves.length)}
-                      </span>
-                      <span>of</span>
-                      <span className="font-bold text-foreground">{filteredLeaves.length} Records</span>
-
-                      <div className="flex items-center gap-1.5 ml-4">
-                        <span>Rows:</span>
-                        <select
-                          value={leaveItemsPerPage}
-                          onChange={(e) => {
-                            setLeaveItemsPerPage(Number(e.target.value));
-                            setLeavePage(1);
-                          }}
-                          className="h-7 px-2 text-xs bg-background border border-border rounded text-foreground cursor-pointer font-semibold"
-                        >
-                          <option value={5}>5 per page</option>
-                          <option value={10}>10 per page</option>
-                          <option value={20}>20 per page</option>
-                          <option value={50}>50 per page</option>
-                        </select>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={currentPage === 1}
-                        onClick={() => setLeavePage((prev) => Math.max(prev - 1, 1))}
-                        className="h-8 text-xs gap-1 font-semibold cursor-pointer"
-                      >
-                        <i className="fa-solid fa-chevron-left text-[10px]" /> Previous
-                      </Button>
-
-                      <span className="text-xs font-semibold px-2 text-foreground font-mono">
-                        Page {currentPage} of {totalLeavePages}
-                      </span>
-
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={currentPage >= totalLeavePages}
-                        onClick={() => setLeavePage((prev) => Math.min(prev + 1, totalLeavePages))}
-                        className="h-8 text-xs gap-1 font-semibold cursor-pointer"
-                      >
-                        Next <i className="fa-solid fa-chevron-right text-[10px]" />
-                      </Button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })()}
-        </div>
+      {/* TAB: SALARY SLIPS & COMPENSATION — employee self-service */}
+      {activeTab === "payslips" && (isAdmin || isOPS || can("viewSalarySlips") || Boolean(user)) && (
+        <EmployeeSalarySlipsDesk />
       )}
 
       {/* TAB 4: DOCUMENT VAULT — guarded */}

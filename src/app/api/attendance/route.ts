@@ -27,6 +27,13 @@ function getISTDayRange(): { start: Date; end: Date } {
   return { start, end };
 }
 
+function getISTDayRangeForDate(d: Date): { start: Date; end: Date } {
+  const istDayIndex = Math.floor((d.getTime() + IST_OFFSET_MS) / 86400000);
+  const start = new Date(istDayIndex * 86400000 - IST_OFFSET_MS);
+  const end   = new Date(start.getTime() + 86400000);
+  return { start, end };
+}
+
 /** Canonical IST-midnight Date to store as the `date` field for new records. */
 function getTodayDateNormalized(): Date {
   return getISTDayRange().start;
@@ -43,6 +50,12 @@ const POPULATE_EXTENSION_APPROVER = {
 
 const POPULATE_EXTENSION_REJECTOR = {
   path: "extensionRejectedBy",
+  select: "name email role photoUrl",
+  strictPopulate: false,
+};
+
+const POPULATE_REGULARIZATION_APPROVER = {
+  path: "regularizedBy",
   select: "name email role photoUrl",
   strictPopulate: false,
 };
@@ -73,6 +86,7 @@ export async function GET(request: Request) {
     })
       .populate(POPULATE_EXTENSION_APPROVER)
       .populate(POPULATE_EXTENSION_REJECTOR)
+      .populate(POPULATE_REGULARIZATION_APPROVER)
       .sort({ clockIn: -1 }); // prefer the latest if duplicates somehow exist
 
     // Overnight shift support: if no record exists for today, look for an active unclosed shift from the last 24h
@@ -153,6 +167,7 @@ export async function GET(request: Request) {
       .populate("userId", "name email role department photoUrl shiftName shiftTime employmentType")
       .populate(POPULATE_EXTENSION_APPROVER)
       .populate(POPULATE_EXTENSION_REJECTOR)
+      .populate(POPULATE_REGULARIZATION_APPROVER)
       .sort({ date: -1, clockIn: -1 });
 
     if (limitParam !== "all") {
@@ -195,10 +210,19 @@ export async function POST(request: Request) {
     const { action, location } = body;
     const targetAttendanceId = body.targetAttendanceId || body.attendanceId || body.recordId || body.id;
     const targetUserId = body.targetUserId || body.userId;
-    const reason = body.reason || body.rejectionReason || body.extensionReason || "";
+    const reason = body.reason || body.rejectionReason || body.extensionReason || body.regularizationReason || "";
+    const requestedClockIn = body.requestedClockIn ? new Date(body.requestedClockIn) : undefined;
+    const requestedClockOut = body.requestedClockOut ? new Date(body.requestedClockOut) : undefined;
+    const targetDateStr = body.date || body.targetDate;
 
-    if (!action || !["in", "out", "resume", "request_extension", "approve_extension", "reject_extension", "bulk_approve_extensions"].includes(action)) {
-      return NextResponse.json({ error: "Action must be 'in', 'out', 'resume', 'request_extension', 'approve_extension', 'reject_extension', or 'bulk_approve_extensions'" }, { status: 400 });
+    const ALLOWED_ACTIONS = [
+      "in", "out", "resume",
+      "request_extension", "approve_extension", "reject_extension", "bulk_approve_extensions",
+      "request_regularization", "approve_regularization", "reject_regularization", "bulk_approve_regularizations",
+    ];
+
+    if (!action || !ALLOWED_ACTIONS.includes(action)) {
+      return NextResponse.json({ error: `Action must be one of: ${ALLOWED_ACTIONS.join(", ")}` }, { status: 400 });
     }
 
     await connectToDatabase();
@@ -711,6 +735,318 @@ export async function POST(request: Request) {
         message: `Shift extension (+${requestedHours.toFixed(1)}h) request recorded successfully.`,
         requestedHours,
         attendance: record,
+      });
+
+    } else if (action === "request_regularization") {
+      const targetDate = targetDateStr ? new Date(targetDateStr) : now;
+      if (isNaN(targetDate.getTime())) {
+        return NextResponse.json({ error: "Invalid target date format" }, { status: 400 });
+      }
+
+      if (!reason || !String(reason).trim()) {
+        return NextResponse.json({ error: "Reason for regularization is required" }, { status: 400 });
+      }
+
+      if (!requestedClockIn || isNaN(requestedClockIn.getTime())) {
+        return NextResponse.json({ error: "Valid requestedClockIn time is required" }, { status: 400 });
+      }
+
+      if (requestedClockOut && isNaN(requestedClockOut.getTime())) {
+        return NextResponse.json({ error: "Invalid requestedClockOut time format" }, { status: 400 });
+      }
+
+      if (requestedClockOut && requestedClockOut.getTime() <= requestedClockIn.getTime()) {
+        return NextResponse.json({ error: "Requested clock out time must be after clock in time" }, { status: 400 });
+      }
+
+      const { start: dateStart, end: dateEnd } = getISTDayRangeForDate(targetDate);
+      let record: any = null;
+
+      if (targetAttendanceId && mongoose.Types.ObjectId.isValid(String(targetAttendanceId))) {
+        record = await Attendance.findOne({
+          _id: new mongoose.Types.ObjectId(String(targetAttendanceId)),
+          tenantId: tenantObjectId,
+          ...(session.role === "Admin" || session.role === "OPS" || session.role === "HR" ? {} : { userId: userObjectId }),
+        });
+      }
+
+      if (!record) {
+        record = await Attendance.findOne({
+          userId: userObjectId,
+          tenantId: tenantObjectId,
+          date: { $gte: dateStart, $lt: dateEnd },
+        });
+      }
+
+      if (!record) {
+        // Create a new attendance record for regularizing an unlogged day
+        record = new Attendance({
+          userId: userObjectId,
+          tenantId: tenantObjectId,
+          date: dateStart,
+          status: "Present",
+          clockIn: requestedClockIn,
+          clockOut: requestedClockOut,
+          regularHours: 0,
+          overtimeHours: 0,
+        });
+      }
+
+      record.regularizationRequested = true;
+      record.regularizationStatus = "Pending";
+      record.regularizationReason = String(reason).trim();
+      record.requestedClockIn = requestedClockIn;
+      record.requestedClockOut = requestedClockOut;
+      record.regularizationRejectionReason = "";
+      await record.save();
+      await record.populate(POPULATE_REGULARIZATION_APPROVER);
+
+      // Dispatch notifications to Reviewers (Admin, HR, OPS, Manager)
+      try {
+        const employee = await User.findById(userObjectId).select("name department");
+        const employeeName = employee?.name || "Team Member";
+        const employeeDept = employee?.department || "";
+
+        const reviewerQuery: Record<string, unknown> = {
+          tenantId: tenantObjectId,
+          _id: { $ne: userObjectId },
+          status: { $ne: "Suspended" },
+          $or: [
+            { role: { $in: ["Admin", "SuperAdmin", "OPS", "HR"] } },
+            ...(employeeDept ? [{ role: "Manager", department: employeeDept }] : [{ role: "Manager" }]),
+          ],
+        };
+
+        const reviewers = await User.find(reviewerQuery).select("_id role");
+        if (reviewers.length > 0) {
+          const dateLabel = dateStart.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+          const reviewerNotifications = reviewers.map((rev) => ({
+            recipientId: rev._id,
+            tenantId: tenantObjectId,
+            title: `📝 Attendance Regularization Request — ${employeeName}`,
+            message: `${employeeName}${employeeDept ? ` (${employeeDept})` : ""} submitted an attendance regularization request for ${dateLabel}. Reason: "${String(reason).trim()}".`,
+            type: "hr",
+            linkUrl: "/dashboard/calendar",
+            adminOnly: ["Admin", "SuperAdmin", "OPS"].includes(rev.role),
+          }));
+          await Notification.insertMany(reviewerNotifications);
+        }
+
+        // Confirmation notification to employee
+        await Notification.create({
+          recipientId: userObjectId,
+          tenantId: tenantObjectId,
+          title: "📝 Regularization Request Submitted",
+          message: "Your attendance regularization request has been submitted for management review.",
+          type: "hr",
+          linkUrl: "/dashboard/calendar",
+        });
+      } catch (notifErr) {
+        console.error("Failed to dispatch regularization request notifications:", notifErr);
+      }
+
+      return NextResponse.json({
+        success: true,
+        message: "Attendance regularization request submitted successfully.",
+        attendance: record,
+      });
+
+    } else if (action === "approve_regularization") {
+      const dataScope = await getUserDataScope(session);
+      const isElevatedStaff = session.role === "Admin" || session.role === "OPS" || session.role === "HR" || session.role === "Manager" || dataScope.canViewFeature("manageHR") || dataScope.canViewFeature("approveAdditionalShiftTime");
+      if (!isElevatedStaff) {
+        return NextResponse.json({ error: "Forbidden: Only Admin, OPS, HR, or Managers can approve attendance regularization" }, { status: 403 });
+      }
+
+      if (!targetAttendanceId || !mongoose.Types.ObjectId.isValid(String(targetAttendanceId))) {
+        return NextResponse.json({ error: "Valid targetAttendanceId is required" }, { status: 400 });
+      }
+
+      const recordToApprove = await Attendance.findOne({
+        _id: new mongoose.Types.ObjectId(String(targetAttendanceId)),
+        tenantId: tenantObjectId,
+      });
+
+      if (!recordToApprove) {
+        return NextResponse.json({ error: "Attendance record not found" }, { status: 404 });
+      }
+
+      const tenant = await Tenant.findById(tenantObjectId).lean();
+      const dynamicTargetHours = Number(tenant?.targetShiftHours) || SHIFT_TARGET_HOURS;
+
+      // Apply requested punch times
+      if (recordToApprove.requestedClockIn) {
+        recordToApprove.clockIn = recordToApprove.requestedClockIn;
+      }
+      if (recordToApprove.requestedClockOut) {
+        recordToApprove.clockOut = recordToApprove.requestedClockOut;
+      }
+
+      // Calculate worked hours
+      if (recordToApprove.clockIn && recordToApprove.clockOut) {
+        const totalDurationHours = Math.max(0, (new Date(recordToApprove.clockOut).getTime() - new Date(recordToApprove.clockIn).getTime()) / (1000 * 60 * 60));
+        recordToApprove.regularHours = Number(Math.min(totalDurationHours, dynamicTargetHours).toFixed(2));
+        recordToApprove.overtimeHours = Number(Math.max(0, totalDurationHours - dynamicTargetHours).toFixed(2));
+      } else if (recordToApprove.clockIn && !recordToApprove.clockOut) {
+        recordToApprove.regularHours = dynamicTargetHours;
+        recordToApprove.overtimeHours = 0;
+      }
+
+      recordToApprove.status = "Present";
+      recordToApprove.regularizationRequested = false;
+      recordToApprove.regularizationStatus = "Approved";
+      recordToApprove.regularizedBy = userObjectId;
+      recordToApprove.regularizedAt = now;
+      recordToApprove.regularizationRejectionReason = "";
+      await recordToApprove.save();
+      await recordToApprove.populate(POPULATE_REGULARIZATION_APPROVER);
+
+      // Notify the employee
+      try {
+        await Notification.create({
+          recipientId: recordToApprove.userId,
+          tenantId: tenantObjectId,
+          title: "✅ Attendance Regularization Approved",
+          message: "Your attendance regularization request has been approved and your timesheet updated.",
+          type: "hr",
+          linkUrl: "/dashboard/calendar",
+        });
+      } catch (notifErr) {
+        console.error("Failed to send regularization approval notification:", notifErr);
+      }
+
+      return NextResponse.json({
+        success: true,
+        message: "Attendance regularization approved successfully.",
+        attendance: recordToApprove,
+      });
+
+    } else if (action === "reject_regularization") {
+      const dataScope = await getUserDataScope(session);
+      const isElevatedStaff = session.role === "Admin" || session.role === "OPS" || session.role === "HR" || session.role === "Manager" || dataScope.canViewFeature("manageHR") || dataScope.canViewFeature("approveAdditionalShiftTime");
+      if (!isElevatedStaff) {
+        return NextResponse.json({ error: "Forbidden: Only Admin, OPS, HR, or Managers can decline attendance regularization" }, { status: 403 });
+      }
+
+      if (!targetAttendanceId || !mongoose.Types.ObjectId.isValid(String(targetAttendanceId))) {
+        return NextResponse.json({ error: "Valid targetAttendanceId is required" }, { status: 400 });
+      }
+
+      const recordToReject = await Attendance.findOne({
+        _id: new mongoose.Types.ObjectId(String(targetAttendanceId)),
+        tenantId: tenantObjectId,
+      });
+
+      if (!recordToReject) {
+        return NextResponse.json({ error: "Attendance record not found" }, { status: 404 });
+      }
+
+      const rejectionReason = String(body.reason || body.rejectionReason || reason || "").trim() || "Attendance regularization request declined by manager.";
+
+      recordToReject.regularizationRequested = false;
+      recordToReject.regularizationStatus = "Rejected";
+      recordToReject.regularizedBy = userObjectId;
+      recordToReject.regularizedAt = now;
+      recordToReject.regularizationRejectionReason = rejectionReason;
+      await recordToReject.save();
+      await recordToReject.populate(POPULATE_REGULARIZATION_APPROVER);
+
+      // Notify the employee
+      try {
+        await Notification.create({
+          recipientId: recordToReject.userId,
+          tenantId: tenantObjectId,
+          title: "❌ Attendance Regularization Declined",
+          message: `Your attendance regularization request was declined. Reason: "${rejectionReason}"`,
+          type: "hr",
+          linkUrl: "/dashboard/calendar",
+        });
+      } catch (notifErr) {
+        console.error("Failed to send regularization decline notification:", notifErr);
+      }
+
+      return NextResponse.json({
+        success: true,
+        message: "Attendance regularization request has been declined.",
+        attendance: recordToReject,
+      });
+
+    } else if (action === "bulk_approve_regularizations") {
+      const dataScope = await getUserDataScope(session);
+      const isElevatedStaff = session.role === "Admin" || session.role === "OPS" || session.role === "HR" || session.role === "Manager" || dataScope.canViewFeature("manageHR") || dataScope.canViewFeature("approveAdditionalShiftTime");
+      if (!isElevatedStaff) {
+        return NextResponse.json({ error: "Forbidden: Only Admin, OPS, HR, or Managers can approve attendance regularization" }, { status: 403 });
+      }
+
+      const attendanceIds = body.attendanceIds || body.targetAttendanceIds || body.ids;
+      if (!Array.isArray(attendanceIds) || attendanceIds.length === 0) {
+        return NextResponse.json({ error: "attendanceIds array is required" }, { status: 400 });
+      }
+
+      const validObjectIds = attendanceIds
+        .filter((id: string) => mongoose.Types.ObjectId.isValid(id))
+        .map((id: string) => new mongoose.Types.ObjectId(id));
+
+      const recordsToApprove = await Attendance.find({
+        _id: { $in: validObjectIds },
+        tenantId: tenantObjectId,
+        regularizationRequested: true,
+      });
+
+      const tenant = await Tenant.findById(tenantObjectId).lean();
+      const dynamicTargetHours = Number(tenant?.targetShiftHours) || SHIFT_TARGET_HOURS;
+
+      let approvedCount = 0;
+      const notificationsToCreate = [];
+
+      for (const rec of recordsToApprove) {
+        if (rec.requestedClockIn) {
+          rec.clockIn = rec.requestedClockIn;
+        }
+        if (rec.requestedClockOut) {
+          rec.clockOut = rec.requestedClockOut;
+        }
+
+        if (rec.clockIn && rec.clockOut) {
+          const totalDurationHours = Math.max(0, (new Date(rec.clockOut).getTime() - new Date(rec.clockIn).getTime()) / (1000 * 60 * 60));
+          rec.regularHours = Number(Math.min(totalDurationHours, dynamicTargetHours).toFixed(2));
+          rec.overtimeHours = Number(Math.max(0, totalDurationHours - dynamicTargetHours).toFixed(2));
+        } else if (rec.clockIn && !rec.clockOut) {
+          rec.regularHours = dynamicTargetHours;
+          rec.overtimeHours = 0;
+        }
+
+        rec.status = "Present";
+        rec.regularizationRequested = false;
+        rec.regularizationStatus = "Approved";
+        rec.regularizedBy = userObjectId;
+        rec.regularizedAt = now;
+        rec.regularizationRejectionReason = "";
+        await rec.save();
+        approvedCount++;
+
+        notificationsToCreate.push({
+          recipientId: rec.userId,
+          tenantId: tenantObjectId,
+          title: "✅ Attendance Regularization Approved",
+          message: "Your attendance regularization request has been approved in batch.",
+          type: "hr",
+          linkUrl: "/dashboard/calendar",
+        });
+      }
+
+      if (notificationsToCreate.length > 0) {
+        try {
+          await Notification.insertMany(notificationsToCreate);
+        } catch (notifErr) {
+          console.error("Failed to insert bulk regularization notifications:", notifErr);
+        }
+      }
+
+      return NextResponse.json({
+        success: true,
+        approvedCount,
+        message: `Successfully approved ${approvedCount} regularization requests.`,
       });
     }
 

@@ -9,6 +9,9 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { AdminInvoicesTab } from "@/components/settings/AdminInvoicesTab";
 import InvoiceGridView from "./InvoiceGridView";
+import { ZeroTouchPayrollDesk } from "@/components/finance/ZeroTouchPayrollDesk";
+import { useAuth } from "@/hooks/useAuth";
+import { usePermissions } from "@/hooks/usePermissions";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -169,6 +172,10 @@ export function FinancePortalDashboard({
   onDeleteDeal,
   onRefresh,
 }: FinancePortalDashboardProps) {
+  const { user } = useAuth();
+  const { can, isAdmin, isOPS, isHR } = usePermissions();
+  const canManagePayroll = Boolean(isAdmin || isOPS || isHR || can("managePayroll"));
+
   const searchParams = useSearchParams();
   const urlTab = searchParams.get("tab");
   const [activeTab, setActiveTab] = useState<"invoices" | "expenses" | "budget" | "payroll" | "overview">(
@@ -674,80 +681,85 @@ export function FinancePortalDashboard({
 
       {/* ── PAYROLL TAB ── */}
       {activeTab === "payroll" && (
-        <div className="space-y-5">
-          {/* Payroll KPIs */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {(() => {
-              const lastPaid    = activePayrollData.find(p => p.status === "Paid");
-              const totalYTD    = activePayrollData.filter(p => p.status === "Paid").reduce((s, p) => s + p.total, 0);
-              const processing  = activePayrollData.find(p => p.status === "Processing");
-              return [
-                { label: "YTD Payroll",         val: `$${fmt(totalYTD)}`,             sub: `${activePayrollData.filter(p => p.status === "Paid").length} cycles paid`, icon: "fa-coins",              bg: "bg-emerald-500/10 text-emerald-500" },
-                { label: "Last Disbursement",    val: lastPaid ? `$${fmt(lastPaid.total)}` : "—", sub: lastPaid?.period || "—", icon: "fa-money-check-dollar", bg: "bg-primary/10 text-primary" },
-                { label: "Next Processing",      val: processing ? `$${fmt(processing.total)}` : "—", sub: processing ? `Due ${processing.date}` : "—", icon: "fa-clock",            bg: "bg-amber-500/10 text-amber-500" },
-              ];
-            })().map(m => (
-              <Card key={m.label}>
-                <CardContent className="p-4 flex items-center justify-between">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{m.label}</p>
-                    <p className="text-xl font-bold text-foreground">{m.val}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">{m.sub}</p>
-                  </div>
-                  <div className={cn("p-3 rounded-xl", m.bg)}><i className={`fa-solid ${m.icon} text-lg`} /></div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+        financeScope === "internal" ? (
+          <ZeroTouchPayrollDesk
+            canManagePayroll={canManagePayroll}
+            currentUserId={user?._id}
+            currentUserRole={user?.role}
+            onToast={showToast}
+          />
+        ) : (
+          <div className="space-y-5">
+            {/* Payroll KPIs */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {(() => {
+                const lastPaid    = activePayrollData.find(p => p.status === "Paid");
+                const totalYTD    = activePayrollData.filter(p => p.status === "Paid").reduce((s, p) => s + p.total, 0);
+                const processing  = activePayrollData.find(p => p.status === "Processing");
+                return [
+                  { label: "YTD External Payouts", val: `$${fmt(totalYTD)}`, sub: `${activePayrollData.filter(p => p.status === "Paid").length} cycles paid`, icon: "fa-coins", bg: "bg-emerald-500/10 text-emerald-500" },
+                  { label: "Last Disbursement", val: lastPaid ? `$${fmt(lastPaid.total)}` : "—", sub: lastPaid?.period || "—", icon: "fa-money-check-dollar", bg: "bg-primary/10 text-primary" },
+                  { label: "Next Processing", val: processing ? `$${fmt(processing.total)}` : "—", sub: processing ? `Due ${processing.date}` : "—", icon: "fa-clock", bg: "bg-amber-500/10 text-amber-500" },
+                ];
+              })().map(m => (
+                <Card key={m.label}>
+                  <CardContent className="p-4 flex items-center justify-between">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{m.label}</p>
+                      <p className="text-xl font-bold text-foreground">{m.val}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">{m.sub}</p>
+                    </div>
+                    <div className={cn("p-3 rounded-xl", m.bg)}><i className={`fa-solid ${m.icon} text-lg`} /></div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
 
-          {/* Payroll Table */}
-          <Card>
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-sm font-bold flex items-center gap-2">
-                  <i className="fa-solid fa-table text-primary" /> {financeScope === "external" ? "External Contractor Payout History" : "Payroll History"}
-                </CardTitle>
-                <Button variant="outline" size="sm" className="gap-2 h-8 font-semibold cursor-pointer">
-                  <i className="fa-solid fa-download text-xs" /> Export
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent className="pt-0 overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-muted/40">
-                  <tr className="border-b border-border">
-                    {["Pay Period", "Total Payroll", "Headcount", "Disbursement Date", "Status"].map(h => (
-                      <th key={h} className="text-left py-2.5 px-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{h}</th>
+            {/* External Payroll Table */}
+            <Card>
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-sm font-bold flex items-center gap-2">
+                    <i className="fa-solid fa-table text-primary" /> External Contractor Payout History
+                  </CardTitle>
+                </div>
+              </CardHeader>
+              <CardContent className="pt-0 overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/40">
+                    <tr className="border-b border-border">
+                      {["Pay Period", "Total Payout", "Headcount", "Disbursement Date", "Status"].map(h => (
+                        <th key={h} className="text-left py-2.5 px-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider whitespace-nowrap">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {activePayrollData.sort((a, b) => b.date.localeCompare(a.date)).map((p, i) => (
+                      <tr key={p.period} className={cn("border-b border-border/50 hover:bg-muted/30 transition-colors", i % 2 === 1 && "bg-muted/10")}>
+                        <td className="py-3 px-3 font-semibold text-foreground">{p.period}</td>
+                        <td className="py-3 px-3 font-bold text-foreground">${fmt(p.total)}</td>
+                        <td className="py-3 px-3 text-muted-foreground">{p.headcount} recipients</td>
+                        <td className="py-3 px-3 text-muted-foreground text-xs">{p.date}</td>
+                        <td className="py-3 px-3">
+                          <span className={cn("text-[11px] font-semibold px-2.5 py-0.5 rounded-full border", payrollStatusStyle[p.status])}>{p.status}</span>
+                        </td>
+                      </tr>
                     ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {activePayrollData.sort((a, b) => b.date.localeCompare(a.date)).map((p, i) => (
-                    <tr key={p.period} className={cn("border-b border-border/50 hover:bg-muted/30 transition-colors", i % 2 === 1 && "bg-muted/10")}>
-                      <td className="py-3 px-3 font-semibold text-foreground">{p.period}</td>
-                      <td className="py-3 px-3 font-bold text-foreground">${fmt(p.total)}</td>
-                      <td className="py-3 px-3 text-muted-foreground">{p.headcount} recipients</td>
-                      <td className="py-3 px-3 text-muted-foreground text-xs">{p.date}</td>
-                      <td className="py-3 px-3">
-                        <span className={cn("text-[11px] font-semibold px-2.5 py-0.5 rounded-full border", payrollStatusStyle[p.status])}>{p.status}</span>
-                      </td>
-                    </tr>
-                  ))}
-                  {activePayrollData.length === 0 && (
-                    <tr>
-                      <td colSpan={5} className="py-12 text-center text-muted-foreground">
-                        <i className="fa-solid fa-money-check-dollar text-3xl mb-3 block opacity-25" />
-                        <p className="text-sm font-semibold">No external contractor disbursements recorded.</p>
-                        <p className="text-xs text-muted-foreground mt-1">Disbursements to external agencies and freelance staff will appear here.</p>
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </CardContent>
-          </Card>
-
-        </div>
+                    {activePayrollData.length === 0 && (
+                      <tr>
+                        <td colSpan={5} className="py-12 text-center text-muted-foreground">
+                          <i className="fa-solid fa-money-check-dollar text-3xl mb-3 block opacity-25" />
+                          <p className="text-sm font-semibold">No external contractor disbursements recorded.</p>
+                          <p className="text-xs text-muted-foreground mt-1">Disbursements to external agencies and freelance staff will appear here.</p>
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </CardContent>
+            </Card>
+          </div>
+        )
       )}
 
     </div>

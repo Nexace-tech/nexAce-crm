@@ -31,6 +31,14 @@ export interface IAttendance extends Document {
   extensionRejectedBy?: mongoose.Types.ObjectId;
   extensionRejectedAt?: Date;
   extensionRejectionReason?: string;
+  regularizationRequested?: boolean;
+  regularizationReason?: string;
+  requestedClockIn?: Date;
+  requestedClockOut?: Date;
+  regularizationStatus?: "Pending" | "Approved" | "Rejected";
+  regularizedBy?: mongoose.Types.ObjectId;
+  regularizedAt?: Date;
+  regularizationRejectionReason?: string;
   tenantId: mongoose.Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
@@ -73,6 +81,17 @@ const AttendanceSchema = new Schema<IAttendance>(
     extensionRejectedBy: { type: Schema.Types.ObjectId, ref: "User" },
     extensionRejectedAt: { type: Date },
     extensionRejectionReason: { type: String, default: "" },
+    regularizationRequested: { type: Boolean, default: false },
+    regularizationReason: { type: String, default: "" },
+    requestedClockIn: { type: Date },
+    requestedClockOut: { type: Date },
+    regularizationStatus: {
+      type: String,
+      enum: ["Pending", "Approved", "Rejected"],
+    },
+    regularizedBy: { type: Schema.Types.ObjectId, ref: "User" },
+    regularizedAt: { type: Date },
+    regularizationRejectionReason: { type: String, default: "" },
     tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true },
   },
   { timestamps: true }
@@ -87,11 +106,10 @@ AttendanceSchema.index({ tenantId: 1, userId: 1, date: -1 });
 // Force invalidate in-memory Mongoose model cache if schema updated in dev / hot-reload
 if (
   mongoose.models.Attendance &&
-  (!mongoose.models.Attendance.schema.path("extensionRejectedBy") ||
-    !mongoose.models.Attendance.schema.path("extensionApprovedBy") ||
-    !mongoose.models.Attendance.schema.path("extensionRejected") ||
-    !mongoose.models.Attendance.schema.path("extensionAllocatedHours") ||
-    !mongoose.models.Attendance.schema.path("extensionRejectionReason"))
+  (!mongoose.models.Attendance.schema.path("regularizationStatus") ||
+    !mongoose.models.Attendance.schema.path("regularizedBy") ||
+    !mongoose.models.Attendance.schema.path("extensionRejectedBy") ||
+    !mongoose.models.Attendance.schema.path("extensionApprovedBy"))
 ) {
   delete (mongoose.models as any).Attendance;
 }

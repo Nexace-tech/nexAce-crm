@@ -68,6 +68,7 @@ export function usePermissions() {
   const can = (featureKey: string): boolean => {
     if (!user) return false;
     if (isAdmin) return true;
+    // Dynamic tenant-configured feature permission takes absolute precedence
     if (featurePermissions[featureKey] !== undefined) {
       return Boolean(featurePermissions[featureKey]);
     }
@@ -82,7 +83,13 @@ export function usePermissions() {
       return false;
     }
     if (isSubAdminRole(user.role)) return true;
-    if (user.role === "HR" && (featureKey === "manageHolidays" || featureKey === "importHolidayExcel")) {
+    if (user.role === "HR" && (
+      featureKey === "manageHolidays" || 
+      featureKey === "importHolidayExcel" ||
+      featureKey === "manageLeaveBalances" ||
+      featureKey === "managePayroll" ||
+      featureKey === "approveRegularization"
+    )) {
       return true;
     }
     return false;
@@ -92,24 +99,15 @@ export function usePermissions() {
     if (!user) return false;
     // Root Admin always has full, unconditional access to every module
     if (isAdmin) return true;
-    // Drive Space & Finance Portal (My Invoices & Generator) are accessible to all authenticated workspace users
-    if (moduleKey === "drive" || moduleKey === "finance") {
-      return true;
+
+    // 1. Dynamic check: if tenant configured this module permission explicitly for the role, respect it
+    if (modulePermissions[moduleKey] !== undefined) {
+      return Boolean(modulePermissions[moduleKey]);
     }
 
-    // OPS Portal (/dashboard/clients): only accessible to Admin, OPS or if explicitly granted
-    if (moduleKey === "clients") {
-      if (isAdmin || isSubAdminRole(user.role)) return true;
-      if (modulePermissions["clients"] !== undefined) {
-        return Boolean(modulePermissions["clients"]);
-      }
-      return false;
-    }
-
-    // IT Portal: accessible if module permission "it" or any IT feature permission is granted
+    // 2. IT Portal: accessible if module permission "it" or any IT feature permission is granted
     if (moduleKey === "it") {
       if (
-        modulePermissions["it"] === true ||
         featurePermissions["viewITPortal"] === true ||
         featurePermissions["manageITDevices"] === true ||
         featurePermissions["manageITAccess"] === true ||
@@ -118,32 +116,25 @@ export function usePermissions() {
       ) {
         return true;
       }
-      if (
-        modulePermissions["it"] === false &&
-        !featurePermissions["viewITPortal"] &&
-        !featurePermissions["manageITDevices"] &&
-        !featurePermissions["manageITAccess"] &&
-        !featurePermissions["manageITSubscriptions"] &&
-        !featurePermissions["manageITInvoices"]
-      ) {
-        return false;
-      }
     }
 
-    if (modulePermissions[moduleKey] !== undefined) {
-      return Boolean(modulePermissions[moduleKey]);
+    // 3. OPS Portal (/dashboard/clients): only accessible to Admin, OPS or if explicitly granted
+    if (moduleKey === "clients") {
+      if (isSubAdminRole(user.role)) return true;
+      return false;
     }
+
     if (isSubAdminRole(user.role)) return true;
 
-    // Default fallback access for modules before explicit customization in settings
+    // 4. Default fallback access for modules before explicit customization in settings
     const defaultModulesByRole: Record<string, string[]> = {
-      Employee: ["overview", "team", "calendar", "projects", "chat", "notifications", "goals", "finance"],
-      HR: ["overview", "team", "calendar", "projects", "chat", "notifications", "goals", "hr", "finance"],
-      Manager: ["overview", "team", "calendar", "projects", "chat", "notifications", "bd", "referrals", "goals", "finance"],
-      OPS: ["overview", "team", "calendar", "projects", "clients", "bd", "finance", "referrals", "goals", "hr", "it", "analytics", "settings"],
+      Employee: ["overview", "team", "calendar", "projects", "chat", "notifications", "goals", "finance", "drive"],
+      HR: ["overview", "team", "calendar", "projects", "chat", "notifications", "goals", "hr", "finance", "drive"],
+      Manager: ["overview", "team", "calendar", "projects", "chat", "notifications", "bd", "referrals", "goals", "finance", "drive"],
+      OPS: ["overview", "team", "calendar", "projects", "clients", "bd", "finance", "referrals", "goals", "hr", "it", "analytics", "settings", "drive"],
     };
     const roleKey = normalizeRoleKey(user.role);
-    const allowedDefaults = defaultModulesByRole[roleKey] || defaultModulesByRole[user.role] || ["overview", "team", "calendar", "projects", "chat", "notifications", "finance"];
+    const allowedDefaults = defaultModulesByRole[roleKey] || defaultModulesByRole[user.role] || ["overview", "team", "calendar", "projects", "chat", "notifications", "finance", "drive"];
     return allowedDefaults.includes(moduleKey);
   };
 

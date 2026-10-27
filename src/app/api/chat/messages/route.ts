@@ -24,14 +24,50 @@ export async function GET(request: Request) {
 
     // Mode 1: Fetch recent conversation threads with unread counts
     if (mode === "conversations") {
+      const isSuperRole = session.role === "Admin" || isSubAdminRole(session.role);
+
+      // Find all channels accessible to this user
+      const channelDocs = await Channel.find({
+        tenantId: tenantObjectId,
+        isActive: { $ne: false },
+        $or: [
+          { isPrivate: false },
+          ...(isSuperRole ? [{}] : [
+            { createdBy: userObjectId },
+            { members: userObjectId }
+          ])
+        ]
+      }).select("name isPrivate").lean();
+
+      const accessibleChannelNames = new Set(channelDocs.map((c: any) => c.name.toLowerCase()));
+      // Always include standard channels
+      accessibleChannelNames.add("general");
+      accessibleChannelNames.add("projects");
+      accessibleChannelNames.add("engineering");
+      accessibleChannelNames.add("random");
+
+      const myIdStr = userObjectId.toString();
+      const myNameKey = session.userName ? session.userName.toLowerCase().replace(/[^a-z0-9]/g, "_") : "";
+
       const conversations = await ChatMessage.aggregate([
         {
           $match: {
             tenantId: tenantObjectId,
             $or: [
-              { recipientId: userObjectId },
-              { senderId: userObjectId },
-              { channel: { $regex: /^dm_/ } }
+              {
+                channel: {
+                  $in: Array.from(accessibleChannelNames),
+                  $not: /^dm_/
+                }
+              },
+              {
+                channel: { $regex: /^dm_/ },
+                $or: [
+                  { recipientId: userObjectId },
+                  { senderId: userObjectId },
+                  { channel: { $regex: new RegExp(`(${myIdStr}${myNameKey ? `|${myNameKey}` : ""})`, "i") } }
+                ]
+              }
             ]
           }
         },
@@ -39,17 +75,40 @@ export async function GET(request: Request) {
         {
           $group: {
             _id: "$channel",
+            channel: { $first: "$channel" },
+            isDM: { $first: "$isDM" },
+            recipientId: { $first: "$recipientId" },
+            senderId: { $first: "$senderId" },
+            senderName: { $first: "$senderName" },
             lastMessage: { $first: "$content" },
             lastMessageAt: { $first: "$createdAt" },
-            senderName: { $first: "$senderName" },
-            senderId: { $first: "$senderId" },
             unreadCount: {
               $sum: {
                 $cond: [
                   {
                     $and: [
                       { $ne: ["$senderId", userObjectId] },
-                      { $eq: ["$read", false] }
+                      {
+                        $or: [
+                          {
+                            $and: [
+                              { $regexMatch: { input: "$channel", regex: /^dm_/ } },
+                              {
+                                $or: [
+                                  { $eq: ["$read", false] },
+                                  { $not: [{ $in: [myIdStr, { $ifNull: ["$readBy", []] }] }] }
+                                ]
+                              }
+                            ]
+                          },
+                          {
+                            $and: [
+                              { $not: [{ $regexMatch: { input: "$channel", regex: /^dm_/ } }] },
+                              { $not: [{ $in: [myIdStr, { $ifNull: ["$readBy", []] }] }] }
+                            ]
+                          }
+                        ]
+                      }
                     ]
                   },
                   1,
@@ -144,27 +203,34 @@ export async function GET(request: Request) {
     }
 
     // Automatically mark unread messages in this channel sent by others as read by current user
-    const userIdentifier = session?.userName || userObjectId.toString();
-    const markReadFilter = channel.startsWith("dm_")
-      ? queryCondition
-      : {
+    const userIdentifiers = [userObjectId.toString(), session?.userName].filter(Boolean) as string[];
+
+    if (!channel.startsWith("dm_")) {
+      // For channels, add current user to readBy without breaking unread status for other team members
+      await ChatMessage.updateMany(
+        {
           tenantId: tenantObjectId,
           channel: { $in: Array.from(possibleChannels) },
           senderId: { $ne: userObjectId },
-          read: false,
-        };
-
-    await ChatMessage.updateMany(
-      {
-        ...markReadFilter,
-        senderId: { $ne: userObjectId },
-        read: false,
-      },
-      {
-        $set: { read: true, readAt: new Date() },
-        $addToSet: { readBy: userIdentifier },
-      }
-    );
+          readBy: { $nin: userIdentifiers }
+        },
+        {
+          $addToSet: { readBy: { $each: userIdentifiers } }
+        }
+      );
+    } else {
+      // For DMs, mark read: true and add current user to readBy
+      await ChatMessage.updateMany(
+        {
+          ...queryCondition,
+          senderId: { $ne: userObjectId },
+        },
+        {
+          $set: { read: true, readAt: new Date() },
+          $addToSet: { readBy: { $each: userIdentifiers } }
+        }
+      );
+    }
 
     const messages = await ChatMessage.find(queryCondition)
       .sort({ createdAt: 1 })

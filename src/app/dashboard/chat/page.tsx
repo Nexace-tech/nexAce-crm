@@ -491,6 +491,8 @@ export default function CommunicationHub() {
           }
           return newMsgs;
         });
+        // Immediately refresh unread counters so badges clear without waiting for poll
+        fetchRecentConversations();
       }
     } catch (err) {
       console.error("Fetch chat messages error:", err);
@@ -1212,6 +1214,11 @@ export default function CommunicationHub() {
                   return Boolean(isGlobal || pinnedChannels.includes(chName));
                 };
 
+                const getChannelConv = (chObj: any) => {
+                  const chName = (typeof chObj === "string" ? chObj : chObj.name || "").toLowerCase();
+                  return recentConversations.find((c: any) => c._id?.toLowerCase() === chName || c.channel?.toLowerCase() === chName);
+                };
+
                 const getDMChannel = (targetUser: any) => {
                   const myId = user?._id || user?.name || "";
                   const targetId = targetUser._id || targetUser.name || "";
@@ -1219,6 +1226,22 @@ export default function CommunicationHub() {
                   const targetKey = targetId.toString().toLowerCase().replace(/[^a-z0-9]/g, "_");
                   const pairKey = [myKey, targetKey].sort().join("_");
                   return `dm_${pairKey}`;
+                };
+
+                const getDmConv = (mUser: any) => {
+                  const dmChannel = getDMChannel(mUser);
+                  const targetId = (mUser._id || mUser.id || "").toString();
+                  const targetName = (mUser.name || mUser.userName || "").toLowerCase().replace(/[^a-z0-9]/g, "_");
+
+                  return recentConversations.find((c: any) => {
+                    if (!c) return false;
+                    if (c._id === dmChannel || c.channel === dmChannel) return true;
+                    if (targetId && (c.recipientId?.toString() === targetId || c.senderId?.toString() === targetId)) return true;
+                    if (targetId && (c._id?.includes(targetId) || c.channel?.includes(targetId))) return true;
+                    if (targetName && (c._id?.toLowerCase().includes(targetName) || c.channel?.toLowerCase().includes(targetName))) return true;
+                    if (mUser.name && c.senderName && c.senderName.toLowerCase() === mUser.name.toLowerCase()) return true;
+                    return false;
+                  });
                 };
 
                 const sourceList = teamMembers.length > 0
@@ -1256,7 +1279,16 @@ export default function CommunicationHub() {
                 const pinnedDmList = allDmUsers.filter(isDmPinned);
                 const totalPinnedCount = pinnedChannelList.length + pinnedDmList.length;
 
-                const unreadConvCount = recentConversations.filter((c: any) => (c.unreadCount || 0) > 0).length;
+                const unreadChannelsList = rawChannels.filter((ch: any) => {
+                  const conv = getChannelConv(ch);
+                  return (conv?.unreadCount || 0) > 0;
+                });
+                const unreadDmList = allDmUsers.filter((m: any) => {
+                  if (m.isSelf) return false;
+                  const conv = getDmConv(m);
+                  return (conv?.unreadCount || 0) > 0;
+                });
+                const totalUnreadCount = unreadChannelsList.length + unreadDmList.length;
 
                 return (
                   <div className="flex items-center gap-1 p-1 bg-muted/40 rounded-lg shrink-0 text-xs">
@@ -1301,9 +1333,9 @@ export default function CommunicationHub() {
                       )}
                     >
                       <span>Unread</span>
-                      {unreadConvCount > 0 && (
+                      {totalUnreadCount > 0 && (
                         <span className="text-[9px] px-1 py-0.2 rounded-full bg-rose-500/20 text-rose-500 font-mono font-bold">
-                          {unreadConvCount}
+                          {totalUnreadCount}
                         </span>
                       )}
                     </button>
@@ -1329,6 +1361,11 @@ export default function CommunicationHub() {
                     return Boolean(isGlobal || pinnedChannels.includes(chName));
                   };
 
+                  const getChannelConv = (chObj: any) => {
+                    const chName = (typeof chObj === "string" ? chObj : chObj.name || "").toLowerCase();
+                    return recentConversations.find((c: any) => c._id?.toLowerCase() === chName || c.channel?.toLowerCase() === chName);
+                  };
+
                   const getDMChannel = (targetUser: any) => {
                     const myId = user?._id || user?.name || "";
                     const targetId = targetUser._id || targetUser.name || "";
@@ -1336,6 +1373,22 @@ export default function CommunicationHub() {
                     const targetKey = targetId.toString().toLowerCase().replace(/[^a-z0-9]/g, "_");
                     const pairKey = [myKey, targetKey].sort().join("_");
                     return `dm_${pairKey}`;
+                  };
+
+                  const getDmConv = (mUser: any) => {
+                    const dmChannel = getDMChannel(mUser);
+                    const targetId = (mUser._id || mUser.id || "").toString();
+                    const targetName = (mUser.name || mUser.userName || "").toLowerCase().replace(/[^a-z0-9]/g, "_");
+
+                    return recentConversations.find((c: any) => {
+                      if (!c) return false;
+                      if (c._id === dmChannel || c.channel === dmChannel) return true;
+                      if (targetId && (c.recipientId?.toString() === targetId || c.senderId?.toString() === targetId)) return true;
+                      if (targetId && (c._id?.includes(targetId) || c.channel?.includes(targetId))) return true;
+                      if (targetName && (c._id?.toLowerCase().includes(targetName) || c.channel?.toLowerCase().includes(targetName))) return true;
+                      if (mUser.name && c.senderName && c.senderName.toLowerCase() === mUser.name.toLowerCase()) return true;
+                      return false;
+                    });
                   };
 
                   const sourceList = teamMembers.length > 0
@@ -1381,6 +1434,17 @@ export default function CommunicationHub() {
 
                   const totalPinnedCount = pinnedChannelList.length + pinnedDmList.length;
 
+                  const unreadChannelsList = rawChannels.filter((ch: any) => {
+                    const conv = getChannelConv(ch);
+                    return (conv?.unreadCount || 0) > 0;
+                  });
+
+                  const unreadDmList = allDmUsers.filter((m: any) => {
+                    if (m.isSelf) return false;
+                    const conv = getDmConv(m);
+                    return (conv?.unreadCount || 0) > 0;
+                  });
+
                   // -------------------------------------------------------------
                   // PINNED VIEW (when user clicks "Pinned" tab or at top of "All")
                   // -------------------------------------------------------------
@@ -1417,6 +1481,8 @@ export default function CommunicationHub() {
                               const chId = typeof chObj === "string" ? chObj : chObj._id;
                               const isPrivate = typeof chObj === "object" && Boolean(chObj.isPrivate);
                               const isSelected = selectedChannel === chName;
+                              const conv = getChannelConv(chObj);
+                              const unreadCount = conv?.unreadCount || 0;
 
                               return (
                                 <div
@@ -1442,20 +1508,27 @@ export default function CommunicationHub() {
                                       Channel
                                     </span>
                                   </span>
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      togglePinChannel(chName, chId, isChannelPinned(chObj));
-                                    }}
-                                    className={cn(
-                                      "p-1 text-[10px] transition-colors cursor-pointer",
-                                      isSelected ? "text-slate-950 hover:text-rose-700" : "text-amber-500 hover:text-rose-500"
+                                  <div className="flex items-center gap-1 shrink-0">
+                                    {unreadCount > 0 && selectedChannel !== chName && (
+                                      <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-full bg-rose-500 text-white font-mono">
+                                        {unreadCount}
+                                      </span>
                                     )}
-                                    title="Unpin Channel"
-                                  >
-                                    <i className="fa-solid fa-thumbtack" />
-                                  </button>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        togglePinChannel(chName, chId, isChannelPinned(chObj));
+                                      }}
+                                      className={cn(
+                                        "p-1 text-[10px] transition-colors cursor-pointer",
+                                        isSelected ? "text-slate-950 hover:text-rose-700" : "text-amber-500 hover:text-rose-500"
+                                      )}
+                                      title="Unpin Channel"
+                                    >
+                                      <i className="fa-solid fa-thumbtack" />
+                                    </button>
+                                  </div>
                                 </div>
                               );
                             })}
@@ -1465,7 +1538,7 @@ export default function CommunicationHub() {
                               const dmChannel = getDMChannel(mUser);
                               const isSelfUser = Boolean(mUser.isSelf);
                               const isSelected = selectedChannel === dmChannel;
-                              const conv = recentConversations.find((c: any) => c._id === dmChannel || (mUser.name && c._id.includes(mUser.name.toLowerCase().replace(/[^a-z0-9]/g, "_"))));
+                              const conv = getDmConv(mUser);
                               const unreadCount = isSelfUser ? 0 : conv?.unreadCount || 0;
 
                               return (
@@ -1533,51 +1606,126 @@ export default function CommunicationHub() {
                   // UNREAD VIEW (when user clicks "Unread" tab)
                   // -------------------------------------------------------------
                   if (sidebarFilter === "unread") {
-                    const unreadDms = allDmUsers.filter((m: any) => {
-                      const dmChannel = getDMChannel(m);
-                      const conv = recentConversations.find((c: any) => c._id === dmChannel || (m.name && c._id.includes(m.name.toLowerCase().replace(/[^a-z0-9]/g, "_"))));
-                      return (conv?.unreadCount || 0) > 0;
+                    const filteredUnreadChannels = unreadChannelsList.filter((ch: any) => {
+                      const chName = typeof ch === "string" ? ch : ch.name;
+                      return !sidebarSearch || chName.toLowerCase().includes(sidebarSearch.toLowerCase());
                     });
 
-                    if (unreadDms.length === 0) {
+                    const filteredUnreadDms = unreadDmList.filter((m: any) => {
+                      return !sidebarSearch || (m.name && m.name.toLowerCase().includes(sidebarSearch.toLowerCase())) || (m.email && m.email.toLowerCase().includes(sidebarSearch.toLowerCase()));
+                    });
+
+                    const totalFilteredUnread = filteredUnreadChannels.length + filteredUnreadDms.length;
+
+                    if (totalFilteredUnread === 0) {
                       return (
-                        <div className="py-8 px-3 text-center rounded-xl border border-dashed border-border/80 bg-muted/20">
+                        <div className="py-8 px-3 text-center rounded-xl border border-dashed border-border/80 bg-muted/20 space-y-1">
                           <i className="fa-solid fa-circle-check text-2xl text-emerald-500/70 mb-2" />
                           <p className="text-xs font-semibold text-foreground">All caught up!</p>
-                          <p className="text-[11px] text-muted-foreground mt-0.5">No unread direct messages or channel mentions.</p>
+                          <p className="text-[11px] text-muted-foreground mt-0.5">
+                            {sidebarSearch ? "No unread messages match your search." : "No unread direct messages or channel mentions."}
+                          </p>
                         </div>
                       );
                     }
 
                     return (
-                      <div className="space-y-1">
-                        <h4 className="text-[10px] font-bold uppercase tracking-wider text-rose-500 mb-1 flex items-center gap-1.5">
-                          <i className="fa-solid fa-envelope-open-text text-[10px]" /> Unread Chats ({unreadDms.length})
-                        </h4>
-                        {unreadDms.map((mUser: any) => {
-                          const dmChannel = getDMChannel(mUser);
-                          const conv = recentConversations.find((c: any) => c._id === dmChannel || (mUser.name && c._id.includes(mUser.name.toLowerCase().replace(/[^a-z0-9]/g, "_"))));
-                          const unreadCount = conv?.unreadCount || 0;
-
-                          return (
-                            <div
-                              key={mUser._id || mUser.name}
-                              onClick={() => {
-                                setSelectedChannel(dmChannel);
-                                setMobileChatView("chat");
-                              }}
-                              className="group flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-rose-500/10 text-foreground border border-rose-500/20 hover:bg-rose-500/15 transition-colors cursor-pointer"
-                            >
-                              <span className="flex items-center gap-2 truncate">
-                                <i className="fa-solid fa-circle-user text-rose-500 text-sm" />
-                                <span className="truncate">{mUser.name || mUser.email}</span>
+                      <div className="space-y-3">
+                        {/* Unread Channels */}
+                        {filteredUnreadChannels.length > 0 && (
+                          <div className="space-y-1">
+                            <h4 className="text-[10px] font-bold uppercase tracking-wider text-rose-500 mb-1 flex items-center justify-between">
+                              <span className="flex items-center gap-1.5">
+                                <i className="fa-solid fa-hashtag text-[10px]" /> Unread Channels ({filteredUnreadChannels.length})
                               </span>
-                              <Badge className="bg-rose-600 text-white font-bold text-[10px] px-1.5 py-0.2 border-0">
-                                {unreadCount} new
-                              </Badge>
+                            </h4>
+                            <div className="space-y-1">
+                              {filteredUnreadChannels.map((chObj: any) => {
+                                const chName = typeof chObj === "string" ? chObj : chObj.name;
+                                const chId = typeof chObj === "string" ? chObj : chObj._id;
+                                const isPrivate = typeof chObj === "object" && Boolean(chObj.isPrivate);
+                                const isSelected = selectedChannel === chName;
+                                const conv = getChannelConv(chObj);
+                                const unreadCount = conv?.unreadCount || 0;
+
+                                return (
+                                  <div
+                                    key={`unread-ch-${chId || chName}`}
+                                    onClick={() => {
+                                      setSelectedChannel(chName);
+                                      setMobileChatView("chat");
+                                    }}
+                                    className={cn(
+                                      "group flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer",
+                                      isSelected
+                                        ? "bg-primary text-primary-foreground font-bold shadow-xs"
+                                        : "bg-rose-500/10 text-foreground border border-rose-500/20 hover:bg-rose-500/15"
+                                    )}
+                                  >
+                                    <span className="flex items-center gap-2 truncate min-w-0 flex-1 mr-1">
+                                      <i className={cn(
+                                        "fa-solid shrink-0",
+                                        isPrivate ? "fa-lock text-amber-500 text-[11px]" : "fa-hashtag text-rose-500 text-xs"
+                                      )} />
+                                      <span className="truncate">{chName}</span>
+                                      {isPrivate && (
+                                        <span className="text-[9px] px-1 py-0.2 rounded font-mono uppercase bg-amber-500/10 text-amber-500 border border-amber-500/20 shrink-0">
+                                          Lock
+                                        </span>
+                                      )}
+                                    </span>
+                                    <Badge className="bg-rose-600 text-white font-bold text-[10px] px-1.5 py-0.2 border-0 shrink-0">
+                                      {unreadCount} new
+                                    </Badge>
+                                  </div>
+                                );
+                              })}
                             </div>
-                          );
-                        })}
+                          </div>
+                        )}
+
+                        {/* Unread Direct Messages */}
+                        {filteredUnreadDms.length > 0 && (
+                          <div className="space-y-1">
+                            <h4 className="text-[10px] font-bold uppercase tracking-wider text-rose-500 mb-1 flex items-center justify-between">
+                              <span className="flex items-center gap-1.5">
+                                <i className="fa-solid fa-envelope-open-text text-[10px]" /> Unread Chats ({filteredUnreadDms.length})
+                              </span>
+                            </h4>
+                            <div className="space-y-1">
+                              {filteredUnreadDms.map((mUser: any) => {
+                                const dmChannel = getDMChannel(mUser);
+                                const conv = getDmConv(mUser);
+                                const unreadCount = conv?.unreadCount || 0;
+                                const isSelected = selectedChannel === dmChannel;
+
+                                return (
+                                  <div
+                                    key={`unread-dm-${mUser._id || mUser.name}`}
+                                    onClick={() => {
+                                      setSelectedChannel(dmChannel);
+                                      setMobileChatView("chat");
+                                    }}
+                                    className={cn(
+                                      "group flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer",
+                                      isSelected
+                                        ? "bg-primary text-primary-foreground font-bold shadow-xs"
+                                        : "bg-rose-500/10 text-foreground border border-rose-500/20 hover:bg-rose-500/15"
+                                    )}
+                                  >
+                                    <span className="flex items-center gap-2 truncate min-w-0 flex-1 mr-1">
+                                      <i className="fa-solid fa-circle-user text-rose-500 text-sm shrink-0" />
+                                      <span className="truncate">{mUser.name || mUser.email}</span>
+                                    </span>
+                                    <Badge className="bg-rose-600 text-white font-bold text-[10px] px-1.5 py-0.2 border-0 shrink-0">
+                                      {unreadCount} new
+                                    </Badge>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     );
                   }
@@ -1620,6 +1768,8 @@ export default function CommunicationHub() {
                             const isPrivate = typeof chObj === "object" && Boolean(chObj.isPrivate);
                             const isSelected = selectedChannel === chName;
                             const isPrivileged = isAdmin || isOPS || user?.role === "Manager" || (chObj.createdBy && (chObj.createdBy._id === user?._id || chObj.createdBy === user?._id));
+                            const conv = getChannelConv(chObj);
+                            const unreadCount = conv?.unreadCount || 0;
 
                             return (
                               <div
@@ -1628,6 +1778,8 @@ export default function CommunicationHub() {
                                   "group flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer",
                                   isSelected
                                     ? "bg-primary text-primary-foreground font-bold shadow-xs"
+                                    : unreadCount > 0
+                                    ? "bg-rose-500/10 text-foreground font-semibold border border-rose-500/20"
                                     : "text-muted-foreground hover:bg-accent hover:text-foreground"
                                 )}
                                 onClick={() => {
@@ -1635,7 +1787,7 @@ export default function CommunicationHub() {
                                   setMobileChatView("chat");
                                 }}
                               >
-                                <span className="flex items-center gap-2 truncate">
+                                <span className="flex items-center gap-2 truncate min-w-0 flex-1 mr-1">
                                   <i className={`fa-solid ${
                                     isPinned
                                       ? "fa-thumbtack text-amber-400 text-[10px]"
@@ -1654,7 +1806,12 @@ export default function CommunicationHub() {
                                   )}
                                 </span>
 
-                                <div className="flex items-center gap-1">
+                                <div className="flex items-center gap-1 shrink-0">
+                                  {unreadCount > 0 && selectedChannel !== chName && (
+                                    <Badge className="bg-rose-600 text-white font-bold text-[10px] px-1.5 py-0.2 animate-pulse border-0">
+                                      {unreadCount} new
+                                    </Badge>
+                                  )}
                                   {isPrivate && (
                                     <button
                                       type="button"
@@ -1782,8 +1939,8 @@ export default function CommunicationHub() {
                                 if (b.isSelf) return 1;
                               }
 
-                              const convA = recentConversations.find((c: any) => c._id === channelA || (a.name && c._id.includes(a.name.toLowerCase().replace(/[^a-z0-9]/g, "_"))));
-                              const convB = recentConversations.find((c: any) => c._id === channelB || (b.name && c._id.includes(b.name.toLowerCase().replace(/[^a-z0-9]/g, "_"))));
+                              const convA = getDmConv(a);
+                              const convB = getDmConv(b);
                               
                               const timeA = convA?.lastMessageAt ? new Date(convA.lastMessageAt).getTime() : 0;
                               const timeB = convB?.lastMessageAt ? new Date(convB.lastMessageAt).getTime() : 0;
@@ -1818,7 +1975,7 @@ export default function CommunicationHub() {
                                 : typeof mUser.isOnline === "boolean"
                                 ? mUser.isOnline
                                 : Boolean(mUser.isClockedIn || (mUser.lastActiveAt && (Date.now() - new Date(mUser.lastActiveAt).getTime() < 5 * 60 * 1000)));
-                              const conv = recentConversations.find((c: any) => c._id === dmChannel || (mUser.name && c._id.includes(mUser.name.toLowerCase().replace(/[^a-z0-9]/g, "_"))));
+                              const conv = getDmConv(mUser);
                               const unreadCount = isSelfUser ? 0 : conv?.unreadCount || 0;
 
                               return (
