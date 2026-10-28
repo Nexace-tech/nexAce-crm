@@ -7,6 +7,7 @@ import { Notification } from "@/models/Notification";
 import { getUserDataScope } from "@/lib/dataScope";
 import { canAssignRole, isSubAdminRole } from "@/lib/roles";
 import { generateSecurePassword, validateDob } from "@/lib/utils";
+import { parseClientTelemetry } from "@/lib/deviceDetector";
 import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
 
@@ -133,6 +134,7 @@ export async function GET(request: Request) {
       session.role?.trim().toLowerCase() === "hr";
 
     const fiveMinsAgo = new Date(Date.now() - 5 * 60 * 1000);
+    const callerTelemetry = parseClientTelemetry(request);
 
     const usersWithAttendance = users.map((u: any) => {
       const att = attendanceMap[u._id.toString()];
@@ -141,13 +143,77 @@ export async function GET(request: Request) {
       const isRecentlyActive = u.lastActiveAt ? new Date(u.lastActiveAt) >= fiveMinsAgo : false;
       const isOnline = isSelf || isClockedIn || isRecentlyActive;
 
+      // Auto-backfill telemetry for active caller if missing
+      let userLastLoginIp = u.lastLoginIp;
+      let userLastLoginDevice = u.lastLoginDevice;
+      let userLoginHistory = u.loginHistory || [];
+
+      if (isSelf) {
+        if (!userLastLoginIp || !userLastLoginDevice?.type || userLastLoginDevice.type === "Unknown") {
+          userLastLoginIp = callerTelemetry.ip;
+          userLastLoginDevice = {
+            type: callerTelemetry.type,
+            os: callerTelemetry.os,
+            browser: callerTelemetry.browser,
+            userAgent: callerTelemetry.userAgent,
+            lastActiveAt: new Date(),
+          };
+          if (!userLoginHistory.length) {
+            userLoginHistory = [{
+              ip: callerTelemetry.ip,
+              deviceType: callerTelemetry.type,
+              os: callerTelemetry.os,
+              browser: callerTelemetry.browser,
+              loggedInAt: new Date(),
+            }];
+          }
+          // Persist to DB in background
+          User.findByIdAndUpdate(session.userId, {
+            lastLoginIp: callerTelemetry.ip,
+            lastLoginDevice: userLastLoginDevice,
+            $push: {
+              loginHistory: {
+                $each: [{
+                  ip: callerTelemetry.ip,
+                  deviceType: callerTelemetry.type,
+                  os: callerTelemetry.os,
+                  browser: callerTelemetry.browser,
+                  loggedInAt: new Date(),
+                }],
+                $slice: -20,
+              },
+            },
+          }).catch(() => {});
+        }
+      }
+
+      // If user clocked in earlier before telemetry deployment, resolve clockInIp to user's IP
+      const resolvedClockInIp = att?.clockInIp || (isSelf ? callerTelemetry.ip : userLastLoginIp) || null;
+      const resolvedClockInDevice = att?.clockInDevice?.type && att.clockInDevice.type !== "Unknown"
+        ? att.clockInDevice
+        : (isSelf ? callerTelemetry : userLastLoginDevice) || { type: "Desktop", os: "Windows", browser: "Web Browser" };
+
       const baseUser = {
         ...u,
+        lastLoginIp: userLastLoginIp,
+        lastLoginDevice: userLastLoginDevice,
+        loginHistory: userLoginHistory,
         isOnline,
         isClockedIn,
         clockInTime: att ? (att.originalClockIn || att.clockIn || null) : null,
         clockOutTime: att?.clockOut || null,
-        attendanceStatus: isClockedIn ? "Active" : att?.clockOut ? "Shift Ended" : "Off Shift"
+        attendanceStatus: isClockedIn ? "Active" : att?.clockOut ? "Shift Ended" : "Off Shift",
+        todayAttendance: att ? {
+          clockIn: att.clockIn,
+          clockOut: att.clockOut,
+          clockInIp: resolvedClockInIp,
+          clockOutIp: att.clockOutIp,
+          clockInDevice: resolvedClockInDevice,
+          clockOutDevice: att.clockOutDevice,
+          punchSource: att.punchSource || "Web Portal",
+          regularHours: att.regularHours,
+          overtimeHours: att.overtimeHours,
+        } : null,
       };
 
       // Strip private resume fields from other users' profiles when caller lacks HR-level access

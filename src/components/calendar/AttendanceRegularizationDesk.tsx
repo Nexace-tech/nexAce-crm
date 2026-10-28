@@ -862,6 +862,28 @@ export function AttendanceRegularizationDesk({
                         <span className="mx-1 text-muted-foreground/40">•</span>
                         <span>Out: {log.clockOut ? formatDisplayTime(log.clockOut) : "Missing"}</span>
                       </div>
+                      {(log.clockInIp || log.clockInDevice?.type) && (
+                        <div className="flex items-center gap-1.5 mt-0.5 text-[10px] text-muted-foreground font-mono">
+                          {log.clockInIp && (
+                            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded bg-muted border border-border">
+                              <i className="fa-solid fa-network-wired text-[8px] text-emerald-500" />
+                              {log.clockInIp}
+                            </span>
+                          )}
+                          {log.clockInDevice?.type && (
+                            <span className="inline-flex items-center gap-0.5 px-1 py-0.2 rounded bg-primary/10 text-primary font-sans text-[9px] font-semibold">
+                              {log.clockInDevice.type === "Mobile" ? (
+                                <i className="fa-solid fa-mobile-screen text-[8px]" />
+                              ) : log.clockInDevice.type === "Tablet" ? (
+                                <i className="fa-solid fa-tablet-screen-button text-[8px]" />
+                              ) : (
+                                <i className="fa-solid fa-laptop text-[8px]" />
+                              )}
+                              {log.clockInDevice.type}
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </td>
 
                     {/* Reason */}

@@ -45,6 +45,22 @@ interface UserProfile {
     instagram?: string;
     facebook?: string;
   };
+  lastLoginIp?: string;
+  lastLoginDevice?: {
+    type?: string;
+    os?: string;
+    browser?: string;
+    userAgent?: string;
+  };
+  loginHistory?: Array<{
+    loggedInAt: string | Date;
+    ip?: string;
+    deviceType?: string;
+    os?: string;
+    browser?: string;
+    userAgent?: string;
+  }>;
+  lastActiveAt?: string | Date;
   forcePasswordReset?: boolean;
   signatureUrl?: string;
 }

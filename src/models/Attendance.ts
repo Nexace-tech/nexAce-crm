@@ -39,6 +39,21 @@ export interface IAttendance extends Document {
   regularizedBy?: mongoose.Types.ObjectId;
   regularizedAt?: Date;
   regularizationRejectionReason?: string;
+  clockInIp?: string;
+  clockOutIp?: string;
+  clockInDevice?: {
+    type?: "Desktop" | "Mobile" | "Tablet" | "Unknown";
+    os?: string;
+    browser?: string;
+    userAgent?: string;
+  };
+  clockOutDevice?: {
+    type?: "Desktop" | "Mobile" | "Tablet" | "Unknown";
+    os?: string;
+    browser?: string;
+    userAgent?: string;
+  };
+  punchSource?: "Web" | "Mobile" | "Biometric" | "Manual_Regularized";
   tenantId: mongoose.Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
@@ -62,6 +77,33 @@ const AttendanceSchema = new Schema<IAttendance>(
       latitude: { type: Number },
       longitude: { type: Number },
       accuracy: { type: Number },
+    },
+    clockInIp: { type: String, trim: true },
+    clockOutIp: { type: String, trim: true },
+    clockInDevice: {
+      type: {
+        type: String,
+        enum: ["Desktop", "Mobile", "Tablet", "Unknown"],
+        default: "Unknown",
+      },
+      os: { type: String, trim: true },
+      browser: { type: String, trim: true },
+      userAgent: { type: String, trim: true },
+    },
+    clockOutDevice: {
+      type: {
+        type: String,
+        enum: ["Desktop", "Mobile", "Tablet", "Unknown"],
+        default: "Unknown",
+      },
+      os: { type: String, trim: true },
+      browser: { type: String, trim: true },
+      userAgent: { type: String, trim: true },
+    },
+    punchSource: {
+      type: String,
+      enum: ["Web", "Mobile", "Biometric", "Manual_Regularized"],
+      default: "Web",
     },
     regularHours: { type: Number, default: 0 },
     overtimeHours: { type: Number, default: 0 },

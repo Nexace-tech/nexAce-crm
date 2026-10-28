@@ -61,6 +61,21 @@ export interface IUser extends Document {
     showAnniversaryOnDashboard?: boolean;
     receiveBirthdayEmails?: boolean;
   };
+  lastLoginIp?: string;
+  lastLoginDevice?: {
+    type?: "Desktop" | "Mobile" | "Tablet" | "Unknown";
+    os?: string;
+    browser?: string;
+    userAgent?: string;
+    lastActiveAt?: Date;
+  };
+  loginHistory?: Array<{
+    ip: string;
+    deviceType: string;
+    os: string;
+    browser: string;
+    loggedInAt: Date;
+  }>;
   createdAt: Date;
 }
 
@@ -125,6 +140,23 @@ const UserSchema: Schema = new Schema({
     showAnniversaryOnDashboard: { type: Boolean, default: true },
     receiveBirthdayEmails: { type: Boolean, default: true }
   },
+  lastLoginIp: { type: String, default: "" },
+  lastLoginDevice: {
+    type: { type: String, enum: ["Desktop", "Mobile", "Tablet", "Unknown"], default: "Unknown" },
+    os: { type: String, default: "" },
+    browser: { type: String, default: "" },
+    userAgent: { type: String, default: "" },
+    lastActiveAt: { type: Date }
+  },
+  loginHistory: [
+    {
+      ip: { type: String, default: "" },
+      deviceType: { type: String, default: "Unknown" },
+      os: { type: String, default: "" },
+      browser: { type: String, default: "" },
+      loggedInAt: { type: Date, default: Date.now }
+    }
+  ],
   createdAt: { type: Date, default: Date.now }
 });
 
@@ -135,8 +167,9 @@ UserSchema.index({ email: 1, tenantId: 1 }, { unique: true });
 UserSchema.index({ tenantId: 1, role: 1 });
 
 // Force invalidate in-memory Mongoose model cache if schema updated
-if (mongoose.models.User && (!mongoose.models.User.schema.path("salary") || !mongoose.models.User.schema.path("bankDetails") || !mongoose.models.User.schema.path("resumeUrl") || !mongoose.models.User.schema.path("signatureUrl") || !mongoose.models.User.schema.path("hrId") || !mongoose.models.User.schema.path("documentsSubmitted") || !mongoose.models.User.schema.path("onboardedBy") || !mongoose.models.User.schema.path("dob") || !mongoose.models.User.schema.path("preferences"))) {
+if (mongoose.models.User && (!mongoose.models.User.schema.path("salary") || !mongoose.models.User.schema.path("bankDetails") || !mongoose.models.User.schema.path("resumeUrl") || !mongoose.models.User.schema.path("signatureUrl") || !mongoose.models.User.schema.path("hrId") || !mongoose.models.User.schema.path("documentsSubmitted") || !mongoose.models.User.schema.path("onboardedBy") || !mongoose.models.User.schema.path("dob") || !mongoose.models.User.schema.path("preferences") || !mongoose.models.User.schema.path("lastLoginIp"))) {
   delete (mongoose.models as any).User;
 }
 
 export const User: Model<IUser> = mongoose.models.User || mongoose.model<IUser>("User", UserSchema);
+

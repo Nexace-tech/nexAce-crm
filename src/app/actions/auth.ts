@@ -10,6 +10,8 @@ import { redirect } from "next/navigation";
 import { sendEmail } from "@/lib/mail";
 import { Notification } from "@/models/Notification";
 import { validatePasswordPattern, validateDob } from "@/lib/utils";
+import { headers } from "next/headers";
+import { parseClientTelemetry } from "@/lib/deviceDetector";
 import { rateLimitOtp, rateLimitVerify, rateLimitLogin, getClientIp } from "@/lib/rateLimiter";
 
 export interface FormState {
@@ -326,6 +328,38 @@ export async function loginAction(state: FormState | undefined, formData: FormDa
         message: "Company tenant associated with this account was not found.",
         enteredEmail: email,
       };
+    }
+
+    // Extract device telemetry from request headers
+    const reqHeaders = await headers();
+    const telemetry = parseClientTelemetry(reqHeaders);
+
+    // Record login telemetry on the user account
+    try {
+      await User.findByIdAndUpdate(user._id, {
+        lastLoginIp: telemetry.ip,
+        lastLoginDevice: {
+          type: telemetry.type,
+          os: telemetry.os,
+          browser: telemetry.browser,
+          userAgent: telemetry.userAgent,
+          lastActiveAt: new Date(),
+        },
+        $push: {
+          loginHistory: {
+            $each: [{
+              ip: telemetry.ip,
+              deviceType: telemetry.type,
+              os: telemetry.os,
+              browser: telemetry.browser,
+              loggedInAt: new Date(),
+            }],
+            $slice: -20, // Keep last 20 logins
+          },
+        },
+      });
+    } catch (telemetryErr) {
+      console.warn("Failed to record login telemetry:", telemetryErr);
     }
 
     // Create session

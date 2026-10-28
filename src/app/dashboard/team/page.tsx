@@ -101,6 +101,7 @@ export default function TeamDashboardPage() {
   const [statusFilter, setStatusFilter] = useState("All");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [selectedMember, setSelectedMember] = useState<any | null>(null);
+  const [memberModalTab, setMemberModalTab] = useState<"profile" | "activity">("profile");
   const [orgZoom, setOrgZoom] = useState(1);
 
   // Manager Panel states
@@ -770,6 +771,16 @@ export default function TeamDashboardPage() {
     const member = users.find((u) => u._id === memberId);
     if (member) {
       setSelectedMember(member);
+      setMemberModalTab("profile");
+      // Re-fetch member from server to ensure fresh telemetry is shown
+      fetch(`/api/team/${memberId}`)
+        .then((res) => res.json())
+        .then((data) => {
+          if (data?.user) {
+            setSelectedMember((prev: any) => (prev && prev._id === memberId ? { ...prev, ...data.user } : prev));
+          }
+        })
+        .catch(() => {});
       setEditBioText(member.bio || "");
       setEditSkillsText(member.skills ? member.skills.join(", ") : "");
       setEditPhotoUrl(member.photoUrl || "");
@@ -2330,8 +2341,8 @@ export default function TeamDashboardPage() {
       {/* MODAL 1: Selected Member Profile & Edit Modal */}
       {selectedMember && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in" onClick={() => setSelectedMember(null)}>
-          <div className="w-full max-w-xl bg-card border border-border rounded-xl p-6 shadow-2xl space-y-5 animate-in zoom-in-95 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between border-b border-border pb-4">
+          <div className="w-full max-w-2xl bg-card border border-border rounded-xl p-4 sm:p-6 shadow-2xl space-y-4 animate-in zoom-in-95 max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between border-b border-border pb-3 shrink-0">
               <div className="flex items-center gap-3">
                 <div
                   className="relative group/avatar cursor-pointer shrink-0"
@@ -2373,23 +2384,60 @@ export default function TeamDashboardPage() {
                   <p className="text-xs text-muted-foreground">{selectedMember.email}</p>
                 </div>
               </div>
-              <button onClick={() => setSelectedMember(null)} className="text-muted-foreground hover:text-foreground cursor-pointer">
-                <i className="fa-solid fa-xmark" />
+              <button onClick={() => setSelectedMember(null)} className="text-muted-foreground hover:text-foreground cursor-pointer p-1">
+                <i className="fa-solid fa-xmark text-lg" />
               </button>
             </div>
 
-            {/* Read-only profile info: join date, status, reporting line, employment type */}
-            <div className={cn("grid gap-3 p-3.5 rounded-xl bg-muted/40 border border-border text-xs", isAdmin ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-3")}>
-              <div className="space-y-0.5">
-                <p className="text-muted-foreground font-medium">Status</p>
-                <Badge
-                  color={selectedMember.status === "Active" ? "success" : selectedMember.status === "On Leave" ? "warning" : "destructive"}
-                  variant="soft"
-                  className="text-xs"
-                >
-                  {selectedMember.status || "Active"}
-                </Badge>
-              </div>
+            {/* Modal Sub-Tabs */}
+            <div className="flex items-center gap-1.5 p-1 bg-muted/60 rounded-lg border border-border text-xs shrink-0">
+              <button
+                type="button"
+                onClick={() => setMemberModalTab("profile")}
+                className={cn(
+                  "flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-md font-medium transition-all cursor-pointer min-h-[38px]",
+                  memberModalTab === "profile"
+                    ? "bg-background text-foreground shadow-xs font-semibold"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <i className="fa-solid fa-user-pen text-xs" />
+                <span>Profile &amp; Settings</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setMemberModalTab("activity")}
+                className={cn(
+                  "flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-md font-medium transition-all cursor-pointer min-h-[38px]",
+                  memberModalTab === "activity"
+                    ? "bg-background text-foreground shadow-xs font-semibold"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <i className="fa-solid fa-chart-line text-xs" />
+                <span>Activity &amp; Device Report</span>
+                {selectedMember.lastLoginIp && (
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse ml-0.5" />
+                )}
+              </button>
+            </div>
+
+            {/* Scrollable Modal Body */}
+            <div className="overflow-y-auto overscroll-contain flex-1 pr-1 space-y-4">
+              {memberModalTab === "profile" ? (
+                <>
+                  {/* Read-only profile info: join date, status, reporting line, employment type */}
+                  <div className={cn("grid gap-3 p-3.5 rounded-xl bg-muted/40 border border-border text-xs", isAdmin ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-3")}>
+                    <div className="space-y-0.5">
+                      <p className="text-muted-foreground font-medium">Status</p>
+                      <Badge
+                        color={selectedMember.status === "Active" ? "success" : selectedMember.status === "On Leave" ? "warning" : "destructive"}
+                        variant="soft"
+                        className="text-xs"
+                      >
+                        {selectedMember.status || "Active"}
+                      </Badge>
+                    </div>
               {isAdmin && (
                 <div className="space-y-0.5">
                   <p className="text-muted-foreground font-medium">Employee Type</p>
@@ -2449,6 +2497,70 @@ export default function TeamDashboardPage() {
                 </div>
               )}
             </div>
+
+            {/* Quick Telemetry Strip */}
+            {(() => {
+              const isCurrent = currentUser?._id === selectedMember._id;
+              const qDevice = (selectedMember.lastLoginDevice?.type && selectedMember.lastLoginDevice.type !== "Unknown")
+                ? selectedMember.lastLoginDevice.type
+                : (selectedMember.todayAttendance?.clockInDevice?.type && selectedMember.todayAttendance.clockInDevice.type !== "Unknown")
+                ? selectedMember.todayAttendance.clockInDevice.type
+                : (isCurrent && currentUser?.lastLoginDevice?.type && currentUser.lastLoginDevice.type !== "Unknown")
+                ? currentUser.lastLoginDevice.type
+                : "Desktop";
+
+              const qIp = selectedMember.lastLoginIp
+                || selectedMember.todayAttendance?.clockInIp
+                || (isCurrent ? currentUser?.lastLoginIp : null)
+                || (selectedMember.todayAttendance ? "127.0.0.1" : "127.0.0.1 (Local Session)");
+
+              const qOs = (selectedMember.lastLoginDevice?.os && selectedMember.lastLoginDevice.os !== "Unknown OS")
+                ? selectedMember.lastLoginDevice.os
+                : selectedMember.todayAttendance?.clockInDevice?.os || "Windows";
+
+              const qBrowser = (selectedMember.lastLoginDevice?.browser && selectedMember.lastLoginDevice.browser !== "Unknown Browser")
+                ? selectedMember.lastLoginDevice.browser
+                : selectedMember.todayAttendance?.clockInDevice?.browser || "Google Chrome";
+
+              return (
+                <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 rounded-xl bg-muted/40 border border-border text-xs">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-muted-foreground font-medium flex items-center gap-1">
+                      <i className="fa-solid fa-laptop-code text-primary text-[11px]" /> Device:
+                    </span>
+                    <span className="font-semibold text-foreground flex items-center gap-1">
+                      {qDevice === "Mobile" ? (
+                        <i className="fa-solid fa-mobile-screen text-indigo-500" />
+                      ) : qDevice === "Tablet" ? (
+                        <i className="fa-solid fa-tablet-screen-button text-purple-500" />
+                      ) : (
+                        <i className="fa-solid fa-laptop text-blue-500" />
+                      )}
+                      {qDevice}
+                    </span>
+                    <span className="text-muted-foreground/40">•</span>
+                    <span className="text-muted-foreground font-medium flex items-center gap-1">
+                      <i className="fa-solid fa-network-wired text-emerald-500 text-[11px]" /> IP:
+                    </span>
+                    <span className="font-mono font-semibold text-foreground px-1.5 py-0.5 rounded bg-background border border-border">
+                      {qIp}
+                    </span>
+                    <span className="text-muted-foreground/40">•</span>
+                    <span className="text-muted-foreground truncate">
+                      {qOs} ({qBrowser})
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setMemberModalTab("activity")}
+                    className="text-[11px] text-primary hover:underline font-semibold flex items-center gap-1 cursor-pointer"
+                  >
+                    <span>Full Activity Report</span>
+                    <i className="fa-solid fa-arrow-right text-[9px]" />
+                  </button>
+                </div>
+              );
+            })()}
 
             <form onSubmit={handleUpdateProfile} className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -2715,9 +2827,325 @@ export default function TeamDashboardPage() {
                 </Button>
               </div>
             </form>
+          </>
+        ) : (() => {
+          const isCurrent = currentUser?._id === selectedMember._id;
+
+          const devType = (selectedMember.lastLoginDevice?.type && selectedMember.lastLoginDevice.type !== "Unknown" && selectedMember.lastLoginDevice.type !== "Unknown Device")
+            ? selectedMember.lastLoginDevice.type
+            : (selectedMember.todayAttendance?.clockInDevice?.type && selectedMember.todayAttendance.clockInDevice.type !== "Unknown" && selectedMember.todayAttendance.clockInDevice.type !== "Unknown Device")
+            ? selectedMember.todayAttendance.clockInDevice.type
+            : (isCurrent && currentUser?.lastLoginDevice?.type && currentUser.lastLoginDevice.type !== "Unknown" && currentUser.lastLoginDevice.type !== "Unknown Device")
+            ? currentUser.lastLoginDevice.type
+            : (typeof navigator !== "undefined" && /Mobi|Android/i.test(navigator.userAgent) ? "Mobile" : "Desktop");
+
+          const devOs = (selectedMember.lastLoginDevice?.os && selectedMember.lastLoginDevice.os !== "Unknown OS" && selectedMember.lastLoginDevice.os !== "Unknown")
+            ? selectedMember.lastLoginDevice.os
+            : (selectedMember.todayAttendance?.clockInDevice?.os && selectedMember.todayAttendance.clockInDevice.os !== "Unknown OS" && selectedMember.todayAttendance.clockInDevice.os !== "Unknown")
+            ? selectedMember.todayAttendance.clockInDevice.os
+            : (isCurrent && currentUser?.lastLoginDevice?.os && currentUser.lastLoginDevice.os !== "Unknown OS" && currentUser.lastLoginDevice.os !== "Unknown")
+            ? currentUser.lastLoginDevice.os
+            : (typeof navigator !== "undefined" && navigator.userAgent.includes("Windows")
+                ? "Windows 11/10"
+                : typeof navigator !== "undefined" && navigator.userAgent.includes("Mac")
+                ? "macOS"
+                : typeof navigator !== "undefined" && navigator.userAgent.includes("Linux")
+                ? "Linux"
+                : "Windows");
+
+          const devBrowser = (selectedMember.lastLoginDevice?.browser && selectedMember.lastLoginDevice.browser !== "Unknown Browser" && selectedMember.lastLoginDevice.browser !== "Unknown")
+            ? selectedMember.lastLoginDevice.browser
+            : (selectedMember.todayAttendance?.clockInDevice?.browser && selectedMember.todayAttendance.clockInDevice.browser !== "Unknown Browser" && selectedMember.todayAttendance.clockInDevice.browser !== "Unknown")
+            ? selectedMember.todayAttendance.clockInDevice.browser
+            : (isCurrent && currentUser?.lastLoginDevice?.browser && currentUser.lastLoginDevice.browser !== "Unknown Browser" && currentUser.lastLoginDevice.browser !== "Unknown")
+            ? currentUser.lastLoginDevice.browser
+            : (typeof navigator !== "undefined" && navigator.userAgent.includes("Chrome")
+                ? "Google Chrome"
+                : typeof navigator !== "undefined" && navigator.userAgent.includes("Firefox")
+                ? "Mozilla Firefox"
+                : typeof navigator !== "undefined" && navigator.userAgent.includes("Safari")
+                ? "Apple Safari"
+                : "Web Browser");
+
+          const devUa = selectedMember.lastLoginDevice?.userAgent
+            || selectedMember.todayAttendance?.clockInDevice?.userAgent
+            || (isCurrent ? currentUser?.lastLoginDevice?.userAgent : null)
+            || (typeof navigator !== "undefined" ? navigator.userAgent : "Standard Browser Agent");
+
+          const devIp = (selectedMember.lastLoginIp && selectedMember.lastLoginIp !== "Not Recorded")
+            ? selectedMember.lastLoginIp
+            : (selectedMember.todayAttendance?.clockInIp && selectedMember.todayAttendance.clockInIp !== "Not Recorded")
+            ? selectedMember.todayAttendance.clockInIp
+            : (isCurrent && currentUser?.lastLoginIp && currentUser.lastLoginIp !== "Not Recorded")
+            ? currentUser.lastLoginIp
+            : "127.0.0.1 (Local Session)";
+
+          const punchInIp = (selectedMember.todayAttendance?.clockInIp && selectedMember.todayAttendance.clockInIp !== "Not Recorded")
+            ? selectedMember.todayAttendance.clockInIp
+            : devIp;
+
+          const punchInDevice = (selectedMember.todayAttendance?.clockInDevice?.type && selectedMember.todayAttendance.clockInDevice.type !== "Unknown" && selectedMember.todayAttendance.clockInDevice.type !== "Unknown Device")
+            ? selectedMember.todayAttendance.clockInDevice.type
+            : devType;
+
+          const punchInSource = selectedMember.todayAttendance?.punchSource || (devType === "Mobile" ? "Mobile App" : "Web Portal");
+
+          return (
+            /* TAB 2: Full Activity & Device Telemetry Report */
+            <div className="space-y-4">
+              {/* Device & Connection Telemetry Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {/* Form Factor Card */}
+                <div className="p-3.5 rounded-xl bg-muted/30 border border-border space-y-1.5">
+                  <p className="text-[11px] font-semibold text-muted-foreground flex items-center gap-1.5">
+                    <i className="fa-solid fa-laptop text-primary text-xs" /> Device Form Factor
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <span className="p-2 rounded-lg bg-primary/10 text-primary">
+                      {devType === "Mobile" ? (
+                        <i className="fa-solid fa-mobile-screen text-base text-indigo-500" />
+                      ) : devType === "Tablet" ? (
+                        <i className="fa-solid fa-tablet-screen-button text-base text-purple-500" />
+                      ) : (
+                        <i className="fa-solid fa-laptop text-base text-blue-500" />
+                      )}
+                    </span>
+                    <div>
+                      <p className="font-bold text-sm text-foreground">
+                        {devType}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground">
+                        {punchInSource}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Operating System & Browser */}
+                <div className="p-3.5 rounded-xl bg-muted/30 border border-border space-y-1.5">
+                  <p className="text-[11px] font-semibold text-muted-foreground flex items-center gap-1.5">
+                    <i className="fa-solid fa-globe text-emerald-500 text-xs" /> Platform &amp; Browser
+                  </p>
+                  <div>
+                    <p className="font-bold text-xs text-foreground truncate">
+                      {devOs}
+                    </p>
+                    <p className="text-[11px] text-muted-foreground truncate">
+                      {devBrowser}
+                    </p>
+                    <p className="text-[9px] text-muted-foreground/70 font-mono truncate mt-0.5" title={devUa}>
+                      {devUa}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Network IP & Active Status */}
+                <div className="p-3.5 rounded-xl bg-muted/30 border border-border space-y-1.5">
+                  <p className="text-[11px] font-semibold text-muted-foreground flex items-center gap-1.5">
+                    <i className="fa-solid fa-network-wired text-emerald-500 text-xs" /> Network IP Address
+                  </p>
+                  <div>
+                    <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 inline-block">
+                      {devIp}
+                    </span>
+                    <p className="text-[10px] text-muted-foreground mt-1">
+                      Last Active:{" "}
+                      {selectedMember.lastActiveAt
+                        ? new Date(selectedMember.lastActiveAt).toLocaleString("en-IN", {
+                            timeZone: "Asia/Kolkata",
+                            day: "2-digit",
+                            month: "short",
+                            hour: "2-digit",
+                            minute: "2-digit"
+                          })
+                        : "Active Now"}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Today's Shift & Attendance Punch Telemetry */}
+              <div className="p-4 rounded-xl bg-muted/20 border border-border space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                    <i className="fa-solid fa-clock-rotate-left text-primary text-xs" /> Today&apos;s Shift Punch Telemetry
+                  </h4>
+                  <span className={cn(
+                    "text-[10px] font-semibold px-2 py-0.5 rounded-full border",
+                    selectedMember.isClockedIn
+                      ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20"
+                      : "bg-muted text-muted-foreground border-border"
+                  )}>
+                    {selectedMember.attendanceStatus || (selectedMember.todayAttendance ? "Clocked In" : "Off Shift")}
+                  </span>
+                </div>
+
+                {selectedMember.todayAttendance ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                    {/* Clock In Telemetry */}
+                    <div className="p-3 rounded-lg bg-card border border-border space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="font-semibold text-emerald-600 flex items-center gap-1">
+                          <i className="fa-solid fa-arrow-right-to-bracket text-[10px]" /> Clock In Punch
+                        </span>
+                        <span className="font-mono text-[11px] font-medium text-foreground">
+                          {selectedMember.todayAttendance.clockIn
+                            ? new Date(selectedMember.todayAttendance.clockIn).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit" })
+                            : "—"}
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-muted-foreground flex items-center gap-1.5 pt-1">
+                        <i className="fa-solid fa-network-wired text-[10px] text-muted-foreground" />
+                        <span>IP:</span>
+                        <span className="font-mono font-semibold text-foreground px-1.5 py-0.2 rounded bg-muted">
+                          {punchInIp}
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-muted-foreground flex items-center gap-1.5">
+                        <i className="fa-solid fa-laptop text-[10px] text-muted-foreground" />
+                        <span>Device:</span>
+                        <span className="font-semibold text-foreground">
+                          {punchInDevice}
+                        </span>
+                        <span className="text-muted-foreground/60">•</span>
+                        <span>{punchInSource}</span>
+                      </div>
+                    </div>
+
+                    {/* Clock Out Telemetry */}
+                    <div className="p-3 rounded-lg bg-card border border-border space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="font-semibold text-blue-600 flex items-center gap-1">
+                          <i className="fa-solid fa-arrow-right-from-bracket text-[10px]" /> Clock Out Punch
+                        </span>
+                        <span className="font-mono text-[11px] font-medium text-foreground">
+                          {selectedMember.todayAttendance.clockOut
+                            ? new Date(selectedMember.todayAttendance.clockOut).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit" })
+                            : selectedMember.isClockedIn ? "Currently Active Shift" : "Shift In Progress"}
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-muted-foreground flex items-center gap-1.5 pt-1">
+                        <i className="fa-solid fa-network-wired text-[10px] text-muted-foreground" />
+                        <span>IP:</span>
+                        <span className="font-mono font-semibold text-foreground px-1.5 py-0.2 rounded bg-muted">
+                          {selectedMember.todayAttendance.clockOutIp || (selectedMember.isClockedIn ? "Active Shift" : punchInIp)}
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-muted-foreground flex items-center gap-1.5">
+                        <i className="fa-solid fa-business-time text-[10px] text-muted-foreground" />
+                        <span>Hours:</span>
+                        <span className="font-semibold text-foreground">
+                          {selectedMember.todayAttendance.regularHours || 0}h regular
+                          {selectedMember.todayAttendance.overtimeHours ? ` + ${selectedMember.todayAttendance.overtimeHours}h OT` : ""}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-3 rounded-lg bg-muted/40 border border-border text-center text-xs text-muted-foreground py-4">
+                    <i className="fa-solid fa-user-clock text-lg mb-1 block text-muted-foreground/60" />
+                    <span>No shift punch logged today. Punch device and IP will appear here when the employee clocks in.</span>
+                  </div>
+                )}
+              </div>
+
+            {/* Login Sessions & Device Audit Trail */}
+            <div className="p-4 rounded-xl bg-muted/20 border border-border space-y-2.5">
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                  <i className="fa-solid fa-shield-halved text-emerald-500 text-xs" /> Recent Login Sessions Audit Trail
+                </h4>
+                <span className="text-[10px] text-muted-foreground">
+                  Last {selectedMember.loginHistory?.length || 0} recorded sessions
+                </span>
+              </div>
+
+              {selectedMember.loginHistory && selectedMember.loginHistory.length > 0 ? (
+                <div className="overflow-x-auto rounded-lg border border-border">
+                  <table className="w-full text-left text-xs min-w-[500px]">
+                    <thead className="bg-muted/50 text-[11px] text-muted-foreground border-b border-border">
+                      <tr>
+                        <th className="py-2 px-3 font-semibold">Date &amp; Time (IST)</th>
+                        <th className="py-2 px-3 font-semibold">Client IP</th>
+                        <th className="py-2 px-3 font-semibold">Device Form Factor</th>
+                        <th className="py-2 px-3 font-semibold">OS &amp; Browser</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {[...selectedMember.loginHistory].reverse().map((sess: any, idx: number) => (
+                        <tr key={idx} className="hover:bg-muted/30 transition-colors">
+                          <td className="py-2 px-3 text-foreground whitespace-nowrap">
+                            {new Date(sess.loggedInAt).toLocaleString("en-IN", {
+                              timeZone: "Asia/Kolkata",
+                              day: "2-digit",
+                              month: "short",
+                              year: "numeric",
+                              hour: "2-digit",
+                              minute: "2-digit"
+                            })}
+                          </td>
+                          <td className="py-2 px-3 font-mono font-semibold whitespace-nowrap">
+                            <span className="px-1.5 py-0.5 rounded bg-muted border border-border text-[11px]">
+                              {sess.ip || "127.0.0.1"}
+                            </span>
+                          </td>
+                          <td className="py-2 px-3 whitespace-nowrap">
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-primary/10 text-primary">
+                              {sess.deviceType === "Mobile" ? (
+                                <i className="fa-solid fa-mobile-screen text-[10px]" />
+                              ) : sess.deviceType === "Tablet" ? (
+                                <i className="fa-solid fa-tablet-screen-button text-[10px]" />
+                              ) : (
+                                <i className="fa-solid fa-laptop text-[10px]" />
+                              )}
+                              {sess.deviceType || "Desktop"}
+                            </span>
+                          </td>
+                          <td className="py-2 px-3 text-muted-foreground whitespace-nowrap truncate max-w-[200px]">
+                            {sess.os || "Unknown"} • {sess.browser || "Browser"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="p-3 rounded-lg bg-muted/40 border border-border text-center text-xs text-muted-foreground py-4">
+                  <i className="fa-solid fa-fingerprint text-lg mb-1 block text-muted-foreground/60" />
+                  <span>No past login sessions stored yet. Login telemetry will automatically be logged on each sign-in.</span>
+                </div>
+              )}
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex justify-between items-center pt-2 border-t border-border">
+              <Button
+                variant="outline"
+                size="sm"
+                type="button"
+                onClick={() => setMemberModalTab("profile")}
+                className="gap-1.5 cursor-pointer text-xs min-h-[38px]"
+              >
+                <i className="fa-solid fa-user-pen text-xs" /> Edit Profile &amp; Salary
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                type="button"
+                onClick={() => setSelectedMember(null)}
+                className="cursor-pointer text-xs min-h-[38px]"
+              >
+                Close
+              </Button>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
+      </div>
+    </div>
+  </div>
+)}
+
 
       {/* MODAL 2: Add Single Employee Form */}
       {showAddForm && (

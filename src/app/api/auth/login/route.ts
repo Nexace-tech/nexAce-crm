@@ -4,6 +4,7 @@ import { connectToDatabase } from "@/lib/db";
 import { User } from "@/models/User";
 import { createSession } from "@/lib/session";
 import { rateLimitLogin, getClientIp } from "@/lib/rateLimiter";
+import { parseClientTelemetry } from "@/lib/deviceDetector";
 
 export const dynamic = "force-dynamic";
 
@@ -63,6 +64,37 @@ export async function POST(request: NextRequest) {
     const tenant = user.tenantId as any;
     if (!tenant) {
       return NextResponse.json({ error: "Company tenant not found for this account." }, { status: 500 });
+    }
+
+    // Extract device telemetry from request
+    const telemetry = parseClientTelemetry(request);
+
+    // Record login telemetry on the user account
+    try {
+      await User.findByIdAndUpdate(user._id, {
+        lastLoginIp: telemetry.ip,
+        lastLoginDevice: {
+          type: telemetry.type,
+          os: telemetry.os,
+          browser: telemetry.browser,
+          userAgent: telemetry.userAgent,
+          lastActiveAt: new Date(),
+        },
+        $push: {
+          loginHistory: {
+            $each: [{
+              ip: telemetry.ip,
+              deviceType: telemetry.type,
+              os: telemetry.os,
+              browser: telemetry.browser,
+              loggedInAt: new Date(),
+            }],
+            $slice: -20, // Keep last 20 logins
+          },
+        },
+      });
+    } catch (telemetryErr) {
+      console.warn("Failed to record login telemetry:", telemetryErr);
     }
 
     await createSession(

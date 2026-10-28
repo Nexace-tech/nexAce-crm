@@ -2,11 +2,12 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
 import { connectToDatabase } from "@/lib/db";
 import { User } from "@/models/User";
+import { parseClientTelemetry } from "@/lib/deviceDetector";
 import "@/models/Tenant";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const session = await getSession();
     if (!session || !session.userId) {
@@ -15,12 +16,42 @@ export async function GET() {
 
     await connectToDatabase();
     
+    // Automatically capture device telemetry on every active session request
+    const telemetry = parseClientTelemetry(request);
+
     let user = null;
     let dbError = false;
     try {
+      // Find current user to check if initial loginHistory needs to be seeded
+      const existingUser = await User.findById(session.userId);
+
+      const updateDoc: any = {
+        $set: {
+          lastActiveAt: new Date(),
+          lastLoginIp: telemetry.ip,
+          "lastLoginDevice.type": telemetry.type,
+          "lastLoginDevice.os": telemetry.os,
+          "lastLoginDevice.browser": telemetry.browser,
+          "lastLoginDevice.userAgent": telemetry.userAgent,
+          "lastLoginDevice.lastActiveAt": new Date(),
+        },
+      };
+
+      if (!existingUser?.loginHistory || existingUser.loginHistory.length === 0) {
+        updateDoc.$push = {
+          loginHistory: {
+            ip: telemetry.ip,
+            deviceType: telemetry.type,
+            os: telemetry.os,
+            browser: telemetry.browser,
+            loggedInAt: new Date(),
+          },
+        };
+      }
+
       user = await User.findByIdAndUpdate(
         session.userId,
-        { $set: { lastActiveAt: new Date() } },
+        updateDoc,
         { returnDocument: "after" }
       )
         .select("-passwordHash")

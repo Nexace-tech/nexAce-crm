@@ -6,6 +6,7 @@ import { Tenant } from "@/models/Tenant";
 import { Notification } from "@/models/Notification";
 import { User } from "@/models/User";
 import { getUserDataScope } from "@/lib/dataScope";
+import { parseClientTelemetry } from "@/lib/deviceDetector";
 import mongoose from "mongoose";
 
 // IST offset constant
@@ -240,6 +241,8 @@ export async function POST(request: Request) {
     } : undefined;
 
     if (action === "in") {
+      const telemetry = parseClientTelemetry(request);
+
       // Prevent duplicate clock-ins: check the FULL IST day range, not just exact date.
       // This catches any record regardless of what date normalization was used when it was stored.
       let existing = await Attendance.findOne({
@@ -299,6 +302,17 @@ export async function POST(request: Request) {
         if (sanitizedLocation) {
           existing.clockInLocation = sanitizedLocation;
         }
+        if (telemetry.ip && !existing.clockInIp) {
+          existing.clockInIp = telemetry.ip;
+        }
+        if (!existing.clockInDevice?.type || existing.clockInDevice.type === "Unknown") {
+          existing.clockInDevice = {
+            type: telemetry.type,
+            os: telemetry.os,
+            browser: telemetry.browser,
+            userAgent: telemetry.userAgent,
+          };
+        }
         await existing.save();
         await existing.populate(POPULATE_EXTENSION_APPROVER);
         await existing.populate(POPULATE_EXTENSION_REJECTOR);
@@ -311,15 +325,37 @@ export async function POST(request: Request) {
         clockIn:         now,
         originalClockIn: now, // preserved across all break/resume cycles
         clockInLocation: sanitizedLocation,
+        clockInIp:       telemetry.ip,
+        clockInDevice:   {
+          type: telemetry.type,
+          os: telemetry.os,
+          browser: telemetry.browser,
+          userAgent: telemetry.userAgent,
+        },
+        punchSource:     telemetry.type === "Mobile" ? "Mobile App" : "Web Portal",
         regularHours:    0,
         overtimeHours:   0,
         status:          "Present",
         tenantId:        tenantObjectId,
       });
 
+      // Also ensure user model reflects latest punch telemetry
+      User.findByIdAndUpdate(userObjectId, {
+        lastLoginIp: telemetry.ip,
+        lastLoginDevice: {
+          type: telemetry.type,
+          os: telemetry.os,
+          browser: telemetry.browser,
+          userAgent: telemetry.userAgent,
+          lastActiveAt: new Date(),
+        },
+      }).catch(() => {});
+
       return NextResponse.json({ success: true, attendance: newRecord }, { status: 201 });
 
     } else if (action === "out") {
+      const telemetry = parseClientTelemetry(request);
+
       // Find today's record using range — immune to stored date format
       let record = await Attendance.findOne({
         userId:   userObjectId,
@@ -358,6 +394,13 @@ export async function POST(request: Request) {
       if (sanitizedLocation) {
         record.clockOutLocation = sanitizedLocation;
       }
+      record.clockOutIp = telemetry.ip;
+      record.clockOutDevice = {
+        type: telemetry.type,
+        os: telemetry.os,
+        browser: telemetry.browser,
+        userAgent: telemetry.userAgent,
+      };
 
       let totalAccumulated: number;
       if (record.lastResumedAt) {
@@ -392,12 +435,26 @@ export async function POST(request: Request) {
       record.regularHours  = Number(Math.min(safeTotal, dynamicTargetHours).toFixed(2));
       record.overtimeHours = Number(Math.max(0, safeTotal - dynamicTargetHours).toFixed(2));
       await record.save();
+      // Also ensure user model reflects latest punch telemetry
+      User.findByIdAndUpdate(userObjectId, {
+        lastLoginIp: telemetry.ip,
+        lastLoginDevice: {
+          type: telemetry.type,
+          os: telemetry.os,
+          browser: telemetry.browser,
+          userAgent: telemetry.userAgent,
+          lastActiveAt: new Date(),
+        },
+      }).catch(() => {});
+
       await record.populate(POPULATE_EXTENSION_APPROVER);
       await record.populate(POPULATE_EXTENSION_REJECTOR);
 
       return NextResponse.json({ success: true, attendance: record });
 
     } else if (action === "resume") {
+      const telemetry = parseClientTelemetry(request);
+
       // Find today's record using range
       let record = await Attendance.findOne({
         userId:   userObjectId,
@@ -454,6 +511,17 @@ export async function POST(request: Request) {
 
       record.lastResumedAt = now;
       record.clockOut      = undefined;
+      if (telemetry.ip && !record.clockInIp) {
+        record.clockInIp = telemetry.ip;
+      }
+      if (!record.clockInDevice?.type || record.clockInDevice.type === "Unknown") {
+        record.clockInDevice = {
+          type: telemetry.type,
+          os: telemetry.os,
+          browser: telemetry.browser,
+          userAgent: telemetry.userAgent,
+        };
+      }
       await record.save();
       await record.populate(POPULATE_EXTENSION_APPROVER);
       await record.populate(POPULATE_EXTENSION_REJECTOR);
