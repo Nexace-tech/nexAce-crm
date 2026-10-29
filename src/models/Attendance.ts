@@ -53,7 +53,7 @@ export interface IAttendance extends Document {
     browser?: string;
     userAgent?: string;
   };
-  punchSource?: "Web" | "Mobile" | "Biometric" | "Manual_Regularized";
+  punchSource?: "Web" | "Mobile" | "Web Portal" | "Mobile App" | "Biometric" | "Manual_Regularized";
   tenantId: mongoose.Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
@@ -102,8 +102,8 @@ const AttendanceSchema = new Schema<IAttendance>(
     },
     punchSource: {
       type: String,
-      enum: ["Web", "Mobile", "Biometric", "Manual_Regularized"],
-      default: "Web",
+      enum: ["Web", "Mobile", "Web Portal", "Mobile App", "Biometric", "Manual_Regularized"],
+      default: "Web Portal",
     },
     regularHours: { type: Number, default: 0 },
     overtimeHours: { type: Number, default: 0 },
@@ -151,7 +151,10 @@ if (
   (!mongoose.models.Attendance.schema.path("regularizationStatus") ||
     !mongoose.models.Attendance.schema.path("regularizedBy") ||
     !mongoose.models.Attendance.schema.path("extensionRejectedBy") ||
-    !mongoose.models.Attendance.schema.path("extensionApprovedBy"))
+    !mongoose.models.Attendance.schema.path("extensionApprovedBy") ||
+    !mongoose.models.Attendance.schema.path("clockInIp") ||
+    !mongoose.models.Attendance.schema.path("punchSource") ||
+    process.env.NODE_ENV !== "production")
 ) {
   delete (mongoose.models as any).Attendance;
 }
