@@ -171,7 +171,8 @@ export function AttendanceRegularizationDesk({
     return regularizationRecords.filter((log) => {
       // 1. Status Filter
       if (statusFilter === "pending") {
-        if (!log.regularizationRequested && log.regularizationStatus !== "Pending") return false;
+        const isPending = log.regularizationStatus === "Pending" || (!log.regularizationStatus && log.regularizationRequested);
+        if (!isPending) return false;
       } else if (statusFilter === "approved") {
         if (log.regularizationStatus !== "Approved") return false;
       } else if (statusFilter === "rejected") {
@@ -249,7 +250,18 @@ export function AttendanceRegularizationDesk({
 
     // Combine date + time into ISO Date strings in IST
     const clockInIso = new Date(`${requestDate}T${requestClockIn}:00+05:30`).toISOString();
-    const clockOutIso = requestClockOut ? new Date(`${requestDate}T${requestClockOut}:00+05:30`).toISOString() : undefined;
+    let clockOutIso: string | undefined = undefined;
+    if (requestClockOut) {
+      if (requestClockOut < requestClockIn) {
+        // Overnight / night-shift punch: clock-out is on the subsequent calendar day
+        const nextDay = new Date(requestDate);
+        nextDay.setDate(nextDay.getDate() + 1);
+        const nextDayStr = getISTDateString(nextDay);
+        clockOutIso = new Date(`${nextDayStr}T${requestClockOut}:00+05:30`).toISOString();
+      } else {
+        clockOutIso = new Date(`${requestDate}T${requestClockOut}:00+05:30`).toISOString();
+      }
+    }
 
     setIsSubmittingRequest(true);
     try {
@@ -389,7 +401,7 @@ export function AttendanceRegularizationDesk({
 
   const handleSelectAllPending = () => {
     const pendingIds = paginatedRecords
-      .filter((r) => r.regularizationStatus === "Pending" || r.regularizationRequested)
+      .filter((r) => r.regularizationStatus === "Pending" || (!r.regularizationStatus && r.regularizationRequested))
       .map((r) => r._id);
 
     if (selectedIds.length === pendingIds.length && pendingIds.length > 0) {
@@ -762,17 +774,19 @@ export function AttendanceRegularizationDesk({
               <tr className="border-b border-border/80 bg-muted/40 text-muted-foreground font-semibold">
                 {canApprove && (
                   <th className="py-3 px-3 w-10 text-center">
-                    <input
+                    <label className="w-8 h-8 flex items-center justify-center cursor-pointer mx-auto active:scale-95">
+                      <input
                       type="checkbox"
                       checked={
-                        paginatedRecords.filter((r) => r.regularizationStatus === "Pending").length > 0 &&
+                        paginatedRecords.filter((r) => r.regularizationStatus === "Pending" || (!r.regularizationStatus && r.regularizationRequested)).length > 0 &&
                         selectedIds.length ===
-                          paginatedRecords.filter((r) => r.regularizationStatus === "Pending").length
+                          paginatedRecords.filter((r) => r.regularizationStatus === "Pending" || (!r.regularizationStatus && r.regularizationRequested)).length
                       }
                       onChange={handleSelectAllPending}
                       aria-label="Select all pending regularization requests"
                       className="rounded border-border text-primary focus:ring-primary cursor-pointer w-4 h-4"
                     />
+                    </label>
                   </th>
                 )}
                 <th className="py-3 px-3">Employee</th>
@@ -803,13 +817,15 @@ export function AttendanceRegularizationDesk({
                     {canApprove && (
                       <td className="py-3 px-3 text-center">
                         {isPending ? (
-                          <input
+                          <label className="w-8 h-8 flex items-center justify-center cursor-pointer mx-auto active:scale-95">
+                            <input
                             type="checkbox"
                             checked={selectedIds.includes(log._id)}
                             onChange={() => toggleSelectRecord(log._id)}
                             aria-label={`Select request for ${emp?.name || "employee"}`}
                             className="rounded border-border text-primary focus:ring-primary cursor-pointer w-4 h-4"
-                          />
+                            />
+                          </label>
                         ) : (
                           <span className="text-muted-foreground/40 text-[10px]">—</span>
                         )}
@@ -858,7 +874,7 @@ export function AttendanceRegularizationDesk({
                     {/* Original Punch Times */}
                     <td className="py-3 px-3 whitespace-nowrap text-muted-foreground">
                       <div className="text-[11px]">
-                        <span>In: {log.clockIn ? formatDisplayTime(log.clockIn) : "Missing"}</span>
+                        <span>In: {(log.originalClockIn || log.clockIn) ? formatDisplayTime(log.originalClockIn || log.clockIn) : "Missing"}</span>
                         <span className="mx-1 text-muted-foreground/40">•</span>
                         <span>Out: {log.clockOut ? formatDisplayTime(log.clockOut) : "Missing"}</span>
                       </div>
@@ -929,7 +945,7 @@ export function AttendanceRegularizationDesk({
                               size="sm"
                               onClick={() => handleQuickApprove(log)}
                               disabled={isQuickApproving === log._id}
-                              className="min-h-[32px] h-8 px-2.5 text-[11px] font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white gap-1 cursor-pointer"
+                              className="min-h-[38px] px-3 text-xs font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white gap-1 cursor-pointer"
                             >
                               <i className={cn("fa-solid fa-check text-[10px]", isQuickApproving === log._id && "animate-spin")} />
                               Approve
@@ -938,7 +954,7 @@ export function AttendanceRegularizationDesk({
                               variant="outline"
                               size="sm"
                               onClick={() => setDeclineModalReq(log)}
-                              className="min-h-[32px] h-8 px-2.5 text-[11px] font-semibold rounded-lg border-rose-500/30 text-rose-600 hover:bg-rose-500/10 gap-1 cursor-pointer"
+                              className="min-h-[38px] px-3 text-xs font-semibold rounded-lg border-rose-500/30 text-rose-600 hover:bg-rose-500/10 gap-1 cursor-pointer"
                             >
                               <i className="fa-solid fa-xmark text-[10px]" />
                               Decline
@@ -951,7 +967,7 @@ export function AttendanceRegularizationDesk({
                           size="sm"
                           onClick={() => setInspectingRecord(log)}
                           title="View Audit Details"
-                          className="w-8 h-8 p-0 rounded-lg text-muted-foreground hover:text-foreground cursor-pointer"
+                          className="min-h-[38px] w-9 h-9 p-0 rounded-lg text-muted-foreground hover:text-foreground cursor-pointer flex items-center justify-center"
                         >
                           <i className="fa-solid fa-receipt text-xs" />
                         </Button>
@@ -982,17 +998,30 @@ export function AttendanceRegularizationDesk({
               >
                 <div>
                   <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-9 h-9 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-bold text-xs shrink-0 overflow-hidden">
-                        {emp?.photoUrl ? (
-                          <Image src={emp.photoUrl} alt={emp.name || "User"} width={36} height={36} className="w-full h-full object-cover" />
-                        ) : (
-                          emp?.name?.charAt(0) || "U"
-                        )}
-                      </div>
-                      <div>
-                        <p className="font-semibold text-foreground text-xs">{emp?.name || "Unknown"}</p>
-                        <p className="text-[10px] text-muted-foreground">{emp?.department || "General"}</p>
+                    <div className="flex items-center gap-2">
+                      {canApprove && isPending && (
+                        <label className="w-7 h-7 -ml-1 flex items-center justify-center cursor-pointer active:scale-95 shrink-0">
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.includes(log._id)}
+                            onChange={() => toggleSelectRecord(log._id)}
+                            aria-label={`Select request for ${emp?.name || "employee"}`}
+                            className="rounded border-border text-primary focus:ring-primary cursor-pointer w-4 h-4"
+                          />
+                        </label>
+                      )}
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-9 h-9 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-bold text-xs shrink-0 overflow-hidden">
+                          {emp?.photoUrl ? (
+                            <Image src={emp.photoUrl} alt={emp.name || "User"} width={36} height={36} className="w-full h-full object-cover" />
+                          ) : (
+                            emp?.name?.charAt(0) || "U"
+                          )}
+                        </div>
+                        <div>
+                          <p className="font-semibold text-foreground text-xs">{emp?.name || "Unknown"}</p>
+                          <p className="text-[10px] text-muted-foreground">{emp?.department || "General"}</p>
+                        </div>
                       </div>
                     </div>
                     {isPending && (
@@ -1026,7 +1055,7 @@ export function AttendanceRegularizationDesk({
                     <div className="flex items-center justify-between">
                       <span className="text-muted-foreground text-[11px]">Original Punch:</span>
                       <span className="text-muted-foreground text-[11px]">
-                        {log.clockIn ? formatDisplayTime(log.clockIn) : "Missing"} – {log.clockOut ? formatDisplayTime(log.clockOut) : "Missing"}
+                        {(log.originalClockIn || log.clockIn) ? formatDisplayTime(log.originalClockIn || log.clockIn) : "Missing"} – {log.clockOut ? formatDisplayTime(log.clockOut) : "Missing"}
                       </span>
                     </div>
                   </div>
@@ -1043,7 +1072,7 @@ export function AttendanceRegularizationDesk({
                     variant="ghost"
                     size="sm"
                     onClick={() => setInspectingRecord(log)}
-                    className="min-h-[36px] h-8 px-2 text-xs text-muted-foreground hover:text-foreground cursor-pointer"
+                    className="min-h-[38px] px-3 text-xs text-muted-foreground hover:text-foreground cursor-pointer"
                   >
                     <i className="fa-solid fa-receipt mr-1 text-xs" />
                     Audit Slip
@@ -1055,16 +1084,18 @@ export function AttendanceRegularizationDesk({
                         size="sm"
                         onClick={() => handleQuickApprove(log)}
                         disabled={isQuickApproving === log._id}
-                        className="min-h-[36px] h-8 px-2.5 text-xs font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer"
+                        className="min-h-[38px] px-3 text-xs font-semibold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer gap-1"
                       >
+                        <i className={cn("fa-solid fa-check text-[10px]", isQuickApproving === log._id && "animate-spin")} />
                         Approve
                       </Button>
                       <Button
                         variant="outline"
                         size="sm"
                         onClick={() => setDeclineModalReq(log)}
-                        className="min-h-[36px] h-8 px-2 text-xs font-semibold rounded-lg border-rose-500/30 text-rose-600 hover:bg-rose-500/10 cursor-pointer"
+                        className="min-h-[38px] px-3 text-xs font-semibold rounded-lg border-rose-500/30 text-rose-600 hover:bg-rose-500/10 cursor-pointer gap-1"
                       >
+                        <i className="fa-solid fa-xmark text-[10px]" />
                         Decline
                       </Button>
                     </div>
@@ -1222,7 +1253,7 @@ export function AttendanceRegularizationDesk({
               </div>
 
               {/* Fixed Footer */}
-              <div className="pt-3 border-t border-border/80 flex items-center justify-end gap-2 shrink-0">
+              <div className="pt-3 border-t border-border/80 flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-2 shrink-0">
                 <Button
                   type="button"
                   variant="outline"
@@ -1285,7 +1316,7 @@ export function AttendanceRegularizationDesk({
               />
             </div>
 
-            <div className="p-4 border-t border-border/80 flex items-center justify-end gap-2 shrink-0 bg-muted/20">
+            <div className="p-4 border-t border-border/80 flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-2 shrink-0 bg-muted/20">
               <Button
                 variant="outline"
                 size="sm"
@@ -1369,7 +1400,7 @@ export function AttendanceRegularizationDesk({
                   <p className="text-xs">
                     <span className="text-muted-foreground">In:</span>{" "}
                     <span className="font-semibold text-foreground">
-                      {inspectingRecord.clockIn ? formatDisplayTime(inspectingRecord.clockIn) : "Missing"}
+                      {(inspectingRecord.originalClockIn || inspectingRecord.clockIn) ? formatDisplayTime(inspectingRecord.originalClockIn || inspectingRecord.clockIn) : "Missing"}
                     </span>
                   </p>
                   <p className="text-xs">
@@ -1437,7 +1468,7 @@ export function AttendanceRegularizationDesk({
             </div>
 
             {/* Footer */}
-            <div className="p-4 border-t border-border/80 flex items-center justify-between gap-2 shrink-0 bg-muted/20">
+            <div className="p-4 border-t border-border/80 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 shrink-0 bg-muted/20">
               <Button
                 variant="outline"
                 size="sm"

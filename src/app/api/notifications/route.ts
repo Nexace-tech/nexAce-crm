@@ -74,7 +74,7 @@ export async function POST(request: Request) {
 
     const { tenantObjectId, userObjectId, session } = authResult;
     const body = await request.json();
-    const { recipientId, title, message, type, linkUrl, broadcast } = body;
+    const { recipientId, title, message, type, linkUrl, broadcast, targetRoles } = body;
 
     if (!title || !message) {
       return NextResponse.json({ error: "Title and Message are required" }, { status: 400 });
@@ -90,7 +90,11 @@ export async function POST(request: Request) {
 
       // Import User model dynamically to get all tenant members
       const { User } = await import("@/models/User");
-      const tenantUsers = await User.find({ tenantId: tenantObjectId }).select("_id");
+      const userQuery: Record<string, unknown> = { tenantId: tenantObjectId };
+      if (Array.isArray(targetRoles) && targetRoles.length > 0) {
+        userQuery.role = { $in: targetRoles };
+      }
+      const tenantUsers = await User.find(userQuery).select("_id");
       
       const docs = tenantUsers.map((u) => ({
         recipientId: u._id,

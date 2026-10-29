@@ -6,6 +6,7 @@ export interface IRolePermission extends Document {
   isCustom?: boolean;
   modulePermissions: Record<string, boolean>;
   featurePermissions: Record<string, boolean>;
+  spotlightPermissions?: Record<string, boolean>;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -21,12 +22,17 @@ const RolePermissionSchema: Schema = new Schema(
     isCustom: { type: Boolean, default: false },
     modulePermissions: { type: Schema.Types.Mixed, default: {} },
     featurePermissions: { type: Schema.Types.Mixed, default: {} },
+    spotlightPermissions: { type: Schema.Types.Mixed, default: {} },
   },
   { timestamps: true }
 );
 
 // Compound unique index so each tenant has 1 permission config per role
 RolePermissionSchema.index({ tenantId: 1, role: 1 }, { unique: true });
+
+if (process.env.NODE_ENV !== "production" && mongoose.models.RolePermission) {
+  delete mongoose.models.RolePermission;
+}
 
 export const RolePermission: Model<IRolePermission> =
   mongoose.models.RolePermission || mongoose.model<IRolePermission>("RolePermission", RolePermissionSchema);

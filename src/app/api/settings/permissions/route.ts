@@ -76,6 +76,38 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, Record<string, boolean>> =
   },
 };
 
+// Default spotlight feature announcement visibility preset matrix
+export const DEFAULT_SPOTLIGHT_PERMISSIONS: Record<string, Record<string, boolean>> = {
+  OPS: {
+    enabled: true,
+    "fnf-desk": true,
+    "dynamic-role-permissions": true,
+    "client-device-telemetry": true,
+    "mobile-shift-clocking": true,
+  },
+  Manager: {
+    enabled: true,
+    "fnf-desk": true,
+    "dynamic-role-permissions": false,
+    "client-device-telemetry": false,
+    "mobile-shift-clocking": true,
+  },
+  HR: {
+    enabled: true,
+    "fnf-desk": true,
+    "dynamic-role-permissions": false,
+    "client-device-telemetry": true,
+    "mobile-shift-clocking": true,
+  },
+  Employee: {
+    enabled: true,
+    "fnf-desk": false,
+    "dynamic-role-permissions": false,
+    "client-device-telemetry": false,
+    "mobile-shift-clocking": true,
+  },
+};
+
 // Default feature action capabilities preset matrix
 export const DEFAULT_FEATURE_PERMISSIONS: Record<string, Record<string, boolean>> = {
   OPS: {
@@ -260,6 +292,10 @@ export async function GET() {
       JSON.stringify(DEFAULT_FEATURE_PERMISSIONS)
     );
 
+    const spotlightPermissionsMap: Record<string, Record<string, boolean>> = JSON.parse(
+      JSON.stringify(DEFAULT_SPOTLIGHT_PERMISSIONS)
+    );
+
     dbPermissions.forEach((doc) => {
       if (doc.role) {
         if (doc.modulePermissions) {
@@ -272,6 +308,12 @@ export async function GET() {
           featurePermissionsMap[doc.role] = {
             ...(featurePermissionsMap[doc.role] || DEFAULT_FEATURE_PERMISSIONS.Employee),
             ...(doc.featurePermissions as any),
+          };
+        }
+        if ((doc as any).spotlightPermissions) {
+          spotlightPermissionsMap[doc.role] = {
+            ...(spotlightPermissionsMap[doc.role] || DEFAULT_SPOTLIGHT_PERMISSIONS.Employee),
+            ...((doc as any).spotlightPermissions as any),
           };
         }
       }
@@ -307,13 +349,27 @@ export async function GET() {
       }
     });
 
+    Object.keys(spotlightPermissionsMap).forEach((roleKey) => {
+      const sMap = spotlightPermissionsMap[roleKey];
+      if (sMap) {
+        const roleDefaults = DEFAULT_SPOTLIGHT_PERMISSIONS[roleKey] || DEFAULT_SPOTLIGHT_PERMISSIONS.Employee;
+        Object.keys(roleDefaults).forEach((sKey) => {
+          if (sMap[sKey] === undefined) {
+            sMap[sKey] = roleDefaults[sKey];
+          }
+        });
+      }
+    });
+
     const customRoles = dbPermissions.filter((d) => d.isCustom).map((d) => d.role);
 
     return NextResponse.json({
       permissions: permissionsMap,
       featurePermissions: featurePermissionsMap,
+      spotlightPermissions: spotlightPermissionsMap,
       defaultPermissions: DEFAULT_ROLE_PERMISSIONS,
       defaultFeaturePermissions: DEFAULT_FEATURE_PERMISSIONS,
+      defaultSpotlightPermissions: DEFAULT_SPOTLIGHT_PERMISSIONS,
       customRoles,
     });
   } catch (error: unknown) {
@@ -359,6 +415,7 @@ export async function POST(request: Request) {
               isCustom: p.isCustom ?? !["OPS", "Manager", "HR", "Employee"].includes(rName.trim()),
               modulePermissions: p.modulePermissions || {},
               featurePermissions: p.featurePermissions || {},
+              spotlightPermissions: p.spotlightPermissions || {},
             },
           },
           { upsert: true }
@@ -367,7 +424,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: true, message: "Bulk policies imported successfully" });
     }
 
-    const { role, isCustom, modulePermissions, featurePermissions, action } = body;
+    const { role, isCustom, modulePermissions, featurePermissions, spotlightPermissions, action } = body;
 
     if (!role || typeof role !== "string" || !role.trim()) {
       return NextResponse.json({ error: "Invalid role specified" }, { status: 400 });
@@ -396,6 +453,7 @@ export async function POST(request: Request) {
             $set: {
               modulePermissions: DEFAULT_ROLE_PERMISSIONS.Employee,
               featurePermissions: DEFAULT_FEATURE_PERMISSIONS.Employee,
+              spotlightPermissions: DEFAULT_SPOTLIGHT_PERMISSIONS.Employee,
             },
           }
         );
@@ -411,6 +469,7 @@ export async function POST(request: Request) {
     if (isCustom !== undefined) updatePayload.isCustom = isCustom;
     if (modulePermissions) updatePayload.modulePermissions = modulePermissions;
     if (featurePermissions) updatePayload.featurePermissions = featurePermissions;
+    if (spotlightPermissions) updatePayload.spotlightPermissions = spotlightPermissions;
 
     const updatedDoc = await RolePermission.findOneAndUpdate(
       {

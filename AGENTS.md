@@ -17,6 +17,14 @@
 
 - **Auto-Create All Plans Inside `/plans`**: Whenever creating ANY implementation plan, architectural specification, feature roadmap, technical design document, or change proposal, you MUST ALWAYS create and persist the markdown document directly inside the project's root `plans/` directory (e.g. `plans/<feature_name>_plan.md`). Never create plan documents in arbitrary folders, root workspace, or only as ephemeral scratch files without saving them in `plans/`.
 
+# Mandatory New Feature Highlighting Rule (Strictly Enforced)
+
+- **Highlight New Features Upon User Login**: Whenever ANY new feature, module, enhancement, or major capability is added or updated in the CRM:
+  - **Register in Feature Highlights Registry**: You MUST immediately register the new feature in the central registry (`src/lib/featureHighlights.ts`) with a unique release ID, title, summary, relevant tags, applicable roles, deep-link URL, and FontAwesome 6 icon.
+  - **Automatic Login Spotlight**: The system MUST automatically detect unacknowledged releases and present a 100% mobile-responsive **"What's New / Feature Release Spotlight" Modal** immediately upon user login.
+  - **Visual Badges & Pulse Indicators**: Relevant navigation items, tabs, and buttons corresponding to newly added features MUST display visual highlight indicators (e.g. `NEW` badge pills or subtle pulse indicators).
+  - **Persistence & User Choice**: Once the user reviews or dismisses the spotlight ("Got it!" / "Don't show again"), save their seen status so they are not repeatedly interrupted on page reloads, while retaining a "What's New" launcher in the top navigation to revisit at will.
+
 <!-- BEGIN:nextjs-agent-rules -->
 
 # This is NOT the Next.js you know

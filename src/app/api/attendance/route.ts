@@ -101,6 +101,7 @@ export async function GET(request: Request) {
       })
         .populate(POPULATE_EXTENSION_APPROVER)
         .populate(POPULATE_EXTENSION_REJECTOR)
+        .populate(POPULATE_REGULARIZATION_APPROVER)
         .sort({ clockIn: -1 });
 
       if (unclosedYesterday) {
@@ -143,7 +144,7 @@ export async function GET(request: Request) {
     const endStr        = searchParams.get("end") || searchParams.get("endDate");
 
     const dataScope = await getUserDataScope(session);
-    const isElevatedRole = session.role === "Admin" || session.role === "OPS" || session.role === "Manager" || session.role === "HR" || dataScope.canViewFeature("viewTeamTimesheets") || dataScope.canViewFeature("viewAllShiftExtensions") || dataScope.canViewFeature("approveAdditionalShiftTime");
+    const isElevatedRole = session.role === "Admin" || session.role === "OPS" || session.role === "Manager" || session.role === "HR" || dataScope.canViewFeature("viewTeamTimesheets") || dataScope.canViewFeature("viewAllShiftExtensions") || dataScope.canViewFeature("approveAdditionalShiftTime") || dataScope.canViewFeature("approveRegularization");
 
     const historyFilter: Record<string, unknown> = { tenantId: tenantObjectId };
     if (!isElevatedRole) {
@@ -251,7 +252,8 @@ export async function POST(request: Request) {
         date:     { $gte: dayStart, $lt: dayEnd },
       })
         .populate(POPULATE_EXTENSION_APPROVER)
-        .populate(POPULATE_EXTENSION_REJECTOR);
+        .populate(POPULATE_EXTENSION_REJECTOR)
+        .populate(POPULATE_REGULARIZATION_APPROVER);
 
       // Check for unclosed active shift from yesterday (<24h)
       if (!existing) {
@@ -263,7 +265,8 @@ export async function POST(request: Request) {
           clockOut: { $exists: false },
         })
           .populate(POPULATE_EXTENSION_APPROVER)
-          .populate(POPULATE_EXTENSION_REJECTOR);
+          .populate(POPULATE_EXTENSION_REJECTOR)
+          .populate(POPULATE_REGULARIZATION_APPROVER);
         if (unclosedYesterday) {
           existing = unclosedYesterday;
         }
@@ -364,6 +367,7 @@ export async function POST(request: Request) {
       })
         .populate(POPULATE_EXTENSION_APPROVER)
         .populate(POPULATE_EXTENSION_REJECTOR)
+        .populate(POPULATE_REGULARIZATION_APPROVER)
         .sort({ clockIn: -1 });
 
       // Overnight shift support: If no active record for today, look for an unclosed active shift from yesterday (<24h)
@@ -377,6 +381,7 @@ export async function POST(request: Request) {
         })
           .populate(POPULATE_EXTENSION_APPROVER)
           .populate(POPULATE_EXTENSION_REJECTOR)
+          .populate(POPULATE_REGULARIZATION_APPROVER)
           .sort({ clockIn: -1 });
 
         if (unclosedYesterday) {
@@ -449,6 +454,7 @@ export async function POST(request: Request) {
 
       await record.populate(POPULATE_EXTENSION_APPROVER);
       await record.populate(POPULATE_EXTENSION_REJECTOR);
+      await record.populate(POPULATE_REGULARIZATION_APPROVER);
 
       return NextResponse.json({ success: true, attendance: record });
 
@@ -463,6 +469,7 @@ export async function POST(request: Request) {
       })
         .populate(POPULATE_EXTENSION_APPROVER)
         .populate(POPULATE_EXTENSION_REJECTOR)
+        .populate(POPULATE_REGULARIZATION_APPROVER)
         .sort({ clockIn: -1 });
 
       if (!record) {
@@ -474,6 +481,7 @@ export async function POST(request: Request) {
         })
           .populate(POPULATE_EXTENSION_APPROVER)
           .populate(POPULATE_EXTENSION_REJECTOR)
+          .populate(POPULATE_REGULARIZATION_APPROVER)
           .sort({ clockIn: -1 });
         if (unclosedYesterday) record = unclosedYesterday;
       }
@@ -525,6 +533,7 @@ export async function POST(request: Request) {
       await record.save();
       await record.populate(POPULATE_EXTENSION_APPROVER);
       await record.populate(POPULATE_EXTENSION_REJECTOR);
+      await record.populate(POPULATE_REGULARIZATION_APPROVER);
 
       return NextResponse.json({ success: true, attendance: record, message: "Shift resumed successfully!" });
 
@@ -847,12 +856,12 @@ export async function POST(request: Request) {
       }
 
       if (!record) {
-        // Create a new attendance record for regularizing an unlogged day
+        // Create a new attendance record for regularizing an unlogged day (defaults to Absent while pending)
         record = new Attendance({
           userId: userObjectId,
           tenantId: tenantObjectId,
           date: dateStart,
-          status: "Present",
+          status: "Absent",
           clockIn: requestedClockIn,
           clockOut: requestedClockOut,
           regularHours: 0,
@@ -894,7 +903,7 @@ export async function POST(request: Request) {
             title: `📝 Attendance Regularization Request — ${employeeName}`,
             message: `${employeeName}${employeeDept ? ` (${employeeDept})` : ""} submitted an attendance regularization request for ${dateLabel}. Reason: "${String(reason).trim()}".`,
             type: "hr",
-            linkUrl: "/dashboard/calendar",
+            linkUrl: "/dashboard/calendar?tab=regularization",
             adminOnly: ["Admin", "SuperAdmin", "OPS"].includes(rev.role),
           }));
           await Notification.insertMany(reviewerNotifications);
@@ -907,7 +916,7 @@ export async function POST(request: Request) {
           title: "📝 Regularization Request Submitted",
           message: "Your attendance regularization request has been submitted for management review.",
           type: "hr",
-          linkUrl: "/dashboard/calendar",
+          linkUrl: "/dashboard/calendar?tab=regularization",
         });
       } catch (notifErr) {
         console.error("Failed to dispatch regularization request notifications:", notifErr);
@@ -942,6 +951,10 @@ export async function POST(request: Request) {
       const tenant = await Tenant.findById(tenantObjectId).lean();
       const dynamicTargetHours = Number(tenant?.targetShiftHours) || SHIFT_TARGET_HOURS;
 
+      // Preserve original punch for audit trail
+      if (!recordToApprove.originalClockIn && recordToApprove.clockIn) {
+        recordToApprove.originalClockIn = recordToApprove.clockIn;
+      }
       // Apply requested punch times
       if (recordToApprove.requestedClockIn) {
         recordToApprove.clockIn = recordToApprove.requestedClockIn;
@@ -961,6 +974,7 @@ export async function POST(request: Request) {
       }
 
       recordToApprove.status = "Present";
+      recordToApprove.punchSource = "Manual_Regularized";
       recordToApprove.regularizationRequested = false;
       recordToApprove.regularizationStatus = "Approved";
       recordToApprove.regularizedBy = userObjectId;
@@ -977,7 +991,7 @@ export async function POST(request: Request) {
           title: "✅ Attendance Regularization Approved",
           message: "Your attendance regularization request has been approved and your timesheet updated.",
           type: "hr",
-          linkUrl: "/dashboard/calendar",
+          linkUrl: "/dashboard/calendar?tab=regularization",
         });
       } catch (notifErr) {
         console.error("Failed to send regularization approval notification:", notifErr);
@@ -1016,6 +1030,9 @@ export async function POST(request: Request) {
       recordToReject.regularizedBy = userObjectId;
       recordToReject.regularizedAt = now;
       recordToReject.regularizationRejectionReason = rejectionReason;
+      if (!recordToReject.originalClockIn && (recordToReject.regularHours || 0) === 0) {
+        recordToReject.status = "Absent";
+      }
       await recordToReject.save();
       await recordToReject.populate(POPULATE_REGULARIZATION_APPROVER);
 
@@ -1027,7 +1044,7 @@ export async function POST(request: Request) {
           title: "❌ Attendance Regularization Declined",
           message: `Your attendance regularization request was declined. Reason: "${rejectionReason}"`,
           type: "hr",
-          linkUrl: "/dashboard/calendar",
+          linkUrl: "/dashboard/calendar?tab=regularization",
         });
       } catch (notifErr) {
         console.error("Failed to send regularization decline notification:", notifErr);
@@ -1068,6 +1085,9 @@ export async function POST(request: Request) {
       const notificationsToCreate = [];
 
       for (const rec of recordsToApprove) {
+        if (!rec.originalClockIn && rec.clockIn) {
+          rec.originalClockIn = rec.clockIn;
+        }
         if (rec.requestedClockIn) {
           rec.clockIn = rec.requestedClockIn;
         }
@@ -1099,7 +1119,7 @@ export async function POST(request: Request) {
           title: "✅ Attendance Regularization Approved",
           message: "Your attendance regularization request has been approved in batch.",
           type: "hr",
-          linkUrl: "/dashboard/calendar",
+          linkUrl: "/dashboard/calendar?tab=regularization",
         });
       }
 

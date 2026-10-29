@@ -569,7 +569,19 @@ function CalendarPageContent() {
       setAttendanceLoading(true);
       const params = new URLSearchParams();
       if (loadAll) params.append("limit", "all");
-      if (isAdmin || isOPS || isHR || can("viewTeamTimesheets") || can("viewLoginHoursSummary") || can("viewAllShiftExtensions") || can("approveAdditionalShiftTime")) params.append("allUsers", "true");
+      if (
+        isAdmin ||
+        isOPS ||
+        isHR ||
+        currentUser?.role === "Manager" ||
+        can("approveRegularization") ||
+        can("viewTeamTimesheets") ||
+        can("viewLoginHoursSummary") ||
+        can("viewAllShiftExtensions") ||
+        can("approveAdditionalShiftTime")
+      ) {
+        params.append("allUsers", "true");
+      }
       const url = `/api/attendance?${params.toString()}`;
       const res = await fetch(url);
       if (res.ok) {
@@ -618,7 +630,10 @@ function CalendarPageContent() {
   useEffect(() => {
     if (!mounted) return;
     if (attendanceToday && !attendanceToday.clockOut) {
-      const clockInTime = new Date(attendanceToday.originalClockIn || attendanceToday.clockIn).getTime();
+      const effectiveClockIn = (attendanceToday.regularizationStatus === "Approved" && attendanceToday.clockIn)
+        ? attendanceToday.clockIn
+        : (attendanceToday.originalClockIn || attendanceToday.clockIn);
+      const clockInTime = new Date(effectiveClockIn).getTime();
 
       const updateTimer = () => {
         const maxElapsedSecs = Math.max(0, Math.floor((Date.now() - clockInTime) / 1000));
@@ -649,7 +664,10 @@ function CalendarPageContent() {
       return () => clearInterval(interval);
     } else {
       if (attendanceToday?.clockIn && attendanceToday?.clockOut) {
-        const clockInTime = new Date(attendanceToday.originalClockIn || attendanceToday.clockIn).getTime();
+        const effectiveClockIn = (attendanceToday.regularizationStatus === "Approved" && attendanceToday.clockIn)
+          ? attendanceToday.clockIn
+          : (attendanceToday.originalClockIn || attendanceToday.clockIn);
+        const clockInTime = new Date(effectiveClockIn).getTime();
         const clockOutTime = new Date(attendanceToday.clockOut).getTime();
         const maxElapsedSecs = Math.max(0, Math.floor((clockOutTime - clockInTime) / 1000));
 
@@ -3119,6 +3137,10 @@ function CalendarPageContent() {
             const otHours = Math.max(0, workedHours - targetHours);
             const isShiftActive = Boolean(attendanceToday?.clockIn && !attendanceToday?.clockOut);
             const isShiftCompleted = Boolean(attendanceToday?.clockIn && attendanceToday?.clockOut);
+            const isRegularizedApproved = attendanceToday?.regularizationStatus === "Approved" || attendanceToday?.punchSource === "Manual_Regularized";
+            const isRegularizationPending = Boolean(attendanceToday?.regularizationRequested && attendanceToday?.regularizationStatus === "Pending");
+            const isRegularizationRejected = Boolean(attendanceToday?.regularizationStatus === "Rejected" && !attendanceToday?.regularizationRequested);
+            const regularizedTimeStr = attendanceToday?.regularizedAt ? formatISTTime(attendanceToday.regularizedAt) : "";
 
             // Estimated shift target completion time
             let targetFinishTimeStr = "--:--";
@@ -3129,8 +3151,12 @@ function CalendarPageContent() {
               targetFinishTimeStr = "Target Met!";
             }
 
-            const clockInDisplay = (attendanceToday?.originalClockIn || attendanceToday?.clockIn)
-              ? new Date(attendanceToday.originalClockIn ?? attendanceToday.clockIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })
+            const effectiveClockIn = (isRegularizedApproved && attendanceToday?.clockIn)
+              ? attendanceToday.clockIn
+              : (attendanceToday?.clockIn || attendanceToday?.originalClockIn);
+
+            const clockInDisplay = effectiveClockIn
+              ? new Date(effectiveClockIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })
               : "--:--";
 
             const clockOutDisplay = attendanceToday?.clockOut
@@ -3148,8 +3174,8 @@ function CalendarPageContent() {
                   )} />
 
                   {/* Header Status Row */}
-                  <div className="w-full flex items-center justify-between pb-3 border-b border-border/60 text-xs">
-                    <div className="flex items-center gap-2">
+                  <div className="w-full flex flex-col sm:flex-row items-start sm:items-center justify-between pb-3 border-b border-border/60 text-xs gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       {isShiftActive ? (
                         <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-semibold border border-emerald-500/20">
                           <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
@@ -3166,13 +3192,139 @@ function CalendarPageContent() {
                           Ready to Clock In
                         </span>
                       )}
+
+                      {/* Regularization Status Badges in Header */}
+                      {isRegularizedApproved && (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 font-bold border border-emerald-500/30 text-[11px] shadow-2xs">
+                          <i className="fa-solid fa-clipboard-check text-emerald-600 dark:text-emerald-400 text-[10px]" />
+                          <span>Approved Regularization</span>
+                          {regularizedTimeStr && (
+                            <span className="font-mono text-[10px] text-emerald-700/80 dark:text-emerald-300/80 font-semibold">
+                              • {regularizedTimeStr}
+                            </span>
+                          )}
+                        </span>
+                      )}
+                      {isRegularizationPending && (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-300 font-bold border border-amber-500/30 text-[11px] animate-pulse">
+                          <i className="fa-solid fa-hourglass-half text-amber-600 dark:text-amber-400 text-[10px]" />
+                          Regularization Under Review
+                        </span>
+                      )}
+                      {isRegularizationRejected && (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-rose-500/15 text-rose-700 dark:text-rose-300 font-bold border border-rose-500/30 text-[11px]">
+                          <i className="fa-solid fa-circle-xmark text-rose-600 dark:text-rose-400 text-[10px]" />
+                          Regularization Rejected
+                        </span>
+                      )}
                     </div>
 
-                    <div className="flex items-center gap-1.5 font-mono text-[11px] text-muted-foreground">
+                    <div className="flex items-center gap-1.5 font-mono text-[11px] text-muted-foreground shrink-0">
                       <i className="fa-solid fa-location-dot text-primary text-[10px]" />
                       <span>IST (UTC+5:30)</span>
                     </div>
                   </div>
+
+                  {/* Attendance Regularization Approved Audit Banner */}
+                  {isRegularizedApproved && (() => {
+                    const regularizer = typeof attendanceToday?.regularizedBy === "object" ? attendanceToday.regularizedBy : null;
+                    const regularizerName = regularizer?.name || "Management / Admin";
+                    const regularizerRole = regularizer?.role || "Authorizer";
+                    const timeStr = attendanceToday?.regularizedAt
+                      ? formatISTTime(attendanceToday.regularizedAt)
+                      : "";
+
+                    return (
+                      <div className="w-full p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/25 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-emerald-700 dark:text-emerald-300 shadow-2xs animate-in fade-in">
+                        <div className="flex items-start sm:items-center gap-2.5 min-w-0">
+                          <div className="w-7 h-7 rounded-lg bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-xs shrink-0 border border-emerald-500/30 mt-0.5 sm:mt-0">
+                            <i className="fa-solid fa-clipboard-check" />
+                          </div>
+                          <div className="min-w-0">
+                            <div className="font-bold flex items-center gap-1.5 flex-wrap">
+                              <span>Attendance Regularization Approved</span>
+                              <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 font-medium">
+                                Authorized by {regularizerName} ({regularizerRole})
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-muted-foreground truncate mt-0.5">
+                              Punches adjusted {timeStr ? `at ${timeStr}` : ""}: &ldquo;{attendanceToday.regularizationReason || "Punch correction authorized"}&rdquo;.
+                            </p>
+                          </div>
+                        </div>
+                        <span className="px-2.5 py-1 rounded-full text-[10px] font-mono font-bold bg-emerald-500/20 border border-emerald-500/30 text-emerald-700 dark:text-emerald-300 shrink-0 self-start sm:self-center">
+                          Regularized
+                        </span>
+                      </div>
+                    );
+                  })()}
+
+                  {/* Attendance Regularization Pending Review Banner */}
+                  {isRegularizationPending && (() => {
+                    const timeStr = attendanceToday?.regularizationRequestedAt
+                      ? formatISTTime(attendanceToday.regularizationRequestedAt)
+                      : "";
+
+                    return (
+                      <div className="w-full p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/25 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-amber-700 dark:text-amber-300 shadow-2xs animate-in fade-in">
+                        <div className="flex items-start sm:items-center gap-2.5 min-w-0">
+                          <div className="w-7 h-7 rounded-lg bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center text-xs shrink-0 border border-amber-500/30 mt-0.5 sm:mt-0">
+                            <i className="fa-solid fa-hourglass-half" />
+                          </div>
+                          <div className="min-w-0">
+                            <div className="font-bold flex items-center gap-1.5 flex-wrap">
+                              <span>Regularization Request Pending</span>
+                              <span className="text-[10px] px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30 font-medium">
+                                Under Review
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-muted-foreground truncate mt-0.5">
+                              Punch adjustment request submitted {timeStr ? `at ${timeStr}` : ""}: &ldquo;{attendanceToday.regularizationReason || "Adjustment requested"}&rdquo; — awaiting manager approval.
+                            </p>
+                          </div>
+                        </div>
+                        <span className="px-2.5 py-1 rounded-full text-[10px] font-mono font-bold bg-amber-500/20 border border-amber-500/30 text-amber-700 dark:text-amber-300 shrink-0 self-start sm:self-center">
+                          Pending Review
+                        </span>
+                      </div>
+                    );
+                  })()}
+
+                  {/* Attendance Regularization Rejected Feedback Banner */}
+                  {isRegularizationRejected && (() => {
+                    const regularizer = typeof attendanceToday?.regularizedBy === "object" ? attendanceToday.regularizedBy : null;
+                    const regularizerName = regularizer?.name || "Management / Admin";
+                    const regularizerRole = regularizer?.role || "Reviewer";
+                    const timeStr = attendanceToday?.regularizedAt
+                      ? formatISTTime(attendanceToday.regularizedAt)
+                      : "";
+
+                    return (
+                      <div className="w-full p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/25 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-rose-700 dark:text-rose-300 shadow-2xs animate-in fade-in">
+                        <div className="flex items-start sm:items-center gap-2.5 min-w-0">
+                          <div className="w-7 h-7 rounded-lg bg-rose-500/20 text-rose-600 dark:text-rose-400 flex items-center justify-center text-xs shrink-0 border border-rose-500/30 mt-0.5 sm:mt-0">
+                            <i className="fa-solid fa-circle-xmark" />
+                          </div>
+                          <div className="min-w-0">
+                            <div className="font-bold flex items-center gap-1.5 flex-wrap">
+                              <span>Regularization Request Rejected</span>
+                              <span className="text-[10px] px-1.5 py-0.2 rounded bg-rose-500/20 text-rose-700 dark:text-rose-300 border border-rose-500/30 font-medium">
+                                Reviewed by {regularizerName} ({regularizerRole})
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-muted-foreground truncate mt-0.5 italic">
+                              &ldquo;{attendanceToday.regularizationRejectionReason || "Adjustment request rejected by reviewer."}&rdquo;
+                            </p>
+                          </div>
+                        </div>
+                        {timeStr && (
+                          <span className="text-[10px] text-muted-foreground/80 shrink-0 self-start sm:self-center">
+                            {timeStr}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })()}
 
                   {/* Shift Extension Audit Banner for Employee */}
                   {attendanceToday?.extensionApproved && (() => {
@@ -3407,12 +3559,17 @@ function CalendarPageContent() {
                               >
                                 <i className="fa-solid fa-play text-xs" /> Resume Shift
                               </Button>
-                              <p className="text-xs text-muted-foreground flex items-center gap-1.5 font-medium">
+                              <p className="text-xs text-muted-foreground flex items-center gap-1.5 font-medium flex-wrap justify-center">
                                 <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                                Shift paused • <span className="font-mono font-semibold text-foreground">{workedHours.toFixed(1)} hrs</span> logged today
+                                <span>Shift paused • <span className="font-mono font-semibold text-foreground">{workedHours.toFixed(1)} hrs</span> logged today</span>
+                                {isRegularizedApproved && (
+                                  <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded-md inline-flex items-center gap-1">
+                                    <i className="fa-solid fa-clipboard-check text-[9px]" />Authorized by Management
+                                  </span>
+                                )}
                                 {isExtensionApproved && (
-                                  <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded-md ml-1">
-                                    <i className="fa-solid fa-shield-check mr-1" />Extension Approved
+                                  <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded-md inline-flex items-center gap-1">
+                                    <i className="fa-solid fa-shield-check text-[9px]" />Extension Approved
                                   </span>
                                 )}
                               </p>
@@ -3429,39 +3586,74 @@ function CalendarPageContent() {
                       <span className="text-muted-foreground block text-[10px] uppercase font-semibold flex items-center gap-1">
                         <i className="fa-solid fa-arrow-right-to-bracket text-emerald-500" /> Clock In
                       </span>
-                      <span className="font-mono font-bold text-foreground text-sm mt-1">
-                        {clockInDisplay}
-                      </span>
+                      <div className="flex items-center justify-between gap-1 mt-1">
+                        <span className="font-mono font-bold text-foreground text-sm">
+                          {clockInDisplay}
+                        </span>
+                        {isRegularizedApproved && (
+                          <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 font-bold border border-emerald-500/30">
+                            Regularized
+                          </span>
+                        )}
+                      </div>
                     </div>
 
                     <div className="p-3 rounded-xl bg-accent/20 border border-border/50 flex flex-col justify-between">
                       <span className="text-muted-foreground block text-[10px] uppercase font-semibold flex items-center gap-1">
                         <i className="fa-solid fa-arrow-right-from-bracket text-rose-500" /> Clock Out
                       </span>
-                      <span className={cn(
-                        "font-mono font-bold text-sm mt-1",
-                        clockOutDisplay === "Active" ? "text-emerald-500" : "text-foreground"
-                      )}>
-                        {clockOutDisplay}
-                      </span>
+                      <div className="flex items-center justify-between gap-1 mt-1">
+                        <span className={cn(
+                          "font-mono font-bold text-sm",
+                          clockOutDisplay === "Active" ? "text-emerald-500" : "text-foreground"
+                        )}>
+                          {clockOutDisplay}
+                        </span>
+                        {isRegularizedApproved && clockOutDisplay !== "--:--" && clockOutDisplay !== "Active" && (
+                          <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 font-bold border border-emerald-500/30">
+                            Regularized
+                          </span>
+                        )}
+                      </div>
                     </div>
 
                     <div className="p-3 rounded-xl bg-accent/20 border border-border/50 flex flex-col justify-between">
                       <span className="text-muted-foreground block text-[10px] uppercase font-semibold flex items-center gap-1">
                         <i className="fa-solid fa-business-time text-primary" /> Worked Today
                       </span>
-                      <span className="font-mono font-bold text-foreground text-sm mt-1">
-                        {workedHours.toFixed(1)} hrs
-                      </span>
+                      <div className="flex items-center justify-between gap-1 mt-1">
+                        <span className="font-mono font-bold text-foreground text-sm">
+                          {workedHours.toFixed(1)} hrs
+                        </span>
+                        {isRegularizedApproved && (
+                          <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 font-bold border border-emerald-500/30">
+                            Approved
+                          </span>
+                        )}
+                      </div>
                     </div>
 
                     <div className="p-3 rounded-xl bg-accent/20 border border-border/50 flex flex-col justify-between">
                       <span className="text-muted-foreground block text-[10px] uppercase font-semibold flex items-center gap-1">
                         <i className="fa-solid fa-flag-checkered text-amber-500" /> Target Finish
                       </span>
-                      <span className="font-mono font-bold text-foreground text-sm mt-1 truncate" title={targetFinishTimeStr}>
-                        {targetFinishTimeStr}
-                      </span>
+                      {isRegularizedApproved ? (
+                        <div className="flex flex-col justify-end mt-1 min-w-0">
+                          <span className="font-bold text-emerald-600 dark:text-emerald-400 text-xs sm:text-sm truncate flex items-center gap-1.5" title="Approved Regularization">
+                            <i className="fa-solid fa-clipboard-check text-[11px] shrink-0" />
+                            <span className="truncate">Approved Regularization</span>
+                          </span>
+                          {regularizedTimeStr && (
+                            <span className="text-[10px] text-muted-foreground font-mono mt-0.5 truncate">
+                              at {regularizedTimeStr}
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="font-mono font-bold text-foreground text-sm mt-1 truncate" title={targetFinishTimeStr}>
+                          {targetFinishTimeStr}
+                        </span>
+                      )}
                     </div>
                   </div>
                 </Card>
@@ -4409,7 +4601,7 @@ function CalendarPageContent() {
               attendanceHistory={attendanceHistory}
               onRefresh={() => fetchAttendance(true)}
               onToast={showToast}
-              canApprove={Boolean(isAdmin || can("approveRegularization"))}
+              canApprove={Boolean(isAdmin || isOPS || isHR || currentUser?.role === "Manager" || can("approveRegularization"))}
               canExport={Boolean(isAdmin || isOPS || isHR || can("exportAttendance") || can("exportShiftExtensions"))}
               currentUserId={currentUser?._id}
               currentUserRole={currentUser?.role}

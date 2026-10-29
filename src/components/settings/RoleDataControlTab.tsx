@@ -5,6 +5,8 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { FEATURE_RELEASES } from "@/lib/featureHighlights";
+import { FeatureSpotlightModal } from "@/components/layout/FeatureSpotlightModal";
 
 // ─── Module Metadata ──────────────────────────────────────────────────────────
 export interface ModuleMeta {
@@ -444,13 +446,17 @@ interface RoleDataControlTabProps {
 
 export function RoleDataControlTab({ isAdmin, showToast }: RoleDataControlTabProps) {
   const [selectedRole, setSelectedRole] = useState<string>("OPS");
-  const [activeSubTab, setActiveSubTab] = useState<"modules" | "features" | "matrix">("features");
+  const [activeSubTab, setActiveSubTab] = useState<"modules" | "features" | "spotlight" | "matrix">("features");
   const [permissionsMap, setPermissionsMap] = useState<Record<string, Record<string, boolean>>>({});
   const [featurePermissionsMap, setFeaturePermissionsMap] = useState<Record<string, Record<string, boolean>>>({});
+  const [spotlightPermissionsMap, setSpotlightPermissionsMap] = useState<Record<string, Record<string, boolean>>>({});
   const [initialPermissionsMap, setInitialPermissionsMap] = useState<Record<string, Record<string, boolean>>>({});
   const [initialFeaturePermissionsMap, setInitialFeaturePermissionsMap] = useState<Record<string, Record<string, boolean>>>({});
+  const [initialSpotlightPermissionsMap, setInitialSpotlightPermissionsMap] = useState<Record<string, Record<string, boolean>>>({});
   const [defaultPermissions, setDefaultPermissions] = useState<Record<string, Record<string, boolean>>>({});
   const [defaultFeaturePermissions, setDefaultFeaturePermissions] = useState<Record<string, Record<string, boolean>>>({});
+  const [defaultSpotlightPermissions, setDefaultSpotlightPermissions] = useState<Record<string, Record<string, boolean>>>({});
+  const [previewSpotlightModal, setPreviewSpotlightModal] = useState(false);
   const [customRoles, setCustomRoles] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -535,12 +541,16 @@ export function RoleDataControlTab({ isAdmin, showToast }: RoleDataControlTabPro
         const data = await res.json();
         const pMap = data.permissions || {};
         const fMap = data.featurePermissions || {};
+        const sMap = data.spotlightPermissions || {};
         setPermissionsMap(pMap);
         setFeaturePermissionsMap(fMap);
+        setSpotlightPermissionsMap(sMap);
         setInitialPermissionsMap(JSON.parse(JSON.stringify(pMap)));
         setInitialFeaturePermissionsMap(JSON.parse(JSON.stringify(fMap)));
+        setInitialSpotlightPermissionsMap(JSON.parse(JSON.stringify(sMap)));
         setDefaultPermissions(data.defaultPermissions || {});
         setDefaultFeaturePermissions(data.defaultFeaturePermissions || {});
+        setDefaultSpotlightPermissions(data.defaultSpotlightPermissions || {});
         setCustomRoles(data.customRoles || []);
       }
     } catch (e) {
@@ -599,16 +609,35 @@ export function RoleDataControlTab({ isAdmin, showToast }: RoleDataControlTabPro
     const initMod = JSON.stringify(initialPermissionsMap[selectedRole] || {});
     const currFeat = JSON.stringify(featurePermissionsMap[selectedRole] || {});
     const initFeat = JSON.stringify(initialFeaturePermissionsMap[selectedRole] || {});
-    return currMod !== initMod || currFeat !== initFeat;
-  }, [permissionsMap, initialPermissionsMap, featurePermissionsMap, initialFeaturePermissionsMap, selectedRole]);
+    const currSpot = JSON.stringify(spotlightPermissionsMap[selectedRole] || {});
+    const initSpot = JSON.stringify(initialSpotlightPermissionsMap[selectedRole] || {});
+    return currMod !== initMod || currFeat !== initFeat || currSpot !== initSpot;
+  }, [permissionsMap, initialPermissionsMap, featurePermissionsMap, initialFeaturePermissionsMap, spotlightPermissionsMap, initialSpotlightPermissionsMap, selectedRole]);
 
   // ── Metrics ────────────────────────────────────────────────────────────────
   const activeRolePerms = permissionsMap[selectedRole] || {};
   const activeRoleFeaturePerms = featurePermissionsMap[selectedRole] || {};
+  const activeRoleSpotlightPerms = spotlightPermissionsMap[selectedRole] || {};
+
+  const allHighlightFeatures = useMemo(() => {
+    const map = new Map<string, any>();
+    FEATURE_RELEASES.forEach((rel) => {
+      rel.features.forEach((feat) => {
+        if (!map.has(feat.id)) {
+          map.set(feat.id, { ...feat, releaseTitle: rel.title, releaseVersion: rel.version });
+        }
+      });
+    });
+    return Array.from(map.values());
+  }, []);
+
   const totalModules = MODULES.length;
   const enabledModules = MODULES.filter((m) => activeRolePerms[m.key] ?? true).length;
   const totalFeatures = FEATURE_ACTIONS.length;
   const enabledFeatures = FEATURE_ACTIONS.filter((f) => activeRoleFeaturePerms[f.key] ?? false).length;
+  const totalSpotlights = allHighlightFeatures.length;
+  const enabledSpotlights = allHighlightFeatures.filter((f) => activeRoleSpotlightPerms[f.id] ?? false).length;
+  const isRoleSpotlightActive = activeRoleSpotlightPerms.enabled !== false;
 
   const currentRoleCfg = roleConfig[selectedRole] || {
     label: selectedRole,
@@ -649,6 +678,36 @@ export function RoleDataControlTab({ isAdmin, showToast }: RoleDataControlTabPro
     });
   };
 
+  const handleToggleSpotlightMaster = (targetRole: string = selectedRole) => {
+    if (!isAdmin) return;
+    setSpotlightPermissionsMap((prev) => {
+      const current = prev[targetRole] || {};
+      const currentEnabled = current.enabled !== false;
+      return { ...prev, [targetRole]: { ...current, enabled: !currentEnabled } };
+    });
+  };
+
+  const handleToggleSpotlightFeature = (featureId: string, targetRole: string = selectedRole) => {
+    if (!isAdmin) return;
+    setSpotlightPermissionsMap((prev) => {
+      const current = prev[targetRole] || {};
+      const currentValue = current[featureId] ?? false;
+      return { ...prev, [targetRole]: { ...current, [featureId]: !currentValue } };
+    });
+  };
+
+  const handleSetAllSpotlight = (value: boolean, targetRole: string = selectedRole) => {
+    if (!isAdmin) return;
+    setSpotlightPermissionsMap((prev) => {
+      const current = prev[targetRole] || {};
+      const updates: Record<string, boolean> = { enabled: true };
+      allHighlightFeatures.forEach((feat) => {
+        updates[feat.id] = value;
+      });
+      return { ...prev, [targetRole]: { ...current, ...updates } };
+    });
+  };
+
   const handleSetAllInSubGroup = (category: FeatureCategory, subGroup: string, value: boolean) => {
     if (!isAdmin) return;
     const featuresInSub = FEATURE_ACTIONS.filter((f) => f.category === category && (f.subGroup || "General Features") === subGroup);
@@ -672,6 +731,7 @@ export function RoleDataControlTab({ isAdmin, showToast }: RoleDataControlTabPro
   const handleDiscardChanges = () => {
     setPermissionsMap(JSON.parse(JSON.stringify(initialPermissionsMap)));
     setFeaturePermissionsMap(JSON.parse(JSON.stringify(initialFeaturePermissionsMap)));
+    setSpotlightPermissionsMap(JSON.parse(JSON.stringify(initialSpotlightPermissionsMap)));
     showToast("Changes discarded", "success");
   };
 
@@ -733,6 +793,7 @@ export function RoleDataControlTab({ isAdmin, showToast }: RoleDataControlTabPro
           isCustom: isCustomRole,
           modulePermissions: permissionsMap[selectedRole] || {},
           featurePermissions: featurePermissionsMap[selectedRole] || {},
+          spotlightPermissions: spotlightPermissionsMap[selectedRole] || {},
         }),
       });
       if (res.ok) {
@@ -1168,6 +1229,20 @@ export function RoleDataControlTab({ isAdmin, showToast }: RoleDataControlTabPro
             <i className="fa-solid fa-layer-group text-xs" /> Module Access
             <span className={cn("text-[10px] px-1.5 py-0.2 rounded-full font-bold", activeSubTab === "modules" ? "bg-primary-foreground/20 text-primary-foreground" : "bg-muted text-muted-foreground")}>
               {enabledModules}/{totalModules}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveSubTab("spotlight")}
+            className={cn(
+              "px-3 py-1.5 rounded-lg font-semibold transition-all flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap flex-1 sm:flex-initial",
+              activeSubTab === "spotlight" ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <i className="fa-solid fa-sparkles text-xs" /> Feature Spotlight
+            <span className={cn("text-[10px] px-1.5 py-0.2 rounded-full font-bold", activeSubTab === "spotlight" ? "bg-primary-foreground/20 text-primary-foreground" : "bg-muted text-muted-foreground")}>
+              {enabledSpotlights}/{totalSpotlights}
             </span>
           </button>
 
@@ -1721,6 +1796,175 @@ export function RoleDataControlTab({ isAdmin, showToast }: RoleDataControlTabPro
       )}
 
       {/* ═════════════════════════════════════════════════════════════════════ */}
+      {/* VIEW: FEATURE SPOTLIGHT & WHAT'S NEW VISIBILITY                     */}
+      {/* ═════════════════════════════════════════════════════════════════════ */}
+      {activeSubTab === "spotlight" && (
+        <div className="space-y-4 animate-in fade-in duration-200">
+          {/* Spotlight Control Header Card */}
+          <div className="p-4 sm:p-5 rounded-2xl border border-border bg-card shadow-xs space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-500/15 text-amber-500 border border-amber-500/30">
+                    <i className="fa-solid fa-sparkles text-[10px]" />
+                    Login Feature Spotlight
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    Role: <strong className="text-foreground">{currentRoleCfg.label}</strong>
+                  </span>
+                </div>
+                <h3 className="text-sm sm:text-base font-bold text-foreground">
+                  Feature Release Highlights on Login
+                </h3>
+                <p className="text-xs text-muted-foreground max-w-2xl leading-relaxed">
+                  Choose which newly launched features appear in the &quot;What&apos;s New&quot; spotlight modal when {currentRoleCfg.label} users log in to the CRM.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2 flex-wrap shrink-0">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setPreviewSpotlightModal(true)}
+                  className="min-h-[38px] text-xs font-semibold gap-1.5 border-primary/30 text-primary hover:bg-primary/10 rounded-xl cursor-pointer"
+                >
+                  <i className="fa-solid fa-eye text-xs" />
+                  <span>Preview as {currentRoleCfg.label}</span>
+                </Button>
+
+                {isAdmin && (
+                  <Button
+                    size="sm"
+                    variant={isRoleSpotlightActive ? "default" : "outline"}
+                    onClick={() => handleToggleSpotlightMaster()}
+                    className={cn(
+                      "min-h-[38px] text-xs font-semibold gap-1.5 rounded-xl transition-all cursor-pointer",
+                      isRoleSpotlightActive
+                        ? "bg-primary text-primary-foreground hover:bg-primary/90"
+                        : "border-border text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    <i className={cn("fa-solid text-xs", isRoleSpotlightActive ? "fa-toggle-on" : "fa-toggle-off")} />
+                    <span>{isRoleSpotlightActive ? "Spotlight Enabled" : "Spotlight Disabled"}</span>
+                  </Button>
+                )}
+              </div>
+            </div>
+
+            {/* Quick Bulk Select Bar */}
+            {isAdmin && (
+              <div className="pt-3 border-t border-border/60 flex items-center justify-between gap-3 flex-wrap">
+                <span className="text-xs text-muted-foreground flex items-center gap-1.5">
+                  <i className="fa-solid fa-layer-group text-primary text-xs" />
+                  <span>Active Highlights: <strong>{enabledSpotlights} of {totalSpotlights}</strong> enabled</span>
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleSetAllSpotlight(true)}
+                    className="text-xs font-semibold text-primary hover:underline cursor-pointer flex items-center gap-1 px-2.5 py-1 rounded-lg hover:bg-primary/10"
+                  >
+                    <i className="fa-solid fa-check-double text-[10px]" /> Enable All
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSetAllSpotlight(false)}
+                    className="text-xs font-semibold text-muted-foreground hover:text-foreground hover:underline cursor-pointer flex items-center gap-1 px-2.5 py-1 rounded-lg hover:bg-muted"
+                  >
+                    <i className="fa-solid fa-ban text-[10px]" /> Disable All
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Cards Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
+            {allHighlightFeatures.map((feat) => {
+              const isEnabled = isRoleSpotlightActive && (activeRoleSpotlightPerms[feat.id] ?? false);
+
+              return (
+                <div
+                  key={feat.id}
+                  onClick={() => isAdmin && handleToggleSpotlightFeature(feat.id)}
+                  className={cn(
+                    "p-4 rounded-2xl border transition-all duration-200 flex flex-col justify-between gap-3 select-none group",
+                    isAdmin ? "cursor-pointer active:scale-[0.995]" : "cursor-default",
+                    isEnabled
+                      ? "bg-card border-border shadow-xs hover:border-primary/50"
+                      : "bg-card/40 border-border/50 opacity-70 hover:opacity-90"
+                  )}
+                >
+                  <div className="space-y-2">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <div className={cn(
+                          "w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border transition-transform shadow-2xs",
+                          isEnabled ? "bg-primary/10 border-primary/30 group-hover:scale-105" : "bg-muted border-border"
+                        )}>
+                          <i className={cn(feat.icon, "text-base")} />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <h4 className="text-xs sm:text-sm font-bold text-foreground">
+                              {feat.title}
+                            </h4>
+                            {feat.badge && (
+                              <span className="px-1.5 py-0.2 rounded text-[9px] font-bold uppercase tracking-wider bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
+                                {feat.badge}
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            <span className="text-[10px] font-medium text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                              {feat.tag}
+                            </span>
+                            <span className="text-[10px] text-muted-foreground">
+                              {feat.releaseVersion}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Switch */}
+                      <div className={cn(
+                        "w-11 h-6 rounded-full p-0.5 transition-colors duration-200 shrink-0",
+                        isEnabled ? "bg-primary shadow-xs shadow-primary/30" : "bg-muted-foreground/20 border border-border/80"
+                      )}>
+                        <div className={cn(
+                          "w-5 h-5 rounded-full bg-white shadow-sm transition-transform duration-200 flex items-center justify-center text-[8px]",
+                          isEnabled ? "translate-x-5 text-primary font-bold" : "translate-x-0 text-muted-foreground/40"
+                        )}>
+                          <i className={cn("fa-solid", isEnabled ? "fa-check" : "fa-minus")} />
+                        </div>
+                      </div>
+                    </div>
+
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      {feat.description}
+                    </p>
+                  </div>
+
+                  <div className="pt-2 border-t border-border/40 flex items-center justify-between text-[11px] text-muted-foreground">
+                    <span className="flex items-center gap-1 truncate max-w-[200px]">
+                      <i className="fa-solid fa-link text-[10px] text-primary" />
+                      <span className="truncate">{feat.href}</span>
+                    </span>
+                    <span className={cn(
+                      "font-semibold",
+                      isEnabled ? "text-emerald-500" : "text-muted-foreground"
+                    )}>
+                      {isEnabled ? "Visible on Login" : "Hidden"}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ═════════════════════════════════════════════════════════════════════ */}
       {/* VIEW 3: ROLE COMPARISON MATRIX                                      */}
       {/* ═════════════════════════════════════════════════════════════════════ */}
       {activeSubTab === "matrix" && (
@@ -1942,6 +2186,15 @@ export function RoleDataControlTab({ isAdmin, showToast }: RoleDataControlTabPro
       {/* ═════════════════════════════════════════════════════════════════════ */}
       {/* MODAL: EXPORT / IMPORT JSON                                         */}
       {/* ═════════════════════════════════════════════════════════════════════ */}
+      {previewSpotlightModal && (
+        <FeatureSpotlightModal
+          forceOpen={true}
+          previewRole={selectedRole}
+          previewFeatures={spotlightPermissionsMap[selectedRole]}
+          onClose={() => setPreviewSpotlightModal(false)}
+        />
+      )}
+
       {showExportImportModal && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in">
           <div className="bg-card border border-border rounded-3xl p-6 w-full max-w-lg shadow-2xl space-y-4">

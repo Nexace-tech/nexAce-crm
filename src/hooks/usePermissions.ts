@@ -8,6 +8,7 @@ export function usePermissions() {
   const { user } = useAuth();
   const [modulePermissions, setModulePermissions] = useState<Record<string, boolean>>({});
   const [featurePermissions, setFeaturePermissions] = useState<Record<string, boolean>>({});
+  const [spotlightPermissions, setSpotlightPermissions] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
 
   // Case-insensitive Admin check (handles 'Admin', 'admin', ' ADMIN ', etc.)
@@ -47,8 +48,14 @@ export function usePermissions() {
             data.featurePermissions?.[user.role] ||
             {};
 
+          const roleSpotlightPerms =
+            data.spotlightPermissions?.[roleKey] ||
+            data.spotlightPermissions?.[user.role] ||
+            {};
+
           setModulePermissions(roleModulePerms);
           setFeaturePermissions(roleFeaturePerms);
+          setSpotlightPermissions(roleSpotlightPerms);
         }
       } catch (err) {
         console.error('Error loading user permissions:', err);
@@ -93,6 +100,13 @@ export function usePermissions() {
       featureKey === "manageITAssetAllocation" ||
       featureKey === "viewHRCasesSLA" ||
       featureKey === "viewDeviceTelemetry"
+    )) {
+      return true;
+    }
+    if (user.role === "Manager" && (
+      featureKey === "approveRegularization" ||
+      featureKey === "viewTeamTimesheets" ||
+      featureKey === "approveAdditionalShiftTime"
     )) {
       return true;
     }
@@ -142,9 +156,28 @@ export function usePermissions() {
     return allowedDefaults.includes(moduleKey);
   };
 
+  const isSpotlightEnabledForRole = (): boolean => {
+    if (isAdmin) return true;
+    if (spotlightPermissions.enabled !== undefined) {
+      return Boolean(spotlightPermissions.enabled);
+    }
+    return true;
+  };
+
+  const canViewSpotlightFeature = (featureId: string): boolean => {
+    if (isAdmin) return true;
+    if (spotlightPermissions[featureId] !== undefined) {
+      return Boolean(spotlightPermissions[featureId]);
+    }
+    return true;
+  };
+
   return {
     can,
     canAccessModule,
+    isSpotlightEnabledForRole,
+    canViewSpotlightFeature,
+    spotlightPermissions,
     loading,
     role: user?.role || 'Employee',
     isAdmin,

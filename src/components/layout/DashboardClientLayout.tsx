@@ -9,6 +9,8 @@ import { NotificationBell } from "@/components/layout/NotificationBell";
 import { LogoutHeaderBtn } from "@/components/layout/LogoutHeaderBtn";
 import { CommandPalette } from "@/components/layout/CommandPalette";
 import { GuidedTour } from "@/components/guided-tour/GuidedTour";
+import { FeatureSpotlightModal } from "@/components/layout/FeatureSpotlightModal";
+import { getLatestFeatureRelease, hasUserSeenRelease } from "@/lib/featureHighlights";
 import { ProfileCompletionBanner } from "@/components/layout/ProfileCompletionBanner";
 import { OnboardingScreens } from "@/components/layout/OnboardingScreens";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
@@ -484,7 +486,13 @@ function SidebarNavMenu({ canAccessModule, can, isEmployeeOrHR, isPending, onNav
                       )}
 
                       {cat.badge !== undefined && !active && (
-                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full font-mono bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 group-hover:bg-slate-200 dark:group-hover:bg-slate-700">
+                        <span
+                          className={cn(
+                            "text-[10px] font-bold px-1.5 py-0.5 rounded-full font-mono",
+                            cat.badgeColor ||
+                              "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 group-hover:bg-slate-200 dark:group-hover:bg-slate-700"
+                          )}
+                        >
                           {cat.badge}
                         </span>
                       )}
@@ -703,7 +711,17 @@ export function DashboardClientLayout({ session, menuItems, isPending = false, c
   const [mobileOpen, setMobileOpen] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [tourOpen, setTourOpen] = useState(false);
+  const [spotlightOpen, setSpotlightOpen] = useState(false);
+  const [hasNewUpdates, setHasNewUpdates] = useState(false);
   const pathname = usePathname();
+
+  useEffect(() => {
+    const latest = getLatestFeatureRelease();
+    if (latest && user?._id) {
+      const seen = hasUserSeenRelease(user._id, latest.id);
+      setHasNewUpdates(!seen);
+    }
+  }, [user?._id]);
 
   useEffect(() => { setMobileOpen(false); }, [pathname]);
 
@@ -828,6 +846,17 @@ export function DashboardClientLayout({ session, menuItems, isPending = false, c
               <NotificationBell onOpen={() => setMobileOpen(false)} />
             </div>
             <button
+              onClick={() => { setMobileOpen(false); setSpotlightOpen(true); }}
+              className="flex-1 flex items-center justify-center h-8 bg-white dark:bg-[#161c24] border border-[#00c5a0]/30 rounded-lg text-[#00c5a0] hover:bg-[#00c5a0]/15 transition-colors cursor-pointer shadow-2xs text-xs font-semibold gap-1 relative"
+              title="What's New"
+            >
+              <i className="fa-solid fa-sparkles text-xs" />
+              <span className="text-[11px]">New</span>
+              {hasNewUpdates && (
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0 animate-pulse" />
+              )}
+            </button>
+            <button
               onClick={() => { setMobileOpen(false); setTourOpen(true); }}
               className="flex-1 flex items-center justify-center h-8 bg-white dark:bg-[#161c24] border border-[#00c5a0]/30 rounded-lg text-[#00c5a0] hover:bg-[#00c5a0]/15 transition-colors cursor-pointer shadow-2xs text-xs font-semibold gap-1"
               title="Product Tour"
@@ -933,6 +962,21 @@ export function DashboardClientLayout({ session, menuItems, isPending = false, c
                 <i className="fa-solid fa-compass text-xs" />
               </button>
 
+              {/* What's New / Feature Spotlight */}
+              <button
+                onClick={() => setSpotlightOpen(true)}
+                className="relative w-9 h-9 border border-[#00c5a0]/40 rounded-lg bg-[#00c5a0]/15 text-[#00c5a0] hover:bg-[#00c5a0]/25 flex items-center justify-center cursor-pointer transition-colors"
+                title="What's New in NexAce"
+              >
+                <i className="fa-solid fa-sparkles text-xs" />
+                {hasNewUpdates && (
+                  <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                  </span>
+                )}
+              </button>
+
               {/* User Avatar */}
               <div className="ml-1">
                 <Link href="/dashboard/settings" className="block no-underline">
@@ -957,6 +1001,13 @@ export function DashboardClientLayout({ session, menuItems, isPending = false, c
         </header>
 
         {/* Modals */}
+        <FeatureSpotlightModal
+          forceOpen={spotlightOpen}
+          onClose={() => {
+            setSpotlightOpen(false);
+            setHasNewUpdates(false);
+          }}
+        />
         <OnboardingScreens />
         <GuidedTour isOpen={tourOpen} onClose={() => setTourOpen(false)} role={role} />
         <CommandPalette open={commandPaletteOpen} onClose={() => setCommandPaletteOpen(false)} />

@@ -74,7 +74,7 @@ function AttendanceRegularizationPageContent() {
     );
   }
 
-  const canApprove = Boolean(isAdmin || can("approveRegularization"));
+  const canApprove = Boolean(isAdmin || isOPS || isHR || currentUser?.role === "Manager" || can("approveRegularization"));
   const canExport = Boolean(isAdmin || isOPS || isHR || can("exportAttendance") || can("exportShiftExtensions"));
 
   return (
