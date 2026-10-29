@@ -93,7 +93,19 @@ export async function PUT(req: Request) {
 
     await connectToDatabase();
     const body = await req.json();
-    const { appraisalId, action, kras, selfFeedback, managerFeedback, finalRating, probationStatus } = body;
+    const {
+      appraisalId,
+      action,
+      kras,
+      selfFeedback,
+      managerFeedback,
+      finalRating,
+      probationStatus,
+      promotionRecommendation,
+      incrementPercentage,
+      reviewerRating,
+      reviewerFeedback,
+    } = body;
 
     const appraisal = await HRAppraisal.findOne({
       _id: appraisalId,
@@ -104,7 +116,23 @@ export async function PUT(req: Request) {
       return NextResponse.json({ error: "Appraisal record not found" }, { status: 404 });
     }
 
-    if (action === "submit_self_review") {
+    if (action === "submit_peer_review") {
+      if (!reviewerRating || !reviewerFeedback) {
+        return NextResponse.json({ error: "Rating and feedback are required" }, { status: 400 });
+      }
+
+      appraisal.peerReviews = appraisal.peerReviews || [];
+      appraisal.peerReviews.push({
+        reviewerId: userObjectId,
+        reviewerName: session.userName || "Colleague",
+        rating: Math.min(5, Math.max(1, Number(reviewerRating))),
+        feedback: reviewerFeedback,
+        submittedAt: new Date(),
+      });
+
+      await appraisal.save();
+      return NextResponse.json({ success: true, appraisal });
+    } else if (action === "submit_self_review") {
       if (appraisal.userId.toString() !== userObjectId.toString()) {
         return NextResponse.json({ error: "Forbidden: you can only submit a self-review for your own appraisal" }, { status: 403 });
       }
@@ -132,6 +160,8 @@ export async function PUT(req: Request) {
       if (kras) appraisal.kras = kras;
       if (managerFeedback) appraisal.managerFeedback = managerFeedback;
       if (probationStatus) appraisal.probationStatus = probationStatus;
+      if (promotionRecommendation) appraisal.promotionRecommendation = promotionRecommendation;
+      if (incrementPercentage !== undefined) appraisal.incrementPercentage = Number(incrementPercentage);
 
       const totalManager = appraisal.kras.reduce((acc: number, item: any) => acc + (item.managerScore || 0), 0);
       appraisal.overallManagerRating = Number((totalManager / appraisal.kras.length).toFixed(1));

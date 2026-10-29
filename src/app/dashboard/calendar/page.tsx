@@ -4409,7 +4409,7 @@ function CalendarPageContent() {
               attendanceHistory={attendanceHistory}
               onRefresh={() => fetchAttendance(true)}
               onToast={showToast}
-              canApprove={Boolean(isAdmin || isOPS || isHR || can("approveRegularization") || can("approveAdditionalShiftTime"))}
+              canApprove={Boolean(isAdmin || can("approveRegularization"))}
               canExport={Boolean(isAdmin || isOPS || isHR || can("exportAttendance") || can("exportShiftExtensions"))}
               currentUserId={currentUser?._id}
               currentUserRole={currentUser?.role}

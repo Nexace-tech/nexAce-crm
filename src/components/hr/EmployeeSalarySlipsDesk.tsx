@@ -199,7 +199,7 @@ export function EmployeeSalarySlipsDesk() {
   };
 
   const { can, isAdmin, isOPS } = usePermissions();
-  const canViewSlips = Boolean(isAdmin || isOPS || can("viewSalarySlips"));
+  const canViewSlips = Boolean(isAdmin || can("viewSalarySlips"));
 
   if (!canViewSlips) {
     return (

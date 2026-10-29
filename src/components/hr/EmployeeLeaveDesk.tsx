@@ -59,8 +59,8 @@ export function EmployeeLeaveDesk({
   onToast,
 }: EmployeeLeaveDeskProps) {
   const { can, isAdmin, isOPS } = usePermissions();
-  const canViewBalances = Boolean(isAdmin || isOPS || can("viewLeaveBalances"));
-  const canApply = Boolean(isAdmin || isOPS || can("applyLeaves") || can("applyLeave"));
+  const canViewBalances = Boolean(isAdmin || can("viewLeaveBalances"));
+  const canApply = Boolean(isAdmin || can("applyLeaves") || can("applyLeave"));
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);

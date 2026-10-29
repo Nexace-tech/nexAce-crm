@@ -18,6 +18,12 @@ export interface IHRCase extends Document {
   assignedTo?: mongoose.Types.ObjectId;
   assignedName?: string;
   comments: IHRCaseComment[];
+  firstResponseAt?: Date;
+  resolvedAt?: Date;
+  slaDeadline?: Date;
+  slaBreached?: boolean;
+  satisfactionRating?: number;
+  satisfactionFeedback?: string;
   tenantId: mongoose.Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
@@ -54,6 +60,12 @@ const HRCaseSchema = new Schema<IHRCase>(
         createdAt: { type: Date, default: Date.now },
       },
     ],
+    firstResponseAt: { type: Date },
+    resolvedAt: { type: Date },
+    slaDeadline: { type: Date },
+    slaBreached: { type: Boolean, default: false },
+    satisfactionRating: { type: Number, min: 1, max: 5 },
+    satisfactionFeedback: { type: String, default: "" },
     tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true },
   },
   { timestamps: true }

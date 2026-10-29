@@ -86,6 +86,11 @@ export default function TeamDashboardPage() {
   const searchParams = useSearchParams();
   const { user: currentUser, loading: authLoading, refreshUser } = useAuth();
   const { canAccessModule, can, loading: permLoading } = usePermissions();
+  const userRole = (currentUser?.role || "").trim();
+  const isAdmin = Boolean(userRole && (userRole.toLowerCase() === "admin" || isSubAdminRole(userRole)));
+  const isOPS = Boolean(userRole && userRole.toLowerCase() === "ops");
+  const isHR = Boolean(userRole && userRole.toLowerCase() === "hr");
+  const isManagerOrAdmin = Boolean(isAdmin || userRole.toLowerCase() === "manager");
   const [users, setUsers] = useState<any[]>([]);
   const [departmentsList, setDepartmentsList] = useState<IDepartmentItem[]>([]);
   const [editEmploymentType, setEditEmploymentType] = useState("Permanent");
@@ -101,7 +106,12 @@ export default function TeamDashboardPage() {
   const [statusFilter, setStatusFilter] = useState("All");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [selectedMember, setSelectedMember] = useState<any | null>(null);
-  const [memberModalTab, setMemberModalTab] = useState<"profile" | "activity">("profile");
+  const [memberModalTab, setMemberModalTab] = useState<"profile" | "assets" | "activity">("profile");
+  const [memberDevices, setMemberDevices] = useState<any[]>([]);
+  const [loadingMemberDevices, setLoadingMemberDevices] = useState(false);
+  const [availableDevices, setAvailableDevices] = useState<any[]>([]);
+  const [selectedDeviceToAssign, setSelectedDeviceToAssign] = useState<string>("");
+  const [isAssigningDevice, setIsAssigningDevice] = useState(false);
   const [orgZoom, setOrgZoom] = useState(1);
 
   // Manager Panel states
@@ -767,11 +777,96 @@ export default function TeamDashboardPage() {
     }
   };
 
+  const fetchMemberDevices = async (memberId: string) => {
+    setLoadingMemberDevices(true);
+    try {
+      const res = await fetch(`/api/it/devices?userId=${memberId}`);
+      if (res.ok) {
+        const data = await res.json();
+        setMemberDevices(data.devices || []);
+      }
+    } catch {
+      // non-fatal
+    } finally {
+      setLoadingMemberDevices(false);
+    }
+  };
+
+  const fetchAvailableDevices = async () => {
+    try {
+      const res = await fetch('/api/it/devices');
+      if (res.ok) {
+        const data = await res.json();
+        const available = (data.devices || []).filter((d: any) => d.status === 'Available');
+        setAvailableDevices(available);
+      }
+    } catch {
+      // non-fatal
+    }
+  };
+
+  const handleAssignDeviceToMember = async (deviceId: string) => {
+    if (!selectedMember || !deviceId) return;
+    setIsAssigningDevice(true);
+    try {
+      const res = await fetch(`/api/it/devices/${deviceId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          assignedUserId: selectedMember._id,
+          assignedTo: selectedMember.name,
+          department: selectedMember.departments?.[0] || selectedMember.department || '—',
+          status: 'In Use',
+        }),
+      });
+      if (res.ok) {
+        setToast({ message: 'IT Asset allocated successfully', type: 'success' });
+        setSelectedDeviceToAssign('');
+        await fetchMemberDevices(selectedMember._id);
+        await fetchAvailableDevices();
+      } else {
+        const err = await res.json();
+        setToast({ message: err.error || 'Failed to allocate device', type: 'error' });
+      }
+    } catch {
+      setToast({ message: 'Failed to allocate device', type: 'error' });
+    } finally {
+      setIsAssigningDevice(false);
+    }
+  };
+
+  const handleReturnMemberDevice = async (deviceId: string, assetTag: string) => {
+    if (!selectedMember || !confirm(`Confirm return and handover of ${assetTag}? This asset will be marked 'Available' in IT inventory.`)) return;
+    try {
+      const res = await fetch(`/api/it/devices/${deviceId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          assignedUserId: 'unassign',
+          assignedTo: '—',
+          status: 'Available',
+        }),
+      });
+      if (res.ok) {
+        setToast({ message: `Asset ${assetTag} returned to inventory`, type: 'success' });
+        await fetchMemberDevices(selectedMember._id);
+        await fetchAvailableDevices();
+      } else {
+        const err = await res.json();
+        setToast({ message: err.error || 'Failed to return asset', type: 'error' });
+      }
+    } catch {
+      setToast({ message: 'Failed to return asset', type: 'error' });
+    }
+  };
+
   const handleSelectMember = (memberId: string) => {
     const member = users.find((u) => u._id === memberId);
     if (member) {
       setSelectedMember(member);
       setMemberModalTab("profile");
+      fetchMemberDevices(memberId);
+      if (isAdmin || can("manageITAssetAllocation") || can("manageITDevices")) fetchAvailableDevices();
       // Re-fetch member from server to ensure fresh telemetry is shown
       fetch(`/api/team/${memberId}`)
         .then((res) => res.json())
@@ -938,9 +1033,6 @@ export default function TeamDashboardPage() {
     return rootNodes;
   }, [users, departmentFilter]);
 
-  const userRole = useMemo(() => (currentUser?.role || "").trim(), [currentUser?.role]);
-  const isAdmin = Boolean(userRole && (userRole.toLowerCase() === "admin" || isSubAdminRole(userRole)));
-  const isManagerOrAdmin = Boolean(isAdmin || userRole.toLowerCase() === "manager");
   const canReassignLine = Boolean(isAdmin || can("reassignReportingLine"));
   const canReassignHR = Boolean(isAdmin || can("reassignHRPartner"));
 

@@ -79,6 +79,7 @@ export const FEATURE_ACTIONS: FeatureMeta[] = [
   { key: "reassignReportingLine", name: "Reassign Reporting Managers", category: "Team", subGroup: "User Management & Hiring", description: "Reassign direct manager and organizational reporting lines for team members", icon: "fa-solid fa-arrows-rotate" },
   { key: "viewSalaryData", name: "View Compensation Data", category: "Team", subGroup: "Compensation & Org Structure", description: "See salary bands and compensation details per employee", icon: "fa-solid fa-sack-dollar" },
   { key: "viewOrgChart", name: "View Visual Org Hierarchy Chart", category: "Team", subGroup: "Compensation & Org Structure", description: "Access interactive organization tree structure", icon: "fa-solid fa-sitemap" },
+  { key: "viewDeviceTelemetry", name: "View Employee Device & IP Telemetry", category: "Team", subGroup: "Audit & Telemetry", description: "Inspect employee device form factor, OS, browser, and client IP addresses in Team profiles and Attendance desks", icon: "fa-solid fa-network-wired" },
 
   // Calendar & Time
   { key: "logOwnTimesheet", name: "Log Own Work Hours", category: "Calendar & Time", subGroup: "Timesheets & Hours Logging", description: "Submit own daily timesheet entries and work logs", icon: "fa-solid fa-clock" },
@@ -170,12 +171,16 @@ export const FEATURE_ACTIONS: FeatureMeta[] = [
   { key: "viewLeaveBalances", name: "View Leave Balances & Accruals", category: "HR & Leave", subGroup: "Leave Applications", description: "View monthly leave balance breakdown, accrual ledgers, and compensatory-off credits", icon: "fa-solid fa-scale-balanced" },
   { key: "manageLeaveBalances", name: "Manage & Grant Leave Balances", category: "HR & Leave", subGroup: "Leave Approvals & Records", description: "Manually adjust leave quotas, grant compensatory-off days, and configure leave accruals", icon: "fa-solid fa-calendar-check" },
   { key: "viewSalarySlips", name: "View Personal Salary Slips", category: "HR & Leave", subGroup: "Employee Self-Service", description: "Access personal monthly salary slips, tax breakdown, and printable A4 payslips", icon: "fa-solid fa-file-invoice-dollar" },
+  { key: "manageFnFSettlements", name: "Manage Full & Final (F&F) Settlements", category: "HR & Leave", subGroup: "Exit & Settlements", description: "Initiate, approve, clear department clearances, and disburse employee Full & Final settlements", icon: "fa-solid fa-file-invoice-dollar" },
+  { key: "viewFnFSettlements", name: "View Full & Final (F&F) Settlements", category: "HR & Leave", subGroup: "Exit & Settlements", description: "Access personal and department Full & Final settlement statements and clearance records", icon: "fa-solid fa-receipt" },
+  { key: "viewHRCasesSLA", name: "Manage HR Ticket SLA Timers", category: "HR & Leave", subGroup: "HR Help Desk", description: "Monitor case resolution times, SLA countdown badges, first response timestamps, and breach alerts", icon: "fa-solid fa-stopwatch" },
 
   // Appraisals
   { key: "viewOwnAppraisals", name: "View Own Performance Appraisals", category: "Appraisals", subGroup: "Performance Reviews", description: "See self review results and manager appraisal feedback", icon: "fa-solid fa-star" },
   { key: "submitSelfReview", name: "Submit Self-Appraisal Review", category: "Appraisals", subGroup: "Performance Reviews", description: "Complete annual or quarterly self-evaluation forms", icon: "fa-solid fa-file-signature" },
   { key: "viewManagerReviews", name: "Access Team Performance Reviews", category: "Appraisals", subGroup: "Performance Reviews", description: "View appraisal evaluations for all subordinate staff", icon: "fa-solid fa-chart-simple" },
   { key: "createAppraisalCycles", name: "Create New Review Cycles", category: "Appraisals", subGroup: "Review Cycle Administration", description: "Launch company-wide performance evaluation rounds", icon: "fa-solid fa-arrows-spin" },
+  { key: "submit360PeerReview", name: "Submit 360° Peer Review Feedback", category: "Appraisals", subGroup: "360 Feedback", description: "Submit peer evaluations, ratings, and constructive feedback for colleagues in appraisal cycles", icon: "fa-solid fa-users" },
 
   // Goals & OKRs
   { key: "viewGoals", name: "View Strategic Goals & OKRs", category: "Goals & OKRs", subGroup: "OKR Management", description: "Browse company-wide and departmental target metrics", icon: "fa-solid fa-bullseye" },
@@ -217,6 +222,7 @@ export const FEATURE_ACTIONS: FeatureMeta[] = [
   { key: "manageITAccess", name: "Manage Access Keys & Credentials", category: "IT & Infrastructure", subGroup: "Access & Security", description: "Grant, suspend, or revoke tool access records and user credentials", icon: "fa-solid fa-key" },
   { key: "manageITSubscriptions", name: "Manage SaaS Subscriptions", category: "IT & Infrastructure", subGroup: "SaaS Subscriptions", description: "Track software subscriptions, plan renewals, and monthly costs", icon: "fa-solid fa-credit-card" },
   { key: "manageITDevices", name: "Manage Hardware Device Assets", category: "IT & Infrastructure", subGroup: "Hardware Assets", description: "Register, assign, repair, and retire company laptops & hardware", icon: "fa-solid fa-laptop" },
+  { key: "manageITAssetAllocation", name: "Allocate & Return IT Hardware Assets", category: "IT & Infrastructure", subGroup: "Hardware Assets", description: "Assign laptops, monitors, and equipment to employees or record asset return in Team & HR profiles", icon: "fa-solid fa-laptop-medical" },
   { key: "manageITInvoices", name: "Manage IT & Vendor Invoices", category: "IT & Infrastructure", subGroup: "Invoices & Billing", description: "Create, edit, and track payment status of vendor and client invoices", icon: "fa-solid fa-file-invoice-dollar" },
 
   // Referrals
@@ -347,7 +353,7 @@ const PRESET_TEMPLATES: RolePresetTemplate[] = [
       "logOwnTimesheet", "editOwnTimesheet", "viewTeamTimesheets", "approveTimesheets", "exportTimesheets", "clockInOut", "canViewShiftClock", "viewAllShiftExtensions", "approveAdditionalShiftTime", "exportShiftExtensions", "viewShiftCalendar", "viewLoginHoursSummary", "viewTeamAvailability", "manageTeamAvailability", "logOwnAvailability", "manageHolidays", "importHolidayExcel",
       "requestRegularization", "approveRegularization", "viewRegularizationDesk",
       "viewOwnLeaves", "applyLeaves", "viewAllLeaves", "approveLeaves", "viewLeaveBalances", "manageLeaveBalances", "viewSalarySlips", "manageCompanyChecklists", "manageHRVault", "manageHRCases", "reassignHRPartner", "manageHRIsolation", "approveTimesheetsAndInvoices", "approveInvoices", "managePayroll", "adjustSalarySlips",
-      "viewOwnAppraisals", "submitSelfReview", "viewManagerReviews", "createAppraisalCycles",
+      "viewOwnAppraisals", "submitSelfReview", "viewManagerReviews", "createAppraisalCycles", "submit360PeerReview", "manageFnFSettlements", "viewFnFSettlements", "viewHRCasesSLA", "manageITAssetAllocation",
       "viewGoals", "sendKudos", "submitSurvey", "createPulseSurveys",
       "submitReferral", "viewOwnReferrals", "viewAllReferrals", "manageReferrals",
       "sendChatMessages", "viewMailCenter", "sendEmails", "joinVirtualHuddles",

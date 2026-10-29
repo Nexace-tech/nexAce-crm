@@ -67,11 +67,24 @@ export async function GET(request: Request) {
 
     const url = new URL(request.url);
     const nextTagForType = url.searchParams.get("nextTagForType");
+    const userIdQuery = url.searchParams.get("userId");
 
     // Fast endpoint for requesting the next dynamic unique asset tag for a specific device type
     if (nextTagForType) {
       const nextTag = await getNextAssetTag(tenantObjectId, nextTagForType);
       return NextResponse.json({ nextTag });
+    }
+
+    // Filter by specific user if requested (used by HR/Team member asset cards)
+    if (userIdQuery && mongoose.Types.ObjectId.isValid(userIdQuery)) {
+      const userObjectIdQuery = new mongoose.Types.ObjectId(userIdQuery);
+      const userDevices = await ITDevice.find({
+        tenantId: tenantObjectId,
+        assignedUserId: userObjectIdQuery,
+      })
+        .sort({ createdAt: -1 })
+        .lean();
+      return NextResponse.json({ devices: userDevices });
     }
 
     const dataScope = await getUserDataScope(session);
@@ -131,6 +144,7 @@ export async function POST(request: Request) {
       purchaseDate,
       warrantyExpiry,
       assignedTo,
+      assignedUserId,
       department,
       location,
       os,
@@ -190,6 +204,7 @@ export async function POST(request: Request) {
       purchaseDate: purchaseDate?.trim() || "",
       warrantyExpiry: warrantyExpiry?.trim() || "",
       assignedTo: assignedTo?.trim() || session.userName || "—",
+      assignedUserId: assignedUserId && mongoose.Types.ObjectId.isValid(assignedUserId) ? new mongoose.Types.ObjectId(assignedUserId) : undefined,
       department: department?.trim() || "—",
       location: location?.trim() || "",
       os: os?.trim() || "",

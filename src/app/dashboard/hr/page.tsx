@@ -17,6 +17,7 @@ import { AccessRestricted } from "@/components/ui/AccessRestricted";
 import { AdminInvoicesTab } from "@/components/settings/AdminInvoicesTab";
 import { EmployeeLeaveDesk } from "@/components/hr/EmployeeLeaveDesk";
 import { EmployeeSalarySlipsDesk } from "@/components/hr/EmployeeSalarySlipsDesk";
+import { FullAndFinalSettlementDesk } from "@/components/hr/FullAndFinalSettlementDesk";
 
 interface LeaveData {
   _id: string; userId: string; userName: string;
@@ -28,6 +29,8 @@ interface CaseData {
   _id: string; userId: string; userName: string;
   category: string; subject: string; description: string;
   status: string; priority: string; comments: any[]; createdAt: string;
+  slaDeadline?: string; slaBreached?: boolean; firstResponseAt?: string; resolvedAt?: string;
+  satisfactionRating?: number; satisfactionFeedback?: string;
 }
 
 const EMPLOYMENT_TYPE_CONFIG: Record<string, { badge: string; icon: string }> = {
@@ -42,11 +45,11 @@ export default function HRPage() {
   const { user, loading: authLoading } = useAuth();
   const { can, isAdmin, isOPS, canAccessModule, loading: permLoading } = usePermissions();
   const [activeTab, setActiveTab] = useTabPersistence<
-    "directory" | "tasks" | "checklists" | "invoices" | "leaves" | "payslips" | "vault" | "cases" | "appraisals" | "probation" | "sandbox"
+    "directory" | "tasks" | "checklists" | "invoices" | "leaves" | "payslips" | "vault" | "cases" | "appraisals" | "probation" | "fnf" | "sandbox"
   >(
     "hr_active_tab_v2",
     "directory",
-    ["directory", "tasks", "checklists", "invoices", "leaves", "payslips", "vault", "cases", "appraisals", "probation", "sandbox"]
+    ["directory", "tasks", "checklists", "invoices", "leaves", "payslips", "vault", "cases", "appraisals", "probation", "fnf", "sandbox"]
   );
 
   const searchParams = useSearchParams();
@@ -2754,6 +2757,25 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
                           <Badge variant="outline" className="text-[10px]">
                             {c.priority} Priority
                           </Badge>
+                          {c.slaDeadline && (
+                            <span
+                              className={cn(
+                                "inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-semibold border",
+                                c.status === "Resolved" || c.status === "Closed"
+                                  ? "bg-muted text-muted-foreground border-border"
+                                  : new Date() > new Date(c.slaDeadline) || c.slaBreached
+                                  ? "bg-rose-500/10 text-rose-600 border-rose-500/30"
+                                  : "bg-amber-500/10 text-amber-600 border-amber-500/30"
+                              )}
+                            >
+                              <i className={cn("fa-solid text-[9px]", new Date() > new Date(c.slaDeadline) || c.slaBreached ? "fa-triangle-exclamation text-rose-500" : "fa-clock text-amber-500")} />
+                              {c.status === "Resolved" || c.status === "Closed"
+                                ? "SLA Completed"
+                                : new Date() > new Date(c.slaDeadline) || c.slaBreached
+                                ? "SLA Breached"
+                                : `SLA: ${Math.max(0, Math.round((new Date(c.slaDeadline).getTime() - Date.now()) / (1000 * 60 * 60)))}h left`}
+                            </span>
+                          )}
                         </div>
                         <p className="text-xs text-muted-foreground">
                           Submitted by <span className="font-semibold text-foreground">{c.userName}</span> • {new Date(c.createdAt).toLocaleDateString()}
@@ -4323,6 +4345,38 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
                   </div>
                 </div>
               ))}
+            </div>
+
+            {/* 360 Peer Review Feedback Section */}
+            <div className="p-3.5 rounded-xl bg-muted/30 border border-border space-y-3">
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                  <i className="fa-solid fa-users text-primary text-xs" /> 360° Peer Feedback
+                </h4>
+                <span className="text-[10px] text-muted-foreground">
+                  {selectedAppraisal.peerReviews?.length || 0} peer evaluations recorded
+                </span>
+              </div>
+
+              {selectedAppraisal.peerReviews && selectedAppraisal.peerReviews.length > 0 ? (
+                <div className="space-y-2">
+                  {selectedAppraisal.peerReviews.map((peer: any, pIdx: number) => (
+                    <div key={pIdx} className="p-2.5 rounded-lg bg-background border border-border text-xs space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="font-semibold text-foreground text-[11px]">{peer.reviewerName}</span>
+                        <span className="flex items-center gap-0.5 text-amber-500 text-[10px]">
+                          {Array.from({ length: peer.rating || 5 }).map((_, r) => (
+                            <i key={r} className="fa-solid fa-star" />
+                          ))}
+                        </span>
+                      </div>
+                      <p className="text-muted-foreground text-[11px]">{peer.feedback}</p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-[11px] text-muted-foreground italic">No peer reviews submitted yet for this cycle.</p>
+              )}
             </div>
 
             <div className="flex justify-end gap-2 border-t border-border pt-3">

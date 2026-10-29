@@ -11,6 +11,7 @@ export interface IITDevice extends Document {
   purchaseDate?: string;
   warrantyExpiry?: string;
   assignedTo: string;
+  assignedUserId?: mongoose.Types.ObjectId;
   department: string;
   location?: string;
   os: string;
@@ -34,6 +35,7 @@ const ITDeviceSchema = new Schema<IITDevice>(
     purchaseDate: { type: String, trim: true, default: "" },
     warrantyExpiry: { type: String, trim: true, default: "" },
     assignedTo: { type: String, trim: true, default: "—" },
+    assignedUserId: { type: Schema.Types.ObjectId, ref: "User", index: true },
     department: { type: String, trim: true, default: "—" },
     location: { type: String, trim: true, default: "" },
     os: { type: String, trim: true, default: "" },
@@ -56,9 +58,10 @@ const ITDeviceSchema = new Schema<IITDevice>(
 ITDeviceSchema.index({ tenantId: 1, status: 1 });
 ITDeviceSchema.index({ tenantId: 1, assetTag: 1 }, { unique: true, sparse: true });
 ITDeviceSchema.index({ tenantId: 1, serialNumber: 1 }, { sparse: true });
+ITDeviceSchema.index({ tenantId: 1, assignedUserId: 1 });
 ITDeviceSchema.index({ tenantId: 1, createdAt: -1 });
 
-if (mongoose.models.ITDevice && (!mongoose.models.ITDevice.schema.path("location") || process.env.NODE_ENV !== "production")) {
+if (mongoose.models.ITDevice && (!mongoose.models.ITDevice.schema.path("location") || !mongoose.models.ITDevice.schema.path("assignedUserId") || process.env.NODE_ENV !== "production")) {
   delete (mongoose.models as any).ITDevice;
 }
 

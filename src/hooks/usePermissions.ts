@@ -88,7 +88,11 @@ export function usePermissions() {
       featureKey === "importHolidayExcel" ||
       featureKey === "manageLeaveBalances" ||
       featureKey === "managePayroll" ||
-      featureKey === "approveRegularization"
+      featureKey === "approveRegularization" ||
+      featureKey === "manageFnFSettlements" ||
+      featureKey === "manageITAssetAllocation" ||
+      featureKey === "viewHRCasesSLA" ||
+      featureKey === "viewDeviceTelemetry"
     )) {
       return true;
     }

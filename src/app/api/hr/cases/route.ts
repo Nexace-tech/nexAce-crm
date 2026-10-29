@@ -42,14 +42,20 @@ export async function POST(request: Request) {
 
     await connectToDatabase();
 
+    const selectedPriority = priority || "Medium";
+    const slaHours = selectedPriority === "High" ? 24 : selectedPriority === "Medium" ? 48 : 72;
+    const slaDeadline = new Date(Date.now() + slaHours * 60 * 60 * 1000);
+
     const hrCase = await HRCase.create({
       userId: userObjectId,
       userName: session.userName,
       category: category || "Other",
       subject,
       description,
-      priority: priority || "Medium",
+      priority: selectedPriority,
       status: "Open",
+      slaDeadline,
+      slaBreached: false,
       comments: [],
       tenantId: tenantObjectId,
     });
@@ -74,7 +80,7 @@ export async function PUT(request: Request) {
     if (isAuthError(authResult)) return authResult;
     const { tenantObjectId, session, userObjectId } = authResult;
     const body = await request.json();
-    const { caseId, status, comment } = body;
+    const { caseId, status, comment, satisfactionRating, satisfactionFeedback } = body;
 
     if (!caseId) {
       return NextResponse.json({ error: "caseId is required" }, { status: 400 });
@@ -82,8 +88,29 @@ export async function PUT(request: Request) {
 
     await connectToDatabase();
 
+    const existingCase = await HRCase.findOne({ _id: caseId, tenantId: tenantObjectId });
+    if (!existingCase) return NextResponse.json({ error: "Case not found" }, { status: 404 });
+
     const updates: any = {};
-    if (status) updates.status = status;
+    if (status) {
+      updates.status = status;
+      if (["Resolved", "Closed"].includes(status) && !existingCase.resolvedAt) {
+        updates.resolvedAt = new Date();
+        if (existingCase.slaDeadline && new Date() > new Date(existingCase.slaDeadline)) {
+          updates.slaBreached = true;
+        }
+      }
+    }
+
+    if (satisfactionRating !== undefined) {
+      updates.satisfactionRating = Number(satisfactionRating);
+      if (satisfactionFeedback !== undefined) updates.satisfactionFeedback = satisfactionFeedback;
+    }
+
+    // First response tracking: if commenter is Admin/HR (not the case creator) and firstResponseAt is not set
+    if (comment && !existingCase.firstResponseAt && existingCase.userId.toString() !== userObjectId.toString()) {
+      updates.firstResponseAt = new Date();
+    }
 
     let hrCase;
 

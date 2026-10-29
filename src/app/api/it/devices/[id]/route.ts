@@ -59,6 +59,7 @@ export async function PATCH(
       purchaseDate,
       warrantyExpiry,
       assignedTo,
+      assignedUserId,
       department,
       location,
       os,
@@ -86,6 +87,13 @@ export async function PATCH(
     // Privileged users (Admin, OPS, HR, Manager) can reassign the device
     if (isPrivileged) {
       if (assignedTo !== undefined) updatePayload.assignedTo = assignedTo;
+      if (assignedUserId !== undefined) {
+        if (!assignedUserId || assignedUserId === "unassign") {
+          updatePayload.assignedUserId = null;
+        } else if (mongoose.Types.ObjectId.isValid(assignedUserId)) {
+          updatePayload.assignedUserId = new mongoose.Types.ObjectId(assignedUserId);
+        }
+      }
       if (department !== undefined) updatePayload.department = department;
     }
 

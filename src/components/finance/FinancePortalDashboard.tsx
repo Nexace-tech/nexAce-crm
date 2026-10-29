@@ -174,7 +174,7 @@ export function FinancePortalDashboard({
 }: FinancePortalDashboardProps) {
   const { user } = useAuth();
   const { can, isAdmin, isOPS, isHR } = usePermissions();
-  const canManagePayroll = Boolean(isAdmin || isOPS || isHR || can("managePayroll"));
+  const canManagePayroll = Boolean(isAdmin || can("managePayroll"));
 
   const searchParams = useSearchParams();
   const urlTab = searchParams.get("tab");
@@ -390,7 +390,7 @@ export function FinancePortalDashboard({
     { key: "invoices" as const,  label: "Invoices",   icon: "fa-file-invoice-dollar", count: activeInvoices.length },
     { key: "expenses" as const,  label: "Expenses",   icon: "fa-receipt", count: activeExpenses.length },
     { key: "budget" as const,    label: "Budget",     icon: "fa-wallet" },
-    { key: "payroll" as const,   label: "Payroll",    icon: "fa-money-check-dollar" },
+    ...(canManagePayroll ? [{ key: "payroll" as const,   label: "Payroll",    icon: "fa-money-check-dollar" }] : []),
   ], [activeInvoices.length, activeExpenses.length]);
 
   return (

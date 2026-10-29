@@ -29,7 +29,15 @@ export async function GET(request: Request) {
 
     await connectToDatabase();
 
-    const isElevated = ["Admin", "SuperAdmin", "OPS", "HR", "Manager"].includes(session.role);
+    const { getUserDataScope } = await import("@/lib/dataScope");
+    const { isSubAdminRole } = await import("@/lib/roles");
+    const dataScope = await getUserDataScope(session);
+    const isElevated =
+      dataScope.role === "Admin" ||
+      dataScope.role === "OPS" ||
+      isSubAdminRole(dataScope.role) ||
+      dataScope.canViewFeature("managePayroll") ||
+      dataScope.canViewFeature("viewSalarySlips");
     const query: Record<string, unknown> = {
       tenantId: tenantObjectId,
       year,
@@ -85,9 +93,22 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const authResult = await requireTenantSession(["Admin", "SuperAdmin", "OPS", "HR"]);
+    const authResult = await requireTenantSession();
     if (isAuthError(authResult)) return authResult;
     const { tenantObjectId, session, userObjectId } = authResult;
+
+    const { getUserDataScope } = await import("@/lib/dataScope");
+    const { isSubAdminRole } = await import("@/lib/roles");
+    const dataScope = await getUserDataScope(session);
+    const canManagePayroll =
+      dataScope.role === "Admin" ||
+      dataScope.role === "OPS" ||
+      isSubAdminRole(dataScope.role) ||
+      dataScope.canViewFeature("managePayroll");
+
+    if (!canManagePayroll) {
+      return NextResponse.json({ error: "Forbidden: Payroll permissions required" }, { status: 403 });
+    }
 
     const body = await request.json();
     const { action } = body;

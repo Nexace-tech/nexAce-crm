@@ -8,6 +8,14 @@ export interface IKRARating {
   comments: string;
 }
 
+export interface IPeerReview {
+  reviewerId: mongoose.Types.ObjectId;
+  reviewerName: string;
+  rating: number;
+  feedback: string;
+  submittedAt?: Date;
+}
+
 export interface IHRAppraisal extends Document {
   tenantId: mongoose.Types.ObjectId;
   userId: mongoose.Types.ObjectId;
@@ -18,11 +26,14 @@ export interface IHRAppraisal extends Document {
   type: "Probation Review" | "Quarterly Appraisal" | "Annual Review";
   status: "Draft" | "Self Review Submitted" | "Manager Review Completed" | "Finalized";
   kras: IKRARating[];
+  peerReviews?: IPeerReview[];
   overallSelfRating: number;
   overallManagerRating: number;
   finalRating: number;
   selfFeedback: string;
   managerFeedback: string;
+  promotionRecommendation?: "Maintain" | "Promote" | "PIP" | "Role Change";
+  incrementPercentage?: number;
   probationStatus?: "Under Probation" | "Confirmed" | "Extended";
   probationEndDate?: Date;
   submittedAt?: Date;
@@ -58,11 +69,26 @@ const HRAppraisalSchema = new Schema(
       default: "Draft",
     },
     kras: [KRARatingSchema],
+    peerReviews: [
+      {
+        reviewerId: { type: Schema.Types.ObjectId, ref: "User", required: true },
+        reviewerName: { type: String, required: true },
+        rating: { type: Number, default: 5, min: 1, max: 5 },
+        feedback: { type: String, default: "" },
+        submittedAt: { type: Date, default: Date.now },
+      },
+    ],
     overallSelfRating: { type: Number, default: 0 },
     overallManagerRating: { type: Number, default: 0 },
     finalRating: { type: Number, default: 0 },
     selfFeedback: { type: String, default: "" },
     managerFeedback: { type: String, default: "" },
+    promotionRecommendation: {
+      type: String,
+      enum: ["Maintain", "Promote", "PIP", "Role Change"],
+      default: "Maintain",
+    },
+    incrementPercentage: { type: Number, default: 0 },
     probationStatus: {
       type: String,
       enum: ["Under Probation", "Confirmed", "Extended"],
