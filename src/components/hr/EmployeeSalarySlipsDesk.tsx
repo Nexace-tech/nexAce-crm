@@ -14,21 +14,22 @@ interface SalarySlipItem {
   month: number;
   year: number;
   payPeriod: string;
-  baseSalary: number;
-  basicSalary: number;
-  hra: number;
-  specialAllowance: number;
-  overtimeHours: number;
-  overtimePay: number;
-  bonus: number;
-  reimbursements: number;
-  lossOfPayDays: number;
-  lossOfPayDeduction: number;
-  taxDeduction: number;
-  otherDeductions: number;
-  grossEarnings: number;
-  totalDeductions: number;
-  netPayable: number;
+  baseSalary?: number;
+  basicSalary?: number;
+  basicPay?: number;
+  hra?: number;
+  specialAllowance?: number;
+  overtimeHours?: number;
+  overtimePay?: number;
+  bonus?: number;
+  reimbursements?: number;
+  lossOfPayDays?: number;
+  lossOfPayDeduction?: number;
+  taxDeduction?: number;
+  otherDeductions?: number;
+  grossEarnings?: number;
+  totalDeductions?: number;
+  netPayable?: number;
   paymentStatus: "Draft" | "Processing" | "Paid";
   paymentDate?: string;
   bankReference?: string;
@@ -63,7 +64,7 @@ const MONTH_SHORT = [
 ];
 
 function numberToWords(num: number): string {
-  if (num === 0) return "Zero";
+  if (!num || num === 0 || isNaN(num)) return "Zero";
   const a = [
     "", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine",
     "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen",
@@ -124,17 +125,22 @@ export function EmployeeSalarySlipsDesk() {
 
   // KPI calculations
   const kpis = useMemo(() => {
-    const totalEarnings = slips.reduce((acc, s) => acc + (s.grossEarnings || 0), 0);
-    const totalDeductions = slips.reduce((acc, s) => acc + (s.totalDeductions || 0), 0);
-    const totalNet = slips.reduce((acc, s) => acc + (s.netPayable || 0), 0);
-    const totalOvertime = slips.reduce((acc, s) => acc + (s.overtimePay || 0), 0);
-    const totalLop = slips.reduce((acc, s) => acc + (s.lossOfPayDeduction || 0), 0);
+    const totalEarnings = slips.reduce((acc, s) => acc + (Number(s.grossEarnings) || 0), 0);
+    const totalDeductions = slips.reduce((acc, s) => acc + (Number(s.totalDeductions) || 0), 0);
+    const totalNet = slips.reduce((acc, s) => acc + (Number(s.netPayable) || 0), 0);
+    const totalOvertime = slips.reduce((acc, s) => acc + (Number(s.overtimePay) || 0), 0);
+    const totalLop = slips.reduce((acc, s) => acc + (Number(s.lossOfPayDeduction) || 0), 0);
 
     const latestSlip = slips[0];
-    const latestNet = latestSlip ? latestSlip.netPayable : 0;
-    const latestBasic = latestSlip ? latestSlip.basicSalary : 0;
-    const latestHra = latestSlip ? latestSlip.hra : 0;
-    const latestAllowances = latestSlip ? latestSlip.specialAllowance + (latestSlip.bonus || 0) + (latestSlip.overtimePay || 0) : 0;
+    const latestNet = latestSlip ? (Number(latestSlip.netPayable) || 0) : 0;
+    const baseSal = latestSlip ? (Number(latestSlip.baseSalary) || Number(latestSlip.userId?.salary) || 0) : 0;
+    const latestBasic = latestSlip ? (Number(latestSlip.basicSalary ?? latestSlip.basicPay ?? Math.round(baseSal * 0.5)) || 0) : 0;
+    const latestHra = latestSlip ? (Number(latestSlip.hra ?? Math.round(baseSal * 0.3)) || 0) : 0;
+    const latestAllowances = latestSlip
+      ? (Number(latestSlip.specialAllowance ?? Math.round(baseSal * 0.2)) || 0) +
+        (Number(latestSlip.bonus) || 0) +
+        (Number(latestSlip.overtimePay) || 0)
+      : 0;
 
     return {
       totalEarnings,
@@ -167,24 +173,32 @@ export function EmployeeSalarySlipsDesk() {
   };
 
   const handleExportCSV = (slip: SalarySlipItem) => {
+    const baseSal = Number(slip.baseSalary) || Number(slip.userId?.salary) || 0;
+    const basicSal = Number(slip.basicSalary ?? slip.basicPay ?? Math.round(baseSal * 0.5)) || 0;
+    const hraVal = Number(slip.hra ?? Math.round(baseSal * 0.3)) || 0;
+    const spVal = Number(slip.specialAllowance ?? Math.round(baseSal * 0.2)) || 0;
+    const grossVal = Number(slip.grossEarnings) || 0;
+    const dedVal = Number(slip.totalDeductions) || 0;
+    const netVal = Number(slip.netPayable) || 0;
+
     const csvContent =
       "Field,Value\n" +
-      `Pay Period,"${slip.payPeriod}"\n` +
-      `Employee,"${slip.userId?.name}"\n` +
-      `Email,"${slip.userId?.email}"\n` +
+      `Pay Period,"${slip.payPeriod || "N/A"}"\n` +
+      `Employee,"${slip.userId?.name || "Employee"}"\n` +
+      `Email,"${slip.userId?.email || ""}"\n` +
       `Department,"${slip.userId?.department || "General"}"\n` +
-      `Base Salary,${slip.baseSalary}\n` +
-      `Basic Salary (50%),${slip.basicSalary}\n` +
-      `HRA (30%),${slip.hra}\n` +
-      `Special Allowance (20%),${slip.specialAllowance}\n` +
-      `Overtime Pay,${slip.overtimePay}\n` +
-      `Bonus,${slip.bonus}\n` +
-      `Gross Earnings,${slip.grossEarnings}\n` +
-      `Loss of Pay Deduction,${slip.lossOfPayDeduction}\n` +
-      `Tax Deduction,${slip.taxDeduction}\n` +
-      `Total Deductions,${slip.totalDeductions}\n` +
-      `Net Payable,${slip.netPayable}\n` +
-      `Status,"${slip.paymentStatus}"\n` +
+      `Base Salary,${baseSal}\n` +
+      `Basic Salary (50%),${basicSal}\n` +
+      `HRA (30%),${hraVal}\n` +
+      `Special Allowance (20%),${spVal}\n` +
+      `Overtime Pay,${Number(slip.overtimePay) || 0}\n` +
+      `Bonus,${Number(slip.bonus) || 0}\n` +
+      `Gross Earnings,${grossVal}\n` +
+      `Loss of Pay Deduction,${Number(slip.lossOfPayDeduction) || 0}\n` +
+      `Tax Deduction,${Number(slip.taxDeduction) || 0}\n` +
+      `Total Deductions,${dedVal}\n` +
+      `Net Payable,${netVal}\n` +
+      `Status,"${slip.paymentStatus || "Draft"}"\n` +
       `Bank Reference,"${slip.bankReference || "N/A"}"\n`;
 
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
@@ -339,7 +353,7 @@ export function EmployeeSalarySlipsDesk() {
             </span>
           </div>
           <div className="text-xl sm:text-2xl font-black text-foreground font-mono">
-            ₹{kpis.latestNet.toLocaleString("en-IN")}
+            ₹{(kpis.latestNet || 0).toLocaleString("en-IN")}
           </div>
           <div className="flex items-center justify-between text-[11px] text-muted-foreground mt-2 pt-2 border-t border-border/50">
             <span>{slips[0] ? slips[0].payPeriod : "No recent slips"}</span>
@@ -357,7 +371,7 @@ export function EmployeeSalarySlipsDesk() {
             </span>
           </div>
           <div className="text-xl sm:text-2xl font-black text-teal-600 dark:text-teal-400 font-mono">
-            ₹{kpis.totalEarnings.toLocaleString("en-IN")}
+            ₹{(kpis.totalEarnings || 0).toLocaleString("en-IN")}
           </div>
           <div className="flex items-center justify-between text-[11px] text-muted-foreground mt-2 pt-2 border-t border-border/50">
             <span>Total Accrued</span>
@@ -373,7 +387,7 @@ export function EmployeeSalarySlipsDesk() {
             </span>
           </div>
           <div className="text-xl sm:text-2xl font-black text-sky-600 dark:text-sky-400 font-mono">
-            ₹{kpis.totalOvertime.toLocaleString("en-IN")}
+            ₹{(kpis.totalOvertime || 0).toLocaleString("en-IN")}
           </div>
           <div className="flex items-center justify-between text-[11px] text-muted-foreground mt-2 pt-2 border-t border-border/50">
             <span>Production Bonus</span>
@@ -389,7 +403,7 @@ export function EmployeeSalarySlipsDesk() {
             </span>
           </div>
           <div className="text-xl sm:text-2xl font-black text-rose-600 dark:text-rose-400 font-mono">
-            ₹{kpis.totalLop.toLocaleString("en-IN")}
+            ₹{(kpis.totalLop || 0).toLocaleString("en-IN")}
           </div>
           <div className="flex items-center justify-between text-[11px] text-muted-foreground mt-2 pt-2 border-t border-border/50">
             <span>Absence Adjustment</span>
@@ -409,7 +423,7 @@ export function EmployeeSalarySlipsDesk() {
               </h4>
             </div>
             <span className="text-[11px] text-muted-foreground font-mono">
-              Gross: ₹{slips[0].grossEarnings.toLocaleString("en-IN")} | Net: ₹{slips[0].netPayable.toLocaleString("en-IN")}
+              Gross: ₹{(Number(slips[0].grossEarnings) || 0).toLocaleString("en-IN")} | Net: ₹{(Number(slips[0].netPayable) || 0).toLocaleString("en-IN")}
             </span>
           </div>
 
@@ -435,20 +449,20 @@ export function EmployeeSalarySlipsDesk() {
           <div className="flex flex-wrap items-center gap-4 text-[11px] text-muted-foreground pt-1">
             <span className="flex items-center gap-1.5">
               <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block" />
-              Basic Pay (50%): <strong className="text-foreground">₹{slips[0].basicSalary.toLocaleString("en-IN")}</strong>
+              Basic Pay (50%): <strong className="text-foreground">₹{((slips[0].basicSalary ?? slips[0].basicPay ?? Math.round((Number(slips[0].baseSalary) || Number(slips[0].userId?.salary) || 0) * 0.5)) || 0).toLocaleString("en-IN")}</strong>
             </span>
             <span className="flex items-center gap-1.5">
               <span className="w-2.5 h-2.5 rounded-full bg-teal-500 inline-block" />
-              HRA (30%): <strong className="text-foreground">₹{slips[0].hra.toLocaleString("en-IN")}</strong>
+              HRA (30%): <strong className="text-foreground">₹{((slips[0].hra ?? Math.round((Number(slips[0].baseSalary) || Number(slips[0].userId?.salary) || 0) * 0.3)) || 0).toLocaleString("en-IN")}</strong>
             </span>
             <span className="flex items-center gap-1.5">
               <span className="w-2.5 h-2.5 rounded-full bg-sky-500 inline-block" />
-              Allowances (20%): <strong className="text-foreground">₹{slips[0].specialAllowance.toLocaleString("en-IN")}</strong>
+              Allowances (20%): <strong className="text-foreground">₹{((slips[0].specialAllowance ?? Math.round((Number(slips[0].baseSalary) || Number(slips[0].userId?.salary) || 0) * 0.2)) || 0).toLocaleString("en-IN")}</strong>
             </span>
-            {slips[0].totalDeductions > 0 && (
+            {(Number(slips[0].totalDeductions) || 0) > 0 && (
               <span className="flex items-center gap-1.5 ml-auto text-rose-500">
                 <i className="fa-solid fa-scissors text-[10px]" />
-                Deductions: <strong>-₹{slips[0].totalDeductions.toLocaleString("en-IN")}</strong>
+                Deductions: <strong>-₹{(Number(slips[0].totalDeductions) || 0).toLocaleString("en-IN")}</strong>
               </span>
             )}
           </div>
@@ -590,7 +604,7 @@ export function EmployeeSalarySlipsDesk() {
                       Net Take-Home Pay
                     </span>
                     <span className="text-xl sm:text-2xl font-black text-foreground font-mono tracking-tight">
-                      ₹{slip.netPayable.toLocaleString("en-IN")}
+                      ₹{(Number(slip.netPayable) || 0).toLocaleString("en-IN")}
                     </span>
                   </div>
                   {slip.bankReference && (
@@ -605,13 +619,13 @@ export function EmployeeSalarySlipsDesk() {
                   <div className="space-y-1 p-2 rounded-xl bg-background border border-border">
                     <span className="text-muted-foreground text-[10px] block">Gross Earnings</span>
                     <span className="font-bold text-emerald-600 font-mono block">
-                      ₹{slip.grossEarnings.toLocaleString("en-IN")}
+                      ₹{(Number(slip.grossEarnings) || 0).toLocaleString("en-IN")}
                     </span>
                   </div>
                   <div className="space-y-1 p-2 rounded-xl bg-background border border-border">
                     <span className="text-muted-foreground text-[10px] block">Deductions</span>
                     <span className="font-bold text-rose-500 font-mono block">
-                      -₹{slip.totalDeductions.toLocaleString("en-IN")}
+                      -₹{(Number(slip.totalDeductions) || 0).toLocaleString("en-IN")}
                     </span>
                   </div>
                 </div>
@@ -679,18 +693,20 @@ export function EmployeeSalarySlipsDesk() {
                       <div className="font-bold text-foreground">{slip.userId?.name || "Employee"}</div>
                       <div className="text-[10px] text-muted-foreground">{slip.userId?.department || "General"}</div>
                     </td>
-                    <td className="py-3.5 px-4 font-mono font-semibold">₹{slip.basicSalary?.toLocaleString("en-IN")}</td>
+                    <td className="py-3.5 px-4 font-mono font-semibold">
+                      ₹{((slip.basicSalary ?? slip.basicPay ?? Math.round((Number(slip.baseSalary) || Number(slip.userId?.salary) || 0) * 0.5)) || 0).toLocaleString("en-IN")}
+                    </td>
                     <td className="py-3.5 px-4 font-mono text-muted-foreground">
-                      ₹{((slip.hra || 0) + (slip.specialAllowance || 0)).toLocaleString("en-IN")}
+                      ₹{((Number(slip.hra ?? Math.round((Number(slip.baseSalary) || Number(slip.userId?.salary) || 0) * 0.3)) || 0) + (Number(slip.specialAllowance ?? Math.round((Number(slip.baseSalary) || Number(slip.userId?.salary) || 0) * 0.2)) || 0)).toLocaleString("en-IN")}
                     </td>
                     <td className="py-3.5 px-4 font-mono text-emerald-600 dark:text-emerald-400 font-semibold">
-                      +₹{((slip.overtimePay || 0) + (slip.bonus || 0)).toLocaleString("en-IN")}
+                      +₹{((Number(slip.overtimePay) || 0) + (Number(slip.bonus) || 0)).toLocaleString("en-IN")}
                     </td>
                     <td className="py-3.5 px-4 font-mono text-rose-500 font-semibold">
-                      -₹{slip.totalDeductions?.toLocaleString("en-IN")}
+                      -₹{(Number(slip.totalDeductions) || 0).toLocaleString("en-IN")}
                     </td>
                     <td className="py-3.5 px-4 font-mono font-black text-sm text-foreground">
-                      ₹{slip.netPayable?.toLocaleString("en-IN")}
+                      ₹{(Number(slip.netPayable) || 0).toLocaleString("en-IN")}
                     </td>
                     <td className="py-3.5 px-4">
                       <Badge
@@ -901,38 +917,38 @@ export function EmployeeSalarySlipsDesk() {
                   <div className="p-3.5 space-y-2.5 font-mono divide-y divide-border/40 text-xs">
                     <div className="flex justify-between pt-1">
                       <span className="text-muted-foreground font-sans">Basic Salary (50%)</span>
-                      <span className="font-semibold">₹{selectedSlip.basicSalary?.toLocaleString("en-IN")}</span>
+                      <span className="font-semibold">₹{((selectedSlip.basicSalary ?? selectedSlip.basicPay ?? Math.round((Number(selectedSlip.baseSalary) || Number(selectedSlip.userId?.salary) || 0) * 0.5)) || 0).toLocaleString("en-IN")}</span>
                     </div>
                     <div className="flex justify-between pt-2">
                       <span className="text-muted-foreground font-sans">House Rent Allowance (HRA 30%)</span>
-                      <span className="font-semibold">₹{selectedSlip.hra?.toLocaleString("en-IN")}</span>
+                      <span className="font-semibold">₹{((selectedSlip.hra ?? Math.round((Number(selectedSlip.baseSalary) || Number(selectedSlip.userId?.salary) || 0) * 0.3)) || 0).toLocaleString("en-IN")}</span>
                     </div>
                     <div className="flex justify-between pt-2">
                       <span className="text-muted-foreground font-sans">Special Allowance (20%)</span>
-                      <span className="font-semibold">₹{selectedSlip.specialAllowance?.toLocaleString("en-IN")}</span>
+                      <span className="font-semibold">₹{((selectedSlip.specialAllowance ?? Math.round((Number(selectedSlip.baseSalary) || Number(selectedSlip.userId?.salary) || 0) * 0.2)) || 0).toLocaleString("en-IN")}</span>
                     </div>
-                    {selectedSlip.overtimePay > 0 && (
+                    {(Number(selectedSlip.overtimePay) || 0) > 0 && (
                       <div className="flex justify-between pt-2 text-sky-600">
-                        <span className="font-sans">Overtime Pay ({selectedSlip.overtimeHours} hrs)</span>
-                        <span className="font-semibold">+₹{selectedSlip.overtimePay?.toLocaleString("en-IN")}</span>
+                        <span className="font-sans">Overtime Pay ({Number(selectedSlip.overtimeHours) || 0} hrs)</span>
+                        <span className="font-semibold">+₹{(Number(selectedSlip.overtimePay) || 0).toLocaleString("en-IN")}</span>
                       </div>
                     )}
-                    {selectedSlip.bonus > 0 && (
+                    {(Number(selectedSlip.bonus) || 0) > 0 && (
                       <div className="flex justify-between pt-2 text-emerald-600">
                         <span className="font-sans">Performance Bonus</span>
-                        <span className="font-semibold">+₹{selectedSlip.bonus?.toLocaleString("en-IN")}</span>
+                        <span className="font-semibold">+₹{(Number(selectedSlip.bonus) || 0).toLocaleString("en-IN")}</span>
                       </div>
                     )}
-                    {selectedSlip.reimbursements > 0 && (
+                    {(Number(selectedSlip.reimbursements) || 0) > 0 && (
                       <div className="flex justify-between pt-2 text-teal-600">
                         <span className="font-sans">Reimbursements</span>
-                        <span className="font-semibold">+₹{selectedSlip.reimbursements?.toLocaleString("en-IN")}</span>
+                        <span className="font-semibold">+₹{(Number(selectedSlip.reimbursements) || 0).toLocaleString("en-IN")}</span>
                       </div>
                     )}
                   </div>
                   <div className="bg-muted/40 p-3.5 font-bold flex justify-between border-t border-border">
                     <span className="font-sans">Total Gross Earnings</span>
-                    <span className="text-emerald-600 font-mono text-sm">₹{selectedSlip.grossEarnings?.toLocaleString("en-IN")}</span>
+                    <span className="text-emerald-600 font-mono text-sm">₹{(Number(selectedSlip.grossEarnings) || 0).toLocaleString("en-IN")}</span>
                   </div>
                 </div>
 
@@ -946,27 +962,27 @@ export function EmployeeSalarySlipsDesk() {
                     <div className="p-3.5 space-y-2.5 font-mono divide-y divide-border/40 text-xs">
                       <div className="flex justify-between pt-1">
                         <span className="text-muted-foreground font-sans">
-                          Loss of Pay (LOP: {selectedSlip.lossOfPayDays}d)
+                          Loss of Pay (LOP: {Number(selectedSlip.lossOfPayDays) || 0}d)
                         </span>
                         <span className="font-semibold text-rose-500">
-                          ₹{selectedSlip.lossOfPayDeduction?.toLocaleString("en-IN")}
+                          ₹{(Number(selectedSlip.lossOfPayDeduction) || 0).toLocaleString("en-IN")}
                         </span>
                       </div>
                       <div className="flex justify-between pt-2">
                         <span className="text-muted-foreground font-sans">Income Tax / TDS</span>
-                        <span className="font-semibold">₹{selectedSlip.taxDeduction?.toLocaleString("en-IN")}</span>
+                        <span className="font-semibold">₹{(Number(selectedSlip.taxDeduction) || 0).toLocaleString("en-IN")}</span>
                       </div>
-                      {selectedSlip.otherDeductions > 0 && (
+                      {(Number(selectedSlip.otherDeductions) || 0) > 0 && (
                         <div className="flex justify-between pt-2">
                           <span className="text-muted-foreground font-sans">Other Deductions</span>
-                          <span className="font-semibold">₹{selectedSlip.otherDeductions?.toLocaleString("en-IN")}</span>
+                          <span className="font-semibold">₹{(Number(selectedSlip.otherDeductions) || 0).toLocaleString("en-IN")}</span>
                         </div>
                       )}
                     </div>
                   </div>
                   <div className="bg-muted/40 p-3.5 font-bold flex justify-between border-t border-border mt-auto">
                     <span className="font-sans">Total Deductions</span>
-                    <span className="text-rose-600 font-mono text-sm">₹{selectedSlip.totalDeductions?.toLocaleString("en-IN")}</span>
+                    <span className="text-rose-600 font-mono text-sm">₹{(Number(selectedSlip.totalDeductions) || 0).toLocaleString("en-IN")}</span>
                   </div>
                 </div>
               </div>
@@ -978,10 +994,10 @@ export function EmployeeSalarySlipsDesk() {
                     Net Take-Home Pay
                   </div>
                   <div className="text-2xl sm:text-3xl font-black text-emerald-600 dark:text-emerald-400 font-mono">
-                    ₹{selectedSlip.netPayable?.toLocaleString("en-IN")}
+                    ₹{(Number(selectedSlip.netPayable) || 0).toLocaleString("en-IN")}
                   </div>
                   <div className="text-[11px] text-muted-foreground italic mt-0.5">
-                    ({numberToWords(selectedSlip.netPayable)})
+                    ({numberToWords(Number(selectedSlip.netPayable) || 0)})
                   </div>
                 </div>
 

@@ -59,23 +59,58 @@ export async function GET(request: Request) {
       .sort({ createdAt: -1 })
       .lean();
 
+    // Normalize slip fields to ensure basicSalary, basicPay, allowances, and deductions are never undefined
+    const normalizedSlips = slips.map((s: any) => {
+      const baseSalary = Number(s.baseSalary) || Number(s.userId?.salary) || 0;
+      const basicSalary = Number(s.basicSalary) || Number(s.basicPay) || Math.round(baseSalary * 0.5);
+      const hra = Number(s.hra) || Math.round(baseSalary * 0.3);
+      const specialAllowance = Number(s.specialAllowance) || Math.round(baseSalary * 0.2);
+      const overtimePay = Number(s.overtimePay) || 0;
+      const bonus = Number(s.bonus) || 0;
+      const reimbursements = Number(s.reimbursements) || 0;
+      const lossOfPayDeduction = Number(s.lossOfPayDeduction) || 0;
+      const taxDeduction = Number(s.taxDeduction) || 0;
+      const otherDeductions = Number(s.otherDeductions) || 0;
+      const totalDeductions = Number(s.totalDeductions) || (lossOfPayDeduction + taxDeduction + otherDeductions);
+      const grossEarnings = Number(s.grossEarnings) || Math.max(0, baseSalary - lossOfPayDeduction + overtimePay + bonus + reimbursements);
+      const netPayable = Number(s.netPayable) || Math.max(0, grossEarnings - totalDeductions);
+
+      return {
+        ...s,
+        baseSalary,
+        basicPay: s.basicPay ?? basicSalary,
+        basicSalary: s.basicSalary ?? basicSalary,
+        hra: s.hra ?? hra,
+        specialAllowance: s.specialAllowance ?? specialAllowance,
+        overtimePay,
+        bonus,
+        reimbursements,
+        lossOfPayDeduction,
+        taxDeduction,
+        otherDeductions,
+        totalDeductions,
+        grossEarnings,
+        netPayable,
+      };
+    });
+
     // Summary KPIs
-    const totalGross = slips.reduce((acc, s) => acc + (s.grossEarnings || 0), 0);
-    const totalNet = slips.reduce((acc, s) => acc + (s.netPayable || 0), 0);
-    const totalLopDeductions = slips.reduce((acc, s) => acc + (s.lossOfPayDeduction || 0), 0);
-    const totalOvertimePaid = slips.reduce((acc, s) => acc + (s.overtimePay || 0), 0);
-    const paidCount = slips.filter((s) => s.paymentStatus === "Paid").length;
-    const processingCount = slips.filter((s) => s.paymentStatus === "Processing").length;
-    const draftCount = slips.filter((s) => s.paymentStatus === "Draft").length;
+    const totalGross = normalizedSlips.reduce((acc, s) => acc + (s.grossEarnings || 0), 0);
+    const totalNet = normalizedSlips.reduce((acc, s) => acc + (s.netPayable || 0), 0);
+    const totalLopDeductions = normalizedSlips.reduce((acc, s) => acc + (s.lossOfPayDeduction || 0), 0);
+    const totalOvertimePaid = normalizedSlips.reduce((acc, s) => acc + (s.overtimePay || 0), 0);
+    const paidCount = normalizedSlips.filter((s) => s.paymentStatus === "Paid").length;
+    const processingCount = normalizedSlips.filter((s) => s.paymentStatus === "Processing").length;
+    const draftCount = normalizedSlips.filter((s) => s.paymentStatus === "Draft").length;
 
     return NextResponse.json({
-      slips,
+      slips: normalizedSlips,
       kpis: {
         totalGross,
         totalNet,
         totalLopDeductions,
         totalOvertimePaid,
-        headcount: slips.length,
+        headcount: normalizedSlips.length,
         paidCount,
         processingCount,
         draftCount,
