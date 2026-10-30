@@ -147,6 +147,16 @@ function CalendarPageContent() {
   const [attendanceSearch, setAttendanceSearch] = useState<string>("");
   const [attendanceStatusFilter, setAttendanceStatusFilter] = useState<string>("All");
   const [attendanceLoading, setAttendanceLoading] = useState(false);
+  const [regularizePrefillDate, setRegularizePrefillDate] = useState<string | null>(null);
+
+  const handleTriggerRegularizeForDate = useCallback((dateVal: string | Date) => {
+    const dateStr = getISTDateString(new Date(dateVal));
+    setRegularizePrefillDate(dateStr);
+    const el = document.getElementById("attendance-regularization-desk-section");
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth" });
+    }
+  }, []);
 
   // Login & Hours Summary States (Admin/OPS only)
   const getDefaultWeekFrom = () => {
@@ -589,6 +599,7 @@ function CalendarPageContent() {
         setAttendanceToday(data.attendance);
         setAttendanceHistory(data.history || []);
         setShiftInfo(data.shiftInfo);
+        setAdditionalTimeRequested(Boolean(data.attendance?.extensionRequested && !data.attendance?.extensionApproved));
       }
     } catch (e) {
       console.error(e);
@@ -1967,12 +1978,29 @@ function CalendarPageContent() {
                             >
                               {dayStr}
                             </span>
-                            {hasEvents && (
-                              <span className="flex h-2 w-2 relative shrink-0" title={`${dayEvents.length} Event(s)`}>
-                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
-                                <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
-                              </span>
-                            )}
+                            <div className="flex items-center gap-1">
+                              {(() => {
+                                const cellDateStr = getISTDateString(day);
+                                const dayLog = attendanceHistory.find((log: any) => getISTDateString(new Date(log.date)) === cellDateStr);
+                                const isReg = dayLog?.regularizationStatus === "Approved" || dayLog?.punchSource === "Manual_Regularized";
+                                if (!isReg) return null;
+                                return (
+                                  <span
+                                    className="w-5 h-5 rounded-md bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 flex items-center justify-center text-[10px] shadow-2xs"
+                                    title="Attendance Regularized & Approved for this day"
+                                  >
+                                    <i className="fa-solid fa-clipboard-check text-[9px]" />
+                                  </span>
+                                );
+                              })()}
+
+                              {hasEvents && (
+                                <span className="flex h-2 w-2 relative shrink-0" title={`${dayEvents.length} Event(s)`}>
+                                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+                                  <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
+                                </span>
+                              )}
+                            </div>
                           </div>
 
                           <div className="space-y-1 overflow-y-auto max-h-[80px] pr-0.5 no-scrollbar flex-1">
@@ -3140,7 +3168,19 @@ function CalendarPageContent() {
             const isRegularizedApproved = attendanceToday?.regularizationStatus === "Approved" || attendanceToday?.punchSource === "Manual_Regularized";
             const isRegularizationPending = Boolean(attendanceToday?.regularizationRequested && attendanceToday?.regularizationStatus === "Pending");
             const isRegularizationRejected = Boolean(attendanceToday?.regularizationStatus === "Rejected" && !attendanceToday?.regularizationRequested);
-            const regularizedTimeStr = attendanceToday?.regularizedAt ? formatISTTime(attendanceToday.regularizedAt) : "";
+            const regularizedTimeStr = attendanceToday?.regularizedAt
+              ? formatISTTime(attendanceToday.regularizedAt)
+              : (attendanceToday?.updatedAt ? formatISTTime(attendanceToday.updatedAt) : "");
+
+            // Calculate break duration today (time offline between first punch and now/clock-out)
+            let totalBreakMinutes = 0;
+            if (attendanceToday?.clockIn) {
+              const firstPunch = new Date(attendanceToday.originalClockIn || attendanceToday.clockIn).getTime();
+              const endTime = attendanceToday.clockOut ? new Date(attendanceToday.clockOut).getTime() : Date.now();
+              const elapsedSpanSecs = Math.max(0, Math.floor((endTime - firstPunch) / 1000));
+              const breakSecs = Math.max(0, elapsedSpanSecs - totalSecondsWorked);
+              totalBreakMinutes = Math.floor(breakSecs / 60);
+            }
 
             // Estimated shift target completion time
             let targetFinishTimeStr = "--:--";
@@ -3326,8 +3366,33 @@ function CalendarPageContent() {
                     );
                   })()}
 
+                  {/* Shift Extension Pending Review Banner for Employee */}
+                  {Boolean(attendanceToday?.extensionRequested && !attendanceToday?.extensionApproved) && (
+                    <div className="w-full p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/25 flex items-center justify-between gap-3 text-xs text-amber-700 dark:text-amber-300 shadow-2xs animate-in fade-in">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="w-7 h-7 rounded-lg bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center text-xs shrink-0 border border-amber-500/30">
+                          <i className="fa-solid fa-hourglass-half" />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="font-bold flex items-center gap-1.5 flex-wrap">
+                            <span>Extension Request Awaiting Review</span>
+                            <span className="text-[10px] px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30">
+                              +{attendanceToday.extensionRequestedHours || 1}h Requested
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-muted-foreground truncate mt-0.5">
+                            Your request is under review by Management / HR. Shift resume will unlock once authorized.
+                          </p>
+                        </div>
+                      </div>
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-amber-500/20 border border-amber-500/30 shrink-0">
+                        Pending
+                      </span>
+                    </div>
+                  )}
+
                   {/* Shift Extension Audit Banner for Employee */}
-                  {attendanceToday?.extensionApproved && (() => {
+                  {Boolean(attendanceToday?.extensionApproved && !attendanceToday?.extensionRequested) && (() => {
                     const approver = typeof attendanceToday.extensionApprovedBy === "object" ? attendanceToday.extensionApprovedBy : null;
                     const approverName = approver?.name || "Operations / Admin";
                     const approverRole = approver?.role || "Admin";
@@ -3498,9 +3563,10 @@ function CalendarPageContent() {
                         {(() => {
                           const dynamicMaxHours = Number(shiftInfo?.maxHours) || 10;
                           const isElevatedStaff = Boolean(isAdmin || isOPS || isHR || can("approveAdditionalShiftTime"));
-                          const isMaxReached = workedHours >= dynamicMaxHours;
-                          const isExtensionApproved = Boolean(attendanceToday?.extensionApproved);
-                          const canResume = !isMaxReached || isElevatedStaff || isExtensionApproved;
+                          const effectiveMaxHours = dynamicMaxHours + (attendanceToday?.extensionApproved ? (Number(attendanceToday?.extensionAllocatedHours) || 0) : 0);
+                          const isMaxReached = workedHours >= effectiveMaxHours;
+                          const isExtensionApproved = Boolean(attendanceToday?.extensionApproved && !attendanceToday?.extensionRequested && (workedHours < effectiveMaxHours || isElevatedStaff));
+                          const canResume = (!isMaxReached && !attendanceToday?.extensionRequested) || isElevatedStaff || isExtensionApproved;
 
                           if (!canResume) {
                             return (
@@ -3510,13 +3576,13 @@ function CalendarPageContent() {
                                 </div>
                                 <div>
                                   <div className="font-bold text-xs text-foreground">
-                                    Maximum Shift Limit Reached ({dynamicMaxHours}h)
+                                    Maximum Shift Limit Reached ({effectiveMaxHours.toFixed(1)}h)
                                   </div>
                                   <p className="text-[11px] text-muted-foreground mt-0.5">
                                     You have completed your daily shift limit. Resuming is locked without approval from Admin, OPS, or HR.
                                   </p>
                                 </div>
-                                {!additionalTimeRequested ? (
+                                {!additionalTimeRequested && !attendanceToday?.extensionRequested ? (
                                   <div className="flex flex-col items-center gap-2 w-full max-w-sm">
                                     {attendanceToday?.extensionRejected && !attendanceToday?.extensionApproved && (
                                       <div className="w-full text-left p-2.5 rounded-lg bg-rose-500/10 border border-rose-500/25 text-[11px] text-rose-700 dark:text-rose-300">
@@ -3562,6 +3628,12 @@ function CalendarPageContent() {
                               <p className="text-xs text-muted-foreground flex items-center gap-1.5 font-medium flex-wrap justify-center">
                                 <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
                                 <span>Shift paused • <span className="font-mono font-semibold text-foreground">{workedHours.toFixed(1)} hrs</span> logged today</span>
+                                {totalBreakMinutes >= 1 && (
+                                  <span className="text-[10px] font-mono font-semibold text-amber-700 dark:text-amber-300 bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded-md inline-flex items-center gap-1" title={`Total Break Duration: ${totalBreakMinutes} minutes`}>
+                                    <i className="fa-solid fa-mug-saucer text-[9px] text-amber-500" />
+                                    Break: {totalBreakMinutes >= 60 ? `${Math.floor(totalBreakMinutes / 60)}h ${totalBreakMinutes % 60}m` : `${totalBreakMinutes}m`}
+                                  </span>
+                                )}
                                 {isRegularizedApproved && (
                                   <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded-md inline-flex items-center gap-1">
                                     <i className="fa-solid fa-clipboard-check text-[9px]" />Authorized by Management
@@ -4385,6 +4457,36 @@ function CalendarPageContent() {
                                           </span>
                                         );
                                       })()}
+
+                                      {/* Regularization Badges */}
+                                      {(log.regularizationStatus === "Approved" || log.punchSource === "Manual_Regularized") && (() => {
+                                        const regApprover = typeof log.regularizedBy === "object" ? log.regularizedBy : null;
+                                        const approverName = regApprover?.name ? ` by ${regApprover.name}` : "";
+                                        return (
+                                          <span
+                                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 whitespace-nowrap cursor-help shadow-2xs"
+                                            title={`Regularized & approved${approverName}: "${log.regularizationReason || "Punch correction authorized"}"`}
+                                          >
+                                            <i className="fa-solid fa-clipboard-check text-[9px]" /> Regularized
+                                          </span>
+                                        );
+                                      })()}
+                                      {Boolean(log.regularizationRequested && log.regularizationStatus === "Pending") && (
+                                        <span
+                                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 animate-pulse whitespace-nowrap cursor-help shadow-2xs"
+                                          title={`Regularization request under review: "${log.regularizationReason || "Requested"}"`}
+                                        >
+                                          <i className="fa-solid fa-hourglass-half text-[9px]" /> Reg. Pending
+                                        </span>
+                                      )}
+                                      {Boolean(log.regularizationStatus === "Rejected" && !log.regularizationRequested) && (
+                                        <span
+                                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-500/30 whitespace-nowrap cursor-help shadow-2xs"
+                                          title={`Regularization declined: "${log.regularizationRejectionReason || "Declined"}"`}
+                                        >
+                                          <i className="fa-solid fa-circle-xmark text-[9px]" /> Reg. Declined
+                                        </span>
+                                      )}
                                     </div>
                                   </td>
 
@@ -4471,6 +4573,31 @@ function CalendarPageContent() {
                                   {/* Action Button */}
                                   <td className="py-3 px-4 text-center whitespace-nowrap">
                                     <div className="flex items-center justify-center gap-1.5">
+                                      {/* Inline Regularize button for non-regularized records */}
+                                      {(() => {
+                                        const isRegularized = log.regularizationStatus === "Approved" || log.punchSource === "Manual_Regularized";
+                                        const isPending = Boolean(log.regularizationRequested && log.regularizationStatus === "Pending");
+                                        const canReqReg = !isRegularized && !isPending && (!isTodayRow || log.clockOut);
+                                        if (!canReqReg) return null;
+
+                                        return (
+                                          <Button
+                                            type="button"
+                                            size="sm"
+                                            variant="outline"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              handleTriggerRegularizeForDate(log.date);
+                                            }}
+                                            className="h-7 px-2 rounded-lg text-xs font-semibold text-emerald-600 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10 cursor-pointer shadow-2xs gap-1"
+                                            title="Request Attendance Regularization for this date"
+                                          >
+                                            <i className="fa-solid fa-file-pen text-[10px]" />
+                                            <span className="hidden sm:inline">Regularize</span>
+                                          </Button>
+                                        );
+                                      })()}
+
                                       {canViewAllStaff && log.extensionRequested && !log.extensionApproved && (
                                         <Button
                                           type="button"
@@ -4606,6 +4733,8 @@ function CalendarPageContent() {
               currentUserId={currentUser?._id}
               currentUserRole={currentUser?.role}
               currentUserDepartment={currentUser?.department}
+              initialRequestDate={regularizePrefillDate}
+              onClearInitialRequestDate={() => setRegularizePrefillDate(null)}
             />
           </div>
 
@@ -5806,101 +5935,123 @@ function CalendarPageContent() {
         </div>
       )}
 
-      {/* Shift Extension Duration & Allocation Modal for Approvers */}
+      {/* Shift Extension Duration & Allocation Modal for Approvers (Unified with HR Desk) */}
       {approvalModalReq && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-3.5 sm:p-4 bg-background/80 backdrop-blur-sm animate-in fade-in duration-150"
+          className="fixed inset-0 z-50 flex items-center justify-center p-3.5 sm:p-4 bg-black/75 backdrop-blur-xs animate-in fade-in"
           onClick={() => setApprovalModalReq(null)}
         >
           <div
-            className="w-full max-w-sm sm:max-w-md bg-card border border-border rounded-2xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col animate-in zoom-in-95 duration-200"
+            className="w-full max-w-md bg-card border border-border rounded-2xl p-5 sm:p-6 shadow-2xl space-y-4 animate-in zoom-in-95 max-h-[92vh] flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Fixed Header */}
-            <div className="p-4 sm:p-5 border-b border-border flex items-center justify-between shrink-0 bg-muted/20">
-              <div className="flex items-center gap-2.5 min-w-0">
-                <div className="w-9 h-9 rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-sm border border-emerald-500/30 shrink-0">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-border/70 shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-emerald-500/15 text-emerald-500 flex items-center justify-center text-sm border border-emerald-500/30 shrink-0">
                   <i className="fa-solid fa-clock-rotate-left" />
                 </div>
-                <div className="min-w-0">
-                  <h3 className="text-sm font-bold text-foreground truncate">Allocate Extra Shift Time</h3>
-                  <p className="text-[11px] text-muted-foreground truncate">Authorize extension hours for employee shift</p>
+                <div>
+                  <h3 className="text-sm font-bold text-foreground">Allocate Extension Time</h3>
+                  <p className="text-[11px] text-muted-foreground">Authorize additional working hours past shift limit</p>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={() => setApprovalModalReq(null)}
-                className="w-8 h-8 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent flex items-center justify-center transition-colors cursor-pointer shrink-0"
+                className="w-8 h-8 rounded-full bg-muted hover:bg-muted/80 text-foreground flex items-center justify-center text-xs cursor-pointer min-h-[36px]"
               >
-                <i className="fa-solid fa-xmark text-sm" />
+                <i className="fa-solid fa-xmark" />
               </button>
             </div>
 
-            {/* Scrollable Body */}
-            <div className="p-4 sm:p-5 space-y-4 overflow-y-auto overscroll-contain flex-1 text-xs">
-              <div className="p-3.5 rounded-xl bg-accent/30 border border-border/70 space-y-1.5">
+            {/* Scrollable Content Body */}
+            <div className="space-y-4 overflow-y-auto overscroll-contain flex-1">
+              <div className="p-3 rounded-xl bg-accent/40 border border-border/70 space-y-2 text-xs">
                 <div className="flex items-center justify-between">
-                  <span className="font-bold text-foreground text-xs">
-                    {typeof approvalModalReq.userId === "object" ? approvalModalReq.userId?.name : "Employee"}
-                  </span>
-                  <span className="text-[10px] font-semibold text-muted-foreground">
-                    {typeof approvalModalReq.userId === "object" ? approvalModalReq.userId?.role : "Staff"}
+                  <span className="text-muted-foreground">Team Member:</span>
+                  <strong className="text-foreground">
+                    {typeof approvalModalReq.userId === "object"
+                      ? approvalModalReq.userId?.name
+                      : "Employee"}
+                  </strong>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Role:</span>
+                  <span className="capitalize font-medium text-foreground">
+                    {typeof approvalModalReq.userId === "object"
+                      ? approvalModalReq.userId?.role || "Staff"
+                      : "Staff"}
                   </span>
                 </div>
-                <div className="flex items-center gap-2 pt-1 text-[11px]">
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Department:</span>
+                  <span className="font-medium text-foreground">
+                    {typeof approvalModalReq.userId === "object"
+                      ? approvalModalReq.userId?.department || "General"
+                      : "General"}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
                   <span className="text-muted-foreground">Requested Duration:</span>
-                  <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400 px-2 py-0.5 rounded-md bg-emerald-500/10 border border-emerald-500/20">
-                    {approvalModalReq.extensionRequestedHours ? `+${approvalModalReq.extensionRequestedHours >= 1 ? `${approvalModalReq.extensionRequestedHours.toFixed(1)}h` : `${Math.round(approvalModalReq.extensionRequestedHours * 60)}m`}` : "Unspecified"}
-                  </span>
+                  <strong className="text-amber-500 font-mono">
+                    +{approvalModalReq.extensionRequestedHours || 0} hrs
+                  </strong>
                 </div>
-                {approvalModalReq.extensionReason ? (
-                  <p className="italic text-foreground/80 text-[11px] leading-relaxed pt-0.5">
-                    "{approvalModalReq.extensionReason}"
-                  </p>
-                ) : (
-                  <p className="text-muted-foreground text-[11px] pt-0.5">Requested additional working time past regular shift cap.</p>
+                {approvalModalReq.extensionReason && (
+                  <div className="pt-2 border-t border-border/50">
+                    <span className="text-muted-foreground block text-[10px] mb-0.5">Submitted Reason:</span>
+                    <p className="italic text-foreground">"{approvalModalReq.extensionReason}"</p>
+                  </div>
                 )}
               </div>
 
+              {/* Quick Hours Allocation Buttons (7 HR Presets) */}
               <div className="space-y-2">
-                <label className="text-xs font-semibold text-foreground flex items-center justify-between">
-                  <span className="flex items-center gap-1.5">
-                    <i className="fa-solid fa-stopwatch text-emerald-500 text-xs" />
-                    <span>Choose Extra Hours to Allocate:</span>
-                  </span>
-                  <span className="font-mono text-emerald-600 dark:text-emerald-400 font-bold text-xs">
-                    +{extensionHoursToAllocate >= 1 ? `${extensionHoursToAllocate.toFixed(1)} hrs` : `${Math.round(extensionHoursToAllocate * 60)} mins`}
-                  </span>
-                </label>
+                <label className="text-xs font-bold text-foreground block">Select Hours to Allocate:</label>
                 <div className="grid grid-cols-4 gap-2">
-                  {[
-                    { h: 0.5, label: "+30m", desc: "30 Mins" },
-                    { h: 1.0, label: "+1.0h", desc: "1 Hour" },
-                    { h: 2.0, label: "+2.0h", desc: "2 Hours" },
-                    { h: 3.0, label: "+3.0h", desc: "3 Hours" },
-                  ].map((preset) => (
+                  {[0.5, 1.0, 1.5, 2.0].map((h) => (
                     <button
-                      key={preset.h}
+                      key={h}
                       type="button"
-                      onClick={() => setExtensionHoursToAllocate(preset.h)}
+                      onClick={() => setExtensionHoursToAllocate(h)}
                       className={cn(
-                        "py-2 px-1.5 rounded-xl text-xs font-bold font-mono border transition-all cursor-pointer flex flex-col items-center justify-center gap-0.5 min-h-[44px]",
-                        extensionHoursToAllocate === preset.h
-                          ? "bg-emerald-600 text-white border-emerald-600 shadow-xs"
-                          : "bg-card border-border/80 text-foreground hover:border-emerald-500/50"
+                        "py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer min-h-[38px]",
+                        extensionHoursToAllocate === h
+                          ? "bg-primary text-primary-foreground border-primary shadow-xs"
+                          : "bg-secondary text-muted-foreground hover:text-foreground border-border"
                       )}
                     >
-                      <span className="text-xs sm:text-sm">{preset.label}</span>
-                      <span className="text-[9px] font-normal opacity-80">{preset.desc}</span>
+                      +{h.toFixed(1)}h
+                    </button>
+                  ))}
+                </div>
+                <div className="grid grid-cols-3 gap-2 pt-1">
+                  {[2.5, 3.0, 4.0].map((h) => (
+                    <button
+                      key={h}
+                      type="button"
+                      onClick={() => setExtensionHoursToAllocate(h)}
+                      className={cn(
+                        "py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer min-h-[38px]",
+                        extensionHoursToAllocate === h
+                          ? "bg-primary text-primary-foreground border-primary shadow-xs"
+                          : "bg-secondary text-muted-foreground hover:text-foreground border-border"
+                      )}
+                    >
+                      +{h.toFixed(1)}h
                     </button>
                   ))}
                 </div>
               </div>
 
+              {/* Custom Duration Input */}
               <div className="space-y-1.5 pt-1">
                 <div className="flex items-center justify-between text-[11px]">
                   <span className="text-muted-foreground">Custom allocated duration:</span>
-                  <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">+{extensionHoursToAllocate.toFixed(1)} hrs total</span>
+                  <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                    +{extensionHoursToAllocate.toFixed(1)} hrs total
+                  </span>
                 </div>
                 <Input
                   type="number"
@@ -5919,13 +6070,13 @@ function CalendarPageContent() {
               </div>
             </div>
 
-            {/* Fixed Footer */}
-            <div className="p-3.5 sm:p-4 border-t border-border flex items-center justify-end gap-2.5 shrink-0 bg-muted/10">
+            {/* Modal Footer Actions */}
+            <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-border/70 shrink-0">
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => setApprovalModalReq(null)}
-                className="cursor-pointer text-xs h-9 min-h-[38px] px-3.5"
+                className="min-h-[38px] text-xs cursor-pointer px-3.5"
               >
                 Cancel
               </Button>
@@ -5937,7 +6088,7 @@ function CalendarPageContent() {
                   setApprovalModalReq(null);
                   await handleConfirmApproveExtension(reqId, hours);
                 }}
-                className="cursor-pointer text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs gap-1.5 h-9 min-h-[38px] px-4"
+                className="min-h-[38px] text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs gap-1.5 px-4 cursor-pointer"
               >
                 <i className="fa-solid fa-check text-xs" /> Approve (+{extensionHoursToAllocate.toFixed(1)}h)
               </Button>

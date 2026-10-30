@@ -503,9 +503,9 @@ export async function POST(request: Request) {
         ? dynamicMaxShiftHours + (Number(record.extensionAllocatedHours) || 0)
         : dynamicMaxShiftHours;
 
-      if (workedHoursSoFar >= effectiveMaxHours && !isElevatedStaff && !record.extensionApproved) {
+      if (workedHoursSoFar >= effectiveMaxHours && !isElevatedStaff) {
         return NextResponse.json({
-          error: `Maximum shift limit reached (${dynamicMaxShiftHours}h). You cannot resume without Admin, OPS, HR, or Manager approval. Please raise an additional shift time request.`,
+          error: `Maximum shift limit reached (${effectiveMaxHours.toFixed(1)}h). You cannot resume without Admin, OPS, HR, or Manager approval. Please raise an additional shift time request.`,
           maxLimitReached: true
         }, { status: 403 });
       }
@@ -757,9 +757,14 @@ export async function POST(request: Request) {
       record.extensionRequested = true;
       record.extensionRequestedHours = requestedHours;
       record.extensionReason = submittedReason;
+      record.extensionApproved = false;
+      record.extensionApprovedBy = undefined;
+      record.extensionApprovedAt = undefined;
       record.extensionRejected = false;
       record.extensionRejectionReason = "";
       await record.save();
+      await record.populate(POPULATE_EXTENSION_APPROVER);
+      await record.populate(POPULATE_EXTENSION_REJECTOR);
 
       // Retrieve requesting employee details for enriched notifications
       const employee = await User.findById(userObjectId).select("name department role");

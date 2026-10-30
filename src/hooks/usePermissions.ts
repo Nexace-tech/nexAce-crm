@@ -136,6 +136,23 @@ export function usePermissions() {
       }
     }
 
+    // 2b. Finance Portal: accessible if module permission "finance" or any Finance feature permission is granted
+    if (moduleKey === "finance") {
+      if (
+        featurePermissions["viewFinancePortal"] === true ||
+        featurePermissions["createInvoices"] === true ||
+        featurePermissions["approveInvoices"] === true ||
+        featurePermissions["confirmInvoicePayments"] === true ||
+        featurePermissions["exportInvoices"] === true ||
+        featurePermissions["manageExpenses"] === true ||
+        featurePermissions["viewExpenseReports"] === true ||
+        featurePermissions["managePayroll"] === true ||
+        featurePermissions["adjustSalarySlips"] === true
+      ) {
+        return true;
+      }
+    }
+
     // 3. OPS Portal (/dashboard/clients): only accessible to Admin, OPS or if explicitly granted
     if (moduleKey === "clients") {
       if (isSubAdminRole(user.role)) return true;

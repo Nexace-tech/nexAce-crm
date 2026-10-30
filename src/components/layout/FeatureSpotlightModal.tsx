@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthContext } from "@/context/AuthContext";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -10,13 +10,18 @@ import {
   markReleaseAsSeen,
   getFeaturesForRole,
   FeatureRelease,
-  HighlightFeatureItem,
 } from "@/lib/featureHighlights";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
 const ALL_ROLES = ["Employee", "Manager", "HR", "OPS"];
+
+const ROLE_ICONS: Record<string, string> = {
+  Employee: "fa-solid fa-user",
+  Manager: "fa-solid fa-user-tie",
+  HR: "fa-solid fa-id-badge",
+  OPS: "fa-solid fa-gears",
+};
 
 interface FeatureSpotlightModalProps {
   forceOpen?: boolean;
@@ -250,48 +255,53 @@ export function FeatureSpotlightModal({
       role="dialog"
       aria-modal="true"
       aria-labelledby="spotlight-title"
-      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200"
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-200"
     >
       <div
         className={cn(
-          "w-full max-w-2xl max-h-[90vh] flex flex-col",
-          "rounded-2xl border border-slate-200 dark:border-[#232d3b]",
-          "bg-white dark:bg-[#151c24] text-slate-900 dark:text-slate-100",
-          "shadow-2xl overflow-hidden"
+          "w-full max-w-2xl max-h-[92vh] flex flex-col",
+          "rounded-2xl sm:rounded-3xl border border-slate-200/90 dark:border-[#232d3b]",
+          "bg-white/95 dark:bg-[#121820]/95 text-slate-900 dark:text-slate-100",
+          "shadow-2xl overflow-hidden relative backdrop-blur-xl"
         )}
       >
+        {/* Subtle Ambient Lighting Accents */}
+        <div className="absolute -top-24 left-1/2 -translate-x-1/2 w-96 h-36 rounded-full bg-gradient-to-r from-emerald-500/20 via-[#00c5a0]/15 to-amber-500/15 blur-3xl pointer-events-none" />
+
         {/* ── Fixed Header ────────────────────────────────────────────── */}
-        <div className="shrink-0 p-4 sm:p-5 border-b border-slate-100 dark:border-[#232d3b] bg-gradient-to-r from-emerald-500/10 via-[#00c5a0]/10 to-transparent">
+        <div className="shrink-0 p-4 sm:p-6 border-b border-slate-100 dark:border-[#232d3b]/80 bg-gradient-to-b from-slate-50/80 dark:from-[#161f2b]/80 to-transparent relative z-10">
           <div className="flex items-start justify-between gap-3">
-            <div className="space-y-1 min-w-0">
+            <div className="space-y-1.5 min-w-0 flex-1">
+              {/* Header Badges Pill Row */}
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] sm:text-xs font-semibold bg-[#00c5a0]/20 text-[#00c5a0] border border-[#00c5a0]/30">
-                  <i className="fa-solid fa-sparkles text-[10px]" />
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-[#00c5a0]/15 text-[#00c5a0] border border-[#00c5a0]/30 shadow-2xs">
+                  <i className="fa-solid fa-wand-magic-sparkles text-xs text-amber-500 dark:text-amber-400" />
                   What&apos;s New
                 </span>
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] sm:text-[11px] font-medium bg-slate-100 dark:bg-[#1a232f] text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-[#2b3544]">
-                  <i className="fa-solid fa-code-branch text-[9px]" />
-                  {release.version} ({release.releaseDate})
+
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-slate-100 dark:bg-[#1a232f] text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-[#2b3544] font-mono">
+                  <i className="fa-solid fa-code-branch text-[10px] text-emerald-500" />
+                  {release.version} • {release.releaseDate}
                 </span>
 
                 {/* Broadcast Status Badge */}
                 {isAdmin && (
                   <span
                     className={cn(
-                      "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] sm:text-[11px] font-bold border",
+                      "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border shadow-2xs",
                       isBroadcasted
                         ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
                         : "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30"
                     )}
                   >
-                    <i className={cn("fa-solid text-[9px]", isBroadcasted ? "fa-tower-broadcast" : "fa-shield-halved")} />
-                    {isBroadcasted ? "Broadcast Active" : "Broadcast Pending Approval"}
+                    <i className={cn("fa-solid text-[10px]", isBroadcasted ? "fa-tower-broadcast" : "fa-shield-halved")} />
+                    {isBroadcasted ? "Broadcast Active" : "Broadcast Pending Setup"}
                   </span>
                 )}
 
                 {previewAsRole && (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] sm:text-[11px] font-semibold bg-purple-500/20 text-purple-400 border border-purple-500/30">
-                    <i className="fa-solid fa-eye text-[9px]" />
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-purple-500/20 text-purple-400 border border-purple-500/30">
+                    <i className="fa-solid fa-eye text-[10px]" />
                     Simulating: {previewAsRole}
                   </span>
                 )}
@@ -299,77 +309,91 @@ export function FeatureSpotlightModal({
 
               <h2
                 id="spotlight-title"
-                className="text-base sm:text-xl font-bold tracking-tight text-slate-900 dark:text-white break-words"
+                className="text-lg sm:text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white break-words mt-1 leading-snug"
               >
                 {release.title}
               </h2>
-              <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 break-words leading-relaxed">
+              <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed break-words">
                 {release.subtitle}
               </p>
             </div>
 
             <button
               onClick={() => handleDismiss(false)}
-              className="w-8 h-8 sm:w-9 sm:h-9 shrink-0 flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-[#1a222d] transition-colors cursor-pointer"
+              className="w-9 h-9 shrink-0 flex items-center justify-center rounded-xl border border-slate-200 dark:border-[#283342] text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-[#1e2735] transition-colors cursor-pointer shadow-2xs min-h-[36px]"
               title="Close modal"
               aria-label="Close"
             >
-              <i className="fa-solid fa-xmark text-sm sm:text-base" />
+              <i className="fa-solid fa-xmark text-sm" />
             </button>
           </div>
         </div>
 
         {/* ── Scrollable Body ─────────────────────────────────────────── */}
-        <div className="flex-1 overflow-y-auto overscroll-contain p-4 sm:p-5 space-y-4">
+        <div className="flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6 space-y-4 relative z-10">
           {/* ═════════════════════════════════════════════════════════════ */}
           {/* ADMIN BROADCAST QUESTION & CONFIGURATION GATEWAY              */}
           {/* ═════════════════════════════════════════════════════════════ */}
           {isAdmin && (adminBroadcastMode || !isBroadcasted) && (
-            <div className="p-4 rounded-xl border border-amber-500/40 bg-amber-500/10 dark:bg-amber-950/20 space-y-3.5">
-              <div className="flex items-start justify-between gap-3">
-                <div className="space-y-1">
-                  <div className="flex items-center gap-1.5 text-xs font-bold text-amber-600 dark:text-amber-400">
-                    <i className="fa-solid fa-bullhorn text-sm" />
-                    <span>Admin Broadcast Permission: Broadcast New Features to Team?</span>
+            <div className="p-4 sm:p-5 rounded-2xl border border-amber-500/30 bg-gradient-to-br from-amber-500/10 via-amber-500/[0.04] to-transparent dark:from-amber-950/30 dark:via-amber-950/10 space-y-4 shadow-sm relative overflow-hidden backdrop-blur-sm">
+              <div className="flex items-start gap-3">
+                <div className="w-9 h-9 rounded-xl bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center text-sm border border-amber-500/30 shrink-0 shadow-2xs">
+                  <i className="fa-solid fa-bullhorn text-sm" />
+                </div>
+                <div className="space-y-1 min-w-0">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wide">
+                    <span>Admin Release Broadcast Gateway</span>
                   </div>
+                  <h3 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white">
+                    Broadcast new capabilities to your workspace team?
+                  </h3>
                   <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-                    Choose whether to announce these updates to your team on their next login, and specify <strong>whom to broadcast</strong>. Other members will <em>not</em> see this popup until you broadcast.
+                    Choose which user roles should receive this release spotlight upon their next login. Team members in non-selected roles will not see this announcement.
                   </p>
                 </div>
               </div>
 
-              {/* Whom to Broadcast (Role Pills) */}
-              <div className="space-y-1.5 pt-1">
+              {/* Whom to Broadcast (Role Pills Matrix) */}
+              <div className="space-y-2 pt-1 border-t border-amber-500/20">
                 <div className="flex items-center justify-between text-[11px] text-slate-600 dark:text-slate-300">
-                  <span className="font-semibold flex items-center gap-1">
-                    <i className="fa-solid fa-users text-amber-500" /> Whom to Broadcast:
+                  <span className="font-semibold flex items-center gap-1.5">
+                    <i className="fa-solid fa-users text-amber-500" />
+                    <span>Target Workspace Roles</span>
+                    <span className="text-[10px] font-mono font-normal opacity-75">
+                      ({targetRoles.length} of {ALL_ROLES.length} selected)
+                    </span>
                   </span>
                   <button
                     type="button"
                     onClick={handleToggleAllRoles}
                     className="text-[11px] font-bold text-[#00c5a0] hover:underline cursor-pointer"
                   >
-                    {targetRoles.length === ALL_ROLES.length ? "Deselect All" : "Select All Roles"}
+                    {targetRoles.length === ALL_ROLES.length ? "Clear All" : "Select All Roles"}
                   </button>
                 </div>
 
-                <div className="flex items-center gap-1.5 flex-wrap">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   {ALL_ROLES.map((r) => {
                     const active = targetRoles.includes(r);
+                    const iconClass = ROLE_ICONS[r] || "fa-solid fa-user";
+
                     return (
                       <button
                         key={r}
                         type="button"
                         onClick={() => handleToggleRole(r)}
                         className={cn(
-                          "px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all flex items-center gap-1.5 cursor-pointer min-h-[34px]",
+                          "px-3 py-2 rounded-xl text-xs font-semibold border transition-all flex items-center justify-between gap-1.5 cursor-pointer min-h-[38px] shadow-2xs",
                           active
-                            ? "bg-[#00c5a0] text-slate-950 border-[#00c5a0] shadow-xs"
-                            : "bg-white dark:bg-[#1a222d] text-slate-600 dark:text-slate-400 border-slate-300 dark:border-[#2b3544] hover:border-slate-400"
+                            ? "bg-gradient-to-r from-emerald-600 to-[#00c5a0] text-slate-950 border-emerald-500 font-bold shadow-xs"
+                            : "bg-white dark:bg-[#161d26] text-slate-600 dark:text-slate-400 border-slate-200 dark:border-[#2b3544] hover:border-slate-300 dark:hover:border-slate-600"
                         )}
                       >
-                        <i className={cn("fa-solid text-[10px]", active ? "fa-check" : "fa-plus")} />
-                        <span>{r}</span>
+                        <span className="flex items-center gap-1.5 truncate">
+                          <i className={cn(iconClass, "text-xs", active ? "text-slate-950" : "text-muted-foreground")} />
+                          <span className="truncate">{r}</span>
+                        </span>
+                        <i className={cn("fa-solid text-[10px] shrink-0", active ? "fa-check" : "fa-plus opacity-40")} />
                       </button>
                     );
                   })}
@@ -378,35 +402,33 @@ export function FeatureSpotlightModal({
 
               {/* Action Buttons: Broadcast Now vs Keep Hidden */}
               <div className="pt-2 border-t border-amber-500/20 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setPreviewAsRole(previewAsRole ? null : "Employee")}
-                    className="min-h-[38px] w-full sm:w-auto justify-center text-xs gap-1 border-slate-300 dark:border-[#2b3544] text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-[#1a222d]"
-                  >
-                    <i className={cn("fa-solid text-[10px]", previewAsRole ? "fa-eye-slash" : "fa-eye")} />
-                    <span>{previewAsRole ? "Exit Preview" : "Preview as Employee"}</span>
-                  </Button>
-                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setPreviewAsRole(previewAsRole ? null : "Employee")}
+                  className="min-h-[38px] w-full sm:w-auto justify-center text-xs gap-1.5 border-slate-300 dark:border-[#2b3544] text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-[#1a222d] rounded-xl cursor-pointer"
+                >
+                  <i className={cn("fa-solid text-xs", previewAsRole ? "fa-eye-slash" : "fa-eye")} />
+                  <span>{previewAsRole ? "Exit Employee Preview" : "Preview as Employee"}</span>
+                </Button>
 
-                <div className="flex items-center gap-2">
+                <div className="flex flex-col sm:flex-row items-center gap-2 w-full sm:w-auto">
                   <Button
                     size="sm"
                     variant="ghost"
                     disabled={broadcastSubmitting}
                     onClick={handleDismissWithoutBroadcast}
-                    className="min-h-[38px] w-full sm:w-auto justify-center text-xs text-slate-600 dark:text-slate-400 hover:text-rose-500"
+                    className="min-h-[38px] w-full sm:w-auto justify-center text-xs text-slate-600 dark:text-slate-400 hover:text-rose-500 rounded-xl cursor-pointer"
                   >
-                    <i className="fa-solid fa-ban text-[10px] mr-1" />
-                    <span>Don&apos;t Broadcast (Keep Hidden)</span>
+                    <i className="fa-solid fa-ban text-[11px] mr-1.5" />
+                    <span>Keep Private (Don&apos;t Broadcast)</span>
                   </Button>
 
                   <Button
                     size="sm"
                     disabled={broadcastSubmitting || targetRoles.length === 0}
                     onClick={handleConfirmBroadcast}
-                    className="min-h-[38px] w-full sm:w-auto justify-center text-xs font-bold px-3.5 bg-gradient-to-r from-emerald-500 to-[#00c5a0] hover:from-emerald-600 hover:to-[#00b290] text-slate-950 shadow-md flex items-center gap-1.5"
+                    className="min-h-[38px] w-full sm:w-auto justify-center text-xs font-bold px-4 bg-gradient-to-r from-emerald-500 to-[#00c5a0] hover:from-emerald-600 hover:to-[#00b290] text-slate-950 shadow-md flex items-center gap-1.5 rounded-xl cursor-pointer"
                   >
                     <i className="fa-solid fa-tower-broadcast text-xs" />
                     <span>{broadcastSubmitting ? "Broadcasting..." : `Broadcast to ${targetRoles.length} Roles`}</span>
@@ -416,11 +438,11 @@ export function FeatureSpotlightModal({
             </div>
           )}
 
-          {/* Admin Edit Audience Bar when already broadcasted */}
+          {/* Admin Edit Audience Ribbon when already broadcasted */}
           {isAdmin && isBroadcasted && !adminBroadcastMode && (
-            <div className="p-3 rounded-xl border border-emerald-500/30 bg-emerald-500/10 dark:bg-emerald-950/20 flex items-center justify-between gap-3 text-xs">
+            <div className="p-3.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 dark:bg-emerald-950/20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
               <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400">
-                <i className="fa-solid fa-circle-check text-sm" />
+                <i className="fa-solid fa-circle-check text-sm shrink-0" />
                 <span>
                   Broadcast Active to: <strong>{targetRoles.join(", ")}</strong>
                 </span>
@@ -429,15 +451,15 @@ export function FeatureSpotlightModal({
                 size="sm"
                 variant="outline"
                 onClick={() => setAdminBroadcastMode(true)}
-                className="min-h-[32px] text-xs border-emerald-500/40 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/15"
+                className="min-h-[34px] text-xs border-emerald-500/40 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/15 rounded-lg cursor-pointer"
               >
-                <i className="fa-solid fa-sliders text-[10px] mr-1" />
-                <span>Adjust Broadcast</span>
+                <i className="fa-solid fa-sliders text-[11px] mr-1.5" />
+                <span>Adjust Audience</span>
               </Button>
             </div>
           )}
 
-          {/* Feature Highlight Cards */}
+          {/* Feature Highlight Cards Grid */}
           <div className="grid grid-cols-1 gap-3">
             {applicableFeatures.map((feat) => {
               const isIncludedInBroadcast = selectedFeatureIds.includes(feat.id);
@@ -446,23 +468,23 @@ export function FeatureSpotlightModal({
                 <div
                   key={feat.id}
                   className={cn(
-                    "group relative p-3.5 sm:p-4 rounded-xl border transition-all duration-200",
-                    "bg-slate-50/80 dark:bg-[#1a222d]/70 hover:bg-slate-100/80 dark:hover:bg-[#1a222d]",
-                    "border-slate-200 dark:border-[#232d3b] hover:border-[#00c5a0]/40",
-                    "flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                    "group relative p-4 rounded-2xl border transition-all duration-200",
+                    "bg-slate-50/80 dark:bg-[#161e28]/70 hover:bg-white dark:hover:bg-[#1a232f]",
+                    "border-slate-200/80 dark:border-[#232d3b] hover:border-[#00c5a0]/50",
+                    "flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 shadow-2xs hover:shadow-md"
                   )}
                 >
-                  <div className="flex items-start gap-3 min-w-0 flex-1">
+                  <div className="flex items-start gap-3.5 min-w-0 flex-1">
                     {/* Admin Feature Checkbox in Broadcast Setup Mode */}
                     {isAdmin && adminBroadcastMode && (
                       <button
                         type="button"
                         onClick={() => handleToggleFeature(feat.id)}
                         className={cn(
-                          "w-6 h-6 rounded-md flex items-center justify-center shrink-0 border mt-2 transition-all cursor-pointer",
+                          "w-6 h-6 rounded-lg flex items-center justify-center shrink-0 border mt-1.5 transition-all cursor-pointer shadow-2xs",
                           isIncludedInBroadcast
                             ? "bg-[#00c5a0] text-slate-950 border-[#00c5a0]"
-                            : "bg-white dark:bg-[#11161d] border-slate-300 dark:border-[#232d3b] text-transparent"
+                            : "bg-white dark:bg-[#11161d] border-slate-300 dark:border-[#283342] text-transparent"
                         )}
                         title="Include in broadcast"
                       >
@@ -470,25 +492,25 @@ export function FeatureSpotlightModal({
                       </button>
                     )}
 
-                    <div className="w-10 h-10 rounded-xl bg-white dark:bg-[#11161d] border border-slate-200 dark:border-[#232d3b] flex items-center justify-center shrink-0 shadow-sm">
+                    <div className="w-11 h-11 rounded-xl bg-white dark:bg-[#11161d] border border-slate-200 dark:border-[#283342] flex items-center justify-center shrink-0 shadow-xs group-hover:scale-105 transition-transform">
                       <i className={cn(feat.icon, "text-base")} />
                     </div>
 
                     <div className="min-w-0 space-y-1">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <h3 className="font-semibold text-xs sm:text-sm text-slate-900 dark:text-white break-words">
+                        <h3 className="font-bold text-xs sm:text-sm text-slate-900 dark:text-white break-words">
                           {feat.title}
                         </h3>
                         {feat.badge && (
-                          <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
+                          <span className="px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
                             {feat.badge}
                           </span>
                         )}
-                        <span className="px-1.5 py-0.5 rounded text-[9px] font-medium bg-slate-200/60 dark:bg-[#232d3b] text-slate-600 dark:text-slate-400">
+                        <span className="px-2 py-0.5 rounded-full text-[9px] font-medium bg-slate-200/70 dark:bg-[#232d3b] text-slate-600 dark:text-slate-400">
                           {feat.tag}
                         </span>
                       </div>
-                      <p className="text-[11px] sm:text-xs text-slate-600 dark:text-slate-400 leading-relaxed break-words">
+                      <p className="text-[11px] sm:text-xs text-slate-600 dark:text-slate-300/90 leading-relaxed break-words">
                         {feat.description}
                       </p>
                     </div>
@@ -499,10 +521,10 @@ export function FeatureSpotlightModal({
                       size="sm"
                       variant="outline"
                       onClick={() => handleNavigate(feat.href)}
-                      className="min-h-[38px] w-full sm:w-auto justify-center px-3 text-xs border-[#00c5a0]/40 text-[#00c5a0] hover:bg-[#00c5a0]/15 hover:text-[#00c5a0] flex items-center gap-1.5 font-medium rounded-lg"
+                      className="min-h-[38px] w-full sm:w-auto justify-center px-3.5 text-xs border-[#00c5a0]/40 text-[#00c5a0] hover:bg-[#00c5a0] hover:text-slate-950 transition-all flex items-center gap-2 font-semibold rounded-xl cursor-pointer group-hover:border-[#00c5a0]"
                     >
                       <span>Explore</span>
-                      <i className="fa-solid fa-arrow-right text-[10px]" />
+                      <i className="fa-solid fa-arrow-right text-[10px] transition-transform group-hover:translate-x-0.5" />
                     </Button>
                   </div>
                 </div>
@@ -512,13 +534,13 @@ export function FeatureSpotlightModal({
         </div>
 
         {/* ── Fixed Footer ────────────────────────────────────────────── */}
-        <div className="shrink-0 p-3.5 sm:p-4 border-t border-slate-100 dark:border-[#232d3b] bg-slate-50/50 dark:bg-[#11161d]/50 flex flex-col sm:flex-row items-center justify-between gap-3">
+        <div className="shrink-0 p-4 sm:p-5 border-t border-slate-100 dark:border-[#232d3b] bg-slate-50/80 dark:bg-[#11161d]/80 backdrop-blur-md flex flex-col sm:flex-row items-center justify-between gap-3 relative z-10">
           <div className="flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
             <i className="fa-solid fa-circle-info text-[#00c5a0]" />
             <span>
               {isAdmin
                 ? "As Admin, you control which features are broadcasted to your workspace."
-                : "You can revisit new updates anytime from the top bar icon."}
+                : "You can revisit new updates anytime from the What's New icon in the top header."}
             </span>
           </div>
 
@@ -527,14 +549,14 @@ export function FeatureSpotlightModal({
               variant="ghost"
               size="sm"
               onClick={() => handleDismiss(false)}
-              className="min-h-[38px] w-full sm:w-auto justify-center text-xs text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+              className="min-h-[38px] w-full sm:w-auto justify-center text-xs text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white rounded-xl cursor-pointer"
             >
               Remind Me Later
             </Button>
             <Button
               size="sm"
               onClick={() => handleDismiss(true)}
-              className="min-h-[38px] w-full sm:w-auto justify-center text-xs font-semibold px-4 rounded-lg bg-[#00c5a0] hover:bg-[#00b290] text-slate-950 flex items-center gap-1.5"
+              className="min-h-[38px] w-full sm:w-auto justify-center text-xs font-bold px-4 rounded-xl bg-gradient-to-r from-emerald-500 to-[#00c5a0] hover:from-emerald-600 hover:to-[#00b290] text-slate-950 flex items-center gap-1.5 shadow-sm cursor-pointer"
             >
               <i className="fa-solid fa-check text-xs" />
               <span>Got it, All Clear!</span>

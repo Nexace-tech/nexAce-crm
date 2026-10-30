@@ -12,6 +12,7 @@ import { NativeService } from "@/lib/native/nativeService";
 
 export interface NotificationBellProps {
   onOpen?: () => void;
+  className?: string;
 }
 
 interface NotifItem {
@@ -66,7 +67,7 @@ function getDateGroup(dateStr: string): string {
 
 const GROUP_ORDER = ["Today", "Yesterday", "This Week", "Earlier"];
 
-export function NotificationBell({ onOpen }: NotificationBellProps = {}) {
+export function NotificationBell({ onOpen, className }: NotificationBellProps = {}) {
   const router = useRouter();
   const { user } = useAuth();
   const [open, setOpen] = useState(false);
@@ -519,18 +520,21 @@ export function NotificationBell({ onOpen }: NotificationBellProps = {}) {
           if (!open) onOpen?.();
           setOpen(!open);
         }}
-        className="relative text-muted-foreground hover:text-foreground h-9 w-9 rounded-full cursor-pointer transition-colors"
+        className={cn(
+          "w-9 h-9 border border-slate-200 dark:border-[#232d3b] rounded-xl bg-slate-50 dark:bg-[#1a222d] text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-[#1e2632] flex items-center justify-center cursor-pointer transition-colors shadow-2xs relative",
+          className
+        )}
         title="Real-time Workspace Notifications"
       >
-        <i className={cn("fa-solid fa-bell text-base text-muted-foreground group-hover:text-foreground", unreadCount > 0 && "animate-[wiggle_0.5s_ease-in-out]")} />
+        <i className={cn("fa-solid fa-bell text-xs", unreadCount > 0 && "animate-[wiggle_0.5s_ease-in-out]")} />
         {unreadCount > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 bg-destructive text-destructive-foreground text-[10px] font-bold h-4 min-w-[16px] px-1 rounded-full flex items-center justify-center shadow-xs animate-pulse">
+          <span className="absolute -top-1 -right-1 bg-rose-500 text-white text-[10px] font-bold h-4 min-w-[16px] px-1 rounded-full flex items-center justify-center shadow-xs">
             {unreadCount > 9 ? "9+" : unreadCount}
           </span>
         )}
         {/* Subtle warning indicator when desktop notifications not enabled and not dismissed */}
         {unreadCount === 0 && !bannerDismissed && notifPermission === "default" && (
-          <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-amber-400 rounded-full border border-background" title="Enable desktop alerts" />
+          <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 bg-amber-400 rounded-full border border-background" title="Enable desktop alerts" />
         )}
       </Button>
 

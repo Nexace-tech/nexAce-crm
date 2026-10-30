@@ -113,6 +113,21 @@ export default async function DashboardLayout({ children }: DashboardLayoutProps
       if (mod.key === "it" && (customPermissions?.it === true || permDoc?.featurePermissions?.viewITPortal === true)) {
         return true;
       }
+      if (
+        mod.key === "finance" &&
+        (customPermissions?.finance === true ||
+          permDoc?.featurePermissions?.viewFinancePortal === true ||
+          permDoc?.featurePermissions?.createInvoices === true ||
+          permDoc?.featurePermissions?.approveInvoices === true ||
+          permDoc?.featurePermissions?.confirmInvoicePayments === true ||
+          permDoc?.featurePermissions?.exportInvoices === true ||
+          permDoc?.featurePermissions?.manageExpenses === true ||
+          permDoc?.featurePermissions?.viewExpenseReports === true ||
+          permDoc?.featurePermissions?.managePayroll === true ||
+          permDoc?.featurePermissions?.adjustSalarySlips === true)
+      ) {
+        return true;
+      }
       if (customPermissions && customPermissions[mod.key] !== undefined) {
         return customPermissions[mod.key] === true;
       }

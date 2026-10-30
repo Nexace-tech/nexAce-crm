@@ -423,7 +423,20 @@ function SidebarNavMenu({ canAccessModule, can, isEmployeeOrHR, isPending, onNav
                 }
 
                 if (cat.id === "finance") {
-                  if (isEmployeeOrHR) {
+                  const canManageFinance =
+                    !isEmployeeOrHR ||
+                    can("viewFinancePortal") ||
+                    can("approveInvoices") ||
+                    can("createInvoices") ||
+                    can("confirmInvoicePayments") ||
+                    can("exportInvoices") ||
+                    can("manageExpenses") ||
+                    can("viewExpenseReports") ||
+                    can("managePayroll") ||
+                    can("adjustSalarySlips") ||
+                    canAccessModule("finance");
+
+                  if (!canManageFinance) {
                     visibleSubItems = [
                       { id: "fin-invoices", name: "My Invoices", href: "/dashboard/finance?tab=invoices" },
                       { id: "fin-generate", name: "Generate My Invoice", href: "/dashboard/finance?tab=generate" },
@@ -847,10 +860,10 @@ export function DashboardClientLayout({ session, menuItems, isPending = false, c
             </div>
             <button
               onClick={() => { setMobileOpen(false); setSpotlightOpen(true); }}
-              className="flex-1 flex items-center justify-center h-8 bg-white dark:bg-[#161c24] border border-[#00c5a0]/30 rounded-lg text-[#00c5a0] hover:bg-[#00c5a0]/15 transition-colors cursor-pointer shadow-2xs text-xs font-semibold gap-1 relative"
+              className="flex-1 flex items-center justify-center h-8 bg-white dark:bg-[#161c24] border border-slate-200 dark:border-[#232d3b] rounded-lg text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-[#232d3b] transition-colors cursor-pointer shadow-2xs text-xs font-semibold gap-1.5 relative"
               title="What's New"
             >
-              <i className="fa-solid fa-sparkles text-xs" />
+              <i className="fa-solid fa-wand-magic-sparkles text-xs text-amber-500" />
               <span className="text-[11px]">New</span>
               {hasNewUpdates && (
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0 animate-pulse" />
@@ -933,42 +946,36 @@ export function DashboardClientLayout({ session, menuItems, isPending = false, c
           {/* Right Header Area: Desktop Tools + Logout Always Visible */}
           <div className="flex items-center gap-2 shrink-0">
             {/* Desktop-only Quick Icons */}
-            <div className="hidden lg:flex items-center gap-2">
-              {/* Fullscreen */}
+            <div className="hidden lg:flex items-center gap-1.5">
+              {/* Group 1: System Controls (Fullscreen & Theme) */}
               <button
                 onClick={toggleFullscreen}
                 title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
-                className="w-9 h-9 border border-slate-200 dark:border-[#232d3b] rounded-lg bg-slate-50 dark:bg-[#1a222d] text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-[#1e2632] flex items-center justify-center cursor-pointer transition-colors"
+                className="w-9 h-9 border border-slate-200 dark:border-[#232d3b] rounded-xl bg-slate-50 dark:bg-[#1a222d] text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-[#1e2632] flex items-center justify-center cursor-pointer transition-colors shadow-2xs"
               >
                 <i className={isFullscreen ? "fa-solid fa-compress text-xs" : "fa-solid fa-expand text-xs"} />
               </button>
 
-              {/* Theme Toggle */}
-              <div className="w-9 h-9 border border-slate-200 dark:border-[#232d3b] rounded-lg bg-slate-50 dark:bg-[#1a222d] flex items-center justify-center">
-                <ThemeToggle />
-              </div>
+              <ThemeToggle />
 
-              {/* Notifications Bell */}
-              <div className="relative">
-                <NotificationBell />
-              </div>
+              {/* Subtle visual divider */}
+              <div className="h-5 w-px bg-slate-200 dark:bg-[#232d3b] mx-0.5" />
 
-              {/* Guided Tour */}
+              {/* Group 2: Product Discovery & Notifications */}
               <button
                 onClick={() => setTourOpen(true)}
-                className="w-9 h-9 border border-[#00c5a0]/40 rounded-lg bg-[#00c5a0]/15 text-[#00c5a0] hover:bg-[#00c5a0]/25 flex items-center justify-center cursor-pointer transition-colors"
+                className="w-9 h-9 border border-slate-200 dark:border-[#232d3b] rounded-xl bg-slate-50 dark:bg-[#1a222d] text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-[#1e2632] flex items-center justify-center cursor-pointer transition-colors shadow-2xs"
                 title="Product Tour"
               >
                 <i className="fa-solid fa-compass text-xs" />
               </button>
 
-              {/* What's New / Feature Spotlight */}
               <button
                 onClick={() => setSpotlightOpen(true)}
-                className="relative w-9 h-9 border border-[#00c5a0]/40 rounded-lg bg-[#00c5a0]/15 text-[#00c5a0] hover:bg-[#00c5a0]/25 flex items-center justify-center cursor-pointer transition-colors"
+                className="relative w-9 h-9 border border-slate-200 dark:border-[#232d3b] rounded-xl bg-slate-50 dark:bg-[#1a222d] text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-[#1e2632] flex items-center justify-center cursor-pointer transition-colors shadow-2xs"
                 title="What's New in NexAce"
               >
-                <i className="fa-solid fa-sparkles text-xs" />
+                <i className="fa-solid fa-wand-magic-sparkles text-xs text-amber-500 dark:text-amber-400" />
                 {hasNewUpdates && (
                   <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
@@ -977,21 +984,37 @@ export function DashboardClientLayout({ session, menuItems, isPending = false, c
                 )}
               </button>
 
-              {/* User Avatar */}
-              <div className="ml-1">
-                <Link href="/dashboard/settings" className="block no-underline">
-                  <Avatar className="w-9 h-9 cursor-pointer border-2 border-[#00c5a0]/40">
-                    {user?.photoUrl ? <AvatarImage src={user.photoUrl} alt={userName} /> : null}
-                    <AvatarFallback className="bg-[#00c5a0]/15 text-[#00c5a0] font-bold text-xs">
-                      {userName ? userName.split(" ").map((n: string) => n[0]).join("").toUpperCase().slice(0, 2) : "U"}
-                    </AvatarFallback>
-                  </Avatar>
-                </Link>
-              </div>
+              <NotificationBell />
+
+              {/* Subtle visual divider */}
+              <div className="h-5 w-px bg-slate-200 dark:bg-[#232d3b] mx-0.5" />
+
+              {/* Group 3: User Identity */}
+              <Link href="/dashboard/settings" className="block no-underline" title="Profile & Settings">
+                <Avatar className="w-9 h-9 cursor-pointer rounded-xl border border-slate-200 dark:border-[#232d3b] hover:border-[#00c5a0] transition-colors shadow-2xs">
+                  {user?.photoUrl ? <AvatarImage src={user.photoUrl} alt={userName} className="rounded-xl object-cover" /> : null}
+                  <AvatarFallback className="bg-slate-100 dark:bg-[#1a222d] text-[#00c5a0] font-bold text-xs rounded-xl">
+                    {userName ? userName.split(" ").map((n: string) => n[0]).join("").toUpperCase().slice(0, 2) : "U"}
+                  </AvatarFallback>
+                </Avatar>
+              </Link>
             </div>
 
-            {/* Mobile Notification Bell */}
-            <div className="lg:hidden relative flex items-center justify-center">
+            {/* Mobile Header Quick Actions */}
+            <div className="lg:hidden flex items-center gap-1.5">
+              <button
+                onClick={() => setSpotlightOpen(true)}
+                className="relative w-9 h-9 border border-slate-200 dark:border-[#232d3b] rounded-xl bg-slate-50 dark:bg-[#1a222d] text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white flex items-center justify-center cursor-pointer transition-colors shadow-2xs"
+                title="What's New in NexAce"
+              >
+                <i className="fa-solid fa-wand-magic-sparkles text-xs text-amber-500" />
+                {hasNewUpdates && (
+                  <span className="absolute -top-1 -right-1 flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                  </span>
+                )}
+              </button>
               <NotificationBell />
             </div>
 

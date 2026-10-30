@@ -17,7 +17,21 @@ function FinancePageContent() {
   const searchParams = useSearchParams();
   const currentTab = searchParams.get("tab");
   const { can, canAccessModule, isAdmin, isOPS, loading: permLoading } = usePermissions();
-  const isRegularUser = !isAdmin && !isOPS;
+  const canManageFinance = Boolean(
+    isAdmin ||
+    isOPS ||
+    canAccessModule("finance") ||
+    can("viewFinancePortal") ||
+    can("createInvoices") ||
+    can("approveInvoices") ||
+    can("confirmInvoicePayments") ||
+    can("exportInvoices") ||
+    can("manageExpenses") ||
+    can("viewExpenseReports") ||
+    can("managePayroll") ||
+    can("adjustSalarySlips")
+  );
+  const isRegularUser = !canManageFinance;
 
   // ── Invoice State ──
   const [invoices, setInvoices] = useState<FinanceInvoice[]>([]);
@@ -180,12 +194,12 @@ function FinancePageContent() {
   };
 
   useEffect(() => {
-    if (isAdmin || isOPS) {
+    if (canManageFinance) {
       fetchInvoices();
       fetchExpenses();
       fetchDeals();
     }
-  }, [isAdmin, isOPS]);
+  }, [canManageFinance]);
 
   // ── Invoice Auto-number ──
   const getNextInvoiceNo = () => {
@@ -587,7 +601,7 @@ function FinancePageContent() {
   const EXPENSE_CATEGORIES = ["Operations", "Technology", "Marketing", "HR & Training", "Facilities", "Travel", "Legal", "Finance", "Other"];
   const INVOICE_CATEGORIES = ["Services", "Consulting", "Software Development", "Content Operations", "HR Services", "Platform Development", "Compliance & Audit", "Project Management", "Other"];
 
-  const hasAccess = isAdmin || isOPS || canAccessModule("finance") || can("viewFinancePortal");
+  const hasAccess = isAdmin || isOPS || canManageFinance;
 
   if (!permLoading && !hasAccess) {
     return (

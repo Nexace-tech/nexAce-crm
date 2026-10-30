@@ -16,6 +16,8 @@ export interface AttendanceRegularizationDeskProps {
   currentUserRole?: string;
   currentUserDepartment?: string;
   onBackToClock?: () => void;
+  initialRequestDate?: string | null;
+  onClearInitialRequestDate?: () => void;
 }
 
 // Helper to format IST dates cleanly
@@ -80,6 +82,8 @@ export function AttendanceRegularizationDesk({
   currentUserRole,
   currentUserDepartment,
   onBackToClock,
+  initialRequestDate,
+  onClearInitialRequestDate,
 }: AttendanceRegularizationDeskProps) {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -94,6 +98,15 @@ export function AttendanceRegularizationDesk({
   // Request Modal State (Employee self-service)
   const [showRequestModal, setShowRequestModal] = useState(false);
   const [requestDate, setRequestDate] = useState(getISTDateString());
+
+  // Handle external pre-filled regularization triggers
+  useEffect(() => {
+    if (initialRequestDate) {
+      setRequestDate(initialRequestDate);
+      setShowRequestModal(true);
+      onClearInitialRequestDate?.();
+    }
+  }, [initialRequestDate, onClearInitialRequestDate]);
   const [requestClockIn, setRequestClockIn] = useState("09:00");
   const [requestClockOut, setRequestClockOut] = useState("18:00");
   const [requestReasonCategory, setRequestReasonCategory] = useState(REGULARIZATION_REASONS[0]);

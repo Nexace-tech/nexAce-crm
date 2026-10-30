@@ -341,7 +341,7 @@ export default function Home() {
       {/* ── Feature Cards ── */}
       <section className={styles.featuresSection}>
         <div className={styles.sectionLabel}>
-          <i className="fa-solid fa-sparkles" /> What&apos;s Inside
+          <i className="fa-solid fa-wand-magic-sparkles" /> What&apos;s Inside
         </div>
         <h2 className={styles.sectionTitle}>Everything Your Team Needs</h2>
         <p className={styles.sectionSubtitle}>
