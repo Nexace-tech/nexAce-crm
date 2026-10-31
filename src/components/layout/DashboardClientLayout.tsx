@@ -521,6 +521,10 @@ function SidebarNavMenu({ canAccessModule, can, isEmployeeOrHR, isPending, onNav
             if (cat.key === "it" && can("viewITPortal")) {
               return true;
             }
+            // Regular employees always have access to self-service invoice generator & invoice history
+            if (cat.key === "finance") {
+              return true;
+            }
             if (!cat.subItems) return false;
             return cat.subItems.some((sub) => sub.key && canAccessModule(sub.key));
           }
