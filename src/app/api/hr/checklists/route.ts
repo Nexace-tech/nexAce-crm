@@ -121,9 +121,26 @@ function getDefaultChecklistItems(type: "Onboarding" | "Offboarding", employment
 
 export async function POST(req: Request) {
   try {
-    const authResult = await requireTenantSession(["Admin", "Manager"]);
+    const authResult = await requireTenantSession();
     if (isAuthError(authResult)) return authResult;
     const { tenantObjectId, userObjectId, session } = authResult;
+
+    const { getUserDataScope } = await import("@/lib/dataScope");
+    const dataScope = await getUserDataScope(session);
+    const isPrivileged =
+      session.role === "Admin" ||
+      session.role === "OPS" ||
+      session.role === "Manager" ||
+      session.role === "HR" ||
+      isSubAdminRole(session.role) ||
+      dataScope.canViewFeature("manageCompanyChecklists");
+
+    if (!isPrivileged) {
+      return NextResponse.json(
+        { error: "Forbidden: Requires HR, Manager, or Admin roles, or manageCompanyChecklists permission" },
+        { status: 403 }
+      );
+    }
 
     await connectToDatabase();
     const body = await req.json();
@@ -240,7 +257,15 @@ export async function PUT(req: Request) {
     }
 
     const isOwner = checklist.userId.toString() === userObjectId.toString();
-    const isPrivileged = session.role === "Admin" || session.role === "Manager" || session.role === "HR";
+    const { getUserDataScope } = await import("@/lib/dataScope");
+    const dataScope = await getUserDataScope(session);
+    const isPrivileged =
+      session.role === "Admin" ||
+      session.role === "OPS" ||
+      session.role === "Manager" ||
+      session.role === "HR" ||
+      isSubAdminRole(session.role) ||
+      dataScope.canViewFeature("manageCompanyChecklists");
 
     if (!isOwner && !isPrivileged) {
       return NextResponse.json({ error: "Forbidden: you can only update your own checklist" }, { status: 403 });

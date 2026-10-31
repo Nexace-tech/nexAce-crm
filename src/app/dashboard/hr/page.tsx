@@ -4788,7 +4788,7 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
                 </div>
                 <div>
                   <h3 className="text-base font-bold text-foreground flex items-center gap-2">
-                    {!isManagerOrAdmin && (selectedDocUser._id === user?._id || selectedDocUser.email === user?.email)
+                    {(selectedDocUser._id === user?._id || selectedDocUser.email === user?.email)
                       ? "My Documents & Uploads"
                       : "Employee Documents & Requests"}
                   </h3>
@@ -4836,7 +4836,7 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
                       : "Your documents are currently undergoing review by HR."}
                   </p>
                 </div>
-                {isManagerOrAdmin && (
+                {isManagerOrAdmin && selectedDocUser._id !== user?._id && selectedDocUser.email !== user?.email && (
                   <Button
                     size="sm"
                     variant={selectedDocUser.documentsSubmitted ? "outline" : "default"}
@@ -4993,8 +4993,8 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
                 })()}
               </div>
 
-              {/* Ask for Document Form — ONLY FOR HR / MANAGERS */}
-              {isManagerOrAdmin && (
+              {/* Ask for Document Form — ONLY FOR HR / MANAGERS VIEWING ANOTHER EMPLOYEE */}
+              {isManagerOrAdmin && selectedDocUser._id !== user?._id && selectedDocUser.email !== user?.email && (
                 <div className="p-4 rounded-xl border border-primary/20 bg-primary/[0.02] space-y-3">
                   <div className="flex items-center gap-2">
                     <i className="fa-solid fa-paper-plane text-primary text-xs" />
@@ -5061,8 +5061,8 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
                 </div>
               )}
 
-              {/* Employee Document Self-Upload Form — ONLY FOR REGULAR USERS VIEWING THEIR OWN CARD */}
-              {!isManagerOrAdmin && (selectedDocUser._id === user?._id || selectedDocUser.email === user?.email) && (
+              {/* Employee Document Self-Upload Form — FOR USER VIEWING THEIR OWN CARD */}
+              {(selectedDocUser._id === user?._id || selectedDocUser.email === user?.email) && (
                 <div id="employee-modal-upload-form" className="p-4 rounded-xl border border-emerald-500/30 bg-emerald-500/[0.03] space-y-3">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
