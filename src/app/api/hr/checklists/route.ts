@@ -21,10 +21,22 @@ export async function GET(req: Request) {
     if (type) query.type = type;
     if (employmentType) query.employmentType = employmentType;
 
-    const { getHRAccessScope } = await import("@/lib/hrIsolation");
-    const scope = await getHRAccessScope(session, tenantObjectId, userObjectId);
-    if (scope.allowedUserIds) {
-      query.userId = { $in: scope.allowedUserIds };
+    const { getUserDataScope } = await import("@/lib/dataScope");
+    const dataScope = await getUserDataScope(session);
+    const isAdmin = Boolean(session.role && session.role.trim().toLowerCase() === "admin");
+    const canManageChecklists =
+      isAdmin ||
+      isSubAdminRole(session.role) ||
+      dataScope.canViewFeature("manageCompanyChecklists");
+
+    if (!canManageChecklists) {
+      query.userId = userObjectId;
+    } else {
+      const { getHRAccessScope } = await import("@/lib/hrIsolation");
+      const scope = await getHRAccessScope(session, tenantObjectId, userObjectId);
+      if (scope.allowedUserIds) {
+        query.userId = { $in: scope.allowedUserIds };
+      }
     }
 
     const checklists = await HROnboarding.find(query)
@@ -127,17 +139,15 @@ export async function POST(req: Request) {
 
     const { getUserDataScope } = await import("@/lib/dataScope");
     const dataScope = await getUserDataScope(session);
-    const isPrivileged =
-      session.role === "Admin" ||
-      session.role === "OPS" ||
-      session.role === "Manager" ||
-      session.role === "HR" ||
+    const isAdmin = Boolean(session.role && session.role.trim().toLowerCase() === "admin");
+    const canManageChecklists =
+      isAdmin ||
       isSubAdminRole(session.role) ||
       dataScope.canViewFeature("manageCompanyChecklists");
 
-    if (!isPrivileged) {
+    if (!canManageChecklists) {
       return NextResponse.json(
-        { error: "Forbidden: Requires HR, Manager, or Admin roles, or manageCompanyChecklists permission" },
+        { error: "Forbidden: You do not have permission to create or manage checklists" },
         { status: 403 }
       );
     }
@@ -259,16 +269,14 @@ export async function PUT(req: Request) {
     const isOwner = checklist.userId.toString() === userObjectId.toString();
     const { getUserDataScope } = await import("@/lib/dataScope");
     const dataScope = await getUserDataScope(session);
-    const isPrivileged =
-      session.role === "Admin" ||
-      session.role === "OPS" ||
-      session.role === "Manager" ||
-      session.role === "HR" ||
+    const isAdmin = Boolean(session.role && session.role.trim().toLowerCase() === "admin");
+    const canManageChecklists =
+      isAdmin ||
       isSubAdminRole(session.role) ||
       dataScope.canViewFeature("manageCompanyChecklists");
 
-    if (!isOwner && !isPrivileged) {
-      return NextResponse.json({ error: "Forbidden: you can only update your own checklist" }, { status: 403 });
+    if (!isOwner && !canManageChecklists) {
+      return NextResponse.json({ error: "Forbidden: You do not have permission to manage checklists" }, { status: 403 });
     }
 
     const item = checklist.items.find((i: any) => i.id === itemId);

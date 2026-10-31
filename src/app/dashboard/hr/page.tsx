@@ -330,6 +330,7 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
   const [sandboxConfig, setSandboxConfig] = useState("{\n  \"maxAnnualDays\": 24,\n  \"autoApproveSickDays\": 2\n}");
 
   const isManagerOrAdmin = user?.role === "Admin" || user?.role === "Manager" || user?.role === "HR" || user?.role === "OPS" || isSubAdminRole(user?.role);
+  const canManageChecklists = isAdmin || isOPS || can("manageCompanyChecklists");
 
   const showToast = (message: string, type: "success" | "error" = "success") => {
     setToast({ message, type });
@@ -337,6 +338,10 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
   };
 
   const handleSendReminder = async (userId: string, userName: string, checklistId?: string) => {
+    if (!canManageChecklists) {
+      showToast("You do not have permission to send reminders", "error");
+      return;
+    }
     try {
       setRemindingUserId(userId);
       const res = await fetch("/api/hr/checklists/remind", {
@@ -679,6 +684,10 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
 
   const handleCreateChecklist = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canManageChecklists) {
+      showToast("You do not have permission to create or manage checklists", "error");
+      return;
+    }
     try {
       let targetUserId = newChecklistUserId;
       let targetUserName = "";
@@ -1899,7 +1908,7 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
               </div>
 
               {/* Add New Contract / Checklist Button */}
-              {isManagerOrAdmin && (
+              {canManageChecklists && (
                 <Button id="btn-add-new-contract" color="primary" size="sm" onClick={() => setShowChecklistModal(true)} className="gap-1.5 h-9 text-xs cursor-pointer shadow-xs">
                   <i className="fa-solid fa-plus text-xs" /> Add New Contract
                 </Button>
@@ -1907,8 +1916,8 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
             </div>
           </div>
 
-          {/* Filter Pills: Type & Employment Type — Visible to HR & Admins only */}
-          {isManagerOrAdmin && (
+          {/* Filter Pills: Type & Employment Type — Dynamic Checklist Managers only */}
+          {canManageChecklists && (
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
               <div className="flex items-center gap-2 flex-wrap">
                 {/* Type Filter */}
@@ -1972,7 +1981,7 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
                   <p className="text-xs text-muted-foreground max-w-sm mx-auto">
                     Try adjusting your filters or search query, or initialize a new contract onboarding workflow.
                   </p>
-                  {isManagerOrAdmin && (
+                  {canManageChecklists && (
                     <Button color="primary" size="sm" onClick={() => setShowChecklistModal(true)} className="gap-1 text-xs">
                       <i className="fa-solid fa-plus text-xs" /> Add New Contract
                     </Button>
@@ -2011,7 +2020,7 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
                       : "Standard";
 
                     const isUserCard = c.userId === user?._id || c.userEmail?.toLowerCase() === user?.email?.toLowerCase();
-                    const isHighlighted = (highlightParam === "true" || !isManagerOrAdmin) && isUserCard && c.status === "In Progress";
+                    const isHighlighted = (highlightParam === "true" || !canManageChecklists) && isUserCard && c.status === "In Progress";
 
                     return (
                       <div

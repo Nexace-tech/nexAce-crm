@@ -13,15 +13,16 @@ export async function POST(req: Request) {
     if (isAuthError(authResult)) return authResult;
     const { tenantObjectId, session } = authResult;
 
-    const isPrivileged =
-      session.role === "Admin" ||
-      session.role === "Manager" ||
-      session.role === "HR" ||
-      session.role === "OPS" ||
-      isSubAdminRole(session.role);
+    const { getUserDataScope } = await import("@/lib/dataScope");
+    const dataScope = await getUserDataScope(session);
+    const isAdmin = Boolean(session.role && session.role.trim().toLowerCase() === "admin");
+    const canManageChecklists =
+      isAdmin ||
+      isSubAdminRole(session.role) ||
+      dataScope.canViewFeature("manageCompanyChecklists");
 
-    if (!isPrivileged) {
-      return NextResponse.json({ error: "Forbidden: Only HR and Managers can send onboarding reminders" }, { status: 403 });
+    if (!canManageChecklists) {
+      return NextResponse.json({ error: "Forbidden: You do not have permission to send onboarding reminders" }, { status: 403 });
     }
 
     await connectToDatabase();
