@@ -47,7 +47,25 @@ export async function GET(request: Request) {
       accessibleChannelNames.add("random");
 
       const myIdStr = userObjectId.toString();
-      const myNameKey = session.userName ? session.userName.toLowerCase().replace(/[^a-z0-9]/g, "_") : "";
+      const myNameStr = session.userName || "";
+      const myNameKey = myNameStr ? myNameStr.toLowerCase().replace(/[^a-z0-9]/g, "_") : "";
+
+      // Self-healing migration for legacy readBy tracking:
+      // If messages contain the user's userName in readBy but not their userObjectId, add userObjectId now
+      if (myNameStr) {
+        await ChatMessage.updateMany(
+          {
+            tenantId: tenantObjectId,
+            $and: [
+              { readBy: myNameStr },
+              { readBy: { $ne: myIdStr } }
+            ]
+          },
+          {
+            $addToSet: { readBy: myIdStr }
+          }
+        );
+      }
 
       const conversations = await ChatMessage.aggregate([
         {
@@ -88,23 +106,34 @@ export async function GET(request: Request) {
                   {
                     $and: [
                       { $ne: ["$senderId", userObjectId] },
+                      ...(myNameStr ? [{ $ne: ["$senderName", myNameStr] }] : []),
                       {
                         $or: [
                           {
                             $and: [
                               { $regexMatch: { input: "$channel", regex: /^dm_/ } },
+                              { $ne: ["$read", true] },
                               {
-                                $or: [
-                                  { $eq: ["$read", false] },
-                                  { $not: [{ $in: [myIdStr, { $ifNull: ["$readBy", []] }] }] }
-                                ]
+                                $not: [{
+                                  $or: [
+                                    { $in: [myIdStr, { $ifNull: ["$readBy", []] }] },
+                                    ...(myNameStr ? [{ $in: [myNameStr, { $ifNull: ["$readBy", []] }] }] : [])
+                                  ]
+                                }]
                               }
                             ]
                           },
                           {
                             $and: [
                               { $not: [{ $regexMatch: { input: "$channel", regex: /^dm_/ } }] },
-                              { $not: [{ $in: [myIdStr, { $ifNull: ["$readBy", []] }] }] }
+                              {
+                                $not: [{
+                                  $or: [
+                                    { $in: [myIdStr, { $ifNull: ["$readBy", []] }] },
+                                    ...(myNameStr ? [{ $in: [myNameStr, { $ifNull: ["$readBy", []] }] }] : [])
+                                  ]
+                                }]
+                              }
                             ]
                           }
                         ]
@@ -212,7 +241,6 @@ export async function GET(request: Request) {
           tenantId: tenantObjectId,
           channel: { $in: Array.from(possibleChannels) },
           senderId: { $ne: userObjectId },
-          readBy: { $nin: userIdentifiers }
         },
         {
           $addToSet: { readBy: { $each: userIdentifiers } }

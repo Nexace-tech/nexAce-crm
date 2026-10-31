@@ -67,6 +67,12 @@ function CalendarPageContent() {
           const el = document.getElementById("attendance-regularization-desk-section");
           el?.scrollIntoView({ behavior: "smooth" });
         }, 350);
+      } else if (sp.get("tab") === "logs" || window.location.hash === "#logs") {
+        setActiveTab("attendance");
+        setTimeout(() => {
+          const el = document.getElementById("attendance-logs-section");
+          el?.scrollIntoView({ behavior: "smooth" });
+        }, 350);
       }
     }
   }, [setActiveTab]);
@@ -4005,7 +4011,7 @@ function CalendarPageContent() {
             const paginatedItems = filteredHistory.slice(startIndex, startIndex + attendanceRowsPerPage);
 
             return (
-              <Card className="border border-border/80 bg-gradient-to-b from-card/95 via-card/85 to-card/75 shadow-sm backdrop-blur-md rounded-2xl overflow-hidden space-y-0">
+              <Card id="attendance-logs-section" className="scroll-mt-6 border border-border/80 bg-gradient-to-b from-card/95 via-card/85 to-card/75 shadow-sm backdrop-blur-md rounded-2xl overflow-hidden space-y-0">
                 {/* Header Toolbar */}
                 <div className="p-5 sm:p-6 pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border/60">
                   <div className="flex items-center gap-3.5">

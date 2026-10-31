@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useAuthContext } from "@/context/AuthContext";
@@ -84,9 +84,9 @@ const navSections: NavSection[] = [
         key: "team",
         href: "/dashboard/team",
         subItems: [
-          { id: "team-directory", name: "Team Directory", href: "/dashboard/team?tab=directory" },
-          { id: "team-orgchart", name: "Org Hierarchy", href: "/dashboard/team?tab=orgchart" },
-          { id: "team-manager", name: "Line Managers", href: "/dashboard/team?tab=manager" },
+          { id: "team-directory", name: "Directory", href: "/dashboard/team?tab=directory" },
+          { id: "team-orgchart", name: "Org Chart (Hierarchy)", href: "/dashboard/team?tab=orgchart" },
+          { id: "team-manager", name: "Manager Panel", href: "/dashboard/team?tab=manager" },
           { id: "team-departments", name: "Departments", href: "/dashboard/team?tab=departments" },
         ],
       },
@@ -100,8 +100,17 @@ const navSections: NavSection[] = [
           { id: "cal-shared", name: "Shared Calendar", href: "/dashboard/calendar?tab=calendar" },
           { id: "cal-sprints", name: "Sprint Board", href: "/dashboard/calendar?tab=sprints" },
           { id: "cal-timesheets", name: "Timesheets", href: "/dashboard/calendar?tab=timesheets" },
-          { id: "cal-shiftclock", name: "Shift Clock & Attendance", href: "/dashboard/calendar?tab=attendance" },
-          { id: "cal-extensions", name: "Shift Extensions Desk", href: "/dashboard/calendar?tab=extensions" },
+          {
+            id: "cal-shiftclock",
+            name: "Shift Clock",
+            href: "/dashboard/calendar?tab=attendance",
+            nestedItems: [
+              { id: "cal-clockinout", name: "Clock In / Out (Timer)", href: "/dashboard/calendar?tab=attendance" },
+              { id: "cal-attendancelogs", name: "Shift Attendance Logs & History", href: "/dashboard/calendar?tab=logs" },
+              { id: "cal-extensions", name: "Shift Extensions Desk", href: "/dashboard/calendar?tab=extensions" },
+              { id: "cal-regularization", name: "Attendance Regularization Desk", href: "/dashboard/calendar?tab=regularization" },
+            ],
+          },
           { id: "cal-availability", name: "Team Availability", href: "/dashboard/calendar?tab=availability" },
           { id: "cal-holidays", name: "Company Holidays", href: "/dashboard/calendar?tab=holidays" },
           { id: "cal-celebrations", name: "Celebrations & Wishes", href: "/dashboard/calendar?tab=celebrations" },
@@ -115,8 +124,8 @@ const navSections: NavSection[] = [
         href: "/dashboard/chat",
         subItems: [
           { id: "chat-workspace", name: "Workspace Chat", href: "/dashboard/chat?tab=chat" },
-          { id: "chat-mail", name: "Mail Center", href: "/dashboard/chat?tab=mail" },
-          { id: "chat-whatsapp", name: "WhatsApp Panel", href: "/dashboard/chat?tab=whatsapp" },
+          { id: "chat-mail", name: "Internal Mailbox", href: "/dashboard/chat?tab=mail" },
+          { id: "chat-whatsapp", name: "WhatsApp Sync", href: "/dashboard/chat?tab=whatsapp" },
           { id: "chat-video", name: "Virtual Huddle / Video", href: "/dashboard/chat?tab=video" },
           { id: "chat-announcements", name: "Announcements", href: "/dashboard/chat?tab=announcements" },
           { id: "chat-settings", name: "Notification Controls", href: "/dashboard/chat?tab=settings" },
@@ -174,11 +183,11 @@ const navSections: NavSection[] = [
         key: "bd",
         href: "/dashboard/bd",
         subItems: [
-          { id: "bd-overview", name: "BD Overview", href: "/dashboard/bd?tab=dashboard" },
-          { id: "bd-leads", name: "Leads Pipeline", href: "/dashboard/bd?tab=all" },
-          { id: "bd-deals", name: "Deals Pipeline", href: "/dashboard/bd?tab=deals" },
-          { id: "bd-sales", name: "Sales Workdesk", href: "/dashboard/bd?tab=sales" },
-          { id: "bd-proposals", name: "Proposals & Quotes", href: "/dashboard/bd?tab=proposals" },
+          { id: "bd-overview", name: "Overview", href: "/dashboard/bd?tab=dashboard" },
+          { id: "bd-leads", name: "All Leads", href: "/dashboard/bd?tab=all" },
+          { id: "bd-deals", name: "Deals", href: "/dashboard/bd?tab=deals" },
+          { id: "bd-sales", name: "Executive Dashboard", href: "/dashboard/bd?tab=sales" },
+          { id: "bd-proposals", name: "Proposals", href: "/dashboard/bd?tab=proposals" },
           { id: "bd-referrals", name: "Referral Pipeline", href: "/dashboard/referrals", key: "referrals" },
         ],
       },
@@ -191,7 +200,7 @@ const navSections: NavSection[] = [
         subItems: [
           { id: "fin-invoices", name: "Invoices", href: "/dashboard/finance?tab=invoices" },
           { id: "fin-expenses", name: "Expenses", href: "/dashboard/finance?tab=expenses" },
-          { id: "fin-budget", name: "Budget & Forecast", href: "/dashboard/finance?tab=budget" },
+          { id: "fin-budget", name: "Budget", href: "/dashboard/finance?tab=budget" },
           { id: "fin-payroll", name: "Payroll", href: "/dashboard/finance?tab=payroll" },
         ],
       },
@@ -207,16 +216,16 @@ const navSections: NavSection[] = [
         key: "hr",
         href: "/dashboard/hr",
         subItems: [
-          { id: "hr-directory", name: "Employee Directory", href: "/dashboard/hr?tab=directory" },
-          { id: "hr-checklists", name: "Onboarding Checklists", href: "/dashboard/hr?tab=checklists" },
-          { id: "hr-leaves", name: "Leaves & Accruals", href: "/dashboard/hr?tab=leaves" },
-          { id: "hr-cases", name: "HR Helpdesk & Cases", href: "/dashboard/hr?tab=cases" },
-          { id: "hr-payslips", name: "Salary Slips & Payroll", href: "/dashboard/hr?tab=payslips" },
-          { id: "hr-fnf", name: "Full & Final (F&F)", href: "/dashboard/hr?tab=fnf" },
-          { id: "hr-appraisals", name: "360° Appraisals", href: "/dashboard/hr?tab=appraisals" },
-          { id: "hr-vault", name: "Policy Vault", href: "/dashboard/hr?tab=vault" },
-          { id: "hr-tasks", name: "Timesheet Approvals", href: "/dashboard/hr?tab=tasks" },
-          { id: "hr-invoices", name: "Invoice Approvals", href: "/dashboard/hr?tab=invoices" },
+          { id: "hr-directory", name: "Directory", href: "/dashboard/hr?tab=directory" },
+          { id: "hr-checklists", name: "Onboarding / Offboarding", href: "/dashboard/hr?tab=checklists" },
+          { id: "hr-leaves", name: "Leave Management", href: "/dashboard/hr?tab=leaves" },
+          { id: "hr-cases", name: "Help Desk", href: "/dashboard/hr?tab=cases" },
+          { id: "hr-payslips", name: "Salary & Payslips", href: "/dashboard/hr?tab=payslips" },
+          { id: "hr-fnf", name: "Review Cycle & Probation", href: "/dashboard/hr?tab=fnf" },
+          { id: "hr-appraisals", name: "Appraisals & KRAs", href: "/dashboard/hr?tab=appraisals" },
+          { id: "hr-vault", name: "Document Vault", href: "/dashboard/hr?tab=vault" },
+          { id: "hr-invoices", name: "Timesheet Approvals", href: "/dashboard/hr?tab=invoices" },
+          { id: "hr-tasks", name: "Tasks & Workflows", href: "/dashboard/hr?tab=tasks" },
         ],
       },
       {
@@ -226,12 +235,12 @@ const navSections: NavSection[] = [
         key: "it",
         href: "/dashboard/it",
         subItems: [
-          { id: "it-overview", name: "Command Center", href: "/dashboard/it?tab=overview" },
-          { id: "it-devices", name: "Hardware & Devices", href: "/dashboard/it?tab=devices" },
-          { id: "it-access", name: "Access & Credentials", href: "/dashboard/it?tab=access" },
-          { id: "it-subscriptions", name: "SaaS Subscriptions", href: "/dashboard/it?tab=subscriptions" },
-          { id: "it-drive", name: "Drive Links", href: "/dashboard/it?tab=drive" },
-          { id: "it-invoices", name: "Vendor Invoices", href: "/dashboard/it?tab=invoices" },
+          { id: "it-overview", name: "Overview", href: "/dashboard/it?tab=overview" },
+          { id: "it-devices", name: "Devices", href: "/dashboard/it?tab=devices" },
+          { id: "it-access", name: "Access & IDs", href: "/dashboard/it?tab=access" },
+          { id: "it-subscriptions", name: "Subscriptions", href: "/dashboard/it?tab=subscriptions" },
+          { id: "it-drive", name: "File & Drive Links", href: "/dashboard/it?tab=drive" },
+          { id: "it-invoices", name: "Invoices", href: "/dashboard/it?tab=invoices" },
         ],
       },
       {
@@ -287,9 +296,11 @@ function isSubItemActive(subHref: string, pathname: string, currentTab: string |
   // Aliases for Projects workspace tabs
   if (targetTab === "projects" && (currentTab === "kanban" || currentTab === "projects_grid")) return true;
 
-  // Aliases for Attendance / Extensions / Regularization
+  // Aliases for Attendance / Extensions / Regularization / Logs
   if (targetPath === "/dashboard/calendar") {
     if (targetTab === "extensions" && currentTab === "extensions") return true;
+    if (targetTab === "regularization" && currentTab === "regularization") return true;
+    if (targetTab === "logs" && currentTab === "logs") return true;
     if (targetTab === "attendance" && currentTab === "attendance") return true;
   }
 
@@ -322,16 +333,12 @@ function SidebarNavMenu({ canAccessModule, can, isEmployeeOrHR, isPending, onNav
   const currentTab = searchParams?.get("tab") || null;
 
   const [openCategories, setOpenCategories] = useState<Record<string, boolean>>({
-    dashboard: true,
-    "dash-team": true,
-    "dash-calendar": true,
-    "dash-chat": true,
     operations: true,
-    bd: true,
-    finance: true,
-    "mgmt-hr": true,
-    "mgmt-it": true,
   });
+  const [openNested, setOpenNested] = useState<Record<string, boolean>>({
+    "ops-control": true,
+  });
+  const hasHydratedRef = useRef(false);
 
   const [opsCounts, setOpsCounts] = useState<{
     operations?: number;
@@ -377,25 +384,46 @@ function SidebarNavMenu({ canAccessModule, can, isEmployeeOrHR, isPending, onNav
     }
   }, [isEmployeeOrHR]);
 
-  const [openNested, setOpenNested] = useState<Record<string, boolean>>({
-    "ops-control": true,
-  });
-
   const toggleNested = (id: string, e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    setOpenNested((prev) => ({
-      ...prev,
-      [id]: !prev[id],
-    }));
+    setOpenNested((prev) => {
+      const next = {
+        ...prev,
+        [id]: !prev[id],
+      };
+      if (typeof window !== "undefined") {
+        try {
+          localStorage.setItem("nexace_sidebar_open_nested", JSON.stringify(next));
+        } catch {}
+      }
+      return next;
+    });
   };
 
-  // Auto-expand active category & nested groups
+  // Sync open state on hydration & pathname/tab change, preserving manual user toggle preferences
   useEffect(() => {
+    let savedCats: Record<string, boolean> = {};
+    let savedNested: Record<string, boolean> = {};
+
+    if (!hasHydratedRef.current && typeof window !== "undefined") {
+      hasHydratedRef.current = true;
+      try {
+        const rawCats = localStorage.getItem("nexace_sidebar_open_categories");
+        if (rawCats) savedCats = JSON.parse(rawCats);
+        const rawNested = localStorage.getItem("nexace_sidebar_open_nested");
+        if (rawNested) savedNested = JSON.parse(rawNested);
+      } catch {}
+    }
+
+    // Auto-detect which category & nested items are active for where the user is currently located
+    const activeCats: Record<string, boolean> = {};
+    const activeNested: Record<string, boolean> = {};
+
     for (const sec of navSections) {
       for (const cat of sec.categories) {
         if (isCategoryActive(cat, pathname, currentTab)) {
-          setOpenCategories((prev) => ({ ...prev, [cat.id]: true }));
+          activeCats[cat.id] = true;
         }
         if (cat.subItems) {
           for (const sub of cat.subItems) {
@@ -404,20 +432,53 @@ function SidebarNavMenu({ canAccessModule, can, isEmployeeOrHR, isPending, onNav
                 isSubItemActive(child.href, pathname, currentTab)
               );
               if (hasActiveChild || isSubItemActive(sub.href, pathname, currentTab, true)) {
-                setOpenNested((prev) => ({ ...prev, [sub.id]: true }));
+                activeNested[sub.id] = true;
+                activeCats[cat.id] = true;
               }
             }
           }
         }
       }
     }
+
+    setOpenCategories((prev) => {
+      const defaultCats: Record<string, boolean> = {
+        operations: savedCats.operations !== undefined ? savedCats.operations : true,
+      };
+      return {
+        ...defaultCats,
+        ...savedCats,
+        ...prev,
+        ...activeCats,
+      };
+    });
+
+    setOpenNested((prev) => {
+      const defaultNested: Record<string, boolean> = {
+        "ops-control": savedNested["ops-control"] !== undefined ? savedNested["ops-control"] : true,
+      };
+      return {
+        ...defaultNested,
+        ...savedNested,
+        ...prev,
+        ...activeNested,
+      };
+    });
   }, [pathname, currentTab]);
 
   const toggleCategory = (categoryId: string) => {
-    setOpenCategories((prev) => ({
-      ...prev,
-      [categoryId]: !prev[categoryId],
-    }));
+    setOpenCategories((prev) => {
+      const next = {
+        ...prev,
+        [categoryId]: !prev[categoryId],
+      };
+      if (typeof window !== "undefined") {
+        try {
+          localStorage.setItem("nexace_sidebar_open_categories", JSON.stringify(next));
+        } catch {}
+      }
+      return next;
+    });
   };
 
   if (isPending) {
@@ -534,7 +595,7 @@ function SidebarNavMenu({ canAccessModule, can, isEmployeeOrHR, isPending, onNav
                       { id: "fin-invoices", name: "Invoices", href: "/dashboard/finance?tab=invoices" },
                       { id: "fin-generate", name: "Generate Invoice", href: "/dashboard/finance?tab=generate" },
                       { id: "fin-expenses", name: "Expenses", href: "/dashboard/finance?tab=expenses" },
-                      { id: "fin-budget", name: "Budget & Forecast", href: "/dashboard/finance?tab=budget" },
+                      { id: "fin-budget", name: "Budget", href: "/dashboard/finance?tab=budget" },
                       { id: "fin-payroll", name: "Payroll", href: "/dashboard/finance?tab=payroll" },
                     ];
                   }

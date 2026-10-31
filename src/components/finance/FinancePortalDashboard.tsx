@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -176,6 +176,8 @@ export function FinancePortalDashboard({
   const { can, isAdmin, isOPS, isHR } = usePermissions();
   const canManagePayroll = Boolean(isAdmin || can("managePayroll"));
 
+  const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
   const urlTab = searchParams.get("tab");
   const [activeTab, setActiveTab] = useState<"invoices" | "expenses" | "budget" | "payroll" | "overview">(
@@ -188,8 +190,29 @@ export function FinancePortalDashboard({
       setActiveTab("invoices");
     } else if (tabParam && ["invoices", "expenses", "budget", "payroll"].includes(tabParam)) {
       setActiveTab(tabParam as any);
+    } else if (typeof window !== "undefined") {
+      try {
+        const stored = localStorage.getItem("finance_active_tab");
+        if (stored && ["invoices", "expenses", "budget", "payroll"].includes(stored)) {
+          setActiveTab(stored as any);
+        }
+      } catch {}
     }
   }, [searchParams]);
+
+  const handleTabChange = (tab: "invoices" | "expenses" | "budget" | "payroll") => {
+    setActiveTab(tab);
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.setItem("finance_active_tab", tab);
+        const params = new URLSearchParams(window.location.search);
+        if (params.get("tab") !== tab) {
+          params.set("tab", tab);
+          router.replace(`${pathname || window.location.pathname}?${params.toString()}`, { scroll: false });
+        }
+      } catch {}
+    }
+  };
 
   const [financeScope, setFinanceScope] = useState<"internal" | "external">("internal");
   const [externalPayroll, setExternalPayroll] = useState<Array<{ period: string; total: number; headcount: number; status: string; date: string }>>([]);
@@ -453,7 +476,7 @@ export function FinancePortalDashboard({
           <button
             key={tab.key}
             type="button"
-            onClick={() => setActiveTab(tab.key)}
+            onClick={() => handleTabChange(tab.key)}
             className={cn(
               "px-4 py-2.5 text-sm font-semibold border-b-2 transition-all flex items-center gap-2 cursor-pointer shrink-0 whitespace-nowrap",
               activeTab === tab.key

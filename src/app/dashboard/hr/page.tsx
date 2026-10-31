@@ -85,6 +85,13 @@ export default function HRPage() {
   const [requestingDoc, setRequestingDoc] = useState(false);
   const [verifyingDocId, setVerifyingDocId] = useState<string | null>(null);
 
+  // Employee in-modal upload state
+  const [empUploadTitle, setEmpUploadTitle] = useState("");
+  const [empUploadCategory, setEmpUploadCategory] = useState("Document");
+  const [empUploadFile, setEmpUploadFile] = useState<File | null>(null);
+  const [empUploadDocId, setEmpUploadDocId] = useState<string | null>(null);
+  const [empUploading, setEmpUploading] = useState(false);
+
   // Checklists State (Onboarding / Offboarding)
   const [checklists, setChecklists] = useState<any[]>([]);
   const [checklistTypeFilter, setChecklistTypeFilter] = useState<"All" | "Onboarding" | "Offboarding">("All");
@@ -428,7 +435,53 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
     setReqDocTitle("");
     setReqDocCategory("Document");
     setReqDocNotes("");
+    setEmpUploadTitle("");
+    setEmpUploadCategory("Document");
+    setEmpUploadFile(null);
+    setEmpUploadDocId(null);
     setShowDocUserModal(true);
+  };
+
+  const handleEmployeeModalUpload = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!empUploadFile) {
+      showToast("Please select a file to upload.", "error");
+      return;
+    }
+    if (!empUploadTitle.trim()) {
+      showToast("Please enter a document title.", "error");
+      return;
+    }
+    setEmpUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", empUploadFile);
+      fd.append("title", empUploadTitle.trim());
+      fd.append("category", empUploadCategory);
+      if (empUploadDocId) {
+        fd.append("documentId", empUploadDocId);
+      }
+      if (selectedDocUser?._id) {
+        fd.append("targetUserId", selectedDocUser._id);
+        fd.append("targetUserName", selectedDocUser.name || "");
+      }
+      const res = await fetch("/api/hr/documents/upload", { method: "POST", body: fd });
+      const data = await res.json();
+      if (res.ok) {
+        showToast("Document uploaded and submitted successfully!");
+        setEmpUploadTitle("");
+        setEmpUploadCategory("Document");
+        setEmpUploadFile(null);
+        setEmpUploadDocId(null);
+        await fetchDocuments();
+      } else {
+        showToast(data.error || "Upload failed. Please try again.", "error");
+      }
+    } catch {
+      showToast("Network error — please try again.", "error");
+    } finally {
+      setEmpUploading(false);
+    }
   };
 
   const handleRequestDocument = async (e: React.FormEvent) => {
@@ -1692,32 +1745,51 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
                       <div className="pt-2 mt-1 border-t border-border/60 flex items-center justify-between gap-2">
                         <div className="flex items-center gap-1.5">
                           <span className="text-[11px] text-muted-foreground font-medium">Docs:</span>
-                          <button
-                            type="button"
-                            onClick={() => handleToggleDocumentSubmission(u._id, !u.documentsSubmitted)}
-                            className={cn(
-                              "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border cursor-pointer transition-all hover:scale-105",
-                              u.documentsSubmitted
-                                ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30"
-                                : "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30"
-                            )}
-                            title="Click to toggle document verification status"
-                          >
-                            {u.documentsSubmitted ? (
-                              <><i className="fa-solid fa-circle-check text-[9px] text-emerald-500" /> Confirmed</>
-                            ) : (
-                              <><i className="fa-solid fa-clock text-[9px] text-amber-500" /> Pending</>
-                            )}
-                          </button>
+                          {isManagerOrAdmin ? (
+                            <button
+                              type="button"
+                              onClick={() => handleToggleDocumentSubmission(u._id, !u.documentsSubmitted)}
+                              className={cn(
+                                "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border cursor-pointer transition-all hover:scale-105",
+                                u.documentsSubmitted
+                                  ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30"
+                                  : "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30"
+                              )}
+                              title="Click to toggle document verification status"
+                            >
+                              {u.documentsSubmitted ? (
+                                <><i className="fa-solid fa-circle-check text-[9px] text-emerald-500" /> Confirmed</>
+                              ) : (
+                                <><i className="fa-solid fa-clock text-[9px] text-amber-500" /> Pending</>
+                              )}
+                            </button>
+                          ) : (
+                            <span
+                              className={cn(
+                                "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border",
+                                u.documentsSubmitted
+                                  ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30"
+                                  : "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30"
+                              )}
+                            >
+                              {u.documentsSubmitted ? (
+                                <><i className="fa-solid fa-circle-check text-[9px] text-emerald-500" /> Confirmed</>
+                              ) : (
+                                <><i className="fa-solid fa-clock text-[9px] text-amber-500" /> Pending</>
+                              )}
+                            </span>
+                          )}
                         </div>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-6 text-[10px] px-2 gap-1 border-primary/30 text-primary hover:bg-primary/10 cursor-pointer font-semibold"
-                          onClick={() => handleOpenEmployeeDocsModal(u)}
-                        >
-                          <i className="fa-solid fa-folder-open text-[9px]" /> Docs &amp; Requests
-                        </Button>
+                        {(isManagerOrAdmin || u._id === user?._id || u.email === user?.email) && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-6 text-[10px] px-2 gap-1 border-primary/30 text-primary hover:bg-primary/10 cursor-pointer font-semibold"
+                            onClick={() => handleOpenEmployeeDocsModal(u)}
+                          >
+                            <i className="fa-solid fa-folder-open text-[9px]" /> {u._id === user?._id || u.email === user?.email ? "My Documents" : "Docs & Requests"}
+                          </Button>
+                        )}
                       </div>
                     </div>
                   </CardContent>
@@ -4716,7 +4788,9 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
                 </div>
                 <div>
                   <h3 className="text-base font-bold text-foreground flex items-center gap-2">
-                    Employee Documents &amp; Requests
+                    {!isManagerOrAdmin && (selectedDocUser._id === user?._id || selectedDocUser.email === user?.email)
+                      ? "My Documents & Uploads"
+                      : "Employee Documents & Requests"}
                   </h3>
                   <p className="text-xs text-muted-foreground">
                     {selectedDocUser.name} &bull; {selectedDocUser.email} &bull; {selectedDocUser.department || "General"}
@@ -4757,27 +4831,31 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
                   <p className="text-[11px] text-muted-foreground">
                     {selectedDocUser.documentsConfirmedBy?.hrName
                       ? `Confirmed by ${selectedDocUser.documentsConfirmedBy.hrName} on ${new Date(selectedDocUser.documentsConfirmedBy.confirmedAt || Date.now()).toLocaleDateString()}`
-                      : "Mark complete once all required documents have been inspected."}
+                      : isManagerOrAdmin
+                      ? "Mark complete once all required documents have been inspected."
+                      : "Your documents are currently undergoing review by HR."}
                   </p>
                 </div>
-                <Button
-                  size="sm"
-                  variant={selectedDocUser.documentsSubmitted ? "outline" : "default"}
-                  onClick={async () => {
-                    const next = !selectedDocUser.documentsSubmitted;
-                    await handleToggleDocumentSubmission(selectedDocUser._id, next);
-                    setSelectedDocUser((prev: any) => ({ ...prev, documentsSubmitted: next }));
-                  }}
-                  className={cn(
-                    "text-xs font-semibold cursor-pointer gap-1.5 shrink-0",
-                    !selectedDocUser.documentsSubmitted
-                      ? "bg-emerald-600 hover:bg-emerald-700 text-white"
-                      : "border-amber-500/40 text-amber-600 hover:bg-amber-500/10"
-                  )}
-                >
-                  <i className={cn("fa-solid", selectedDocUser.documentsSubmitted ? "fa-arrow-rotate-left" : "fa-check-double")} />
-                  {selectedDocUser.documentsSubmitted ? "Mark as Pending" : "Confirm All Documents"}
-                </Button>
+                {isManagerOrAdmin && (
+                  <Button
+                    size="sm"
+                    variant={selectedDocUser.documentsSubmitted ? "outline" : "default"}
+                    onClick={async () => {
+                      const next = !selectedDocUser.documentsSubmitted;
+                      await handleToggleDocumentSubmission(selectedDocUser._id, next);
+                      setSelectedDocUser((prev: any) => ({ ...prev, documentsSubmitted: next }));
+                    }}
+                    className={cn(
+                      "text-xs font-semibold cursor-pointer gap-1.5 shrink-0",
+                      !selectedDocUser.documentsSubmitted
+                        ? "bg-emerald-600 hover:bg-emerald-700 text-white"
+                        : "border-amber-500/40 text-amber-600 hover:bg-amber-500/10"
+                    )}
+                  >
+                    <i className={cn("fa-solid", selectedDocUser.documentsSubmitted ? "fa-arrow-rotate-left" : "fa-check-double")} />
+                    {selectedDocUser.documentsSubmitted ? "Mark as Pending" : "Confirm All Documents"}
+                  </Button>
+                )}
               </div>
 
               {/* Existing Documents List */}
@@ -4800,7 +4878,9 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
                         <i className="fa-solid fa-file-circle-question text-muted-foreground text-2xl" />
                         <p className="text-xs font-medium text-foreground">No documents requested or submitted yet</p>
                         <p className="text-[11px] text-muted-foreground">
-                          Use the form below to ask {selectedDocUser.name} for required onboarding files.
+                          {isManagerOrAdmin
+                            ? `Use the form below to ask ${selectedDocUser.name} for required onboarding files.`
+                            : "You can upload and submit your compliance documents below."}
                         </p>
                       </div>
                     );
@@ -4815,6 +4895,8 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
                           Verified: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30",
                           Rejected: "bg-rose-500/15 text-rose-700 dark:text-rose-400 border-rose-500/30",
                         };
+
+                        const isOwner = selectedDocUser._id === user?._id || selectedDocUser.email === user?.email;
 
                         return (
                           <div
@@ -4856,8 +4938,26 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
                                 </span>
                               )}
 
-                              {/* Verify / Reject buttons for HR */}
-                              {doc.status === "Submitted" && (
+                              {/* Upload action for user if document is requested and not yet uploaded */}
+                              {isOwner && (!doc.fileUrl || doc.status === "Requested") && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => {
+                                    setEmpUploadDocId(doc._id);
+                                    setEmpUploadTitle(doc.title);
+                                    setEmpUploadCategory(doc.category || "Document");
+                                    const el = document.getElementById("employee-modal-upload-form");
+                                    el?.scrollIntoView({ behavior: "smooth" });
+                                  }}
+                                  className="h-7 px-2.5 text-xs border-emerald-500/40 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 font-semibold gap-1.5 cursor-pointer"
+                                >
+                                  <i className="fa-solid fa-file-arrow-up text-[10px]" /> Upload File
+                                </Button>
+                              )}
+
+                              {/* Verify / Reject buttons ONLY for HR */}
+                              {isManagerOrAdmin && doc.status === "Submitted" && (
                                 <>
                                   <Button
                                     size="sm"
@@ -4893,71 +4993,176 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
                 })()}
               </div>
 
-              {/* Ask for Document Form */}
-              <div className="p-4 rounded-xl border border-primary/20 bg-primary/[0.02] space-y-3">
-                <div className="flex items-center gap-2">
-                  <i className="fa-solid fa-paper-plane text-primary text-xs" />
-                  <h4 className="text-xs font-bold text-foreground">Ask Employee for Document</h4>
-                </div>
-                <p className="text-[11px] text-muted-foreground">
-                  Send a formal document request to {selectedDocUser.name}. They will be notified and can upload the file directly.
-                </p>
+              {/* Ask for Document Form — ONLY FOR HR / MANAGERS */}
+              {isManagerOrAdmin && (
+                <div className="p-4 rounded-xl border border-primary/20 bg-primary/[0.02] space-y-3">
+                  <div className="flex items-center gap-2">
+                    <i className="fa-solid fa-paper-plane text-primary text-xs" />
+                    <h4 className="text-xs font-bold text-foreground">Ask Employee for Document</h4>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    Send a formal document request to {selectedDocUser.name}. They will be notified and can upload the file directly.
+                  </p>
 
-                <form onSubmit={handleRequestDocument} className="space-y-3">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <form onSubmit={handleRequestDocument} className="space-y-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-semibold text-foreground">Document Title *</label>
+                        <Input
+                          value={reqDocTitle}
+                          onChange={(e) => setReqDocTitle(e.target.value)}
+                          placeholder="e.g. Government ID Proof / Degree Certificate"
+                          className="h-8 text-xs bg-background"
+                          required
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-semibold text-foreground">Category</label>
+                        <select
+                          value={reqDocCategory}
+                          onChange={(e) => setReqDocCategory(e.target.value)}
+                          className="w-full h-8 px-2 text-xs bg-background border border-border rounded-md text-foreground"
+                        >
+                          <option value="Document">General Document / ID</option>
+                          <option value="Offer Letter">Signed Offer Letter</option>
+                          <option value="NDA">Non-Disclosure Agreement (NDA)</option>
+                          <option value="Contract">Independent Contractor Agreement</option>
+                          <option value="Tax Document">Tax Identification / W-9 / Form 16</option>
+                          <option value="KRA Agreement">KRA Sign-off Agreement</option>
+                          <option value="Other">Other Compliance Document</option>
+                        </select>
+                      </div>
+                    </div>
+
                     <div className="space-y-1">
-                      <label className="text-[11px] font-semibold text-foreground">Document Title *</label>
+                      <label className="text-[11px] font-semibold text-foreground">Special Instructions / Notes</label>
                       <Input
-                        value={reqDocTitle}
-                        onChange={(e) => setReqDocTitle(e.target.value)}
-                        placeholder="e.g. Government ID Proof / Degree Certificate"
+                        value={reqDocNotes}
+                        onChange={(e) => setReqDocNotes(e.target.value)}
+                        placeholder="e.g. Please upload clear scanned copy with both front and back sides."
                         className="h-8 text-xs bg-background"
-                        required
                       />
                     </div>
-                    <div className="space-y-1">
-                      <label className="text-[11px] font-semibold text-foreground">Category</label>
-                      <select
-                        value={reqDocCategory}
-                        onChange={(e) => setReqDocCategory(e.target.value)}
-                        className="w-full h-8 px-2 text-xs bg-background border border-border rounded-md text-foreground"
+
+                    <div className="flex justify-end pt-1">
+                      <Button
+                        type="submit"
+                        disabled={requestingDoc || !reqDocTitle.trim()}
+                        className="h-8 text-xs px-3 font-semibold gap-1.5 cursor-pointer shadow-xs"
                       >
-                        <option value="Document">General Document / ID</option>
-                        <option value="Offer Letter">Signed Offer Letter</option>
-                        <option value="NDA">Non-Disclosure Agreement (NDA)</option>
-                        <option value="Contract">Independent Contractor Agreement</option>
-                        <option value="Tax Document">Tax Identification / W-9 / Form 16</option>
-                        <option value="KRA Agreement">KRA Sign-off Agreement</option>
-                        <option value="Other">Other Compliance Document</option>
-                      </select>
+                        {requestingDoc ? (
+                          <><i className="fa-solid fa-spinner fa-spin text-xs" /> Sending...</>
+                        ) : (
+                          <><i className="fa-solid fa-paper-plane text-xs" /> Send Document Request</>
+                        )}
+                      </Button>
                     </div>
-                  </div>
+                  </form>
+                </div>
+              )}
 
-                  <div className="space-y-1">
-                    <label className="text-[11px] font-semibold text-foreground">Special Instructions / Notes</label>
-                    <Input
-                      value={reqDocNotes}
-                      onChange={(e) => setReqDocNotes(e.target.value)}
-                      placeholder="e.g. Please upload clear scanned copy with both front and back sides."
-                      className="h-8 text-xs bg-background"
-                    />
+              {/* Employee Document Self-Upload Form — ONLY FOR REGULAR USERS VIEWING THEIR OWN CARD */}
+              {!isManagerOrAdmin && (selectedDocUser._id === user?._id || selectedDocUser.email === user?.email) && (
+                <div id="employee-modal-upload-form" className="p-4 rounded-xl border border-emerald-500/30 bg-emerald-500/[0.03] space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <i className="fa-solid fa-file-arrow-up text-emerald-500 text-xs" />
+                      <h4 className="text-xs font-bold text-foreground">
+                        {empUploadDocId ? `Upload File for: ${empUploadTitle}` : "Upload & Submit Document"}
+                      </h4>
+                    </div>
+                    {empUploadDocId && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEmpUploadDocId(null);
+                          setEmpUploadTitle("");
+                        }}
+                        className="text-[10px] text-muted-foreground hover:text-foreground cursor-pointer underline"
+                      >
+                        Cancel specific upload
+                      </button>
+                    )}
                   </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    {empUploadDocId
+                      ? "Upload your file to fulfill this HR document request. It will be submitted for verification."
+                      : "Upload required identity verification, tax forms, or signed agreements for HR inspection."}
+                  </p>
 
-                  <div className="flex justify-end pt-1">
-                    <Button
-                      type="submit"
-                      disabled={requestingDoc || !reqDocTitle.trim()}
-                      className="h-8 text-xs px-3 font-semibold gap-1.5 cursor-pointer shadow-xs"
-                    >
-                      {requestingDoc ? (
-                        <><i className="fa-solid fa-spinner fa-spin text-xs" /> Sending...</>
-                      ) : (
-                        <><i className="fa-solid fa-paper-plane text-xs" /> Send Document Request</>
+                  <form onSubmit={handleEmployeeModalUpload} className="space-y-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-semibold text-foreground">Document Title *</label>
+                        <Input
+                          value={empUploadTitle}
+                          onChange={(e) => setEmpUploadTitle(e.target.value)}
+                          placeholder="e.g. Passport Copy / PAN Card / Agreement"
+                          className="h-8 text-xs bg-background"
+                          required
+                          disabled={empUploading}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-semibold text-foreground">Category</label>
+                        <select
+                          value={empUploadCategory}
+                          onChange={(e) => setEmpUploadCategory(e.target.value)}
+                          disabled={empUploading}
+                          className="w-full h-8 px-2 text-xs bg-background border border-border rounded-md text-foreground"
+                        >
+                          <option value="Document">General Document / ID</option>
+                          <option value="Offer Letter">Signed Offer Letter</option>
+                          <option value="NDA">Non-Disclosure Agreement (NDA)</option>
+                          <option value="Contract">Independent Contractor Agreement</option>
+                          <option value="Tax Document">Tax Identification / W-9 / Form 16</option>
+                          <option value="KRA Agreement">KRA Sign-off Agreement</option>
+                          <option value="Other">Other Compliance Document</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-semibold text-foreground">Select File * (Max 25MB)</label>
+                      <Input
+                        type="file"
+                        accept=".pdf,.png,.jpg,.jpeg,.docx,.doc,.txt"
+                        onChange={(e) => {
+                          const f = e.target.files?.[0];
+                          if (f) {
+                            setEmpUploadFile(f);
+                            if (!empUploadTitle) {
+                              setEmpUploadTitle(f.name.replace(/\.[^/.]+$/, ""));
+                            }
+                          }
+                        }}
+                        disabled={empUploading}
+                        className="h-8 text-xs bg-background cursor-pointer file:cursor-pointer file:text-xs file:py-0 file:px-2 file:rounded file:border-0 file:bg-primary/10 file:text-primary file:font-semibold"
+                        required
+                      />
+                      {empUploadFile && (
+                        <p className="text-[10px] text-muted-foreground">
+                          Selected: <strong className="text-foreground">{empUploadFile.name}</strong> ({(empUploadFile.size / 1024 / 1024).toFixed(2)} MB)
+                        </p>
                       )}
-                    </Button>
-                  </div>
-                </form>
-              </div>
+                    </div>
+
+                    <div className="flex justify-end pt-1">
+                      <Button
+                        type="submit"
+                        disabled={empUploading || !empUploadFile || !empUploadTitle.trim()}
+                        className="h-8 text-xs px-3 font-semibold gap-1.5 cursor-pointer shadow-xs bg-emerald-600 hover:bg-emerald-700 text-white"
+                      >
+                        {empUploading ? (
+                          <><i className="fa-solid fa-spinner fa-spin text-xs" /> Uploading...</>
+                        ) : (
+                          <><i className="fa-solid fa-cloud-arrow-up text-xs" /> Submit Document</>
+                        )}
+                      </Button>
+                    </div>
+                  </form>
+                </div>
+              )}
             </div>
 
             {/* Modal Footer */}

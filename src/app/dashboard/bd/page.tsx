@@ -1,5 +1,6 @@
 "use client";
 import React, { useState, useEffect, useMemo, useCallback } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import type { SalesDeal } from "@/components/operations/SalesWorkdeskDashboard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -139,13 +140,44 @@ const COMPANY_COLORS = ["bg-blue-500", "bg-rose-500", "bg-amber-500", "bg-emeral
 export default function BDPortalPage() {
   const { can, canAccessModule, isAdmin, isOPS, loading: permLoading } = usePermissions();
   const { user: currentUser } = useAuth();
+  const router = useRouter();
+  const searchParams = useSearchParams();
 
-  // ── Tab State ──
+  // ── Tab State & Persistence ──
   type BDTab = "dashboard" | "all" | "deals" | "sales" | "proposals";
   const [activeTab, setActiveTabState] = useState<BDTab>("dashboard");
+
+  // Sync tab from URL or localStorage on mount/reload
+  useEffect(() => {
+    const validTabs: BDTab[] = ["dashboard", "all", "deals", "sales", "proposals"];
+    const tabFromUrl = searchParams?.get("tab") as BDTab;
+    if (tabFromUrl && validTabs.includes(tabFromUrl)) {
+      setActiveTabState(tabFromUrl);
+      return;
+    }
+    if (typeof window !== "undefined") {
+      try {
+        const stored = localStorage.getItem("bd_active_tab") as BDTab;
+        if (stored && validTabs.includes(stored)) {
+          setActiveTabState(stored);
+        }
+      } catch {}
+    }
+  }, [searchParams]);
+
   const setActiveTab = (tab: BDTab | "leads") => {
-    if (tab === "leads") setActiveTabState("all");
-    else setActiveTabState(tab);
+    const targetTab = tab === "leads" ? "all" : tab;
+    setActiveTabState(targetTab);
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.setItem("bd_active_tab", targetTab);
+        const params = new URLSearchParams(window.location.search);
+        if (params.get("tab") !== targetTab) {
+          params.set("tab", targetTab);
+          router.replace(`${window.location.pathname}?${params.toString()}`, { scroll: false });
+        }
+      } catch {}
+    }
   };
   const leadsSubTab = activeTab;
   const setLeadsSubTab = (tab: BDTab) => setActiveTab(tab);

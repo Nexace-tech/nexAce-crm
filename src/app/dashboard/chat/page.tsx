@@ -72,7 +72,7 @@ const INITIAL_MAILS: MailItem[] = [
     body: "Hello Team,\n\nWe would like to extend our monthly retainer by 20 hours starting next month. Please review the updated scope document attached.\n\nBest regards,\nAcme Procurement Team",
     date: "10:45 AM",
     folder: "inbox",
-    read: false,
+    read: true,
   },
   {
     id: "m2",
@@ -94,7 +94,7 @@ const INITIAL_WA_THREADS: WAThread[] = [
     phone: "+1 (555) 234-5678",
     lastMessage: "Can we schedule a quick call regarding the API integration deadline?",
     time: "11:20 AM",
-    unreadCount: 2,
+    unreadCount: 0,
     status: "Active",
     messages: [
       { sender: "client", text: "Hi! Quick question about project milestone 2.", time: "11:18 AM" },
@@ -310,10 +310,24 @@ export default function CommunicationHub() {
     setComposeBody("");
   };
 
+  const handleSelectMail = (id: string) => {
+    setSelectedMailId(id);
+    setMails((prev) =>
+      prev.map((m) => (m.id === id ? { ...m, read: true } : m))
+    );
+  };
+
   // WhatsApp State
   const [waThreads, setWaThreads] = useState<WAThread[]>(INITIAL_WA_THREADS);
   const [selectedWaId, setSelectedWaId] = useState<string>("wa1");
   const [waReplyText, setWaReplyText] = useState("");
+
+  const handleSelectWaThread = (id: string) => {
+    setSelectedWaId(id);
+    setWaThreads((prev) =>
+      prev.map((t) => (t.id === id ? { ...t, unreadCount: 0 } : t))
+    );
+  };
 
   // Video Call State
   const [inCall, setInCall] = useState(false);
@@ -1230,16 +1244,39 @@ export default function CommunicationHub() {
 
                 const getDmConv = (mUser: any) => {
                   const dmChannel = getDMChannel(mUser);
+                  const myId = (user?._id || "").toString();
                   const targetId = (mUser._id || mUser.id || "").toString();
+                  const myNameKey = (user?.name || "").toLowerCase().replace(/[^a-z0-9]/g, "_");
                   const targetName = (mUser.name || mUser.userName || "").toLowerCase().replace(/[^a-z0-9]/g, "_");
 
                   return recentConversations.find((c: any) => {
                     if (!c) return false;
+                    // Must strictly be a direct message conversation
+                    const isDM = Boolean(c.isDM || c.channel?.startsWith("dm_") || c._id?.startsWith("dm_"));
+                    if (!isDM) return false;
+
+                    // 1. Exact pair channel key match
                     if (c._id === dmChannel || c.channel === dmChannel) return true;
-                    if (targetId && (c.recipientId?.toString() === targetId || c.senderId?.toString() === targetId)) return true;
-                    if (targetId && (c._id?.includes(targetId) || c.channel?.includes(targetId))) return true;
-                    if (targetName && (c._id?.toLowerCase().includes(targetName) || c.channel?.toLowerCase().includes(targetName))) return true;
-                    if (mUser.name && c.senderName && c.senderName.toLowerCase() === mUser.name.toLowerCase()) return true;
+
+                    // 2. Both user IDs in channel name
+                    if (targetId && myId && (c.channel?.includes(targetId) || c._id?.includes(targetId)) && (c.channel?.includes(myId) || c._id?.includes(myId))) return true;
+
+                    // 3. Sender/Recipient pair match
+                    if (targetId && myId) {
+                      const isTargetSender = c.senderId?.toString() === targetId && c.recipientId?.toString() === myId;
+                      const isTargetRecipient = c.recipientId?.toString() === targetId && c.senderId?.toString() === myId;
+                      if (isTargetSender || isTargetRecipient) return true;
+                    }
+
+                    // 4. Pairwise name keys match
+                    if (targetName && myNameKey && (c.channel?.includes(targetName) || c._id?.includes(targetName)) && (c.channel?.includes(myNameKey) || c._id?.includes(myNameKey))) return true;
+
+                    // 5. Target ID sole match in DM channel
+                    if (targetId && (c.channel === `dm_${targetId}` || c._id === `dm_${targetId}`)) return true;
+
+                    // 6. Target name sole match in DM channel
+                    if (targetName && (c.channel === `dm_${targetName}` || c._id === `dm_${targetName}`)) return true;
+
                     return false;
                   });
                 };
@@ -1377,16 +1414,39 @@ export default function CommunicationHub() {
 
                   const getDmConv = (mUser: any) => {
                     const dmChannel = getDMChannel(mUser);
+                    const myId = (user?._id || "").toString();
                     const targetId = (mUser._id || mUser.id || "").toString();
+                    const myNameKey = (user?.name || "").toLowerCase().replace(/[^a-z0-9]/g, "_");
                     const targetName = (mUser.name || mUser.userName || "").toLowerCase().replace(/[^a-z0-9]/g, "_");
 
                     return recentConversations.find((c: any) => {
                       if (!c) return false;
+                      // Must strictly be a direct message conversation
+                      const isDM = Boolean(c.isDM || c.channel?.startsWith("dm_") || c._id?.startsWith("dm_"));
+                      if (!isDM) return false;
+
+                      // 1. Exact pair channel key match
                       if (c._id === dmChannel || c.channel === dmChannel) return true;
-                      if (targetId && (c.recipientId?.toString() === targetId || c.senderId?.toString() === targetId)) return true;
-                      if (targetId && (c._id?.includes(targetId) || c.channel?.includes(targetId))) return true;
-                      if (targetName && (c._id?.toLowerCase().includes(targetName) || c.channel?.toLowerCase().includes(targetName))) return true;
-                      if (mUser.name && c.senderName && c.senderName.toLowerCase() === mUser.name.toLowerCase()) return true;
+
+                      // 2. Both user IDs in channel name
+                      if (targetId && myId && (c.channel?.includes(targetId) || c._id?.includes(targetId)) && (c.channel?.includes(myId) || c._id?.includes(myId))) return true;
+
+                      // 3. Sender/Recipient pair match
+                      if (targetId && myId) {
+                        const isTargetSender = c.senderId?.toString() === targetId && c.recipientId?.toString() === myId;
+                        const isTargetRecipient = c.recipientId?.toString() === targetId && c.senderId?.toString() === myId;
+                        if (isTargetSender || isTargetRecipient) return true;
+                      }
+
+                      // 4. Pairwise name keys match
+                      if (targetName && myNameKey && (c.channel?.includes(targetName) || c._id?.includes(targetName)) && (c.channel?.includes(myNameKey) || c._id?.includes(myNameKey))) return true;
+
+                      // 5. Target ID sole match in DM channel
+                      if (targetId && (c.channel === `dm_${targetId}` || c._id === `dm_${targetId}`)) return true;
+
+                      // 6. Target name sole match in DM channel
+                      if (targetName && (c.channel === `dm_${targetName}` || c._id === `dm_${targetName}`)) return true;
+
                       return false;
                     });
                   };
@@ -1566,7 +1626,7 @@ export default function CommunicationHub() {
                                     </span>
                                   </span>
                                   <div className="flex items-center gap-1 shrink-0">
-                                    {unreadCount > 0 && (
+                                    {unreadCount > 0 && selectedChannel !== dmChannel && (
                                       <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-full bg-rose-500 text-white font-mono">
                                         {unreadCount}
                                       </span>
@@ -2871,19 +2931,26 @@ export default function CommunicationHub() {
                 .map((m) => (
                   <div
                     key={m.id}
-                    onClick={() => setSelectedMailId(m.id)}
+                    onClick={() => handleSelectMail(m.id)}
                     className={cn(
-                      "p-3 rounded-lg border transition-all cursor-pointer space-y-1",
+                      "p-3 rounded-lg border transition-all cursor-pointer space-y-1 relative",
                       selectedMailId === m.id
                         ? "bg-primary/10 border-primary shadow-2xs"
+                        : !m.read
+                        ? "bg-rose-500/5 border-rose-500/30 hover:bg-muted/30"
                         : "bg-card border-border hover:bg-muted/30"
                     )}
                   >
                     <div className="flex justify-between items-center text-xs">
-                      <span className="font-bold text-foreground truncate">{m.sender}</span>
-                      <span className="text-[10px] text-muted-foreground">{m.date}</span>
+                      <span className={cn("truncate flex items-center gap-1.5", !m.read ? "font-bold text-foreground" : "font-semibold text-foreground/90")}>
+                        {!m.read && selectedMailId !== m.id && (
+                          <span className="w-2 h-2 rounded-full bg-rose-500 shrink-0 inline-block animate-pulse" />
+                        )}
+                        <span className="truncate">{m.sender}</span>
+                      </span>
+                      <span className="text-[10px] text-muted-foreground shrink-0">{m.date}</span>
                     </div>
-                    <p className="font-semibold text-xs text-foreground truncate">{m.subject}</p>
+                    <p className={cn("text-xs truncate", !m.read ? "font-bold text-foreground" : "font-medium text-foreground/80")}>{m.subject}</p>
                     <p className="text-[11px] text-muted-foreground line-clamp-2">{m.preview}</p>
                   </div>
                 ))}
@@ -2971,7 +3038,7 @@ export default function CommunicationHub() {
               {waThreads.map((thread) => (
                 <div
                   key={thread.id}
-                  onClick={() => setSelectedWaId(thread.id)}
+                  onClick={() => handleSelectWaThread(thread.id)}
                   className={cn(
                     "p-3 rounded-lg border transition-all cursor-pointer space-y-1.5",
                     selectedWaId === thread.id
@@ -2981,7 +3048,14 @@ export default function CommunicationHub() {
                 >
                   <div className="flex justify-between items-center text-xs">
                     <span className="font-bold text-foreground">{thread.contactName}</span>
-                    <span className="text-[10px] text-muted-foreground font-mono">{thread.time}</span>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {thread.unreadCount > 0 && selectedWaId !== thread.id && (
+                        <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-emerald-500 text-white font-mono animate-pulse">
+                          {thread.unreadCount} new
+                        </span>
+                      )}
+                      <span className="text-[10px] text-muted-foreground font-mono">{thread.time}</span>
+                    </div>
                   </div>
                   <p className="text-[10px] font-mono text-muted-foreground">{thread.phone}</p>
                   <p className="text-xs text-foreground/80 truncate">{thread.lastMessage}</p>
