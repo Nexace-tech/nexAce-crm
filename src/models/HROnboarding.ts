@@ -23,6 +23,18 @@ export interface IContractDetails {
   billingCycle?: "Hourly" | "Daily" | "Weekly" | "Monthly" | "Milestone";
 }
 
+export interface IStatusHistoryItem {
+  fromStatus: string;
+  toStatus: string;
+  changedBy: {
+    userId?: mongoose.Types.ObjectId;
+    userName: string;
+    role?: string;
+  };
+  changedAt: Date;
+  reason?: string;
+}
+
 export interface IHROnboarding extends Document {
   tenantId: mongoose.Types.ObjectId;
   userId: mongoose.Types.ObjectId;
@@ -31,7 +43,8 @@ export interface IHROnboarding extends Document {
   employmentType?: "Permanent" | "Freelancer" | "Part-Time" | "Contractor" | "Intern";
   contractDetails?: IContractDetails;
   type: "Onboarding" | "Offboarding";
-  status: "In Progress" | "Completed" | "Pending Review";
+  status: "In Progress" | "Completed" | "Pending Review" | "On Hold" | "Discarded";
+  statusHistory?: IStatusHistoryItem[];
   startDate: Date;
   dueDate?: Date;
   completedDate?: Date;
@@ -61,6 +74,21 @@ const ChecklistItemSchema = new Schema({
   documentName: { type: String },
 });
 
+const StatusHistorySchema = new Schema(
+  {
+    fromStatus: { type: String, required: true },
+    toStatus: { type: String, required: true },
+    changedBy: {
+      userId: { type: Schema.Types.ObjectId, ref: "User" },
+      userName: { type: String, required: true },
+      role: { type: String, default: "" },
+    },
+    changedAt: { type: Date, default: Date.now },
+    reason: { type: String, default: "" },
+  },
+  { _id: false }
+);
+
 const HROnboardingSchema = new Schema(
   {
     tenantId: { type: Schema.Types.ObjectId, ref: "Tenant", required: true },
@@ -89,9 +117,10 @@ const HROnboardingSchema = new Schema(
     type: { type: String, enum: ["Onboarding", "Offboarding"], required: true },
     status: {
       type: String,
-      enum: ["In Progress", "Completed", "Pending Review"],
+      enum: ["In Progress", "Completed", "Pending Review", "On Hold", "Discarded"],
       default: "In Progress",
     },
+    statusHistory: { type: [StatusHistorySchema], default: [] },
     startDate: { type: Date, default: Date.now },
     dueDate: { type: Date },
     completedDate: { type: Date },

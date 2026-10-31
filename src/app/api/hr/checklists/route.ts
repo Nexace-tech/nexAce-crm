@@ -198,6 +198,32 @@ export async function POST(req: Request) {
       });
     }
 
+    // If user requested to save this custom items list as a new reusable preset
+    if (body.saveAsPreset && body.presetName && typeof body.presetName === "string" && body.presetName.trim()) {
+      try {
+        const { ChecklistPreset } = await import("@/models/ChecklistPreset");
+        await ChecklistPreset.create({
+          tenantId: tenantObjectId,
+          name: body.presetName.trim(),
+          description: `Preset created during ${userName} onboarding`,
+          targetEmploymentType: employmentType || "All",
+          items: finalItems.map((it: any, idx: number) => ({
+            id: it.id || String(idx + 1),
+            title: it.title,
+            category: it.category || "Document",
+            required: it.required !== undefined ? Boolean(it.required) : true,
+          })),
+          isSystemDefault: false,
+          createdBy: {
+            userId: userObjectId,
+            userName: session.userName || "HR Team",
+          },
+        });
+      } catch (presetErr) {
+        console.warn("Optional saveAsPreset failed:", presetErr);
+      }
+    }
+
     const checklist = await HROnboarding.create({
       tenantId: tenantObjectId,
       userId,
@@ -255,7 +281,7 @@ export async function PUT(req: Request) {
 
     await connectToDatabase();
     const body = await req.json();
-    const { checklistId, itemId, completed, notes, documentUrl, documentName } = body;
+    const { checklistId, itemId, completed, notes, documentUrl, documentName, status, reason } = body;
 
     const checklist = await HROnboarding.findOne({
       _id: checklistId,
@@ -279,39 +305,106 @@ export async function PUT(req: Request) {
       return NextResponse.json({ error: "Forbidden: You do not have permission to manage checklists" }, { status: 403 });
     }
 
-    const item = checklist.items.find((i: any) => i.id === itemId);
-    if (item) {
-      item.completed = completed;
-      item.completedAt = completed ? new Date() : undefined;
-      item.completedBy = session.userName;
-      if (notes !== undefined) item.notes = notes;
-      if (documentUrl !== undefined) item.documentUrl = documentUrl;
-      if (documentName !== undefined) item.documentName = documentName;
+    // 1. Handle Status Change (In Progress, On Hold, Completed, Discarded) with Audit History
+    if (status) {
+      if (!canManageChecklists) {
+        return NextResponse.json({ error: "Forbidden: You do not have permission to change checklist status" }, { status: 403 });
+      }
+      const validStatuses = ["In Progress", "Completed", "Pending Review", "On Hold", "Discarded"];
+      if (!validStatuses.includes(status)) {
+        return NextResponse.json({ error: `Invalid status. Must be one of: ${validStatuses.join(", ")}` }, { status: 400 });
+      }
+      const previousStatus = checklist.status || "In Progress";
+      if (previousStatus !== status) {
+        checklist.status = status;
+        if (!checklist.statusHistory) checklist.statusHistory = [];
+        checklist.statusHistory.push({
+          fromStatus: previousStatus,
+          toStatus: status,
+          changedBy: {
+            userId: userObjectId,
+            userName: session.userName || "HR Team",
+            role: session.role || "HR",
+          },
+          changedAt: new Date(),
+          reason: reason ? String(reason).trim() : "",
+        });
+
+        if (status === "Completed") {
+          checklist.completedDate = new Date();
+        } else if (status === "Discarded" || status === "On Hold") {
+          checklist.completedDate = undefined;
+        }
+
+        // Notify admins/HR if discarded
+        if (status === "Discarded") {
+          try {
+            const { notifyAdmins } = await import("@/lib/notify");
+            await notifyAdmins(tenantObjectId, {
+              title: `${checklist.type} Checklist Discarded`,
+              message: `${checklist.userName}'s ${checklist.type} workflow was discarded by ${session.userName}.${reason ? ` Reason: ${reason}` : ""}`,
+              type: "hr",
+              linkUrl: "/dashboard/hr?tab=checklists",
+            }, ["Admin", "OPS"]);
+          } catch (notifErr) {
+            console.warn("Failed to notify on discard:", notifErr);
+          }
+        }
+      }
     }
 
-    const allDone = checklist.items.every((i: any) => i.completed);
-    if (allDone) {
-      checklist.status = "Completed";
-      checklist.completedDate = new Date();
-
-      try {
-        const { User } = await import("@/models/User");
-        const userRec = await User.findById(checklist.userId).select("hrId").lean();
-        const payload = {
-          title: `${checklist.type} Checklist Completed`,
-          message: `${checklist.userName} completed all ${checklist.type} checklist items.`,
-          type: "hr" as const,
-          linkUrl: "/dashboard/hr?tab=checklists",
-        };
-        if (userRec?.hrId) {
-          await notify(tenantObjectId, userRec.hrId.toString(), payload);
-        }
-        await notifyAdmins(tenantObjectId, payload, ["Admin", "OPS"]);
-      } catch (err) {
-        console.warn("Failed to dispatch completion notification:", err);
+    // 2. Handle Checklist Item Toggle / Completion
+    if (itemId !== undefined) {
+      const item = checklist.items.find((i: any) => i.id === itemId);
+      if (item) {
+        item.completed = completed;
+        item.completedAt = completed ? new Date() : undefined;
+        item.completedBy = session.userName;
+        if (notes !== undefined) item.notes = notes;
+        if (documentUrl !== undefined) item.documentUrl = documentUrl;
+        if (documentName !== undefined) item.documentName = documentName;
       }
-    } else {
-      checklist.status = "In Progress";
+
+      const allDone = checklist.items.every((i: any) => i.completed);
+      if (allDone && checklist.status !== "Discarded") {
+        const prev = checklist.status;
+        checklist.status = "Completed";
+        checklist.completedDate = new Date();
+        if (prev !== "Completed") {
+          if (!checklist.statusHistory) checklist.statusHistory = [];
+          checklist.statusHistory.push({
+            fromStatus: prev,
+            toStatus: "Completed",
+            changedBy: {
+              userId: userObjectId,
+              userName: session.userName || "System",
+              role: session.role || "HR",
+            },
+            changedAt: new Date(),
+            reason: "All checklist items verified and completed",
+          });
+        }
+
+        try {
+          const { User } = await import("@/models/User");
+          const userRec = await User.findById(checklist.userId).select("hrId").lean();
+          const payload = {
+            title: `${checklist.type} Checklist Completed`,
+            message: `${checklist.userName} completed all ${checklist.type} checklist items.`,
+            type: "hr" as const,
+            linkUrl: "/dashboard/hr?tab=checklists",
+          };
+          if (userRec?.hrId) {
+            await notify(tenantObjectId, userRec.hrId.toString(), payload);
+          }
+          await notifyAdmins(tenantObjectId, payload, ["Admin", "OPS"]);
+        } catch (err) {
+          console.warn("Failed to dispatch completion notification:", err);
+        }
+      } else if (!allDone && checklist.status === "Completed") {
+        checklist.status = "In Progress";
+        checklist.completedDate = undefined;
+      }
     }
 
     await checklist.save();

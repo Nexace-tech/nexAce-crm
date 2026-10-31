@@ -38,6 +38,23 @@ export const FEATURE_RELEASES: FeatureRelease[] = [
     subtitle: "Explore newly launched operational desks, automated attendance extensions, real-time video huddles, and transparent compensation vaults.",
     features: [
       {
+        id: "custom-onboarding-presets",
+        title: "Customizable Onboarding Checklists & Document Presets",
+        description: "Configure tailored document checklists (1-Doc, 2-Docs, 3-Docs, 5-Docs) per hire, create custom presets, add on-the-fly requirements, and manage access dynamically via Role Data Control.",
+        icon: "fa-solid fa-file-circle-check text-emerald-500",
+        badge: "NEW",
+        tag: "Contracts & Onboarding",
+        category: "HRMS & Payroll",
+        highlights: [
+          "Pre-seeded presets: Quick NDA (1 Doc), Fast Contractor (2 Docs), Contractor Core (3 Docs), Full Standard (5 Docs)",
+          "Interactive checklist builder with add/remove document controls",
+          "Save tailored items as reusable custom presets in 1 click",
+          "Dynamic RBAC in Settings > Role Data Control to toggle HR/Manager access anytime",
+        ],
+        href: "/dashboard/hr?tab=checklists",
+        applicableRoles: ["Admin", "Sub Admin", "OPS", "HR", "Manager"],
+      },
+      {
         id: "shift-extensions-desk",
         title: "Shift Extensions & Overtime Desk",
         description: "Review and approve employee requests to work past standard limits with 7 rapid approval presets (+30m to +4h), department info, custom hours, and live audit slips.",

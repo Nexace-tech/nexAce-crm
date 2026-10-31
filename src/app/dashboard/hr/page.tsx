@@ -116,6 +116,23 @@ export default function HRPage() {
   const [contractSowRef, setContractSowRef] = useState("");
   const [contractBillingCycle, setContractBillingCycle] = useState("Monthly");
 
+  // Onboarding Checklist Status Lifecycle & History State
+  const [checklistStatusFilter, setChecklistStatusFilter] = useState<"All" | "In Progress" | "On Hold" | "Completed" | "Discarded">("All");
+  const [updatingChecklistStatusId, setUpdatingChecklistStatusId] = useState<string | null>(null);
+  const [statusChangeReason, setStatusChangeReason] = useState("");
+  const [pendingNewStatus, setPendingNewStatus] = useState<string | null>(null);
+
+  // Onboarding Checklist Presets & Custom Document Items State
+  const [presets, setPresets] = useState<any[]>([]);
+  const [selectedPresetId, setSelectedPresetId] = useState<string>("");
+  const [checklistBuilderItems, setChecklistBuilderItems] = useState<{ id: string; title: string; category: string; required?: boolean }[]>([]);
+  const [newCustomDocTitle, setNewCustomDocTitle] = useState("");
+  const [newCustomDocCategory, setNewCustomDocCategory] = useState("Document");
+  const [saveAsNewPreset, setSaveAsNewPreset] = useState(false);
+  const [newPresetName, setNewPresetName] = useState("");
+  const [showPresetManagerModal, setShowPresetManagerModal] = useState(false);
+  const [deletingPresetId, setDeletingPresetId] = useState<string | null>(null);
+
   // Leave Management State
   const [leaves, setLeaves] = useState<any[]>([]);
   const [showLeaveForm, setShowLeaveForm] = useState(false);
@@ -550,6 +567,82 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
     }
   };
 
+  const fetchPresets = async () => {
+    try {
+      const res = await fetch("/api/hr/checklists/presets");
+      if (res.ok) {
+        const d = await res.json();
+        setPresets(d.presets || []);
+      }
+    } catch (err) {
+      console.error("Failed to fetch presets:", err);
+    }
+  };
+
+  const handleSelectPreset = (presetId: string) => {
+    setSelectedPresetId(presetId);
+    const found = presets.find((p) => p._id === presetId);
+    if (found && Array.isArray(found.items)) {
+      setChecklistBuilderItems(found.items.map((it: any) => ({ ...it })));
+    }
+  };
+
+  const handleAddCustomDocToBuilder = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!newCustomDocTitle.trim()) return;
+    const newItem = {
+      id: String(Date.now()),
+      title: newCustomDocTitle.trim(),
+      category: newCustomDocCategory,
+      required: true,
+    };
+    setChecklistBuilderItems((prev) => [...prev, newItem]);
+    setNewCustomDocTitle("");
+  };
+
+  const handleRemoveDocFromBuilder = (itemId: string) => {
+    setChecklistBuilderItems((prev) => prev.filter((it) => it.id !== itemId));
+  };
+
+  const handleChangeChecklistStatus = async (checklistId: string, newStatus: string, reason?: string) => {
+    try {
+      setUpdatingChecklistStatusId(checklistId);
+      const res = await fetch("/api/hr/checklists", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ checklistId, status: newStatus, reason }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to update checklist status");
+      showToast(`Checklist status changed to ${newStatus}`);
+      if (selectedChecklistDetails && selectedChecklistDetails._id === checklistId && data.checklist) {
+        setSelectedChecklistDetails(data.checklist);
+      }
+      setPendingNewStatus(null);
+      setStatusChangeReason("");
+      await fetchChecklists();
+    } catch (err: any) {
+      showToast(err.message || "Failed to update checklist status", "error");
+    } finally {
+      setUpdatingChecklistStatusId(null);
+    }
+  };
+
+  const handleDeleteCustomPreset = async (presetId: string) => {
+    try {
+      setDeletingPresetId(presetId);
+      const res = await fetch(`/api/hr/checklists/presets?id=${presetId}`, { method: "DELETE" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to delete preset");
+      showToast(data.message || "Preset deleted successfully");
+      await fetchPresets();
+    } catch (err: any) {
+      showToast(err.message || "Failed to delete preset", "error");
+    } finally {
+      setDeletingPresetId(null);
+    }
+  };
+
   const fetchLeaves = async () => {
     try {
       const res = await fetch("/api/hr/leaves");
@@ -662,6 +755,23 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
 
     return () => clearInterval(interval);
   }, []);
+
+  // Auto-sync builder items when opening checklist modal or changing employment type (5-Docs Standard by default)
+  useEffect(() => {
+    if (!showChecklistModal || presets.length === 0) return;
+    if (checklistBuilderItems.length === 0 || !selectedPresetId) {
+      // Prioritize the 5-document standard preset by default
+      const defaultFiveDocPreset =
+        presets.find((p) => (p.items?.length === 5 && (p.name.includes("Standard") || p.name.includes("Part-Time")))) ||
+        presets.find((p) => p.items?.length === 5) ||
+        presets.find((p) => p.targetEmploymentType === newChecklistEmploymentType) ||
+        presets[0];
+      if (defaultFiveDocPreset) {
+        setSelectedPresetId(defaultFiveDocPreset._id);
+        setChecklistBuilderItems(defaultFiveDocPreset.items.map((it: any) => ({ ...it })));
+      }
+    }
+  }, [showChecklistModal, newChecklistEmploymentType, presets]);
 
   // Handlers
   const handleToggleChecklistItem = async (checklistId: string, itemId: string, completed: boolean) => {
@@ -794,6 +904,9 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
           dueDate: newChecklistDueDate ? new Date(newChecklistDueDate) : undefined,
           contractDetails,
           initialAttachments: Object.keys(initialAttachments).length > 0 ? initialAttachments : undefined,
+          items: checklistBuilderItems.length > 0 ? checklistBuilderItems : undefined,
+          saveAsPreset: saveAsNewPreset,
+          presetName: newPresetName.trim() || undefined,
         }),
       });
 
@@ -818,7 +931,11 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
         setContractSowRef("");
         setInitOfferLetterFile(null);
         setInitNdaFile(null);
-        await Promise.all([fetchDirectory(), fetchChecklists(), fetchDocuments()]);
+        setChecklistBuilderItems([]);
+        setSelectedPresetId("");
+        setSaveAsNewPreset(false);
+        setNewPresetName("");
+        await Promise.all([fetchDirectory(), fetchChecklists(), fetchPresets(), fetchDocuments()]);
       } else {
         const err = await res.json();
         showToast(err.error || "Failed to create checklist", "error");
@@ -1935,6 +2052,30 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
                   ))}
                 </div>
 
+                {/* Status Filter: In Progress, On Hold, Completed, Discarded */}
+                <div className="flex gap-1 bg-muted/40 p-1 rounded-lg border border-border overflow-x-auto no-scrollbar">
+                  {(["All", "In Progress", "On Hold", "Completed", "Discarded"] as const).map((st) => (
+                    <Button
+                      key={st}
+                      variant={checklistStatusFilter === st ? "default" : "ghost"}
+                      size="sm"
+                      className={cn(
+                        "h-7 text-xs px-2.5 whitespace-nowrap",
+                        checklistStatusFilter === st && st === "Discarded" && "bg-destructive text-destructive-foreground",
+                        checklistStatusFilter === st && st === "On Hold" && "bg-slate-700 text-white",
+                        checklistStatusFilter === st && st === "Completed" && "bg-emerald-600 text-white"
+                      )}
+                      onClick={() => setChecklistStatusFilter(st)}
+                    >
+                      {st === "In Progress" && <i className="fa-solid fa-spinner fa-spin text-[10px] mr-1 text-amber-500" />}
+                      {st === "On Hold" && <i className="fa-solid fa-pause text-[10px] mr-1 text-slate-400" />}
+                      {st === "Completed" && <i className="fa-solid fa-circle-check text-[10px] mr-1 text-emerald-400" />}
+                      {st === "Discarded" && <i className="fa-solid fa-ban text-[10px] mr-1 text-rose-400" />}
+                      {st}
+                    </Button>
+                  ))}
+                </div>
+
                 <div className="h-4 w-px bg-border hidden sm:block" />
 
                 {/* Employment Type Filter */}
@@ -1960,6 +2101,7 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
             const filteredChecklists = checklists
               .filter((c) => checklistTypeFilter === "All" || c.type === checklistTypeFilter)
               .filter((c) => checklistEmploymentTypeFilter === "All" || (c.employmentType || "Permanent") === checklistEmploymentTypeFilter)
+              .filter((c) => checklistStatusFilter === "All" || c.status === checklistStatusFilter)
               .filter((c) => {
                 if (!checklistSearchQuery) return true;
                 const q = checklistSearchQuery.toLowerCase();
@@ -2051,9 +2193,19 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
                               ) : (
                                 <Badge
                                   variant="soft"
-                                  color={c.status === "Completed" ? "success" : "warning"}
-                                  className="text-[10px] py-0 shrink-0 font-medium"
+                                  className={cn(
+                                    "text-[10px] py-0 shrink-0 font-medium border",
+                                    c.status === "Completed" && "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20",
+                                    c.status === "On Hold" && "bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/20",
+                                    c.status === "Discarded" && "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20",
+                                    c.status === "In Progress" && "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20",
+                                    !["Completed", "On Hold", "Discarded", "In Progress"].includes(c.status) && "bg-muted text-muted-foreground border-border"
+                                  )}
                                 >
+                                  {c.status === "Completed" && <i className="fa-solid fa-circle-check mr-1 text-[9px]" />}
+                                  {c.status === "On Hold" && <i className="fa-solid fa-pause mr-1 text-[9px]" />}
+                                  {c.status === "Discarded" && <i className="fa-solid fa-ban mr-1 text-[9px]" />}
+                                  {c.status === "In Progress" && <i className="fa-solid fa-clock mr-1 text-[9px]" />}
                                   {c.status}
                                 </Badge>
                               )}
@@ -3507,12 +3659,176 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
                 </div>
               </div>
 
-              {/* Preview hint of default checklist items */}
-              <div className="p-2.5 bg-muted/20 border border-border rounded-lg text-[11px] text-muted-foreground flex items-start gap-2">
-                <i className="fa-solid fa-info-circle text-primary mt-0.5" />
-                <span>
-                  Default items tailored for <strong className="text-foreground">{newChecklistEmploymentType}</strong> will be generated automatically upon initialization.
-                </span>
+              {/* Interactive Document Checklist & Presets Builder */}
+              <div className="p-4 bg-muted/25 border border-border/80 rounded-xl space-y-3.5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border/60 pb-2.5">
+                  <div className="space-y-0.5">
+                    <div className="flex items-center gap-1.5 font-bold text-xs text-foreground">
+                      <i className="fa-solid fa-list-check text-emerald-500" />
+                      <span>Document Checklist &amp; Presets</span>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">
+                      Pick a template preset (e.g. 1 Doc, 2 Docs, 3 Docs) or customize the exact checklist items for this hire.
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowPresetManagerModal(true)}
+                    className="h-7 text-[11px] px-2.5 gap-1 shrink-0 cursor-pointer border-border font-medium"
+                    title="View, add, or delete document presets"
+                  >
+                    <i className="fa-solid fa-sliders text-[10px]" /> Manage Presets
+                  </Button>
+                </div>
+
+                {/* Preset Dropdown Selector */}
+                <div className="space-y-1">
+                  <label className="text-[11px] font-semibold text-foreground flex items-center justify-between">
+                    <span>Select Preset Template</span>
+                    <span className="text-[10px] text-primary font-mono font-medium">
+                      {checklistBuilderItems.length} doc{checklistBuilderItems.length === 1 ? "" : "s"} required
+                    </span>
+                  </label>
+                  <select
+                    value={selectedPresetId}
+                    onChange={(e) => handleSelectPreset(e.target.value)}
+                    className="w-full h-8 px-2.5 text-xs bg-background border border-border rounded-lg text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer font-medium"
+                  >
+                    <option value="">-- Choose Preset or Customize Below --</option>
+                    {presets.map((p) => (
+                      <option key={p._id} value={p._id}>
+                        {p.name} ({p.items?.length || 0} Docs){p.isSystemDefault ? " â€¢ Built-in" : " â€¢ Custom"}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Checklist Items Interactive List */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="font-semibold text-foreground">Configured Documents / Tasks:</span>
+                    <span className="text-[10px] text-muted-foreground">Click trash to remove document</span>
+                  </div>
+
+                  {checklistBuilderItems.length === 0 ? (
+                    <div className="p-3 bg-muted/40 border border-dashed border-border rounded-lg text-center text-xs text-muted-foreground">
+                      No documents in this checklist. Pick a preset above or add a custom document below.
+                    </div>
+                  ) : (
+                    <div className="space-y-1.5 max-h-48 overflow-y-auto overscroll-contain pr-1">
+                      {checklistBuilderItems.map((item, idx) => (
+                        <div
+                          key={item.id || idx}
+                          className="flex items-center justify-between p-2 rounded-lg border border-border/80 bg-background text-xs shadow-2xs hover:border-primary/40 transition-colors"
+                        >
+                          <div className="flex items-center gap-2 min-w-0 flex-1">
+                            <span className="w-5 h-5 rounded-full bg-primary/10 text-primary text-[10px] font-bold flex items-center justify-center shrink-0">
+                              {idx + 1}
+                            </span>
+                            <span className="font-medium text-foreground truncate block">{item.title}</span>
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                            <span className={cn(
+                              "text-[10px] px-1.5 py-0.5 rounded font-medium border",
+                              item.category === "Contract" && "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30",
+                              item.category === "NDA" && "bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/30",
+                              item.category === "Document" && "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30",
+                              item.category === "Access" && "bg-teal-500/10 text-teal-600 dark:text-teal-400 border-teal-500/30",
+                              item.category === "KRA Sign-off" && "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30",
+                              item.category === "IT Asset" && "bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border-cyan-500/30",
+                              item.category === "Compliance" && "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30",
+                              !["Contract", "NDA", "Document", "Access", "KRA Sign-off", "IT Asset", "Compliance"].includes(item.category) && "bg-muted text-muted-foreground border-border"
+                            )}>
+                              {item.category}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveDocFromBuilder(item.id)}
+                              className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer"
+                              title="Remove document from checklist"
+                            >
+                              <i className="fa-solid fa-trash text-[10px]" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Inline Add Custom Document Row */}
+                <div className="pt-2 border-t border-border/60 space-y-1.5">
+                  <label className="text-[11px] font-semibold text-foreground">Add Custom Document / Task</label>
+                  <div className="flex flex-col sm:flex-row items-stretch gap-1.5">
+                    <Input
+                      placeholder="e.g. Degree Certificate, PAN Card, Background Check"
+                      value={newCustomDocTitle}
+                      onChange={(e) => setNewCustomDocTitle(e.target.value)}
+                      className="h-8 text-xs bg-background flex-1"
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          handleAddCustomDocToBuilder();
+                        }
+                      }}
+                    />
+                    <div className="flex items-center gap-1.5">
+                      <select
+                        value={newCustomDocCategory}
+                        onChange={(e) => setNewCustomDocCategory(e.target.value)}
+                        className="h-8 px-2 text-xs bg-background border border-border rounded-md text-foreground cursor-pointer shrink-0"
+                      >
+                        <option value="Document">Document</option>
+                        <option value="Contract">Contract</option>
+                        <option value="NDA">NDA</option>
+                        <option value="KRA Sign-off">KRA Sign-off</option>
+                        <option value="Compliance">Compliance</option>
+                        <option value="Access">Access</option>
+                        <option value="IT Asset">IT Asset</option>
+                        <option value="Other">Other</option>
+                      </select>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={handleAddCustomDocToBuilder}
+                        disabled={!newCustomDocTitle.trim()}
+                        className="h-8 text-xs px-2.5 font-semibold gap-1 shrink-0 cursor-pointer border-primary/30 text-primary hover:bg-primary/10"
+                      >
+                        <i className="fa-solid fa-plus text-[10px]" /> Add
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Save Current Selection As Preset Checkbox */}
+                <div className="pt-2 border-t border-border/60 space-y-2">
+                  <label className="flex items-center gap-2 cursor-pointer select-none text-xs text-foreground font-medium">
+                    <input
+                      type="checkbox"
+                      checked={saveAsNewPreset}
+                      onChange={(e) => setSaveAsNewPreset(e.target.checked)}
+                      className="rounded border-border text-primary focus:ring-primary cursor-pointer"
+                    />
+                    <span>Save this document selection as a new reusable preset</span>
+                  </label>
+                  {saveAsNewPreset && (
+                    <div className="pl-6 space-y-1">
+                      <Input
+                        placeholder="Preset Name (e.g. Fast Track 2-Doc Onboarding)"
+                        value={newPresetName}
+                        onChange={(e) => setNewPresetName(e.target.value)}
+                        className="h-8 text-xs bg-background max-w-sm"
+                        required={saveAsNewPreset}
+                      />
+                      <p className="text-[10px] text-muted-foreground">
+                        This preset will be saved in your company templates and can be re-used for future hires.
+                      </p>
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div className="flex justify-end gap-2 pt-2 border-t border-border">
@@ -3560,9 +3876,104 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
                       <i className={cn(EMPLOYMENT_TYPE_CONFIG[selectedChecklistDetails.employmentType || "Permanent"]?.icon, "text-[10px]")} />
                       {selectedChecklistDetails.employmentType || "Permanent"}
                     </span>
-                    <Badge variant="outline">{selectedChecklistDetails.status}</Badge>
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        "text-xs font-bold",
+                        selectedChecklistDetails.status === "Completed" && "border-emerald-500/40 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10",
+                        selectedChecklistDetails.status === "On Hold" && "border-slate-500/40 text-slate-600 dark:text-slate-400 bg-slate-500/10",
+                        selectedChecklistDetails.status === "Discarded" && "border-rose-500/40 text-rose-600 dark:text-rose-400 bg-rose-500/10",
+                        selectedChecklistDetails.status === "In Progress" && "border-amber-500/40 text-amber-600 dark:text-amber-400 bg-amber-500/10"
+                      )}
+                    >
+                      {selectedChecklistDetails.status}
+                    </Badge>
                   </div>
                   <p className="text-xs text-muted-foreground mt-0.5">{selectedChecklistDetails.userEmail}</p>
+
+                  {/* Status Lifecycle Selector for authorized managers */}
+                  {canManageChecklists && (
+                    <div className="pt-2 flex items-center gap-1.5 flex-wrap">
+                      <span className="text-[11px] font-semibold text-muted-foreground mr-1">Change Status:</span>
+                      {(["In Progress", "On Hold", "Completed", "Discarded"] as const).map((st) => (
+                        <button
+                          key={st}
+                          type="button"
+                          disabled={updatingChecklistStatusId === selectedChecklistDetails._id}
+                          onClick={() => {
+                            if (selectedChecklistDetails.status === st) return;
+                            if (st === "Discarded" || st === "On Hold") {
+                              setPendingNewStatus(st);
+                            } else {
+                              handleChangeChecklistStatus(selectedChecklistDetails._id, st);
+                            }
+                          }}
+                          className={cn(
+                            "px-2 py-0.5 rounded-md text-[10px] font-semibold border transition-all cursor-pointer flex items-center gap-1",
+                            selectedChecklistDetails.status === st
+                              ? st === "Discarded"
+                                ? "bg-destructive text-destructive-foreground border-destructive"
+                                : st === "On Hold"
+                                ? "bg-slate-700 text-white border-slate-700"
+                                : st === "Completed"
+                                ? "bg-emerald-600 text-white border-emerald-600"
+                                : "bg-primary text-primary-foreground border-primary"
+                              : "bg-muted/40 hover:bg-muted text-muted-foreground hover:text-foreground border-border"
+                          )}
+                        >
+                          {st === "In Progress" && <i className="fa-solid fa-play text-[8px]" />}
+                          {st === "On Hold" && <i className="fa-solid fa-pause text-[8px]" />}
+                          {st === "Completed" && <i className="fa-solid fa-check text-[8px]" />}
+                          {st === "Discarded" && <i className="fa-solid fa-ban text-[8px]" />}
+                          <span>{st}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Status Change Confirmation Prompt with Reason Input */}
+                  {pendingNewStatus && (
+                    <div className="mt-2 p-3 bg-muted/40 border border-primary/30 rounded-xl space-y-2 animate-in fade-in">
+                      <div className="flex items-center justify-between text-xs font-bold text-foreground">
+                        <span className="flex items-center gap-1.5">
+                          {pendingNewStatus === "Discarded" ? (
+                            <i className="fa-solid fa-triangle-exclamation text-rose-500" />
+                          ) : (
+                            <i className="fa-solid fa-pause text-slate-500" />
+                          )}
+                          <span>Change status to &quot;{pendingNewStatus}&quot;</span>
+                        </span>
+                        <button type="button" onClick={() => setPendingNewStatus(null)} className="text-muted-foreground hover:text-foreground cursor-pointer">
+                          <i className="fa-solid fa-xmark text-xs" />
+                        </button>
+                      </div>
+                      <Input
+                        placeholder={pendingNewStatus === "Discarded" ? "Reason for discarding (e.g. Candidate backed out, offer rescinded)..." : "Reason for placing on hold..."}
+                        value={statusChangeReason}
+                        onChange={(e) => setStatusChangeReason(e.target.value)}
+                        className="h-8 text-xs bg-background"
+                      />
+                      <div className="flex justify-end gap-2 pt-1">
+                        <Button type="button" variant="ghost" size="sm" onClick={() => setPendingNewStatus(null)} className="h-7 text-xs">
+                          Cancel
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="default"
+                          onClick={() => handleChangeChecklistStatus(selectedChecklistDetails._id, pendingNewStatus, statusChangeReason)}
+                          className={cn(
+                            "h-7 text-xs font-bold gap-1",
+                            pendingNewStatus === "Discarded"
+                              ? "bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                              : "bg-primary text-primary-foreground"
+                          )}
+                        >
+                          <i className="fa-solid fa-check text-[10px]" /> Confirm {pendingNewStatus}
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
               <button
@@ -3736,11 +4147,20 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
                         <input
                           type="checkbox"
                           checked={item.completed}
+                          disabled={!canManageChecklists}
                           onChange={(e) => {
                             e.stopPropagation();
+                            if (!canManageChecklists) {
+                              showToast("Only HR or Admins with checklist permissions can verify items", "error");
+                              return;
+                            }
                             handleToggleChecklistItem(selectedChecklistDetails._id, item.id, !item.completed);
                           }}
-                          className="rounded border-border text-primary focus:ring-primary cursor-pointer shrink-0"
+                          className={cn(
+                            "rounded border-border text-primary focus:ring-primary shrink-0",
+                            canManageChecklists ? "cursor-pointer" : "cursor-not-allowed opacity-50"
+                          )}
+                          title={!canManageChecklists ? "Only authorized HR or Admin can mark items complete" : "Toggle complete"}
                         />
                         <div className="min-w-0 flex-1">
                           <span className={cn("font-medium block", item.completed && "line-through opacity-80")}>{item.title}</span>
@@ -3831,8 +4251,180 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
               </div>
             </div>
 
+            {/* Status History & Audit Trail Timeline */}
+            <div className="space-y-2 pt-3 border-t border-border">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                  <i className="fa-solid fa-clock-rotate-left text-primary text-xs" />
+                  <span>Status History &amp; Audit Trail</span>
+                </label>
+                <span className="text-[10px] text-muted-foreground font-mono">
+                  {selectedChecklistDetails.statusHistory?.length || 0} transition{(selectedChecklistDetails.statusHistory?.length || 0) === 1 ? "" : "s"}
+                </span>
+              </div>
+
+              {!selectedChecklistDetails.statusHistory || selectedChecklistDetails.statusHistory.length === 0 ? (
+                <p className="text-[11px] text-muted-foreground italic bg-muted/20 p-2.5 rounded-lg border border-border/50">
+                  No status transitions recorded yet. Initial status is {selectedChecklistDetails.status}.
+                </p>
+              ) : (
+                <div className="space-y-2 max-h-40 overflow-y-auto overscroll-contain pr-1">
+                  {selectedChecklistDetails.statusHistory.map((h: any, hIdx: number) => (
+                    <div
+                      key={hIdx}
+                      className="p-2.5 rounded-lg border border-border/80 bg-muted/20 text-xs space-y-1 shadow-2xs"
+                    >
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <div className="flex items-center gap-1.5">
+                          <span className={cn(
+                            "text-[10px] px-1.5 py-0.5 rounded font-bold border",
+                            h.fromStatus === "Completed" && "bg-emerald-500/10 text-emerald-600 border-emerald-500/20",
+                            h.fromStatus === "Discarded" && "bg-rose-500/10 text-rose-600 border-rose-500/20",
+                            h.fromStatus === "On Hold" && "bg-slate-500/10 text-slate-600 border-slate-500/20",
+                            h.fromStatus === "In Progress" && "bg-amber-500/10 text-amber-600 border-amber-500/20",
+                            !["Completed", "Discarded", "On Hold", "In Progress"].includes(h.fromStatus) && "bg-muted text-muted-foreground border-border"
+                          )}>
+                            {h.fromStatus}
+                          </span>
+                          <i className="fa-solid fa-arrow-right text-[9px] text-muted-foreground" />
+                          <span className={cn(
+                            "text-[10px] px-1.5 py-0.5 rounded font-bold border",
+                            h.toStatus === "Completed" && "bg-emerald-500/10 text-emerald-600 border-emerald-500/20",
+                            h.toStatus === "Discarded" && "bg-rose-500/10 text-rose-600 border-rose-500/20",
+                            h.toStatus === "On Hold" && "bg-slate-500/10 text-slate-600 border-slate-500/20",
+                            h.toStatus === "In Progress" && "bg-amber-500/10 text-amber-600 border-amber-500/20",
+                            !["Completed", "Discarded", "On Hold", "In Progress"].includes(h.toStatus) && "bg-muted text-muted-foreground border-border"
+                          )}>
+                            {h.toStatus}
+                          </span>
+                        </div>
+                        <span className="text-[10px] text-muted-foreground">
+                          {new Date(h.changedAt).toLocaleString()}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between text-[11px] text-muted-foreground pt-0.5">
+                        <span>Author: <strong className="text-foreground">{h.changedBy?.userName || "HR Team"}</strong> ({h.changedBy?.role || "HR"})</span>
+                      </div>
+                      {h.reason && (
+                        <p className="text-[11px] text-foreground bg-background p-1.5 rounded border border-border/60">
+                          <strong className="text-muted-foreground">Note:</strong> {h.reason}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
             <div className="flex justify-end pt-2 border-t border-border">
               <Button variant="outline" size="sm" type="button" onClick={() => setSelectedChecklistDetails(null)}>
+                Close
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Preset Manager Dialog */}
+      {showPresetManagerModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in"
+          onClick={() => setShowPresetManagerModal(false)}
+        >
+          <div
+            className="w-full max-w-lg max-h-[90vh] overflow-y-auto overscroll-contain bg-card border border-border rounded-2xl p-5 sm:p-6 shadow-2xl space-y-4 animate-in zoom-in-95 flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-border pb-3 shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center text-sm font-bold">
+                  <i className="fa-solid fa-sliders" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base text-foreground">Document Checklist Presets</h3>
+                  <p className="text-xs text-muted-foreground">Manage pre-configured onboarding document templates</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPresetManagerModal(false)}
+                className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted cursor-pointer"
+              >
+                <i className="fa-solid fa-xmark text-sm" />
+              </button>
+            </div>
+
+            <div className="space-y-3 overflow-y-auto flex-1 pr-1">
+              {presets.map((p) => (
+                <div
+                  key={p._id}
+                  className="p-3.5 rounded-xl border border-border/80 bg-muted/20 space-y-2 hover:border-primary/40 transition-colors"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-bold text-xs text-foreground">{p.name}</span>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-full font-bold bg-primary/10 text-primary border border-primary/20">
+                          {p.items?.length || 0} Docs
+                        </span>
+                        {p.isSystemDefault ? (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded font-medium bg-muted text-muted-foreground border border-border">
+                            Built-in Default
+                          </span>
+                        ) : (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                            Custom Preset
+                          </span>
+                        )}
+                      </div>
+                      {p.description && (
+                        <p className="text-[11px] text-muted-foreground">{p.description}</p>
+                      )}
+                    </div>
+
+                    {!p.isSystemDefault && canManageChecklists && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        disabled={deletingPresetId === p._id}
+                        onClick={() => handleDeleteCustomPreset(p._id)}
+                        className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10 cursor-pointer shrink-0"
+                        title="Delete custom preset"
+                      >
+                        {deletingPresetId === p._id ? (
+                          <i className="fa-solid fa-spinner fa-spin text-xs" />
+                        ) : (
+                          <i className="fa-solid fa-trash text-xs" />
+                        )}
+                      </Button>
+                    )}
+                  </div>
+
+                  {/* Document Items List Preview */}
+                  <div className="flex items-center gap-1.5 flex-wrap pt-1 border-t border-border/50">
+                    {p.items?.map((it: any, iIdx: number) => (
+                      <span
+                        key={iIdx}
+                        className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-md bg-background border border-border text-foreground"
+                      >
+                        <i className="fa-solid fa-file-lines text-[9px] text-primary" />
+                        <span className="truncate max-w-[180px]">{it.title}</span>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex justify-end pt-3 border-t border-border shrink-0">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setShowPresetManagerModal(false)}
+                className="text-xs"
+              >
                 Close
               </Button>
             </div>
