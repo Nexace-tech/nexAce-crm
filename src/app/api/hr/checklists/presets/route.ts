@@ -75,8 +75,9 @@ export async function GET(req: Request) {
       .sort({ isSystemDefault: -1, createdAt: 1 })
       .lean();
 
-    // Auto-seed default presets if tenant doesn't have any yet
-    if (presets.length === 0) {
+    // Ensure built-in system default presets always exist for this tenant
+    const hasSystemDefaults = presets.some((p) => p.isSystemDefault);
+    if (!hasSystemDefaults) {
       const seedDocs = DEFAULT_PRESETS_SEED.map((p) => ({
         ...p,
         tenantId: tenantObjectId,

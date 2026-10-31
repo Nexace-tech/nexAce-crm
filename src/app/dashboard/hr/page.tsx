@@ -122,10 +122,19 @@ export default function HRPage() {
   const [statusChangeReason, setStatusChangeReason] = useState("");
   const [pendingNewStatus, setPendingNewStatus] = useState<string | null>(null);
 
+  // Default 5-Document Standard Checklist for Onboarding
+  const BUILTIN_FALLBACK_5_DOCS = [
+    { id: "1", title: "Submit Identity & Address Proof", category: "Document", required: true },
+    { id: "2", title: "Sign Non-Disclosure Agreement (NDA)", category: "NDA", required: true },
+    { id: "3", title: "KRA & Job Description Sign-off", category: "KRA Sign-off", required: true },
+    { id: "4", title: "Issue Work Laptop & Access Pass", category: "IT Asset", required: true },
+    { id: "5", title: "Provision CRM & Email Accounts", category: "Access", required: true },
+  ];
+
   // Onboarding Checklist Presets & Custom Document Items State
   const [presets, setPresets] = useState<any[]>([]);
   const [selectedPresetId, setSelectedPresetId] = useState<string>("");
-  const [checklistBuilderItems, setChecklistBuilderItems] = useState<{ id: string; title: string; category: string; required?: boolean }[]>([]);
+  const [checklistBuilderItems, setChecklistBuilderItems] = useState<{ id: string; title: string; category: string; required?: boolean }[]>(BUILTIN_FALLBACK_5_DOCS);
   const [newCustomDocTitle, setNewCustomDocTitle] = useState("");
   const [newCustomDocCategory, setNewCustomDocCategory] = useState("Document");
   const [saveAsNewPreset, setSaveAsNewPreset] = useState(false);
@@ -567,12 +576,36 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
     }
   };
 
+  const selectDefaultPresetForType = (empType: string, presetList = presets) => {
+    if (!presetList || presetList.length === 0) return;
+    // 1. Try finding 5-doc preset matching employment type (e.g. Part-Time Alignment for Part-Time)
+    let target = presetList.find((p) => p.isSystemDefault && p.targetEmploymentType === empType && (p.name.includes("5 Docs") || p.items?.length === 5));
+    // 2. If no exact 5-doc match for this empType, find Full-Time Standard (5 Docs) or any 5-doc preset
+    if (!target) {
+      target = presetList.find((p) => p.isSystemDefault && (p.name.includes("5 Docs") || p.items?.length === 5));
+    }
+    // 3. Fallback to Full-Time Standard by name or any system default
+    if (!target) {
+      target = presetList.find((p) => p.name?.includes("Full-Time Standard")) || presetList.find((p) => p.isSystemDefault) || presetList[0];
+    }
+    if (target) {
+      setSelectedPresetId(target._id);
+      if (Array.isArray(target.items)) {
+        setChecklistBuilderItems(target.items.map((it: any) => ({ ...it })));
+      }
+    }
+  };
+
   const fetchPresets = async () => {
     try {
       const res = await fetch("/api/hr/checklists/presets");
       if (res.ok) {
         const d = await res.json();
-        setPresets(d.presets || []);
+        const presetList = d.presets || [];
+        setPresets(presetList);
+        if (presetList.length > 0 && !selectedPresetId) {
+          selectDefaultPresetForType(newChecklistEmploymentType, presetList);
+        }
       }
     } catch (err) {
       console.error("Failed to fetch presets:", err);
@@ -581,10 +614,46 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
 
   const handleSelectPreset = (presetId: string) => {
     setSelectedPresetId(presetId);
+    if (!presetId) {
+      setChecklistBuilderItems([]);
+      return;
+    }
     const found = presets.find((p) => p._id === presetId);
     if (found && Array.isArray(found.items)) {
       setChecklistBuilderItems(found.items.map((it: any) => ({ ...it })));
     }
+  };
+
+  const handleResetPresetToOriginal = () => {
+    const current = presets.find((p) => p._id === selectedPresetId);
+    if (current && Array.isArray(current.items)) {
+      setChecklistBuilderItems(current.items.map((it: any) => ({ ...it })));
+      showToast(`Reset checklist to "${current.name}" original documents`);
+    } else if (presets.length > 0) {
+      selectDefaultPresetForType(newChecklistEmploymentType, presets);
+      showToast("Reset checklist to default 5 documents");
+    } else {
+      setChecklistBuilderItems(BUILTIN_FALLBACK_5_DOCS.map((it) => ({ ...it })));
+      showToast("Reset checklist to default 5 documents");
+    }
+  };
+
+  const isPresetModified = useMemo(() => {
+    if (!selectedPresetId) return checklistBuilderItems.length > 0;
+    const currentPreset = presets.find((p) => p._id === selectedPresetId);
+    if (!currentPreset || !Array.isArray(currentPreset.items)) return false;
+    if (checklistBuilderItems.length !== currentPreset.items.length) return true;
+    return checklistBuilderItems.some((item, idx) => {
+      const orig = currentPreset.items[idx];
+      return !orig || item.title !== orig.title || item.category !== orig.category;
+    });
+  }, [selectedPresetId, presets, checklistBuilderItems]);
+
+  const handleOpenChecklistModal = () => {
+    if (presets.length > 0) {
+      selectDefaultPresetForType(newChecklistEmploymentType, presets);
+    }
+    setShowChecklistModal(true);
   };
 
   const handleAddCustomDocToBuilder = (e?: React.FormEvent) => {
@@ -756,20 +825,11 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
     return () => clearInterval(interval);
   }, []);
 
-  // Auto-sync builder items when opening checklist modal or changing employment type (5-Docs Standard by default)
+  // Auto-sync builder items when opening checklist modal (5-Docs Standard by default)
   useEffect(() => {
     if (!showChecklistModal || presets.length === 0) return;
     if (checklistBuilderItems.length === 0 || !selectedPresetId) {
-      // Prioritize the 5-document standard preset by default
-      const defaultFiveDocPreset =
-        presets.find((p) => (p.items?.length === 5 && (p.name.includes("Standard") || p.name.includes("Part-Time")))) ||
-        presets.find((p) => p.items?.length === 5) ||
-        presets.find((p) => p.targetEmploymentType === newChecklistEmploymentType) ||
-        presets[0];
-      if (defaultFiveDocPreset) {
-        setSelectedPresetId(defaultFiveDocPreset._id);
-        setChecklistBuilderItems(defaultFiveDocPreset.items.map((it: any) => ({ ...it })));
-      }
+      selectDefaultPresetForType(newChecklistEmploymentType, presets);
     }
   }, [showChecklistModal, newChecklistEmploymentType, presets]);
 
@@ -931,8 +991,7 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
         setContractSowRef("");
         setInitOfferLetterFile(null);
         setInitNdaFile(null);
-        setChecklistBuilderItems([]);
-        setSelectedPresetId("");
+        selectDefaultPresetForType(newChecklistEmploymentType, presets);
         setSaveAsNewPreset(false);
         setNewPresetName("");
         await Promise.all([fetchDirectory(), fetchChecklists(), fetchPresets(), fetchDocuments()]);
@@ -2026,7 +2085,7 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
 
               {/* Add New Contract / Checklist Button */}
               {canManageChecklists && (
-                <Button id="btn-add-new-contract" color="primary" size="sm" onClick={() => setShowChecklistModal(true)} className="gap-1.5 h-9 text-xs cursor-pointer shadow-xs">
+                <Button id="btn-add-new-contract" color="primary" size="sm" onClick={handleOpenChecklistModal} className="gap-1.5 h-9 text-xs cursor-pointer shadow-xs">
                   <i className="fa-solid fa-plus text-xs" /> Add New Contract
                 </Button>
               )}
@@ -2124,7 +2183,7 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
                     Try adjusting your filters or search query, or initialize a new contract onboarding workflow.
                   </p>
                   {canManageChecklists && (
-                    <Button color="primary" size="sm" onClick={() => setShowChecklistModal(true)} className="gap-1 text-xs">
+                    <Button color="primary" size="sm" onClick={handleOpenChecklistModal} className="gap-1 text-xs">
                       <i className="fa-solid fa-plus text-xs" /> Add New Contract
                     </Button>
                   )}
@@ -3475,7 +3534,13 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
                   <label className="text-xs font-semibold text-foreground">Employment Type</label>
                   <select
                     value={newChecklistEmploymentType}
-                    onChange={(e) => setNewChecklistEmploymentType(e.target.value)}
+                    onChange={(e) => {
+                      const newType = e.target.value;
+                      setNewChecklistEmploymentType(newType);
+                      if (!isPresetModified) {
+                        selectDefaultPresetForType(newType, presets);
+                      }
+                    }}
                     className="w-full h-9 px-3 text-sm bg-background border border-border rounded-md text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
                   >
                     <option value="Contractor">Contractor (Independent)</option>
@@ -3683,14 +3748,43 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
                   </Button>
                 </div>
 
-                {/* Preset Dropdown Selector */}
-                <div className="space-y-1">
-                  <label className="text-[11px] font-semibold text-foreground flex items-center justify-between">
-                    <span>Select Preset Template</span>
-                    <span className="text-[10px] text-primary font-mono font-medium">
-                      {checklistBuilderItems.length} doc{checklistBuilderItems.length === 1 ? "" : "s"} required
-                    </span>
-                  </label>
+                {/* Preset Dropdown Selector & Reset Button */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between flex-wrap gap-1.5">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <label className="text-[11px] font-semibold text-foreground">Select Preset Template</label>
+                      {isPresetModified ? (
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-semibold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 rounded">
+                          <i className="fa-solid fa-pen text-[8px]" /> Modified
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium bg-muted text-muted-foreground border border-border rounded">
+                          <i className="fa-solid fa-check text-[8px] text-emerald-500" /> Default Preset
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] text-primary font-mono font-medium">
+                        {checklistBuilderItems.length} doc{checklistBuilderItems.length === 1 ? "" : "s"} required
+                      </span>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={handleResetPresetToOriginal}
+                        disabled={!isPresetModified}
+                        className={cn(
+                          "h-6 text-[10px] px-2 gap-1 rounded font-medium transition-all cursor-pointer",
+                          isPresetModified
+                            ? "text-primary border-primary/40 hover:bg-primary/10 hover:border-primary/60"
+                            : "text-muted-foreground/40 border-border/40 opacity-50 cursor-not-allowed"
+                        )}
+                        title={isPresetModified ? "Reset back to this preset's original documents" : "Checklist matches original preset"}
+                      >
+                        <i className="fa-solid fa-rotate-left text-[9px]" /> Reset to Original
+                      </Button>
+                    </div>
+                  </div>
                   <select
                     value={selectedPresetId}
                     onChange={(e) => handleSelectPreset(e.target.value)}
@@ -3699,7 +3793,7 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
                     <option value="">-- Choose Preset or Customize Below --</option>
                     {presets.map((p) => (
                       <option key={p._id} value={p._id}>
-                        {p.name} ({p.items?.length || 0} Docs){p.isSystemDefault ? " â€¢ Built-in" : " â€¢ Custom"}
+                        {p.name} ({p.items?.length || 0} Docs){p.isSystemDefault ? " • Built-in" : " • Custom"}
                       </option>
                     ))}
                   </select>
