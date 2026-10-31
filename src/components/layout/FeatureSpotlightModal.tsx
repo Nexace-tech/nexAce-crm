@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthContext } from "@/context/AuthContext";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -12,6 +12,7 @@ import {
   FeatureRelease,
 } from "@/lib/featureHighlights";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
 const ALL_ROLES = ["Employee", "Manager", "HR", "OPS"];
@@ -162,6 +163,29 @@ export function FeatureSpotlightModal({
     );
   };
 
+  // Toggle ALL features selection for Admin broadcast
+  const handleToggleAllFeatures = () => {
+    if (!release) return;
+    const allIds = release.features.map((f) => f.id);
+    if (selectedFeatureIds.length === allIds.length) {
+      setSelectedFeatureIds([]);
+    } else {
+      setSelectedFeatureIds(allIds);
+    }
+  };
+
+  // Search & Category Filter State
+  const [selectedCategory, setSelectedCategory] = useState<string>("All");
+  const [searchQuery, setSearchQuery] = useState<string>("");
+  const [expandedFeatureIds, setExpandedFeatureIds] = useState<Record<string, boolean>>({});
+
+  const handleToggleExpandFeature = (id: string) => {
+    setExpandedFeatureIds((prev) => ({
+      ...prev,
+      [id]: !prev[id],
+    }));
+  };
+
   // Broadcast Submission Handlers
   const handleConfirmBroadcast = async () => {
     if (!release) return;
@@ -234,11 +258,9 @@ export function FeatureSpotlightModal({
     router.push(href);
   };
 
-  if (!isOpen || !release) return null;
-
-  // Filter features to display
+  // Filter features to display (Computed unconditionally to comply with React Hooks rules)
   const effectiveRole = previewAsRole || previewRole || user?.role;
-  const rawFeatures = getFeaturesForRole(release.features, effectiveRole);
+  const rawFeatures = release ? getFeaturesForRole(release.features, effectiveRole) : [];
   const applicableFeatures = rawFeatures.filter((feat) => {
     if (adminBroadcastMode) return true; // Show all when Admin is configuring
     if (selectedFeatureIds.length > 0 && !selectedFeatureIds.includes(feat.id)) {
@@ -249,6 +271,31 @@ export function FeatureSpotlightModal({
     }
     return canViewSpotlightFeature(feat.id);
   });
+
+  const categories = useMemo(() => {
+    if (!release) return ["All"];
+    const cats = new Set<string>();
+    cats.add("All");
+    release.features.forEach((f) => {
+      if (f.category) cats.add(f.category);
+    });
+    return Array.from(cats);
+  }, [release]);
+
+  const displayedFeatures = useMemo(() => {
+    return applicableFeatures.filter((feat) => {
+      const matchesCategory =
+        selectedCategory === "All" || feat.category === selectedCategory;
+      const matchesSearch =
+        searchQuery.trim() === "" ||
+        feat.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        feat.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        feat.tag.toLowerCase().includes(searchQuery.toLowerCase());
+      return matchesCategory && matchesSearch;
+    });
+  }, [applicableFeatures, selectedCategory, searchQuery]);
+
+  if (!isOpen || !release) return null;
 
   return (
     <div
@@ -459,78 +506,214 @@ export function FeatureSpotlightModal({
             </div>
           )}
 
-          {/* Feature Highlight Cards Grid */}
-          <div className="grid grid-cols-1 gap-3">
-            {applicableFeatures.map((feat) => {
-              const isIncludedInBroadcast = selectedFeatureIds.includes(feat.id);
+          {/* ═════════════════════════════════════════════════════════════ */}
+          {/* SEARCH, CATEGORY FILTER & ADMIN CONTROLS RIBBON              */}
+          {/* ═════════════════════════════════════════════════════════════ */}
+          <div className="space-y-2.5 pt-1">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
+              {/* Search Bar */}
+              <div className="relative flex-1">
+                <i className="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none" />
+                <Input
+                  type="text"
+                  placeholder="Search new features, modules & tools..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-8 h-9 text-xs rounded-xl bg-slate-100/70 dark:bg-[#161e28] border-slate-200 dark:border-[#2b3544] focus-visible:ring-[#00c5a0]"
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery("")}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xs p-0.5 cursor-pointer"
+                  >
+                    <i className="fa-solid fa-xmark text-xs" />
+                  </button>
+                )}
+              </div>
 
-              return (
-                <div
-                  key={feat.id}
-                  className={cn(
-                    "group relative p-4 rounded-2xl border transition-all duration-200",
-                    "bg-slate-50/80 dark:bg-[#161e28]/70 hover:bg-white dark:hover:bg-[#1a232f]",
-                    "border-slate-200/80 dark:border-[#232d3b] hover:border-[#00c5a0]/50",
-                    "flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 shadow-2xs hover:shadow-md"
-                  )}
-                >
-                  <div className="flex items-start gap-3.5 min-w-0 flex-1">
-                    {/* Admin Feature Checkbox in Broadcast Setup Mode */}
-                    {isAdmin && adminBroadcastMode && (
-                      <button
-                        type="button"
-                        onClick={() => handleToggleFeature(feat.id)}
-                        className={cn(
-                          "w-6 h-6 rounded-lg flex items-center justify-center shrink-0 border mt-1.5 transition-all cursor-pointer shadow-2xs",
-                          isIncludedInBroadcast
-                            ? "bg-[#00c5a0] text-slate-950 border-[#00c5a0]"
-                            : "bg-white dark:bg-[#11161d] border-slate-300 dark:border-[#283342] text-transparent"
-                        )}
-                        title="Include in broadcast"
-                      >
-                        <i className="fa-solid fa-check text-xs" />
-                      </button>
-                    )}
-
-                    <div className="w-11 h-11 rounded-xl bg-white dark:bg-[#11161d] border border-slate-200 dark:border-[#283342] flex items-center justify-center shrink-0 shadow-xs group-hover:scale-105 transition-transform">
-                      <i className={cn(feat.icon, "text-base")} />
-                    </div>
-
-                    <div className="min-w-0 space-y-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <h3 className="font-bold text-xs sm:text-sm text-slate-900 dark:text-white break-words">
-                          {feat.title}
-                        </h3>
-                        {feat.badge && (
-                          <span className="px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
-                            {feat.badge}
-                          </span>
-                        )}
-                        <span className="px-2 py-0.5 rounded-full text-[9px] font-medium bg-slate-200/70 dark:bg-[#232d3b] text-slate-600 dark:text-slate-400">
-                          {feat.tag}
-                        </span>
-                      </div>
-                      <p className="text-[11px] sm:text-xs text-slate-600 dark:text-slate-300/90 leading-relaxed break-words">
-                        {feat.description}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="shrink-0 flex items-center justify-end pt-1 sm:pt-0">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleNavigate(feat.href)}
-                      className="min-h-[38px] w-full sm:w-auto justify-center px-3.5 text-xs border-[#00c5a0]/40 text-[#00c5a0] hover:bg-[#00c5a0] hover:text-slate-950 transition-all flex items-center gap-2 font-semibold rounded-xl cursor-pointer group-hover:border-[#00c5a0]"
-                    >
-                      <span>Explore</span>
-                      <i className="fa-solid fa-arrow-right text-[10px] transition-transform group-hover:translate-x-0.5" />
-                    </Button>
-                  </div>
+              {/* Admin Broadcast Feature Selection Counter & Select All */}
+              {isAdmin && adminBroadcastMode && (
+                <div className="flex items-center justify-between sm:justify-end gap-2 shrink-0">
+                  <span className="text-[11px] font-mono px-2.5 py-1 rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 font-bold">
+                    {selectedFeatureIds.length}/{release.features.length} selected
+                  </span>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={handleToggleAllFeatures}
+                    className="h-9 text-xs px-3 rounded-xl border-slate-300 dark:border-[#2b3544] text-[#00c5a0] hover:bg-[#00c5a0]/10 font-bold cursor-pointer"
+                  >
+                    <i className={cn("fa-solid mr-1 text-[10px]", selectedFeatureIds.length === release.features.length ? "fa-xmark" : "fa-check-double")} />
+                    <span>{selectedFeatureIds.length === release.features.length ? "Clear All" : "Select All"}</span>
+                  </Button>
                 </div>
-              );
-            })}
+              )}
+            </div>
+
+            {/* Category Filter Pills (Horizontal Touch Scroll) */}
+            {categories.length > 1 && (
+              <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+                {categories.map((cat) => {
+                  const isActive = selectedCategory === cat;
+                  return (
+                    <button
+                      key={cat}
+                      type="button"
+                      onClick={() => setSelectedCategory(cat)}
+                      className={cn(
+                        "px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer min-h-[34px] flex items-center gap-1.5 shadow-2xs",
+                        isActive
+                          ? "bg-[#00c5a0] text-slate-950 font-bold shadow-xs"
+                          : "bg-slate-100 dark:bg-[#161e28] text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-[#283342] hover:text-slate-900 dark:hover:text-white"
+                      )}
+                    >
+                      <span>{cat}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
+
+          {/* Feature Highlight Cards Grid */}
+          {displayedFeatures.length === 0 ? (
+            <div className="p-8 text-center rounded-2xl border border-dashed border-slate-200 dark:border-[#232d3b] space-y-2">
+              <i className="fa-solid fa-magnifying-glass text-slate-400 text-lg" />
+              <p className="text-xs font-semibold text-slate-600 dark:text-slate-400">
+                No features found matching &ldquo;{searchQuery}&rdquo;
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchQuery("");
+                  setSelectedCategory("All");
+                }}
+                className="text-xs text-[#00c5a0] font-bold hover:underline cursor-pointer"
+              >
+                Reset filters
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-3">
+              {displayedFeatures.map((feat) => {
+                const isIncludedInBroadcast = selectedFeatureIds.includes(feat.id);
+                const isExpanded = !!expandedFeatureIds[feat.id];
+
+                return (
+                  <div
+                    key={feat.id}
+                    className={cn(
+                      "group relative p-4 rounded-2xl border transition-all duration-200",
+                      "bg-slate-50/80 dark:bg-[#161e28]/70 hover:bg-white dark:hover:bg-[#1a232f]",
+                      "border-slate-200/80 dark:border-[#232d3b] hover:border-[#00c5a0]/50",
+                      "flex flex-col sm:flex-row sm:items-start justify-between gap-3.5 shadow-2xs hover:shadow-md"
+                    )}
+                  >
+                    <div className="flex items-start gap-3.5 min-w-0 flex-1">
+                      {/* Admin Feature Checkbox in Broadcast Setup Mode */}
+                      {isAdmin && adminBroadcastMode && (
+                        <button
+                          type="button"
+                          onClick={() => handleToggleFeature(feat.id)}
+                          className={cn(
+                            "w-6 h-6 rounded-lg flex items-center justify-center shrink-0 border mt-1.5 transition-all cursor-pointer shadow-2xs",
+                            isIncludedInBroadcast
+                              ? "bg-[#00c5a0] text-slate-950 border-[#00c5a0]"
+                              : "bg-white dark:bg-[#11161d] border-slate-300 dark:border-[#283342] text-transparent"
+                          )}
+                          title="Include in broadcast"
+                        >
+                          <i className="fa-solid fa-check text-xs" />
+                        </button>
+                      )}
+
+                      <div className="w-11 h-11 rounded-xl bg-white dark:bg-[#11161d] border border-slate-200 dark:border-[#283342] flex items-center justify-center shrink-0 shadow-xs group-hover:scale-105 transition-transform">
+                        <i className={cn(feat.icon, "text-base")} />
+                      </div>
+
+                      <div className="min-w-0 space-y-1.5 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h3 className="font-bold text-xs sm:text-sm text-slate-900 dark:text-white break-words">
+                            {feat.title}
+                          </h3>
+                          {feat.badge && (
+                            <span
+                              className={cn(
+                                "px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider border",
+                                feat.badge === "NEW"
+                                  ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
+                                  : "bg-teal-500/15 text-teal-600 dark:text-teal-400 border-teal-500/30"
+                              )}
+                            >
+                              {feat.badge}
+                            </span>
+                          )}
+                          <span className="px-2 py-0.5 rounded-full text-[9px] font-medium bg-slate-200/70 dark:bg-[#232d3b] text-slate-600 dark:text-slate-400">
+                            {feat.tag}
+                          </span>
+                          {feat.category && (
+                            <span className="px-2 py-0.5 rounded-full text-[9px] font-semibold bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/20">
+                              {feat.category}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[11px] sm:text-xs text-slate-600 dark:text-slate-300/90 leading-relaxed break-words">
+                          {feat.description}
+                        </p>
+
+                        {/* Expandable Key Highlights ("What's Included") */}
+                        {feat.highlights && feat.highlights.length > 0 && (
+                          <div className="pt-1">
+                            <button
+                              type="button"
+                              onClick={() => handleToggleExpandFeature(feat.id)}
+                              className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-[#00c5a0] hover:underline cursor-pointer"
+                            >
+                              <i
+                                className={cn(
+                                  "fa-solid text-[9px] transition-transform duration-150",
+                                  isExpanded ? "fa-chevron-up" : "fa-chevron-down"
+                                )}
+                              />
+                              <span>{isExpanded ? "Hide Details" : `What's Included (${feat.highlights.length})`}</span>
+                            </button>
+
+                            {isExpanded && (
+                              <div className="mt-2 p-2.5 rounded-xl bg-slate-100/80 dark:bg-[#111720]/80 border border-slate-200/80 dark:border-[#222c3a] space-y-1.5 animate-in fade-in duration-150">
+                                {feat.highlights.map((item, idx) => (
+                                  <div
+                                    key={idx}
+                                    className="flex items-start gap-2 text-[11px] text-slate-700 dark:text-slate-300"
+                                  >
+                                    <i className="fa-solid fa-circle-check text-emerald-500 text-[10px] mt-0.5 shrink-0" />
+                                    <span className="leading-snug">{item}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="shrink-0 flex items-center justify-end pt-1 sm:pt-0">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleNavigate(feat.href)}
+                        className="min-h-[38px] w-full sm:w-auto justify-center px-3.5 text-xs border-[#00c5a0]/40 text-[#00c5a0] hover:bg-[#00c5a0] hover:text-slate-950 transition-all flex items-center gap-2 font-semibold rounded-xl cursor-pointer group-hover:border-[#00c5a0]"
+                      >
+                        <span>Explore</span>
+                        <i className="fa-solid fa-arrow-right text-[10px] transition-transform group-hover:translate-x-0.5" />
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* ── Fixed Footer ────────────────────────────────────────────── */}

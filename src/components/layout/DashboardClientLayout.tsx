@@ -83,6 +83,12 @@ const navSections: NavSection[] = [
         icon: "fa-solid fa-users",
         key: "team",
         href: "/dashboard/team",
+        subItems: [
+          { id: "team-directory", name: "Team Directory", href: "/dashboard/team?tab=directory" },
+          { id: "team-orgchart", name: "Org Hierarchy", href: "/dashboard/team?tab=orgchart" },
+          { id: "team-manager", name: "Line Managers", href: "/dashboard/team?tab=manager" },
+          { id: "team-departments", name: "Departments", href: "/dashboard/team?tab=departments" },
+        ],
       },
       {
         id: "dash-calendar",
@@ -90,6 +96,16 @@ const navSections: NavSection[] = [
         icon: "fa-solid fa-calendar-days",
         key: "calendar",
         href: "/dashboard/calendar",
+        subItems: [
+          { id: "cal-shared", name: "Shared Calendar", href: "/dashboard/calendar?tab=calendar" },
+          { id: "cal-sprints", name: "Sprint Board", href: "/dashboard/calendar?tab=sprints" },
+          { id: "cal-timesheets", name: "Timesheets", href: "/dashboard/calendar?tab=timesheets" },
+          { id: "cal-shiftclock", name: "Shift Clock & Attendance", href: "/dashboard/calendar?tab=attendance" },
+          { id: "cal-extensions", name: "Shift Extensions Desk", href: "/dashboard/calendar?tab=extensions" },
+          { id: "cal-availability", name: "Team Availability", href: "/dashboard/calendar?tab=availability" },
+          { id: "cal-holidays", name: "Company Holidays", href: "/dashboard/calendar?tab=holidays" },
+          { id: "cal-celebrations", name: "Celebrations & Wishes", href: "/dashboard/calendar?tab=celebrations" },
+        ],
       },
       {
         id: "dash-chat",
@@ -97,6 +113,14 @@ const navSections: NavSection[] = [
         icon: "fa-solid fa-comments",
         key: "chat",
         href: "/dashboard/chat",
+        subItems: [
+          { id: "chat-workspace", name: "Workspace Chat", href: "/dashboard/chat?tab=chat" },
+          { id: "chat-mail", name: "Mail Center", href: "/dashboard/chat?tab=mail" },
+          { id: "chat-whatsapp", name: "WhatsApp Panel", href: "/dashboard/chat?tab=whatsapp" },
+          { id: "chat-video", name: "Virtual Huddle / Video", href: "/dashboard/chat?tab=video" },
+          { id: "chat-announcements", name: "Announcements", href: "/dashboard/chat?tab=announcements" },
+          { id: "chat-settings", name: "Notification Controls", href: "/dashboard/chat?tab=settings" },
+        ],
       },
       {
         id: "dash-notifications",
@@ -177,16 +201,59 @@ const navSections: NavSection[] = [
     title: "Workspace & Management",
     categories: [
       {
-        id: "management",
-        name: "Management & HR",
-        icon: "fa-solid fa-sliders",
+        id: "mgmt-hr",
+        name: "HR Portal",
+        icon: "fa-solid fa-user-tie",
+        key: "hr",
+        href: "/dashboard/hr",
         subItems: [
-          { id: "mgmt-hr", name: "HR Portal", href: "/dashboard/hr", key: "hr" },
-          { id: "mgmt-goals", name: "Goals & OKRs", href: "/dashboard/goals", key: "goals" },
-          { id: "mgmt-it", name: "IT Portal", href: "/dashboard/it", key: "it" },
-          { id: "mgmt-analytics", name: "Analytics Logs", href: "/dashboard/analytics", key: "analytics" },
-          { id: "mgmt-settings", name: "Settings & Security", href: "/dashboard/settings", key: "settings" },
+          { id: "hr-directory", name: "Employee Directory", href: "/dashboard/hr?tab=directory" },
+          { id: "hr-checklists", name: "Onboarding Checklists", href: "/dashboard/hr?tab=checklists" },
+          { id: "hr-leaves", name: "Leaves & Accruals", href: "/dashboard/hr?tab=leaves" },
+          { id: "hr-cases", name: "HR Helpdesk & Cases", href: "/dashboard/hr?tab=cases" },
+          { id: "hr-payslips", name: "Salary Slips & Payroll", href: "/dashboard/hr?tab=payslips" },
+          { id: "hr-fnf", name: "Full & Final (F&F)", href: "/dashboard/hr?tab=fnf" },
+          { id: "hr-appraisals", name: "360° Appraisals", href: "/dashboard/hr?tab=appraisals" },
+          { id: "hr-vault", name: "Policy Vault", href: "/dashboard/hr?tab=vault" },
+          { id: "hr-tasks", name: "Timesheet Approvals", href: "/dashboard/hr?tab=tasks" },
+          { id: "hr-invoices", name: "Invoice Approvals", href: "/dashboard/hr?tab=invoices" },
         ],
+      },
+      {
+        id: "mgmt-it",
+        name: "IT Portal",
+        icon: "fa-solid fa-terminal",
+        key: "it",
+        href: "/dashboard/it",
+        subItems: [
+          { id: "it-overview", name: "Command Center", href: "/dashboard/it?tab=overview" },
+          { id: "it-devices", name: "Hardware & Devices", href: "/dashboard/it?tab=devices" },
+          { id: "it-access", name: "Access & Credentials", href: "/dashboard/it?tab=access" },
+          { id: "it-subscriptions", name: "SaaS Subscriptions", href: "/dashboard/it?tab=subscriptions" },
+          { id: "it-drive", name: "Drive Links", href: "/dashboard/it?tab=drive" },
+          { id: "it-invoices", name: "Vendor Invoices", href: "/dashboard/it?tab=invoices" },
+        ],
+      },
+      {
+        id: "mgmt-goals",
+        name: "Goals & OKRs",
+        icon: "fa-solid fa-bullseye",
+        key: "goals",
+        href: "/dashboard/goals",
+      },
+      {
+        id: "mgmt-analytics",
+        name: "Analytics Logs",
+        icon: "fa-solid fa-chart-line",
+        key: "analytics",
+        href: "/dashboard/analytics",
+      },
+      {
+        id: "mgmt-settings",
+        name: "Settings & Security",
+        icon: "fa-solid fa-gear",
+        key: "settings",
+        href: "/dashboard/settings",
       },
     ],
   },
@@ -205,6 +272,11 @@ function isSubItemActive(subHref: string, pathname: string, currentTab: string |
     if (targetPath === "/dashboard/clients" && targetTab === "operations") return true;
     if (targetPath === "/dashboard/bd" && targetTab === "dashboard") return true;
     if (targetPath === "/dashboard/finance" && targetTab === "invoices") return true;
+    if (targetPath === "/dashboard/chat" && targetTab === "chat") return true;
+    if (targetPath === "/dashboard/calendar" && targetTab === "calendar") return true;
+    if (targetPath === "/dashboard/team" && targetTab === "directory") return true;
+    if (targetPath === "/dashboard/hr" && targetTab === "directory") return true;
+    if (targetPath === "/dashboard/it" && targetTab === "overview") return true;
     if (isFirst) return true;
     return false;
   }
@@ -214,6 +286,12 @@ function isSubItemActive(subHref: string, pathname: string, currentTab: string |
 
   // Aliases for Projects workspace tabs
   if (targetTab === "projects" && (currentTab === "kanban" || currentTab === "projects_grid")) return true;
+
+  // Aliases for Attendance / Extensions / Regularization
+  if (targetPath === "/dashboard/calendar") {
+    if (targetTab === "extensions" && currentTab === "extensions") return true;
+    if (targetTab === "attendance" && currentTab === "attendance") return true;
+  }
 
   return false;
 }
@@ -245,10 +323,14 @@ function SidebarNavMenu({ canAccessModule, can, isEmployeeOrHR, isPending, onNav
 
   const [openCategories, setOpenCategories] = useState<Record<string, boolean>>({
     dashboard: true,
+    "dash-team": true,
+    "dash-calendar": true,
+    "dash-chat": true,
     operations: true,
     bd: true,
     finance: true,
-    management: true,
+    "mgmt-hr": true,
+    "mgmt-it": true,
   });
 
   const [opsCounts, setOpsCounts] = useState<{
@@ -375,6 +457,9 @@ function SidebarNavMenu({ canAccessModule, can, isEmployeeOrHR, isPending, onNav
             return false;
           }
           if (cat.key && !canAccessModule(cat.key)) {
+            if (cat.key === "it" && can("viewITPortal")) {
+              return true;
+            }
             if (!cat.subItems) return false;
             return cat.subItems.some((sub) => sub.key && canAccessModule(sub.key));
           }
@@ -397,7 +482,10 @@ function SidebarNavMenu({ canAccessModule, can, isEmployeeOrHR, isPending, onNav
                         if (sub.key === "it") return canAccessModule("it") || can("viewITPortal");
                         return canAccessModule(sub.key);
                       }
-                      if (cat.key) return canAccessModule(cat.key);
+                      if (cat.key) {
+                        if (cat.key === "it") return canAccessModule("it") || can("viewITPortal");
+                        return canAccessModule(cat.key);
+                      }
                       return true;
                     })
                   : [];

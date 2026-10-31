@@ -80,6 +80,13 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, Record<string, boolean>> =
 export const DEFAULT_SPOTLIGHT_PERMISSIONS: Record<string, Record<string, boolean>> = {
   OPS: {
     enabled: true,
+    "shift-extensions-desk": true,
+    "attendance-regularization-desk": true,
+    "celebrations-hub": true,
+    "virtual-huddles": true,
+    "mail-center": true,
+    "whatsapp-panel": true,
+    "salary-slips-vault": true,
     "fnf-desk": true,
     "dynamic-role-permissions": true,
     "client-device-telemetry": true,
@@ -87,6 +94,13 @@ export const DEFAULT_SPOTLIGHT_PERMISSIONS: Record<string, Record<string, boolea
   },
   Manager: {
     enabled: true,
+    "shift-extensions-desk": true,
+    "attendance-regularization-desk": true,
+    "celebrations-hub": true,
+    "virtual-huddles": true,
+    "mail-center": true,
+    "whatsapp-panel": true,
+    "salary-slips-vault": true,
     "fnf-desk": true,
     "dynamic-role-permissions": false,
     "client-device-telemetry": false,
@@ -94,6 +108,13 @@ export const DEFAULT_SPOTLIGHT_PERMISSIONS: Record<string, Record<string, boolea
   },
   HR: {
     enabled: true,
+    "shift-extensions-desk": true,
+    "attendance-regularization-desk": true,
+    "celebrations-hub": true,
+    "virtual-huddles": true,
+    "mail-center": true,
+    "whatsapp-panel": false,
+    "salary-slips-vault": true,
     "fnf-desk": true,
     "dynamic-role-permissions": false,
     "client-device-telemetry": true,
@@ -101,6 +122,13 @@ export const DEFAULT_SPOTLIGHT_PERMISSIONS: Record<string, Record<string, boolea
   },
   Employee: {
     enabled: true,
+    "shift-extensions-desk": false,
+    "attendance-regularization-desk": true,
+    "celebrations-hub": true,
+    "virtual-huddles": true,
+    "mail-center": false,
+    "whatsapp-panel": false,
+    "salary-slips-vault": true,
     "fnf-desk": false,
     "dynamic-role-permissions": false,
     "client-device-telemetry": false,
@@ -116,7 +144,7 @@ export const DEFAULT_FEATURE_PERMISSIONS: Record<string, Record<string, boolean>
     // Team
     viewTeamDirectory: true, viewEmployeeProfiles: true, editEmployeeProfiles: true, inviteTeamMembers: true, deactivateEmployees: true, reassignReportingLine: true, viewSalaryData: true, viewOrgChart: true, viewDeviceTelemetry: true,
     // Calendar & Time
-    logOwnTimesheet: true, editOwnTimesheet: true, viewTeamTimesheets: true, approveTimesheets: true, exportTimesheets: true, manageShifts: true, viewShiftCalendar: true, clockInOut: true, canViewShiftClock: true, viewAllShiftExtensions: true, approveAdditionalShiftTime: true, exportShiftExtensions: true, viewLoginHoursSummary: true, viewTeamAvailability: true, manageTeamAvailability: true, logOwnAvailability: true, manageHolidays: true, importHolidayExcel: true, requestRegularization: true, approveRegularization: true, viewRegularizationDesk: true,
+    logOwnTimesheet: true, editOwnTimesheet: true, viewTeamTimesheets: true, approveTimesheets: true, exportTimesheets: true, manageShifts: true, viewShiftCalendar: true, clockInOut: true, canViewShiftClock: true, viewAllShiftExtensions: true, approveAdditionalShiftTime: true, exportShiftExtensions: true, viewLoginHoursSummary: true, viewTeamAvailability: true, manageTeamAvailability: true, logOwnAvailability: true, manageHolidays: true, importHolidayExcel: true, requestRegularization: true, approveRegularization: true, viewRegularizationDesk: true, viewCelebrations: true, sendCelebrationWishes: true,
     // Projects
     viewProjects: true, createProjects: true, deleteProjects: true, assignTasksToOthers: true, changeTaskStatus: true, commentOnTasks: true, deleteTaskComments: true, manageProjectWiki: true, viewProjectGantt: true, exportProjectData: true,
     // Sprints
@@ -124,7 +152,7 @@ export const DEFAULT_FEATURE_PERMISSIONS: Record<string, Record<string, boolean>
     // Drive
     viewDriveFiles: true, uploadDriveFiles: true, downloadDriveFiles: true, shareDriveFiles: true, deleteDriveFiles: true, bulkDeleteDriveFiles: true,
     // Chat
-    sendChatMessages: true, createChatChannels: true, deleteChatChannels: true, pinChatMessages: true, deleteOthersChatMessages: true, viewMailCenter: true, sendEmails: true, deleteEmails: true, viewWhatsAppPanel: true, sendWhatsAppMessages: true, startVirtualHuddles: true, joinVirtualHuddles: true,
+    sendChatMessages: true, createChatChannels: true, deleteChatChannels: true, pinChatMessages: true, deleteOthersChatMessages: true, viewMailCenter: true, sendEmails: true, deleteEmails: true, viewWhatsAppPanel: true, sendWhatsAppMessages: true, startVirtualHuddles: true, joinVirtualHuddles: true, manageChatNotifications: true,
     // HR & Leave
     viewOwnLeaves: true, applyLeaves: true, viewAllLeaves: true, approveLeaves: true, viewLeaveBalances: true, manageLeaveBalances: true, viewSalarySlips: true, manageFnFSettlements: true, viewFnFSettlements: true, viewHRCasesSLA: true, manageCompanyChecklists: true, manageHRVault: true, manageHRCases: true, reassignHRPartner: true, manageHRIsolation: true, approveTimesheetsAndInvoices: true,
     // Appraisals
@@ -155,7 +183,7 @@ export const DEFAULT_FEATURE_PERMISSIONS: Record<string, Record<string, boolean>
     // Team
     viewTeamDirectory: true, viewEmployeeProfiles: true, editEmployeeProfiles: false, inviteTeamMembers: false, deactivateEmployees: false, reassignReportingLine: true, viewSalaryData: false, viewOrgChart: true, viewDeviceTelemetry: true,
     // Calendar & Time
-    logOwnTimesheet: true, editOwnTimesheet: true, viewTeamTimesheets: true, approveTimesheets: true, exportTimesheets: true, manageShifts: true, viewShiftCalendar: true, clockInOut: true, canViewShiftClock: true, viewAllShiftExtensions: true, approveAdditionalShiftTime: true, exportShiftExtensions: true, viewLoginHoursSummary: false, viewTeamAvailability: true, manageTeamAvailability: true, logOwnAvailability: true, manageHolidays: false, importHolidayExcel: false, requestRegularization: true, approveRegularization: true, viewRegularizationDesk: true,
+    logOwnTimesheet: true, editOwnTimesheet: true, viewTeamTimesheets: true, approveTimesheets: true, exportTimesheets: true, manageShifts: true, viewShiftCalendar: true, clockInOut: true, canViewShiftClock: true, viewAllShiftExtensions: true, approveAdditionalShiftTime: true, exportShiftExtensions: true, viewLoginHoursSummary: false, viewTeamAvailability: true, manageTeamAvailability: true, logOwnAvailability: true, manageHolidays: false, importHolidayExcel: false, requestRegularization: true, approveRegularization: true, viewRegularizationDesk: true, viewCelebrations: true, sendCelebrationWishes: true,
     // Projects
     viewProjects: true, createProjects: true, deleteProjects: false, assignTasksToOthers: true, changeTaskStatus: true, commentOnTasks: true, deleteTaskComments: false, manageProjectWiki: true, viewProjectGantt: true, exportProjectData: true,
     // Sprints
@@ -163,7 +191,7 @@ export const DEFAULT_FEATURE_PERMISSIONS: Record<string, Record<string, boolean>
     // Drive
     viewDriveFiles: true, uploadDriveFiles: true, downloadDriveFiles: true, shareDriveFiles: true, deleteDriveFiles: true, bulkDeleteDriveFiles: false,
     // Chat
-    sendChatMessages: true, createChatChannels: true, deleteChatChannels: false, pinChatMessages: true, deleteOthersChatMessages: false, viewMailCenter: true, sendEmails: true, deleteEmails: false, viewWhatsAppPanel: true, sendWhatsAppMessages: true, startVirtualHuddles: true, joinVirtualHuddles: true,
+    sendChatMessages: true, createChatChannels: true, deleteChatChannels: false, pinChatMessages: true, deleteOthersChatMessages: false, viewMailCenter: true, sendEmails: true, deleteEmails: false, viewWhatsAppPanel: true, sendWhatsAppMessages: true, startVirtualHuddles: true, joinVirtualHuddles: true, manageChatNotifications: true,
     // HR & Leave
     viewOwnLeaves: true, applyLeaves: true, viewAllLeaves: true, approveLeaves: true, viewLeaveBalances: true, manageLeaveBalances: false, viewSalarySlips: true, manageCompanyChecklists: false, manageHRVault: false, manageHRCases: false, reassignHRPartner: false, manageHRIsolation: false, approveTimesheetsAndInvoices: false,
     // Appraisals
@@ -194,7 +222,7 @@ export const DEFAULT_FEATURE_PERMISSIONS: Record<string, Record<string, boolean>
     // Team
     viewTeamDirectory: true, viewEmployeeProfiles: true, editEmployeeProfiles: true, inviteTeamMembers: true, deactivateEmployees: false, reassignReportingLine: true, viewSalaryData: true, viewOrgChart: true,
     // Calendar & Time
-    logOwnTimesheet: true, editOwnTimesheet: true, viewTeamTimesheets: true, approveTimesheets: true, exportTimesheets: true, manageShifts: false, viewShiftCalendar: true, clockInOut: true, canViewShiftClock: true, viewAllShiftExtensions: true, approveAdditionalShiftTime: true, exportShiftExtensions: true, viewLoginHoursSummary: true, viewTeamAvailability: true, manageTeamAvailability: true, logOwnAvailability: true, manageHolidays: true, importHolidayExcel: true, requestRegularization: true, approveRegularization: true, viewRegularizationDesk: true,
+    logOwnTimesheet: true, editOwnTimesheet: true, viewTeamTimesheets: true, approveTimesheets: true, exportTimesheets: true, manageShifts: false, viewShiftCalendar: true, clockInOut: true, canViewShiftClock: true, viewAllShiftExtensions: true, approveAdditionalShiftTime: true, exportShiftExtensions: true, viewLoginHoursSummary: true, viewTeamAvailability: true, manageTeamAvailability: true, logOwnAvailability: true, manageHolidays: true, importHolidayExcel: true, requestRegularization: true, approveRegularization: true, viewRegularizationDesk: true, viewCelebrations: true, sendCelebrationWishes: true,
     // Projects
     viewProjects: true, createProjects: false, deleteProjects: false, assignTasksToOthers: false, changeTaskStatus: false, commentOnTasks: true, deleteTaskComments: false, manageProjectWiki: true, viewProjectGantt: true, exportProjectData: false,
     // Sprints
@@ -202,7 +230,7 @@ export const DEFAULT_FEATURE_PERMISSIONS: Record<string, Record<string, boolean>
     // Drive
     viewDriveFiles: true, uploadDriveFiles: true, downloadDriveFiles: true, shareDriveFiles: true, deleteDriveFiles: false, bulkDeleteDriveFiles: false,
     // Chat
-    sendChatMessages: true, createChatChannels: false, deleteChatChannels: false, pinChatMessages: false, deleteOthersChatMessages: false, viewMailCenter: true, sendEmails: true, deleteEmails: false, viewWhatsAppPanel: false, sendWhatsAppMessages: false, startVirtualHuddles: true, joinVirtualHuddles: true,
+    sendChatMessages: true, createChatChannels: false, deleteChatChannels: false, pinChatMessages: false, deleteOthersChatMessages: false, viewMailCenter: true, sendEmails: true, deleteEmails: false, viewWhatsAppPanel: false, sendWhatsAppMessages: false, startVirtualHuddles: true, joinVirtualHuddles: true, manageChatNotifications: true,
     // HR & Leave
     viewOwnLeaves: true, applyLeaves: true, viewAllLeaves: true, approveLeaves: true, viewLeaveBalances: true, manageLeaveBalances: true, viewSalarySlips: true, manageCompanyChecklists: true, manageHRVault: true, manageHRCases: true, reassignHRPartner: true, manageHRIsolation: true, approveTimesheetsAndInvoices: true,
     // Appraisals
@@ -233,7 +261,7 @@ export const DEFAULT_FEATURE_PERMISSIONS: Record<string, Record<string, boolean>
     // Team
     viewTeamDirectory: true, viewEmployeeProfiles: true, editEmployeeProfiles: false, inviteTeamMembers: false, deactivateEmployees: false, reassignReportingLine: false, viewSalaryData: false, viewOrgChart: true, viewDeviceTelemetry: false,
     // Calendar & Time
-    logOwnTimesheet: true, editOwnTimesheet: true, viewTeamTimesheets: false, approveTimesheets: false, exportTimesheets: false, manageShifts: false, viewShiftCalendar: true, clockInOut: true, canViewShiftClock: true, viewAllShiftExtensions: false, approveAdditionalShiftTime: false, exportShiftExtensions: false, viewLoginHoursSummary: false, viewTeamAvailability: false, manageTeamAvailability: false, logOwnAvailability: true, manageHolidays: false, importHolidayExcel: false, requestRegularization: true, approveRegularization: false, viewRegularizationDesk: false,
+    logOwnTimesheet: true, editOwnTimesheet: true, viewTeamTimesheets: false, approveTimesheets: false, exportTimesheets: false, manageShifts: false, viewShiftCalendar: true, clockInOut: true, canViewShiftClock: true, viewAllShiftExtensions: false, approveAdditionalShiftTime: false, exportShiftExtensions: false, viewLoginHoursSummary: false, viewTeamAvailability: false, manageTeamAvailability: false, logOwnAvailability: true, manageHolidays: false, importHolidayExcel: false, requestRegularization: true, approveRegularization: false, viewRegularizationDesk: false, viewCelebrations: true, sendCelebrationWishes: true,
     // Projects
     viewProjects: true, createProjects: false, deleteProjects: false, assignTasksToOthers: false, changeTaskStatus: true, commentOnTasks: true, deleteTaskComments: false, manageProjectWiki: false, viewProjectGantt: true, exportProjectData: false,
     // Sprints
@@ -241,7 +269,7 @@ export const DEFAULT_FEATURE_PERMISSIONS: Record<string, Record<string, boolean>
     // Drive
     viewDriveFiles: true, uploadDriveFiles: true, downloadDriveFiles: true, shareDriveFiles: true, deleteDriveFiles: false, bulkDeleteDriveFiles: false,
     // Chat
-    sendChatMessages: true, createChatChannels: false, deleteChatChannels: false, pinChatMessages: false, deleteOthersChatMessages: false, viewMailCenter: false, sendEmails: false, deleteEmails: false, viewWhatsAppPanel: false, sendWhatsAppMessages: false, startVirtualHuddles: false, joinVirtualHuddles: true,
+    sendChatMessages: true, createChatChannels: false, deleteChatChannels: false, pinChatMessages: false, deleteOthersChatMessages: false, viewMailCenter: false, sendEmails: false, deleteEmails: false, viewWhatsAppPanel: false, sendWhatsAppMessages: false, startVirtualHuddles: false, joinVirtualHuddles: true, manageChatNotifications: false,
     // HR & Leave
     viewOwnLeaves: true, applyLeaves: true, viewAllLeaves: false, approveLeaves: false, viewLeaveBalances: true, manageLeaveBalances: false, viewSalarySlips: true, manageCompanyChecklists: false, manageHRVault: false, manageHRCases: false, reassignHRPartner: false, manageHRIsolation: false, approveTimesheetsAndInvoices: false,
     // Appraisals
