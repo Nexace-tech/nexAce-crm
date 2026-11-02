@@ -11,12 +11,15 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { useAuth } from "@/hooks/useAuth";
 import { Preloader } from "@/components/ui/Preloader";
 import { SelfServiceInvoiceTab } from "@/components/settings/SelfServiceInvoiceTab";
+import { CompensationPolicyModal } from "@/components/finance/CompensationPolicyModal";
 
 function FinancePageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const currentTab = searchParams.get("tab");
-  const { can, canAccessModule, isAdmin, isOPS, loading: permLoading } = usePermissions();
+  const { can, canAccessModule, isAdmin, isOPS, isHR, loading: permLoading } = usePermissions();
+  const canConfigurePolicy = Boolean(isAdmin || isOPS || can("manageCompensationPolicy") || can("managePayroll"));
+  const [showCompensationPolicyModal, setShowCompensationPolicyModal] = useState(false);
   const canManageFinance = Boolean(
     isAdmin ||
     isOPS ||
@@ -43,7 +46,7 @@ function FinancePageContent() {
     invoiceNo: "",
     client: "",
     amount: "",
-    currency: "USD",
+    currency: "INR",
     status: "Draft" as FinanceInvoice["status"],
     issuedDate: "",
     dueDate: "",
@@ -62,7 +65,7 @@ function FinancePageContent() {
     title: "",
     category: "Operations",
     amount: "",
-    currency: "USD",
+    currency: "INR",
     date: "",
     paidBy: "",
     department: "General",
@@ -217,7 +220,7 @@ function FinancePageContent() {
       invoiceNo: getNextInvoiceNo(),
       client: "",
       amount: "",
-      currency: "USD",
+      currency: "INR",
       status: "Draft",
       issuedDate: new Date().toISOString().split("T")[0],
       dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
@@ -234,7 +237,7 @@ function FinancePageContent() {
       invoiceNo: inv.invoiceNo,
       client: inv.client,
       amount: String(inv.amount),
-      currency: inv.currency || "USD",
+      currency: inv.currency || "INR",
       status: inv.status,
       issuedDate: inv.issuedDate?.split("T")[0] || "",
       dueDate: inv.dueDate?.split("T")[0] || "",
@@ -439,7 +442,7 @@ function FinancePageContent() {
       title: "",
       category: "Operations",
       amount: "",
-      currency: "USD",
+      currency: "INR",
       date: new Date().toISOString().split("T")[0],
       paidBy: "",
       department: "General",
@@ -456,7 +459,7 @@ function FinancePageContent() {
       title: exp.title,
       category: exp.category,
       amount: String(exp.amount),
-      currency: exp.currency || "USD",
+      currency: exp.currency || "INR",
       date: exp.date?.split("T")[0] || "",
       paidBy: exp.paidBy || "",
       department: exp.department || "General",
@@ -698,6 +701,17 @@ function FinancePageContent() {
               <i className="fa-solid fa-wand-magic-sparkles text-xs" /> Generate My Invoice
             </Button>
           )}
+          {canConfigurePolicy && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowCompensationPolicyModal(true)}
+              className="gap-2 h-8 font-semibold cursor-pointer border-border hover:bg-muted"
+              title="Configure LOP formula, Overtime multipliers, and Tax/Deduction rules"
+            >
+              <i className="fa-solid fa-sliders text-xs text-primary" /> Policy Rules
+            </Button>
+          )}
           {(can("createInvoices") || isAdmin || isOPS) && (
             <Button variant="outline" size="sm" onClick={() => router.push("/dashboard/finance/invoices/new")} className="gap-2 h-8 font-semibold cursor-pointer border-primary/40 text-primary hover:bg-primary/10">
               <i className="fa-solid fa-plus text-xs" /> Create Corporate Invoice
@@ -754,7 +768,7 @@ function FinancePageContent() {
                 <div className="space-y-1">
                   <label className={labelCls}>Currency</label>
                   <select value={invoiceFormData.currency} onChange={e => setInvoiceFormData(p => ({ ...p, currency: e.target.value }))} className="w-full h-9 rounded-md border border-input bg-background text-sm px-2 text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer">
-                    {["USD", "EUR", "GBP", "PKR", "AED"].map(c => <option key={c} value={c}>{c}</option>)}
+                    {["INR", "USD", "EUR", "GBP", "AED", "PKR"].map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
                 </div>
               </div>
@@ -1303,7 +1317,7 @@ function FinancePageContent() {
                 <div className="space-y-1">
                   <label className={labelCls}>Currency</label>
                   <select value={expenseFormData.currency} onChange={e => setExpenseFormData(p => ({ ...p, currency: e.target.value }))} className="w-full h-9 rounded-md border border-input bg-background text-sm px-2 text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer">
-                    {["USD", "EUR", "GBP", "PKR", "AED"].map(c => <option key={c} value={c}>{c}</option>)}
+                    {["INR", "USD", "EUR", "GBP", "AED", "PKR"].map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
                 </div>
               </div>
@@ -1378,7 +1392,7 @@ function FinancePageContent() {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <label className={labelCls}>Deal Value ($)</label>
+                  <label className={labelCls}>Deal Value (₹)</label>
                   <Input
                     type="number"
                     min="0"
@@ -1438,6 +1452,13 @@ function FinancePageContent() {
           </div>
         </div>
       )}
+
+            {/* ── Compensation & Invoice Policy Modal ── */}
+      <CompensationPolicyModal
+        isOpen={showCompensationPolicyModal}
+        onClose={() => setShowCompensationPolicyModal(false)}
+        showToast={showToast}
+      />
 
       {/* ── Delete Confirm Modal ── */}
       {deleteTarget && (

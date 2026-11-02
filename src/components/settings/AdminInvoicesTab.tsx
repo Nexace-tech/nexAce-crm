@@ -18,6 +18,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { useAuth } from "@/hooks/useAuth";
 import { InvoiceDetailsView } from "@/components/finance/InvoiceDetailsView";
 import { downloadInvoicePdf } from "@/lib/invoice-pdf";
+import { InvoiceHistoryDrawer } from "@/components/finance/InvoiceHistoryDrawer";
 
 export interface IInvoiceObjection {
   category: string;
@@ -205,6 +206,7 @@ export function AdminInvoicesTab({ showToast, scope = "internal" }: AdminInvoice
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("Bank Transfer");
   const canProcessPayment = Boolean((isAdmin || isOPS) && !isHR);
   const [timelineModalInvoice, setTimelineModalInvoice] = useState<Invoice | null>(null);
+  const [historyDrawerInvoice, setHistoryDrawerInvoice] = useState<Invoice | null>(null);
 
   // Admin's own UPI ID (used ONLY for "Paid From" source option, NEVER for "Paid To" payee)
   const adminProfileUpiId = (user?.bankDetails?.upiId || (user as any)?.upiId || "").trim();
@@ -1368,10 +1370,18 @@ export function AdminInvoicesTab({ showToast, scope = "internal" }: AdminInvoice
                               </DropdownMenuItem>
 
                               <DropdownMenuItem
-                                onClick={() => setTimelineModalInvoice(inv)}
+                                onClick={() => setHistoryDrawerInvoice(inv)}
                                 className="gap-2.5 text-xs cursor-pointer py-1.5 font-semibold text-primary"
                               >
-                                <i className="fa-solid fa-route text-primary w-3.5 text-center" />
+                                <i className="fa-solid fa-timeline text-primary w-3.5 text-center" />
+                                <span>Invoice History &amp; Timeline</span>
+                              </DropdownMenuItem>
+
+                              <DropdownMenuItem
+                                onClick={() => setTimelineModalInvoice(inv)}
+                                className="gap-2.5 text-xs cursor-pointer py-1.5"
+                              >
+                                <i className="fa-solid fa-route text-muted-foreground w-3.5 text-center" />
                                 <span>View Cycle History</span>
                               </DropdownMenuItem>
 
@@ -2958,6 +2968,22 @@ export function AdminInvoicesTab({ showToast, scope = "internal" }: AdminInvoice
             </div>
           </div>
         </div>
+      )}
+
+      {/* ── Invoice History & Interaction Drawer ── */}
+      {historyDrawerInvoice && (
+        <InvoiceHistoryDrawer
+          isOpen={Boolean(historyDrawerInvoice)}
+          onClose={() => setHistoryDrawerInvoice(null)}
+          invoiceId={historyDrawerInvoice._id || historyDrawerInvoice.invoiceNo}
+          invoiceNo={historyDrawerInvoice.invoiceNo}
+          clientName={historyDrawerInvoice.customerNo || historyDrawerInvoice.billedToName || historyDrawerInvoice.businessName || "Client"}
+          amount={historyDrawerInvoice.total}
+          currency={historyDrawerInvoice.currency}
+          status={historyDrawerInvoice.status}
+          isInternal={historyDrawerInvoice.invoiceNo?.startsWith("INV-SAL") || historyDrawerInvoice.invoiceNo?.startsWith("INV-EMP")}
+          showToast={(msg, type) => showToast(msg, type === "info" ? "success" : type)}
+        />
       )}
     </div>
   );

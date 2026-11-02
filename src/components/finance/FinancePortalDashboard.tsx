@@ -414,7 +414,7 @@ export function FinancePortalDashboard({
     { key: "expenses" as const,  label: "Expenses",   icon: "fa-receipt", count: activeExpenses.length },
     { key: "budget" as const,    label: "Budget",     icon: "fa-wallet" },
     ...(canManagePayroll ? [{ key: "payroll" as const,   label: "Payroll",    icon: "fa-money-check-dollar" }] : []),
-  ], [activeInvoices.length, activeExpenses.length]);
+  ], [activeInvoices.length, activeExpenses.length, canManagePayroll]);
 
   return (
     <div className="space-y-6">
@@ -523,7 +523,7 @@ export function FinancePortalDashboard({
                 <CardContent className="p-4 flex items-center justify-between">
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{m.label}</p>
-                    <p className={cn("text-xl font-bold", m.color)}>${fmt(m.val)}</p>
+                    <p className={cn("text-xl font-bold", m.color)}>₹{fmt(m.val)}</p>
                   </div>
                   <div className={cn("p-3 rounded-xl", m.bg)}><i className={`fa-solid ${m.icon} text-lg`} /></div>
                 </CardContent>
@@ -565,7 +565,7 @@ export function FinancePortalDashboard({
                           <td className="py-3 px-3 font-semibold text-foreground max-w-[160px] truncate">{exp.title}</td>
                           <td className="py-3 px-3 text-xs text-muted-foreground">{exp.category}</td>
                           <td className="py-3 px-3 text-xs text-muted-foreground">{exp.department}</td>
-                          <td className="py-3 px-3 font-bold text-foreground">${fmtDec(exp.amount)}</td>
+                          <td className="py-3 px-3 font-bold text-foreground">₹{fmtDec(exp.amount)}</td>
                           <td className="py-3 px-3 text-xs text-muted-foreground">{exp.date?.split("T")[0]}</td>
                           <td className="py-3 px-3">
                             <span className={cn("text-[11px] font-semibold px-2.5 py-0.5 rounded-full border", expenseStatusStyle[exp.status])}>{exp.status}</span>
@@ -605,7 +605,7 @@ export function FinancePortalDashboard({
                         <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ backgroundColor: cat.color }} />
                         {cat.name}
                       </span>
-                      <span className="text-muted-foreground">${fmt(cat.val)} <span className="text-[10px]">({cat.pct}%)</span></span>
+                      <span className="text-muted-foreground">₹{fmt(cat.val)} <span className="text-[10px]">({cat.pct}%)</span></span>
                     </div>
                     <div className="h-1.5 bg-muted rounded-full overflow-hidden">
                       <div className="h-full rounded-full" style={{ width: `${cat.pct}%`, backgroundColor: cat.color }} />
@@ -634,9 +634,9 @@ export function FinancePortalDashboard({
               const remaining   = totalBudget - totalSpent;
               const overBudget  = activeBudgetData.filter(b => b.spent > b.budget).length;
               return [
-                { label: "Total Budget",    val: `$${fmt(totalBudget)}`, sub: `${activeBudgetData.length} departments`, icon: "fa-wallet",              bg: "bg-primary/10 text-primary"    },
-                { label: "Total Spent",     val: `$${fmt(totalSpent)}`,  sub: `${totalBudget > 0 ? Math.round((totalSpent/totalBudget)*100) : 0}% utilized`, icon: "fa-money-bill-wave", bg: "bg-amber-500/10 text-amber-500" },
-                { label: "Remaining",       val: `$${fmt(remaining)}`,   sub: `${overBudget} dept(s) over budget`, icon: "fa-piggy-bank",         bg: overBudget > 0 ? "bg-rose-500/10 text-rose-500" : "bg-emerald-500/10 text-emerald-500" },
+                { label: "Total Budget",    val: `₹{fmt(totalBudget)}`, sub: `${activeBudgetData.length} departments`, icon: "fa-wallet",              bg: "bg-primary/10 text-primary"    },
+                { label: "Total Spent",     val: `₹{fmt(totalSpent)}`,  sub: `${totalBudget > 0 ? Math.round((totalSpent/totalBudget)*100) : 0}% utilized`, icon: "fa-money-bill-wave", bg: "bg-amber-500/10 text-amber-500" },
+                { label: "Remaining",       val: `₹{fmt(remaining)}`,   sub: `${overBudget} dept(s) over budget`, icon: "fa-piggy-bank",         bg: overBudget > 0 ? "bg-rose-500/10 text-rose-500" : "bg-emerald-500/10 text-emerald-500" },
               ];
             })().map(m => (
               <Card key={m.label}>
@@ -668,8 +668,8 @@ export function FinancePortalDashboard({
                     <div className="flex items-center justify-between text-sm">
                       <span className="font-semibold text-foreground">{dept.dept}</span>
                       <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                        <span>Spent: <strong className={over ? "text-rose-500" : "text-foreground"}>${fmt(dept.spent)}</strong></span>
-                        <span>Budget: <strong>${fmt(dept.budget)}</strong></span>
+                        <span>Spent: <strong className={over ? "text-rose-500" : "text-foreground"}>₹{fmt(dept.spent)}</strong></span>
+                        <span>Budget: <strong>₹{fmt(dept.budget)}</strong></span>
                         <span className={cn("font-bold px-1.5 py-0.5 rounded text-[11px]", over ? "bg-rose-500/10 text-rose-500" : "bg-emerald-500/10 text-emerald-500")}>
                           {pct}%
                         </span>
@@ -684,7 +684,7 @@ export function FinancePortalDashboard({
                     {over && (
                       <p className="text-[11px] text-rose-500">
                         <i className="fa-solid fa-triangle-exclamation mr-1" />
-                        Over budget by ${fmt(dept.spent - dept.budget)}
+                        Over budget by ₹{fmt(dept.spent - dept.budget)}
                       </p>
                     )}
                   </div>
@@ -704,7 +704,17 @@ export function FinancePortalDashboard({
 
       {/* ── PAYROLL TAB ── */}
       {activeTab === "payroll" && (
-        financeScope === "internal" ? (
+        !canManagePayroll ? (
+          <div className="p-8 text-center bg-card border border-border rounded-xl space-y-2">
+            <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center mx-auto text-muted-foreground">
+              <i className="fa-solid fa-lock text-sm" />
+            </div>
+            <h4 className="text-sm font-bold text-foreground">Payroll &amp; Compensation Access Restricted</h4>
+            <p className="text-xs text-muted-foreground max-w-md mx-auto">
+              Your role does not currently have permission to access Payroll &amp; Compensation. Please contact your workspace Administrator to grant permission.
+            </p>
+          </div>
+        ) : financeScope === "internal" ? (
           <ZeroTouchPayrollDesk
             canManagePayroll={canManagePayroll}
             currentUserId={user?._id}
@@ -720,9 +730,9 @@ export function FinancePortalDashboard({
                 const totalYTD    = activePayrollData.filter(p => p.status === "Paid").reduce((s, p) => s + p.total, 0);
                 const processing  = activePayrollData.find(p => p.status === "Processing");
                 return [
-                  { label: "YTD External Payouts", val: `$${fmt(totalYTD)}`, sub: `${activePayrollData.filter(p => p.status === "Paid").length} cycles paid`, icon: "fa-coins", bg: "bg-emerald-500/10 text-emerald-500" },
-                  { label: "Last Disbursement", val: lastPaid ? `$${fmt(lastPaid.total)}` : "—", sub: lastPaid?.period || "—", icon: "fa-money-check-dollar", bg: "bg-primary/10 text-primary" },
-                  { label: "Next Processing", val: processing ? `$${fmt(processing.total)}` : "—", sub: processing ? `Due ${processing.date}` : "—", icon: "fa-clock", bg: "bg-amber-500/10 text-amber-500" },
+                  { label: "YTD External Payouts", val: `₹{fmt(totalYTD)}`, sub: `${activePayrollData.filter(p => p.status === "Paid").length} cycles paid`, icon: "fa-coins", bg: "bg-emerald-500/10 text-emerald-500" },
+                  { label: "Last Disbursement", val: lastPaid ? `₹{fmt(lastPaid.total)}` : "—", sub: lastPaid?.period || "—", icon: "fa-money-check-dollar", bg: "bg-primary/10 text-primary" },
+                  { label: "Next Processing", val: processing ? `₹{fmt(processing.total)}` : "—", sub: processing ? `Due ${processing.date}` : "—", icon: "fa-clock", bg: "bg-amber-500/10 text-amber-500" },
                 ];
               })().map(m => (
                 <Card key={m.label}>
@@ -760,7 +770,7 @@ export function FinancePortalDashboard({
                     {activePayrollData.sort((a, b) => b.date.localeCompare(a.date)).map((p, i) => (
                       <tr key={p.period} className={cn("border-b border-border/50 hover:bg-muted/30 transition-colors", i % 2 === 1 && "bg-muted/10")}>
                         <td className="py-3 px-3 font-semibold text-foreground">{p.period}</td>
-                        <td className="py-3 px-3 font-bold text-foreground">${fmt(p.total)}</td>
+                        <td className="py-3 px-3 font-bold text-foreground">₹{fmt(p.total)}</td>
                         <td className="py-3 px-3 text-muted-foreground">{p.headcount} recipients</td>
                         <td className="py-3 px-3 text-muted-foreground text-xs">{p.date}</td>
                         <td className="py-3 px-3">

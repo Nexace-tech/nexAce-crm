@@ -222,6 +222,7 @@ export const FEATURE_ACTIONS: FeatureMeta[] = [
   { key: "uploadInvoiceExcel", name: "Upload Excel Files for Invoice Generation", category: "Finance & Invoices", subGroup: "Invoices Management", description: "Allow users with this role to upload Excel (.xlsx, .xls, .csv) timesheets and itemized billing spreadsheets when generating invoices (configured dynamically per role)", icon: "fa-solid fa-file-excel" },
   { key: "managePayroll", name: "Run Zero-Touch Payroll & Disbursement", category: "Finance & Invoices", subGroup: "Payroll & Compensation", description: "Process automated zero-touch monthly payroll, compute LOP/overtime, and disburse salary batches", icon: "fa-solid fa-money-check-dollar" },
   { key: "adjustSalarySlips", name: "Adjust & Edit Salary Slips", category: "Finance & Invoices", subGroup: "Payroll & Compensation", description: "Modify salary slip line items, bonuses, deductions, and payment reference notes", icon: "fa-solid fa-file-signature" },
+  { key: "manageCompensationPolicy", name: "Configure Compensation & Invoice Policy", category: "Finance & Invoices", subGroup: "Payroll & Compensation", description: "Configure Loss of Pay (LOP) divisor formulas, overtime multipliers, statutory tax/TDS rules, and standard allowance & deduction presets", icon: "fa-solid fa-sliders" },
 
   // IT & Infrastructure
   { key: "viewITPortal", name: "Access IT Portal", category: "IT & Infrastructure", subGroup: "IT Command Center", description: "Browse the IT Portal overview and hardware/software inventory", icon: "fa-solid fa-terminal" },
@@ -392,7 +393,7 @@ const PRESET_TEMPLATES: RolePresetTemplate[] = [
     features: [
       "viewKpiWidgets", "viewAnnouncements", "viewTeamDirectory", "viewSalaryData", "viewOrgChart",
       "viewClients", "viewReports", "exportClientData",
-      "viewFinancePortal", "viewSelfServiceInvoices", "createInvoices", "approveInvoices", "confirmInvoicePayments", "exportInvoices", "manageExpenses", "viewExpenseReports", "uploadInvoiceExcel", "managePayroll", "adjustSalarySlips", "viewSalarySlips",
+      "viewFinancePortal", "viewSelfServiceInvoices", "createInvoices", "approveInvoices", "confirmInvoicePayments", "exportInvoices", "manageExpenses", "viewExpenseReports", "uploadInvoiceExcel", "managePayroll", "adjustSalarySlips", "viewSalarySlips", "manageCompensationPolicy",
       "viewITPortal", "manageITInvoices", "manageITSubscriptions",
       "sendChatMessages", "viewMailCenter", "sendEmails",
       "viewNotifications",
@@ -2398,6 +2399,39 @@ export function RoleDataControlTab({ isAdmin, showToast }: RoleDataControlTabPro
                 )}
               </Button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Fixed bottom floating bar when dirty for quick save anywhere on the page */}
+      {isDirty && isAdmin && (
+        <div className="fixed bottom-5 inset-x-4 max-w-xl mx-auto z-50 flex items-center justify-between gap-3 px-4 py-3 rounded-2xl bg-card/95 border border-amber-500/50 text-foreground backdrop-blur-xl shadow-2xl animate-in fade-in slide-in-from-bottom-4">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-ping shrink-0" />
+            <div className="min-w-0">
+              <p className="text-xs font-bold text-foreground truncate">Unsaved Policy Changes</p>
+              <p className="text-[11px] text-muted-foreground truncate">
+                Role: <span className="text-amber-500 font-semibold">{currentRoleCfg.label}</span>
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={handleDiscardChanges}
+              className="px-3 py-1.5 text-xs font-semibold rounded-xl bg-muted hover:bg-muted/80 text-foreground border border-border shadow-xs transition-colors cursor-pointer"
+            >
+              Discard
+            </button>
+            <button
+              type="button"
+              onClick={handleSavePermissions}
+              disabled={saving}
+              className="px-4 py-1.5 text-xs font-bold rounded-xl bg-amber-500 hover:bg-amber-600 text-white shadow-md transition-all cursor-pointer flex items-center justify-center gap-1.5 active:scale-95 disabled:opacity-50"
+            >
+              <i className={cn("fa-solid text-xs", saving ? "fa-spinner fa-spin" : "fa-floppy-disk")} />
+              {saving ? "Saving..." : "Save Policy"}
+            </button>
           </div>
         </div>
       )}

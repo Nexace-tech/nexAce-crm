@@ -32,12 +32,22 @@ export async function GET(request: Request) {
     const { getUserDataScope } = await import("@/lib/dataScope");
     const { isSubAdminRole } = await import("@/lib/roles");
     const dataScope = await getUserDataScope(session);
-    const isElevated =
+    const canViewSlips =
       dataScope.role === "Admin" ||
       dataScope.role === "OPS" ||
       isSubAdminRole(dataScope.role) ||
       dataScope.canViewFeature("managePayroll") ||
       dataScope.canViewFeature("viewSalarySlips");
+
+    if (!canViewSlips) {
+      return NextResponse.json({ error: "Forbidden: Salary slips access required" }, { status: 403 });
+    }
+
+    const isElevated =
+      dataScope.role === "Admin" ||
+      dataScope.role === "OPS" ||
+      isSubAdminRole(dataScope.role) ||
+      dataScope.canViewFeature("managePayroll");
     const query: Record<string, unknown> = {
       tenantId: tenantObjectId,
       year,
@@ -141,12 +151,21 @@ export async function POST(request: Request) {
       isSubAdminRole(dataScope.role) ||
       dataScope.canViewFeature("managePayroll");
 
-    if (!canManagePayroll) {
-      return NextResponse.json({ error: "Forbidden: Payroll permissions required" }, { status: 403 });
-    }
+    const canAdjustSlips =
+      canManagePayroll || dataScope.canViewFeature("adjustSalarySlips");
 
     const body = await request.json();
     const { action } = body;
+
+    if (action === "update_slip") {
+      if (!canAdjustSlips) {
+        return NextResponse.json({ error: "Forbidden: Adjust salary slips permission required" }, { status: 403 });
+      }
+    } else {
+      if (!canManagePayroll) {
+        return NextResponse.json({ error: "Forbidden: Payroll permissions required" }, { status: 403 });
+      }
+    }
     const now = new Date();
     const month = body.month ? parseInt(body.month, 10) : now.getMonth() + 1;
     const year = body.year ? parseInt(body.year, 10) : now.getFullYear();

@@ -1619,7 +1619,7 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
             </button>
           )}
           {/* Salary & Payslips — employee self-service */}
-          {(isAdmin || isOPS || can("viewSalarySlips") || Boolean(user)) && (
+          {(isAdmin || isOPS || can("viewSalarySlips") || can("managePayroll")) && (
             <button onClick={() => setActiveTab("payslips")} className={cn(
               "px-3.5 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-2 cursor-pointer shrink-0 min-h-[38px]",
               activeTab === "payslips" ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
@@ -2622,8 +2622,22 @@ Updated At    : ${leave.updatedAt ? new Date(leave.updatedAt).toLocaleString() :
       )}
 
       {/* TAB: SALARY SLIPS & COMPENSATION — employee self-service */}
-      {activeTab === "payslips" && (isAdmin || isOPS || can("viewSalarySlips") || Boolean(user)) && (
-        <EmployeeSalarySlipsDesk />
+      {activeTab === "payslips" && (
+        (isAdmin || isOPS || can("viewSalarySlips") || can("managePayroll")) ? (
+          <EmployeeSalarySlipsDesk />
+        ) : (
+          <div className="rounded-3xl border border-border/80 bg-card p-10 text-center space-y-4 shadow-xs my-6">
+            <div className="w-14 h-14 rounded-2xl bg-amber-500/10 text-amber-500 flex items-center justify-center mx-auto text-2xl border border-amber-500/20">
+              <i className="fa-solid fa-lock" />
+            </div>
+            <div className="space-y-1">
+              <h3 className="text-base font-bold text-foreground">Access Restricted</h3>
+              <p className="text-xs text-muted-foreground max-w-md mx-auto">
+                You do not have permission to view or manage salary slips and compensation records. Please contact your workspace administrator to request access.
+              </p>
+            </div>
+          </div>
+        )
       )}
 
       {/* TAB 4: DOCUMENT VAULT — guarded */}

@@ -10,6 +10,20 @@ export interface IFinanceInvoiceTimelineEvent {
   timestamp: Date | string;
 }
 
+export interface IInvoiceHistoryItem {
+  _id?: mongoose.Types.ObjectId | string;
+  date: Date | string;
+  type: "Note" | "Email" | "Call" | "Meeting" | "Payment" | "Audit" | "StatusChange";
+  category: "Internal" | "External" | "System";
+  title: string;
+  summary: string;
+  authorName: string;
+  authorRole: string;
+  authorId?: mongoose.Types.ObjectId;
+  attachments?: Array<{ name: string; url: string }>;
+  metadata?: Record<string, any>;
+}
+
 export interface IInvoiceObjection {
   category: string;
   itemRef?: string;
@@ -65,6 +79,7 @@ export interface IFinanceInvoice extends Document {
   }>;
   revisionCount?: number;
   timeline?: IFinanceInvoiceTimelineEvent[];
+  history?: IInvoiceHistoryItem[];
   bankDetails?: {
     accountName?: string;
     bankName?: string;
@@ -177,6 +192,33 @@ const FinanceInvoiceSchema = new Schema<IFinanceInvoice>(
         actorId: { type: Schema.Types.ObjectId, ref: "User" },
         note: { type: String, default: "" },
         timestamp: { type: Date, default: Date.now },
+      },
+    ],
+    history: [
+      {
+        date: { type: Date, default: Date.now },
+        type: {
+          type: String,
+          enum: ["Note", "Email", "Call", "Meeting", "Payment", "Audit", "StatusChange"],
+          default: "Note",
+        },
+        category: {
+          type: String,
+          enum: ["Internal", "External", "System"],
+          default: "Internal",
+        },
+        title: { type: String, required: true },
+        summary: { type: String, required: true },
+        authorName: { type: String, required: true },
+        authorRole: { type: String, default: "Staff" },
+        authorId: { type: Schema.Types.ObjectId, ref: "User" },
+        attachments: [
+          {
+            name: { type: String, default: "" },
+            url: { type: String, default: "" },
+          },
+        ],
+        metadata: { type: Schema.Types.Mixed, default: {} },
       },
     ],
     bankDetails: {

@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { downloadInvoicePdf } from "@/lib/invoice-pdf";
 import { downloadElementAsPdf } from "@/lib/invoice-dom-pdf";
+import { InvoiceHistoryDrawer } from "@/components/finance/InvoiceHistoryDrawer";
 
 export interface IInvoiceObjection {
   category: string;
@@ -239,6 +240,7 @@ export function InvoiceDetailsView({
   const [rejectModalOpen, setRejectModalOpen] = useState(false);
   const [objections, setObjections] = useState<InvoiceObjectionFormItem[]>([createBlankObjection()]);
   const [showTraceModal, setShowTraceModal] = useState(false);
+  const [showHistoryDrawer, setShowHistoryDrawer] = useState(false);
 
   useEffect(() => {
     fetch("/api/settings/company")
@@ -922,6 +924,17 @@ export function InvoiceDetailsView({
         </div>
 
         <div className="flex items-center gap-2 flex-wrap shrink-0">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setShowHistoryDrawer(true)}
+            className="gap-1.5 font-bold h-8 px-3 cursor-pointer text-foreground border-border hover:bg-muted shadow-2xs"
+            title="Open comprehensive interaction history, communications, notes, and activity timeline"
+          >
+            <i className="fa-solid fa-timeline text-[11px] text-primary" /> Invoice History
+          </Button>
+
           <Button
             type="button"
             variant="outline"
@@ -2274,6 +2287,18 @@ export function InvoiceDetailsView({
           </div>
         </div>
       </div>
+
+      <InvoiceHistoryDrawer
+        isOpen={showHistoryDrawer}
+        onClose={() => setShowHistoryDrawer(false)}
+        invoiceId={invoice._id || invoice.invoiceNo}
+        invoiceNo={invoice.invoiceNo}
+        clientName={invoice.billedToName || invoice.businessName || invoice.customerNo || "Client"}
+        amount={invoice.total}
+        currency={invoice.currency}
+        status={invoice.status}
+        isInternal={invoice.invoiceNo?.startsWith("INV-SAL") || invoice.invoiceNo?.startsWith("INV-EMP")}
+      />
     </div>
   );
 }

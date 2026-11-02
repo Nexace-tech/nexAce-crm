@@ -99,7 +99,7 @@ function getItemChoicesForFinance(inv?: FinanceInvoice | null) {
   if (Array.isArray(rawItems) && rawItems.length > 0) {
     rawItems.forEach((item: any, idx: number) => {
       choices.push({
-        label: `Deliverable #${idx + 1}: ${item.description || "Line Item"} (${inv.currency || "$"}${item.amount || item.unitPrice || 0})`,
+        label: `Deliverable #${idx + 1}: ${item.description || "Line Item"} (${inv.currency === "INR" || !inv.currency ? "₹" : `${inv.currency} `}${item.amount || item.unitPrice || 0})`,
         value: `Line Item #${idx + 1}: ${item.description || "Deliverable"}`,
         group: "Deliverables",
       });
@@ -183,7 +183,7 @@ function formatForInvoiceDetails(inv: any): InvoiceDetailsData {
     taxRate,
     taxAmount,
     total,
-    currency: inv.currency || "USD",
+    currency: inv.currency || "INR",
     status: inv.status || "Draft",
     notes: inv.notes || "",
     bankDetails: inv.bankDetails,
@@ -502,9 +502,9 @@ export default function InvoiceGridView({
 
   const kpiCards = [
     { label: "Total Invoices", value: kpis.total, sub: `${kpis.draft} draft`, icon: "fa-file-invoice-dollar", color: "text-violet-600 dark:text-violet-400", bg: "bg-violet-500/10", border: "border-violet-500/20" },
-    { label: "Paid Revenue",   value: `$${fmt(kpis.paid)}`,    sub: `${kpis.paidCount} invoices`,    icon: "fa-circle-check",          color: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-500/20" },
-    { label: "Pending",        value: `$${fmt(kpis.pending)}`, sub: `${kpis.pendingCount} invoices`, icon: "fa-clock",                 color: "text-amber-600 dark:text-amber-400",   bg: "bg-amber-500/10",   border: "border-amber-500/20" },
-    { label: "Overdue",        value: `$${fmt(kpis.overdue)}`, sub: `${kpis.overdueCount} invoices`, icon: "fa-triangle-exclamation",  color: "text-rose-600 dark:text-rose-400",     bg: "bg-rose-500/10",    border: "border-rose-500/20" },
+    { label: "Paid Revenue",   value: `₹${fmt(kpis.paid)}`,    sub: `${kpis.paidCount} invoices`,    icon: "fa-circle-check",          color: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-500/20" },
+    { label: "Pending",        value: `₹${fmt(kpis.pending)}`, sub: `${kpis.pendingCount} invoices`, icon: "fa-clock",                 color: "text-amber-600 dark:text-amber-400",   bg: "bg-amber-500/10",   border: "border-amber-500/20" },
+    { label: "Overdue",        value: `₹${fmt(kpis.overdue)}`, sub: `${kpis.overdueCount} invoices`, icon: "fa-triangle-exclamation",  color: "text-rose-600 dark:text-rose-400",     bg: "bg-rose-500/10",    border: "border-rose-500/20" },
   ];
 
   if (viewingInvoice) {
@@ -1020,7 +1020,7 @@ export default function InvoiceGridView({
                     <div className="bg-primary/5 border border-primary/10 rounded-xl px-3 py-2.5 flex items-center justify-between">
                       <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide">Amount</span>
                       <span className="text-base font-black text-primary">
-                        {inv.currency || "USD"} {fmtDec(inv.amount)}
+                        {inv.currency === "INR" || !inv.currency ? "₹" : `${inv.currency} `}{fmtDec(inv.amount)}
                       </span>
                     </div>
 
@@ -1171,7 +1171,7 @@ export default function InvoiceGridView({
                         {/* Amount */}
                         <td className="py-3.5 px-4 text-right whitespace-nowrap">
                           <span className="text-xs font-black text-foreground font-mono">
-                            {inv.currency || "USD"} {fmtDec(inv.amount)}
+                            {inv.currency === "INR" || !inv.currency ? "₹" : `${inv.currency} `}{fmtDec(inv.amount)}
                           </span>
                         </td>
 
@@ -1271,7 +1271,7 @@ export default function InvoiceGridView({
                     </span>
                   </h3>
                   <p className="text-xs text-muted-foreground">
-                    {traceInvoice.client} &bull; {traceInvoice.currency || "USD"} {fmtDec(traceInvoice.amount)}
+                    {traceInvoice.client} &bull; {traceInvoice.currency === "INR" || !traceInvoice.currency ? "₹" : `${traceInvoice.currency} `}{fmtDec(traceInvoice.amount)}
                   </p>
                 </div>
               </div>
@@ -1897,7 +1897,7 @@ export default function InvoiceGridView({
                 <div>
                   <p className="text-[10px] font-bold text-muted-foreground uppercase">Disbursement Amount</p>
                   <p className="text-xl font-black text-emerald-600 dark:text-emerald-400 font-mono">
-                    {paymentModal.invoice.currency || "USD"} {fmtDec(paymentModal.invoice.amount)}
+                    {paymentModal.invoice.currency === "INR" || !paymentModal.invoice.currency ? "₹" : `${paymentModal.invoice.currency} `}{fmtDec(paymentModal.invoice.amount)}
                   </p>
                 </div>
                 <div className="text-right">

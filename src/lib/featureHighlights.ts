@@ -30,6 +30,78 @@ export interface FeatureRelease {
 
 export const FEATURE_RELEASES: FeatureRelease[] = [
   {
+    id: "release-2026-11-invoice-history-and-policy-engine",
+    version: "v3.0",
+    releaseDate: "November 2026",
+    badge: "Finance & Payroll Suite",
+    title: "Invoice Interaction History & Master Policy Engine",
+    subtitle: "Complete interaction audit trail across all internal & external invoices, plus 1-click compensation policy toggling and automatic salary breakdown picking.",
+    features: [
+      {
+        id: "invoice-interaction-history-timeline",
+        title: "Internal & External Invoice History & Activity Timeline",
+        description: "Log notes, client email correspondences, phone calls, payment memos, and view synthesized status change audits across all corporate and staff invoices via an interactive slide-over drawer.",
+        icon: "fa-solid fa-timeline text-primary",
+        badge: "NEW",
+        tag: "Finance & Invoices",
+        category: "Communication",
+        highlights: [
+          "Complete activity history for internal staff claims and external corporate client invoices",
+          "Log notes, emails, calls, meetings, and payment proofs with attachments",
+          "Quick category filter pills: All, Notes, Emails, Calls, Meetings, Payments, and Status Changes",
+          "Seamless drawer available in Invoice Details, Admin Invoices Table, and Finance Dashboard",
+        ],
+        href: "/dashboard/finance?tab=invoices",
+        applicableRoles: ["Admin", "Sub Admin", "OPS", "HR", "Employee"],
+      },
+      {
+        id: "master-compensation-policy-toggle",
+        title: "Master Policy Toggle & 1-Click Auto-Picking",
+        description: "Control all compensation rules with a single Master Switch. Automatically populate standard allowances (40% HRA, 15% Special) and statutory deductions (12% PF, ₹200 PT, TDS) based on employee contract type.",
+        icon: "fa-solid fa-toggle-on text-emerald-500",
+        badge: "ENHANCED",
+        tag: "HRMS & Payroll",
+        category: "HRMS & Payroll",
+        highlights: [
+          "Master Policy Toggle: Enable or suspend all rules in 1 click across the entire organization",
+          "Auto-Picking: Base salary instantly calculates HRA, Special Allowance, PF, and PT",
+          "Direct Generator Activation: Turn on policy rules directly from SelfInvoiceGenerator banner",
+          "Auto-healing DB defaults: Guarantees enterprise standard presets are never missing",
+        ],
+        href: "/dashboard/settings?tab=invoices",
+        applicableRoles: ["Admin", "Sub Admin", "OPS", "HR"],
+      },
+    ],
+  },
+  {
+    id: "release-2026-11-compensation-policy",
+    version: "v2.9",
+    releaseDate: "November 2026",
+    badge: "Finance & Payroll Rules",
+    title: "Customizable Compensation Policy & Salary Calculations",
+    subtitle: "Fine-tune Loss of Pay (LOP) divisor formulas, overtime multipliers, statutory deductions (PF/ESI/PT), and earnings presets across your organization.",
+    features: [
+      {
+        id: "customizable-compensation-policy",
+        title: "Customizable Compensation & Invoice Policy",
+        description: "Admin, OPS, and HR can now customize LOP divisor modes (calendar days, working days, fixed 26/30, custom), grace days, overtime multipliers, tax & TDS withholding, and standard allowance/deduction presets.",
+        icon: "fa-solid fa-sliders text-emerald-500",
+        badge: "NEW",
+        tag: "Finance & Invoices",
+        category: "HRMS & Payroll",
+        highlights: [
+          "Configurable LOP formula: Divisor mode, custom divisor, and grace absence allowance",
+          "Dynamic Overtime: Custom standard (1.5x), weekend (2.0x), and holiday multipliers",
+          "Statutory & Tax Rules: TDS withholding %, Professional Tax (PT), Provident Fund (PF), and ESI",
+          "One-click reset to standard enterprise defaults anytime",
+        ],
+        href: "/dashboard/finance?tab=invoices",
+        applicableRoles: ["Admin", "Sub Admin", "OPS", "HR"],
+      },
+    ],
+  },
+
+  {
     id: "release-2026-10-enterprise-suite",
     version: "v2.8",
     releaseDate: "October 2026",

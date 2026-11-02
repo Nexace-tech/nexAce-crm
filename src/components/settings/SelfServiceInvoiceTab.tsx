@@ -11,6 +11,8 @@ import { cn } from "@/lib/utils";
 import { InvoiceDetailsView } from "@/components/finance/InvoiceDetailsView";
 import { downloadInvoicePdf } from "@/lib/invoice-pdf";
 import { removeSignatureBackground } from "@/lib/signature";
+import { CompensationPolicyModal } from "@/components/finance/CompensationPolicyModal";
+import type { ICompensationPolicy } from "@/models/CompensationPolicy";
 import type { IInvoiceObjection } from "./AdminInvoicesTab";
 import * as XLSX from "xlsx";
 
@@ -211,6 +213,28 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
   const urlTab = searchParams.get("tab");
 
   const { user } = useAuth();
+  const { isAdmin, isOPS, isHR, can } = usePermissions();
+  const canManagePolicy = Boolean(isAdmin || isOPS || can("manageCompensationPolicy") || can("managePayroll"));
+  const [compensationPolicy, setCompensationPolicy] = useState<ICompensationPolicy | null>(null);
+
+  const [showPolicyModal, setShowPolicyModal] = useState(false);
+
+  useEffect(() => {
+    const fetchPolicy = async () => {
+      try {
+        const res = await fetch("/api/finance/compensation-policy");
+        if (res.ok) {
+          const d = await res.json();
+          if (d.policy) {
+            setCompensationPolicy(d.policy);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to fetch compensation policy:", err);
+      }
+    };
+    fetchPolicy();
+  }, []);
   const [activeSubTab, setActiveSubTab] = useState<"history" | "generate">(() => {
     return urlTab === "generate" ? "generate" : "history";
   });
@@ -920,7 +944,6 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
   };
 
   // Dynamic Role-based & Employment-type permission for Excel invoice upload
-  const { can } = usePermissions();
   const isFullTime = Boolean(
     user?.employmentType &&
     (user.employmentType.toLowerCase().includes("permanent") || user.employmentType.toLowerCase().includes("full"))
@@ -1163,6 +1186,125 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
     upiId: user?.bankDetails?.upiId || "",
     notes: `Monthly contractual salary claim for ${new Date(now.getFullYear(), now.getMonth(), 1).toLocaleString("default", { month: "long", year: "numeric" })}. Verified biometric & shift attendance attached.`,
   });
+
+  // Auto-populate compensation policy presets into allowances & deductions on initial load
+  const hasAutoPopulatedRef = useRef(false);
+  const [togglingPolicy, setTogglingPolicy] = useState(false);
+
+  const applyPolicyDefaultsToState = (targetBaseSalary?: number) => {
+    if (!compensationPolicy || compensationPolicy.enabled === false) return;
+    const currentSalary = targetBaseSalary !== undefined ? targetBaseSalary : (Number(salaryFormData.monthlySalary) || 0);
+    if (currentSalary <= 0) return;
+
+    const rawEmpType = (salaryFormData.employmentType || user?.employmentType || "Permanent").trim().toLowerCase();
+    const isContractor = rawEmpType.includes("contract");
+    const isIntern = rawEmpType.includes("intern") || rawEmpType.includes("trainee");
+    const isPermanent = !isContractor && !isIntern;
+
+    const matchesEmployment = (target?: string) => {
+      if (!target || target === "All") return true;
+      const t = target.toLowerCase();
+      if (t === "permanent" && isPermanent) return true;
+      if (t === "contractor" && isContractor) return true;
+      if (t === "intern" && isIntern) return true;
+      return false;
+    };
+
+    const newAllowances: CustomSalaryItem[] = [];
+    const newDeductions: CustomSalaryItem[] = [];
+
+    // 1. Allowances matching employment type
+    if (Array.isArray(compensationPolicy.allowancePresets) && !isContractor) {
+      compensationPolicy.allowancePresets.forEach((preset, idx) => {
+        if (!preset.isDefault) return;
+        if (!matchesEmployment(preset.targetEmploymentType)) return;
+        const amt = preset.type === "percentage" ? Math.round((currentSalary * preset.value) / 100) : Number(preset.value) || 0;
+        if (amt > 0) {
+          newAllowances.push({
+            id: `policy_allowance_${idx + 1}_${Date.now()}`,
+            name: preset.name,
+            amount: amt,
+          });
+        }
+      });
+    }
+
+    // 2. Deductions matching employment type
+    if (Array.isArray(compensationPolicy.deductionPresets)) {
+      compensationPolicy.deductionPresets.forEach((preset, idx) => {
+        if (!preset.isDefault) return;
+        if (!matchesEmployment(preset.targetEmploymentType)) return;
+        let amt = 0;
+        if (preset.name.includes("Provident Fund") && (compensationPolicy.taxRules as any)?.enforcePfWageCap) {
+          amt = Math.round((Math.min(currentSalary, 15000) * preset.value) / 100);
+        } else {
+          amt = preset.type === "percentage" ? Math.round((currentSalary * preset.value) / 100) : Number(preset.value) || 0;
+        }
+        if (amt > 0) {
+          newDeductions.push({
+            id: `policy_ded_${idx + 1}_${Date.now()}`,
+            name: preset.name,
+            amount: amt,
+          });
+        }
+      });
+    }
+
+    // 3. Contractor TDS Withholding
+    if (isContractor && compensationPolicy.taxRules?.tdsRate > 0) {
+      newDeductions.push({
+        id: `policy_tds_${Date.now()}`,
+        name: `${compensationPolicy.taxRules.taxLabel || "TDS"} Withholding (${compensationPolicy.taxRules.tdsRate}%)`,
+        amount: Math.round((currentSalary * compensationPolicy.taxRules.tdsRate) / 100),
+      });
+    }
+
+    setSalaryFormData((prev) => ({
+      ...prev,
+      autoCalculateLop: compensationPolicy.lopFormula?.autoCalculateLop ?? prev.autoCalculateLop,
+      allowances: newAllowances,
+      deductions: newDeductions,
+    }));
+  };
+
+  const handleTogglePolicyRules = async (enable: boolean) => {
+    setTogglingPolicy(true);
+    try {
+      const res = await fetch("/api/finance/compensation-policy", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled: enable }),
+      });
+      if (res.ok) {
+        setCompensationPolicy((prev) => prev ? ({ ...prev, enabled: enable } as unknown as ICompensationPolicy) : null);
+        if (enable) {
+          hasAutoPopulatedRef.current = false;
+          applyPolicyDefaultsToState();
+          showToast("Compensation Policy Rules activated! Standard allowances & deductions applied.", "success");
+        } else {
+          showToast("Compensation Policy Rules suspended (Manual mode active).", "success");
+        }
+      } else {
+        const d = await res.json();
+        showToast(d.error || "Failed to toggle policy rules", "error");
+      }
+    } catch {
+      showToast("Error updating policy status", "error");
+    } finally {
+      setTogglingPolicy(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!compensationPolicy || compensationPolicy.enabled === false) return;
+    const currentSalary = Number(salaryFormData.monthlySalary) || 0;
+    if (currentSalary <= 0) return;
+
+    if (!hasAutoPopulatedRef.current && salaryFormData.allowances.length === 0 && salaryFormData.deductions.length === 0) {
+      hasAutoPopulatedRef.current = true;
+      applyPolicyDefaultsToState(currentSalary);
+    }
+  }, [compensationPolicy, salaryFormData.monthlySalary, salaryFormData.employmentType, user?.employmentType]);
 
   const getAvailableMonths = () => {
     const list: Array<{ value: string; label: string; isCurrent: boolean }> = [];
@@ -1569,7 +1711,8 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
     setInvoiceSubmitting(true);
     try {
       const regHours = Number(invoiceFormData.hoursWorked) || 0;
-      const otHours = Number(invoiceFormData.overtimeHours) || 0;
+        const otMultiplier = isPolicyActive ? (compensationPolicy?.overtimeRules?.standardMultiplier || 1.5) : 1.0;
+  const otHours = Number(invoiceFormData.overtimeHours) || 0;
       const hRate = Number(invoiceFormData.hourlyRate) || 0;
       const dRate = Number(invoiceFormData.dailyRate) || 0;
       const dWorked = Number(invoiceFormData.daysWorked) || 0;
@@ -1846,9 +1989,34 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
   const grossSalary = baseSalary + totalAllowances;
   const [salYStr, salMStr] = salaryFormData.selectedMonth.split("-");
   const totalDaysInMonth = new Date(parseInt(salYStr, 10), parseInt(salMStr, 10), 0).getDate() || 30;
-  const dailySalaryRate = totalDaysInMonth > 0 ? baseSalary / totalDaysInMonth : 0;
-  const calculatedLopDeduction = salaryFormData.autoCalculateLop && salaryFormData.lopDays > 0
-    ? Math.round(dailySalaryRate * salaryFormData.lopDays)
+  
+  // Dynamic LOP divisor based on tenant compensation policy
+  const isPolicyActive = compensationPolicy?.enabled !== false;
+  const otMultiplier = isPolicyActive ? (compensationPolicy?.overtimeRules?.standardMultiplier || 1.5) : 1.0;
+  let lopDivisorDays = totalDaysInMonth;
+  const divisorMode = isPolicyActive ? (compensationPolicy?.lopFormula?.divisorMode || "calendar_days") : "calendar_days";
+  if (divisorMode === "working_days") {
+    const y = parseInt(salYStr, 10);
+    const m = parseInt(salMStr, 10);
+    let wd = 0;
+    for (let day = 1; day <= totalDaysInMonth; day++) {
+      const dt = new Date(y, m - 1, day);
+      if (dt.getDay() !== 0) wd++;
+    }
+    lopDivisorDays = Math.max(1, wd);
+  } else if (divisorMode === "fixed_26") {
+    lopDivisorDays = 26;
+  } else if (divisorMode === "fixed_30") {
+    lopDivisorDays = 30;
+  } else if (divisorMode === "custom_divisor") {
+    lopDivisorDays = Math.max(1, compensationPolicy?.lopFormula?.customDivisorDays || 30);
+  }
+
+  const dailySalaryRate = lopDivisorDays > 0 ? baseSalary / lopDivisorDays : 0;
+  const graceAbsenceDays = isPolicyActive ? (compensationPolicy?.lopFormula?.graceAbsenceDays || 0) : 0;
+  const netBillableLopDays = Math.max(0, (salaryFormData.lopDays || 0) - graceAbsenceDays);
+  const calculatedLopDeduction = salaryFormData.autoCalculateLop && netBillableLopDays > 0
+    ? Math.round(dailySalaryRate * netBillableLopDays)
     : 0;
   const totalDeductions = salaryFormData.deductions.reduce((s, d) => s + (Number(d.amount) || 0), 0) + calculatedLopDeduction;
   const netPayableSalary = Math.max(0, grossSalary - totalDeductions);
@@ -1860,6 +2028,19 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
       : salaryFormData.currency === "INR"
       ? "₹"
       : "$";
+
+    const handleApplyPolicyPresets = () => {
+    if (!compensationPolicy) {
+      showToast("Compensation policy not loaded yet.", "error");
+      return;
+    }
+    if (compensationPolicy.enabled === false) {
+      showToast("Policy rules are currently suspended by Admin (Manual mode active).", "error");
+      return;
+    }
+    applyPolicyDefaultsToState();
+    showToast("Re-applied active compensation policy allowances & deductions!", "success");
+  };
 
   const handlePermanentInvoiceSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -2401,17 +2582,34 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
                 >
                   <i className="fa-solid fa-file-invoice text-xs text-primary" /> View My Invoices
                 </Button>
-                <span
-                  className={cn(
-                    "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border",
-                    generatorType === "permanent"
-                      ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
-                      : "bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/30"
-                  )}
-                >
-                  <i className={cn("fa-solid text-[9px]", generatorType === "permanent" ? "fa-shield-halved" : "fa-laptop-code")} />
-                  {generatorType === "permanent" ? "Salaried Permanent Staff" : "Independent Contractor"}
-                </span>
+                <div className="flex items-center gap-1 p-0.5 bg-background border border-border rounded-lg text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setGeneratorType("permanent")}
+                    className={cn(
+                      "px-2.5 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1.5",
+                      generatorType === "permanent"
+                        ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 shadow-2xs border border-emerald-500/30"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                    title="Fixed monthly salary computation with LOP divisor, grace days, allowances, and statutory deductions"
+                  >
+                    <i className="fa-solid fa-file-invoice-dollar text-[10px]" /> Fixed Salary
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setGeneratorType("contractor")}
+                    className={cn(
+                      "px-2.5 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1.5",
+                      generatorType === "contractor"
+                        ? "bg-sky-500/15 text-sky-600 dark:text-sky-400 shadow-2xs border border-sky-500/30"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                    title="Hourly, daily, or shift-based invoice with attendance clock-in, overtime multiplier, and TDS"
+                  >
+                    <i className="fa-solid fa-business-time text-[10px]" /> Hourly / Shift
+                  </button>
+                </div>
               </div>
             </div>
           </CardHeader>
@@ -2428,7 +2626,7 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
                       </div>
                       <div>
                         <h4 className="text-xs font-bold text-foreground">
-                          Permanent Employee Contract Profile
+                          {salaryFormData.employmentType || user?.employmentType || "Salaried"} Employee Profile
                         </h4>
                         <p className="text-[11px] text-muted-foreground">
                           Salaried staff with fixed monthly payout &amp; verified attendance
@@ -2437,7 +2635,7 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
                     </div>
                     <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 text-[11px] font-bold border border-emerald-500/30">
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                      Full Time Permanent Staff
+                      {salaryFormData.employmentType || user?.employmentType || "Permanent Staff"}
                     </span>
                   </div>
 
@@ -2764,6 +2962,102 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
                       </div>
                     )}
                   </div>
+
+                  {salaryFormData.lopDays > 0 && (
+                    <div className="pt-2 flex items-center justify-between flex-wrap gap-2 text-[11px] border-t border-border/40">
+                      <span className="text-muted-foreground flex items-center gap-1.5">
+                        <i className="fa-solid fa-circle-exclamation text-rose-500 text-[10px]" />
+                        <span>{salaryFormData.lopDays} days absence detected</span>
+                        {graceAbsenceDays > 0 && (
+                          <span className="text-emerald-600 dark:text-emerald-400 font-medium">
+                            ({graceAbsenceDays} grace days applied)
+                          </span>
+                        )}
+                      </span>
+                      <a
+                        href="/dashboard/calendar"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-[11px] font-bold text-primary hover:underline cursor-pointer"
+                        title="Request Attendance Regularization if you forgot to clock in"
+                      >
+                        <i className="fa-solid fa-clock-rotate-left text-[10px]" />
+                        Forgot to clock in? Request Regularization
+                      </a>
+                    </div>
+                  )}
+                </div>
+
+                {/* Active Compensation Policy Controls Banner */}
+                <div className="p-3.5 bg-background border border-border rounded-xl space-y-2 shadow-2xs">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <div className="w-7 h-7 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                        <i className="fa-solid fa-shield-halved text-xs" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h4 className="text-xs font-bold text-foreground">
+                            Compensation &amp; Invoice Policy Engine
+                          </h4>
+                          {isPolicyActive ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 text-[10px] font-bold border border-emerald-500/30">
+                              <i className="fa-solid fa-circle-check text-[9px]" /> Policy Active
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 text-[10px] font-bold border border-amber-500/30">
+                              <i className="fa-solid fa-triangle-exclamation text-[9px]" /> Policy Suspended (Manual Mode)
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-muted-foreground mt-0.5">
+                          {isPolicyActive
+                            ? `LOP Divisor: ${divisorMode.replace('_', ' ')} (${lopDivisorDays}d) &bull; Grace Absences: ${graceAbsenceDays}d &bull; Overtime: ${otMultiplier}x`
+                            : "Standard calendar day divisor with 0 auto-populated allowances or statutory deductions."}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      {isPolicyActive ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={handleApplyPolicyPresets}
+                          className="h-7 px-2.5 text-[11px] gap-1.5 font-bold text-primary border-primary/40 hover:bg-primary/10 cursor-pointer"
+                          title="Re-apply or reset allowances and statutory deductions from the active policy"
+                        >
+                          <i className="fa-solid fa-rotate-left text-[10px]" /> Re-apply Policy Defaults
+                        </Button>
+                      ) : canManagePolicy ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={togglingPolicy}
+                          onClick={() => handleTogglePolicyRules(true)}
+                          className="h-7 px-2.5 text-[11px] gap-1.5 font-bold text-emerald-600 dark:text-emerald-400 border-emerald-500/40 hover:bg-emerald-500/10 cursor-pointer shadow-2xs"
+                          title="Click to activate compensation policy rules and auto-calculate allowances & deductions"
+                        >
+                          <i className={cn("fa-solid text-xs", togglingPolicy ? "fa-circle-notch animate-spin" : "fa-toggle-on text-emerald-500")} />
+                          {togglingPolicy ? "Activating..." : "Enable Policy Rules"}
+                        </Button>
+                      ) : null}
+                      {canManagePolicy && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setShowPolicyModal(true)}
+                          className="h-7 px-2.5 text-[11px] gap-1.5 font-bold text-foreground border-border hover:bg-muted cursor-pointer"
+                          title="Configure LOP formula, Overtime multipliers, and Tax/Deduction rules"
+                        >
+                          <i className="fa-solid fa-sliders text-[10px] text-primary" /> Policy Rules
+                        </Button>
+                      )}
+                    </div>
+                  </div>
                 </div>
 
                 {/* Additional Allowances & Earnings */}
@@ -2790,8 +3084,20 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
 
                   <div className="space-y-2">
                     {salaryFormData.allowances.length === 0 ? (
-                      <div className="p-3 text-center rounded-lg border border-dashed border-border/80 bg-background/50 text-[11px] text-muted-foreground">
-                        <span>No additional allowances added. Click <strong>+ Add Allowance</strong> if any bonus or allowance applies.</span>
+                      <div className="p-3 text-center rounded-lg border border-dashed border-border/80 bg-background/50 text-[11px] text-muted-foreground flex flex-col sm:flex-row items-center justify-center gap-2">
+                        <span>No additional allowances added.</span>
+                        {isPolicyActive ? (
+                          <button
+                            type="button"
+                            onClick={handleApplyPolicyPresets}
+                            className="font-bold text-primary hover:underline cursor-pointer inline-flex items-center gap-1"
+                          >
+                            <i className="fa-solid fa-wand-magic-sparkles text-[10px]" />
+                            Apply Policy Allowances (HRA 40%, Special 15%)
+                          </button>
+                        ) : (
+                          <span>Click <strong>+ Add Allowance</strong> if any bonus applies.</span>
+                        )}
                       </div>
                     ) : (
                       salaryFormData.allowances.map((item) => (
@@ -2856,8 +3162,20 @@ export function SelfServiceInvoiceTab({ showToast }: SelfServiceInvoiceTabProps)
 
                   <div className="space-y-2">
                     {salaryFormData.deductions.length === 0 ? (
-                      <div className="p-3 text-center rounded-lg border border-dashed border-border/80 bg-background/50 text-[11px] text-muted-foreground">
-                        <span>No deductions added. Click <strong>+ Add Deduction</strong> if any tax or withholding applies.</span>
+                      <div className="p-3 text-center rounded-lg border border-dashed border-border/80 bg-background/50 text-[11px] text-muted-foreground flex flex-col sm:flex-row items-center justify-center gap-2">
+                        <span>No deductions added.</span>
+                        {isPolicyActive ? (
+                          <button
+                            type="button"
+                            onClick={handleApplyPolicyPresets}
+                            className="font-bold text-rose-500 hover:underline cursor-pointer inline-flex items-center gap-1"
+                          >
+                            <i className="fa-solid fa-wand-magic-sparkles text-[10px]" />
+                            Apply Policy Deductions (PF 12%, PT ₹200)
+                          </button>
+                        ) : (
+                          <span>Click <strong>+ Add Deduction</strong> if any tax or withholding applies.</span>
+                        )}
                       </div>
                     ) : (
                       salaryFormData.deductions.map((item) => (

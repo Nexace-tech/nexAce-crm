@@ -325,9 +325,11 @@ interface SidebarNavMenuProps {
   isEmployeeOrHR: boolean;
   isPending: boolean;
   onNavigate: () => void;
+  isAdmin?: boolean;
+  isOPS?: boolean;
 }
 
-function SidebarNavMenu({ canAccessModule, can, isEmployeeOrHR, isPending, onNavigate }: SidebarNavMenuProps) {
+function SidebarNavMenu({ canAccessModule, can, isEmployeeOrHR, isPending, onNavigate, isAdmin, isOPS }: SidebarNavMenuProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const currentTab = searchParams?.get("tab") || null;
@@ -546,6 +548,9 @@ function SidebarNavMenu({ canAccessModule, can, isEmployeeOrHR, isPending, onNav
               {allowedCategories.map((cat) => {
                 let visibleSubItems = cat.subItems
                   ? cat.subItems.filter((sub) => {
+                      if (sub.id === "hr-payslips") {
+                        return Boolean(isAdmin || isOPS || can("viewSalarySlips") || can("managePayroll"));
+                      }
                       if (sub.key) {
                         if (sub.key === "it") return canAccessModule("it") || can("viewITPortal");
                         return canAccessModule(sub.key);
@@ -605,9 +610,9 @@ function SidebarNavMenu({ canAccessModule, can, isEmployeeOrHR, isPending, onNav
                     visibleSubItems = [
                       { id: "fin-invoices", name: "Invoices", href: "/dashboard/finance?tab=invoices" },
                       { id: "fin-generate", name: "Generate Invoice", href: "/dashboard/finance?tab=generate" },
-                      { id: "fin-expenses", name: "Expenses", href: "/dashboard/finance?tab=expenses" },
-                      { id: "fin-budget", name: "Budget", href: "/dashboard/finance?tab=budget" },
-                      { id: "fin-payroll", name: "Payroll", href: "/dashboard/finance?tab=payroll" },
+                      ...(can("manageExpenses") || can("viewExpenseReports") || isAdmin || isOPS ? [{ id: "fin-expenses", name: "Expenses", href: "/dashboard/finance?tab=expenses" }] : []),
+                      ...(isAdmin || isOPS ? [{ id: "fin-budget", name: "Budget", href: "/dashboard/finance?tab=budget" }] : []),
+                      ...(can("managePayroll") || isAdmin ? [{ id: "fin-payroll", name: "Payroll", href: "/dashboard/finance?tab=payroll" }] : []),
                     ];
                   }
                 }
@@ -1048,6 +1053,8 @@ export function DashboardClientLayout({ session, menuItems, isPending = false, c
             isEmployeeOrHR={isEmployeeOrHR}
             isPending={isPending || user?.status === "Pending"}
             onNavigate={() => setMobileOpen(false)}
+            isAdmin={isAdmin}
+            isOPS={isOPS}
           />
         </React.Suspense>
 

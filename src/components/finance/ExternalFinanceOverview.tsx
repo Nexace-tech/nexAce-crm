@@ -318,23 +318,23 @@ export function ExternalFinanceOverview({
       ["Generated At", new Date().toLocaleString()],
       [],
       ["EXECUTIVE OVERVIEW METRICS"],
-      ["Total External Invoiced", `$${fmt(invoiceMetrics.totalBilled)}`],
-      ["Paid Receivables", `$${fmt(invoiceMetrics.paidAmount)} (${invoiceMetrics.paidCount} invoices)`],
-      ["Pending Receivables", `$${fmt(invoiceMetrics.pendingAmount)} (${invoiceMetrics.pendingCount} invoices)`],
-      ["Overdue Receivables", `$${fmt(invoiceMetrics.overdueAmount)} (${invoiceMetrics.overdueCount} invoices)`],
-      ["Total Vendor Disbursements", `$${fmt(expenseMetrics.totalSpent)}`],
-      ["Approved Disbursements", `$${fmt(expenseMetrics.approvedAmount)} (${expenseMetrics.approvedCount} items)`],
-      ["Net Operating Cash Flow", `$${fmt(netCashFlow)}`],
+      ["Total External Invoiced", `₹{fmt(invoiceMetrics.totalBilled)}`],
+      ["Paid Receivables", `₹{fmt(invoiceMetrics.paidAmount)} (${invoiceMetrics.paidCount} invoices)`],
+      ["Pending Receivables", `₹{fmt(invoiceMetrics.pendingAmount)} (${invoiceMetrics.pendingCount} invoices)`],
+      ["Overdue Receivables", `₹{fmt(invoiceMetrics.overdueAmount)} (${invoiceMetrics.overdueCount} invoices)`],
+      ["Total Vendor Disbursements", `₹{fmt(expenseMetrics.totalSpent)}`],
+      ["Approved Disbursements", `₹{fmt(expenseMetrics.approvedAmount)} (${expenseMetrics.approvedCount} items)`],
+      ["Net Operating Cash Flow", `₹{fmt(netCashFlow)}`],
       ["Operating Margin", `${operatingMargin}%`],
       ["Average Collection Velocity (DSO)", `${invoiceMetrics.avgCollectionDays} days`],
-      ["Estimated Monthly Burn", `$${fmt(monthlyBurn)}`],
+      ["Estimated Monthly Burn", `₹{fmt(monthlyBurn)}`],
       ["Reserve Runway", `${runwayMonths} months`],
-      ["Total Project Budget", `$${fmt(budgetMetrics.totalBudget)}`],
-      ["Total Budget Spent", `$${fmt(budgetMetrics.totalSpent)} (${budgetMetrics.utilizationPct}% utilized)`],
-      ["Available Reserves", `$${fmt(budgetMetrics.remaining)}`],
+      ["Total Project Budget", `₹{fmt(budgetMetrics.totalBudget)}`],
+      ["Total Budget Spent", `₹{fmt(budgetMetrics.totalSpent)} (${budgetMetrics.utilizationPct}% utilized)`],
+      ["Available Reserves", `₹{fmt(budgetMetrics.remaining)}`],
       [],
       ["EXTERNAL CLIENT INVOICES"],
-      ["Invoice No", "Client", "Category", "Issued Date", "Due Date", "Amount (USD)", "Status", "Notes"],
+      ["Invoice No", "Client", "Category", "Issued Date", "Due Date", "Amount (INR)", "Status", "Notes"],
       ...invoices.map((inv) => [
         inv.invoiceNo,
         `"${(inv.client || "").replace(/"/g, '""')}"`,
@@ -347,7 +347,7 @@ export function ExternalFinanceOverview({
       ]),
       [],
       ["EXTERNAL VENDOR & SERVICE EXPENSES"],
-      ["Expense Title", "Category", "Department", "Date", "Amount (USD)", "Status", "Notes"],
+      ["Expense Title", "Category", "Department", "Date", "Amount (INR)", "Status", "Notes"],
       ...expenses.map((exp) => [
         `"${(exp.title || "").replace(/"/g, '""')}"`,
         `"${(exp.category || "Operations").replace(/"/g, '""')}"`,
@@ -359,7 +359,7 @@ export function ExternalFinanceOverview({
       ]),
       [],
       ["PROJECT & VENDOR BUDGET ALLOCATIONS"],
-      ["Allocation / Category", "Budget (USD)", "Spent (USD)", "Remaining (USD)", "Utilization %"],
+      ["Allocation / Category", "Budget (INR)", "Spent (INR)", "Remaining (INR)", "Utilization %"],
       ...budgetData.map((b) => [
         `"${b.dept.replace(/"/g, '""')}"`,
         b.budget,
@@ -436,7 +436,7 @@ export function ExternalFinanceOverview({
   };
 
   const handleCopyInvoiceSummary = (inv: FinanceInvoice) => {
-    const summary = `Invoice: ${inv.invoiceNo}\nClient: ${inv.client}\nAmount: $${fmt(inv.amount)} ${inv.currency || "USD"}\nStatus: ${inv.status}\nDue Date: ${inv.dueDate || "Upon Receipt"}`;
+    const summary = `Invoice: ${inv.invoiceNo}\nClient: ${inv.client}\nAmount: ₹{fmt(inv.amount)} ${inv.currency || "INR"}\nStatus: ${inv.status}\nDue Date: ${inv.dueDate || "Upon Receipt"}`;
     navigator.clipboard.writeText(summary);
     showToast(`Invoice details copied for ${inv.invoiceNo}`, "success");
   };
@@ -550,12 +550,12 @@ export function ExternalFinanceOverview({
             </div>
             <p className="text-xs font-bold text-muted-foreground">External Invoices Billed</p>
             <p className="text-2xl font-black text-foreground font-mono mt-1 tracking-tight">
-              ${fmt(invoiceMetrics.totalBilled)}
+              ₹{fmt(invoiceMetrics.totalBilled)}
             </p>
           </div>
           <div className="pt-3 mt-3 border-t border-border/40 flex items-center justify-between text-[11px]">
             <span className="text-muted-foreground font-medium">
-              ${fmt(invoiceMetrics.paidAmount)} paid • {invoiceMetrics.pendingCount} pending
+              ₹{fmt(invoiceMetrics.paidAmount)} paid • {invoiceMetrics.pendingCount} pending
             </span>
             <span className="font-bold text-blue-600 dark:text-blue-400 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
               Invoices <i className="fa-solid fa-arrow-right text-[9px]" />
@@ -580,12 +580,12 @@ export function ExternalFinanceOverview({
             </div>
             <p className="text-xs font-bold text-muted-foreground">Vendor &amp; Service Expenses</p>
             <p className="text-2xl font-black text-foreground font-mono mt-1 tracking-tight">
-              ${fmt(expenseMetrics.totalSpent)}
+              ₹{fmt(expenseMetrics.totalSpent)}
             </p>
           </div>
           <div className="pt-3 mt-3 border-t border-border/40 flex items-center justify-between text-[11px]">
             <span className="text-muted-foreground font-medium">
-              ${fmt(expenseMetrics.approvedAmount)} approved • {expenseMetrics.pendingCount} pending
+              ₹{fmt(expenseMetrics.approvedAmount)} approved • {expenseMetrics.pendingCount} pending
             </span>
             <span className="font-bold text-amber-600 dark:text-amber-400 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
               Expenses <i className="fa-solid fa-arrow-right text-[9px]" />
@@ -612,12 +612,12 @@ export function ExternalFinanceOverview({
             </div>
             <p className="text-xs font-bold text-muted-foreground">Net Realized Cash Flow</p>
             <p className={cn("text-2xl font-black font-mono mt-1 tracking-tight", netCashFlow >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600")}>
-              ${fmt(netCashFlow)}
+              ₹{fmt(netCashFlow)}
             </p>
           </div>
           <div className="pt-3 mt-3 border-t border-border/40 flex items-center justify-between text-[11px] text-muted-foreground font-medium">
-            <span>Collected: ${fmt(invoiceMetrics.paidAmount)}</span>
-            <span>Spent: ${fmt(expenseMetrics.approvedAmount)}</span>
+            <span>Collected: ₹{fmt(invoiceMetrics.paidAmount)}</span>
+            <span>Spent: ₹{fmt(expenseMetrics.approvedAmount)}</span>
           </div>
         </div>
 
@@ -643,12 +643,12 @@ export function ExternalFinanceOverview({
             </div>
             <p className="text-xs font-bold text-muted-foreground">External Budget Allocated</p>
             <p className="text-2xl font-black text-foreground font-mono mt-1 tracking-tight">
-              ${fmt(budgetMetrics.totalBudget)}
+              ₹{fmt(budgetMetrics.totalBudget)}
             </p>
           </div>
           <div className="pt-3 mt-3 border-t border-border/40 flex items-center justify-between text-[11px]">
             <span className="text-muted-foreground font-medium">
-              ${fmt(budgetMetrics.remaining)} remaining balance
+              ₹{fmt(budgetMetrics.remaining)} remaining balance
             </span>
             <span className="font-bold text-purple-600 dark:text-purple-400 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
               Budgets <i className="fa-solid fa-arrow-right text-[9px]" />
@@ -678,7 +678,7 @@ export function ExternalFinanceOverview({
           <div>
             <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Est. Monthly Burn Rate</p>
             <p className="text-sm font-black text-foreground font-mono">
-              ${fmt(monthlyBurn)} <span className="text-[10px] font-normal text-muted-foreground font-sans">/ month avg</span>
+              ₹{fmt(monthlyBurn)} <span className="text-[10px] font-normal text-muted-foreground font-sans">/ month avg</span>
             </p>
           </div>
         </div>
@@ -774,7 +774,7 @@ export function ExternalFinanceOverview({
                   <g key={idx}>
                     <line x1="45" y1={y} x2="690" y2={y} stroke="currentColor" strokeDasharray="3 3" className="text-border/40" />
                     <text x="40" y={y + 3} textAnchor="end" className="text-[9px] fill-muted-foreground font-mono">
-                      ${fmt(labelVal)}
+                      ₹{fmt(labelVal)}
                     </text>
                   </g>
                 );
@@ -868,7 +868,7 @@ export function ExternalFinanceOverview({
                               m.net >= 0 ? "fill-emerald-400" : "fill-rose-400"
                             )}
                           >
-                            Net: ${fmt(m.net)}
+                            Net: ₹{fmt(m.net)}
                           </text>
                         </g>
                       )}
@@ -947,7 +947,7 @@ export function ExternalFinanceOverview({
                               textAnchor="middle"
                               className="text-[9px] font-mono font-bold fill-white"
                             >
-                              Net: ${fmt(m.net)}
+                              Net: ₹{fmt(m.net)}
                             </text>
                           </g>
                         )}
@@ -1030,7 +1030,7 @@ export function ExternalFinanceOverview({
             >
               <div>
                 <p className="text-[10px] font-bold text-muted-foreground uppercase">Paid Revenue</p>
-                <p className="text-sm font-black text-emerald-600 dark:text-emerald-400 font-mono">${fmt(invoiceMetrics.paidAmount)}</p>
+                <p className="text-sm font-black text-emerald-600 dark:text-emerald-400 font-mono">₹{fmt(invoiceMetrics.paidAmount)}</p>
               </div>
               <span className="text-xs font-mono font-bold text-muted-foreground">{invoiceMetrics.paidCount} inv</span>
             </div>
@@ -1046,7 +1046,7 @@ export function ExternalFinanceOverview({
             >
               <div>
                 <p className="text-[10px] font-bold text-muted-foreground uppercase">Pending Payment</p>
-                <p className="text-sm font-black text-amber-600 dark:text-amber-400 font-mono">${fmt(invoiceMetrics.pendingAmount)}</p>
+                <p className="text-sm font-black text-amber-600 dark:text-amber-400 font-mono">₹{fmt(invoiceMetrics.pendingAmount)}</p>
               </div>
               <span className="text-xs font-mono font-bold text-muted-foreground">{invoiceMetrics.pendingCount} inv</span>
             </div>
@@ -1062,7 +1062,7 @@ export function ExternalFinanceOverview({
             >
               <div>
                 <p className="text-[10px] font-bold text-muted-foreground uppercase">Overdue Receivables</p>
-                <p className="text-sm font-black text-rose-600 dark:text-rose-400 font-mono">${fmt(invoiceMetrics.overdueAmount)}</p>
+                <p className="text-sm font-black text-rose-600 dark:text-rose-400 font-mono">₹{fmt(invoiceMetrics.overdueAmount)}</p>
               </div>
               <span className="text-xs font-mono font-bold text-muted-foreground">{invoiceMetrics.overdueCount} inv</span>
             </div>
@@ -1078,7 +1078,7 @@ export function ExternalFinanceOverview({
             >
               <div>
                 <p className="text-[10px] font-bold text-muted-foreground uppercase">Drafts &amp; Quotes</p>
-                <p className="text-sm font-black text-slate-600 dark:text-slate-400 font-mono">${fmt(invoiceMetrics.draftAmount)}</p>
+                <p className="text-sm font-black text-slate-600 dark:text-slate-400 font-mono">₹{fmt(invoiceMetrics.draftAmount)}</p>
               </div>
               <span className="text-xs font-mono font-bold text-muted-foreground">{invoiceMetrics.draftCount} inv</span>
             </div>
@@ -1157,7 +1157,7 @@ export function ExternalFinanceOverview({
                       {inv.dueDate && <div className="text-[10px]">Due: {inv.dueDate}</div>}
                     </td>
                     <td className="py-3 px-4 text-right font-mono font-black text-sm text-foreground">
-                      ${fmt(inv.amount)}
+                      ₹{fmt(inv.amount)}
                     </td>
                     <td className="py-3 px-4 text-center">
                       <span className={cn("text-[10px] font-bold px-2 py-0.5 rounded-full border", invoiceStatusStyle[inv.status] || invoiceStatusStyle.Draft)}>
@@ -1290,7 +1290,7 @@ export function ExternalFinanceOverview({
                     >
                       <div className="flex items-center justify-between mb-1 font-semibold">
                         <span className="truncate text-foreground text-[11px]">{cat.name}</span>
-                        <span className="font-mono font-bold text-muted-foreground text-[10px]">${fmt(cat.val)}</span>
+                        <span className="font-mono font-bold text-muted-foreground text-[10px]">₹{fmt(cat.val)}</span>
                       </div>
                       <div className="h-1.5 bg-muted rounded-full overflow-hidden">
                         <div
@@ -1329,7 +1329,7 @@ export function ExternalFinanceOverview({
                         </span>
                       </td>
                       <td className="py-2.5 px-4 text-right font-mono font-bold text-foreground">
-                        ${fmt(exp.amount)}
+                        ₹{fmt(exp.amount)}
                       </td>
                       <td className="py-2.5 px-4 text-center">
                         <span className={cn("text-[10px] font-bold px-2 py-0.5 rounded-full border", expenseStatusStyle[exp.status] || expenseStatusStyle.Pending)}>
@@ -1383,7 +1383,7 @@ export function ExternalFinanceOverview({
 
           <div className="p-3 border-t border-border/40 bg-muted/10 flex items-center justify-between">
             <span className="text-[11px] text-muted-foreground font-medium">
-              Approved: <strong className="text-foreground">${fmt(expenseMetrics.approvedAmount)}</strong>
+              Approved: <strong className="text-foreground">₹{fmt(expenseMetrics.approvedAmount)}</strong>
             </span>
             <Button
               size="sm"
@@ -1428,15 +1428,15 @@ export function ExternalFinanceOverview({
               <div className="grid grid-cols-3 gap-2 pt-3">
                 <div className="bg-background/80 p-2.5 rounded-xl border border-border/60">
                   <p className="text-[10px] font-bold text-muted-foreground uppercase">Budgeted</p>
-                  <p className="text-sm font-black text-foreground font-mono">${fmt(budgetMetrics.totalBudget)}</p>
+                  <p className="text-sm font-black text-foreground font-mono">₹{fmt(budgetMetrics.totalBudget)}</p>
                 </div>
                 <div className="bg-background/80 p-2.5 rounded-xl border border-border/60">
                   <p className="text-[10px] font-bold text-muted-foreground uppercase">Utilized</p>
-                  <p className="text-sm font-black text-amber-600 dark:text-amber-400 font-mono">${fmt(budgetMetrics.totalSpent)}</p>
+                  <p className="text-sm font-black text-amber-600 dark:text-amber-400 font-mono">₹{fmt(budgetMetrics.totalSpent)}</p>
                 </div>
                 <div className="bg-background/80 p-2.5 rounded-xl border border-border/60">
                   <p className="text-[10px] font-bold text-muted-foreground uppercase">Remaining</p>
-                  <p className="text-sm font-black text-emerald-600 dark:text-emerald-400 font-mono">${fmt(budgetMetrics.remaining)}</p>
+                  <p className="text-sm font-black text-emerald-600 dark:text-emerald-400 font-mono">₹{fmt(budgetMetrics.remaining)}</p>
                 </div>
               </div>
             </CardHeader>
@@ -1457,7 +1457,7 @@ export function ExternalFinanceOverview({
                       </span>
                       <div className="flex items-center gap-2 font-mono">
                         <span className="text-muted-foreground">
-                          ${fmt(item.spent)} / <strong className="text-foreground">${fmt(item.budget)}</strong>
+                          ₹{fmt(item.spent)} / <strong className="text-foreground">₹{fmt(item.budget)}</strong>
                         </span>
                         <span
                           className={cn(
@@ -1547,10 +1547,10 @@ export function ExternalFinanceOverview({
               <div className="bg-muted/30 p-3.5 rounded-xl border border-border/60 flex items-center justify-between">
                 <div>
                   <p className="text-[10px] font-bold uppercase text-muted-foreground">Total Receivable</p>
-                  <p className="text-xl font-black font-mono text-foreground">${fmt(settlingInvoice.amount)}</p>
+                  <p className="text-xl font-black font-mono text-foreground">₹{fmt(settlingInvoice.amount)}</p>
                 </div>
                 <Badge variant="soft" color="primary" className="text-xs font-mono font-bold">
-                  {settlingInvoice.currency || "USD"}
+                  {settlingInvoice.currency || "INR"}
                 </Badge>
               </div>
 
@@ -1665,7 +1665,7 @@ export function ExternalFinanceOverview({
                 </div>
                 <div>
                   <span className="text-muted-foreground block text-[10px] uppercase font-bold">Total Invoiced Amount</span>
-                  <span className="font-mono font-black text-base text-foreground">${fmt(previewingInvoice.amount)} {previewingInvoice.currency || "USD"}</span>
+                  <span className="font-mono font-black text-base text-foreground">₹{fmt(previewingInvoice.amount)} {previewingInvoice.currency || "INR"}</span>
                 </div>
               </div>
 
