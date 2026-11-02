@@ -521,9 +521,12 @@ function SidebarNavMenu({ canAccessModule, can, isEmployeeOrHR, isPending, onNav
             if (cat.key === "it" && can("viewITPortal")) {
               return true;
             }
-            // Regular employees always have access to self-service invoice generator & invoice history
+            // Regular employees have access to self-service invoice generator & invoice history if permitted
             if (cat.key === "finance") {
-              return true;
+              if (can("viewSelfServiceInvoices")) {
+                return true;
+              }
+              return false;
             }
             if (!cat.subItems) return false;
             return cat.subItems.some((sub) => sub.key && canAccessModule(sub.key));
@@ -590,10 +593,14 @@ function SidebarNavMenu({ canAccessModule, can, isEmployeeOrHR, isPending, onNav
                     canAccessModule("finance");
 
                   if (!canManageFinance) {
-                    visibleSubItems = [
-                      { id: "fin-invoices", name: "My Invoices", href: "/dashboard/finance?tab=invoices" },
-                      { id: "fin-generate", name: "Generate My Invoice", href: "/dashboard/finance?tab=generate" },
-                    ];
+                    if (can("viewSelfServiceInvoices")) {
+                      visibleSubItems = [
+                        { id: "fin-invoices", name: "My Invoices", href: "/dashboard/finance?tab=invoices" },
+                        { id: "fin-generate", name: "Generate My Invoice", href: "/dashboard/finance?tab=generate" },
+                      ];
+                    } else {
+                      visibleSubItems = [];
+                    }
                   } else {
                     visibleSubItems = [
                       { id: "fin-invoices", name: "Invoices", href: "/dashboard/finance?tab=invoices" },

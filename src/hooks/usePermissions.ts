@@ -79,6 +79,10 @@ export function usePermissions() {
     if (featurePermissions[featureKey] !== undefined) {
       return Boolean(featurePermissions[featureKey]);
     }
+    // Self-service personal invoices & history defaults to true for all authenticated members unless explicitly turned off
+    if (featureKey === "viewSelfServiceInvoices") {
+      return true;
+    }
     // Default super-sensitive administrative features to false for SubAdmin / OPS unless explicitly granted
     if ([
       "changeUserRoles",

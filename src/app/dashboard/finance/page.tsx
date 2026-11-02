@@ -605,6 +605,19 @@ function FinancePageContent() {
   const hasAccess = true;
 
   if (isRegularUser) {
+    if (!can("viewSelfServiceInvoices")) {
+      return (
+        <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6 space-y-4">
+          <div className="w-16 h-16 rounded-2xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-500 text-2xl">
+            <i className="fa-solid fa-shield-halved" />
+          </div>
+          <h2 className="text-xl font-bold text-foreground">Access Restricted</h2>
+          <p className="text-sm text-muted-foreground max-w-md">
+            You do not have permission to access Self-Service Invoices. Please contact your workspace administrator to request access.
+          </p>
+        </div>
+      );
+    }
     return (
       <div className="space-y-6">
         {/* Toast */}

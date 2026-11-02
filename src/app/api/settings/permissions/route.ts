@@ -167,7 +167,7 @@ export const DEFAULT_FEATURE_PERMISSIONS: Record<string, Record<string, boolean>
     // BD & Leads
     viewBD: true, manageLeads: true, deleteLeads: true, manageProposals: true, sendProposals: true, manageExecutiveTargets: true, exportBD: true,
     // Finance & Invoices
-    viewFinancePortal: true, createInvoices: true, approveInvoices: true, confirmInvoicePayments: true, exportInvoices: true, manageExpenses: true, viewExpenseReports: true, uploadInvoiceExcel: true, managePayroll: true, adjustSalarySlips: true,
+    viewFinancePortal: true, viewSelfServiceInvoices: true, createInvoices: true, approveInvoices: true, confirmInvoicePayments: true, exportInvoices: true, manageExpenses: true, viewExpenseReports: true, uploadInvoiceExcel: true, managePayroll: true, adjustSalarySlips: true,
     // IT & Infrastructure
     viewITPortal: true, manageITAccess: true, manageITSubscriptions: true, manageITDevices: true, manageITInvoices: true, manageITAssetAllocation: true,
     // Referrals
@@ -206,7 +206,7 @@ export const DEFAULT_FEATURE_PERMISSIONS: Record<string, Record<string, boolean>
     // BD & Leads
     viewBD: true, manageLeads: true, deleteLeads: false, manageProposals: true, sendProposals: true, manageExecutiveTargets: false, exportBD: true,
     // Finance & Invoices
-    viewFinancePortal: false, createInvoices: true, approveInvoices: false, confirmInvoicePayments: false, exportInvoices: true, manageExpenses: false, viewExpenseReports: false, uploadInvoiceExcel: true, managePayroll: false, adjustSalarySlips: false,
+    viewFinancePortal: false, viewSelfServiceInvoices: true, createInvoices: true, approveInvoices: false, confirmInvoicePayments: false, exportInvoices: true, manageExpenses: false, viewExpenseReports: false, uploadInvoiceExcel: true, managePayroll: false, adjustSalarySlips: false,
     // IT & Infrastructure
     viewITPortal: false, manageITAccess: false, manageITSubscriptions: false, manageITDevices: false, manageITInvoices: false,
     // Referrals
@@ -245,7 +245,7 @@ export const DEFAULT_FEATURE_PERMISSIONS: Record<string, Record<string, boolean>
     // BD & Leads
     viewBD: false, manageLeads: false, deleteLeads: false, manageProposals: false, sendProposals: false, manageExecutiveTargets: false, exportBD: false,
     // Finance & Invoices
-    viewFinancePortal: false, createInvoices: false, approveInvoices: true, confirmInvoicePayments: false, exportInvoices: false, manageExpenses: false, viewExpenseReports: false, uploadInvoiceExcel: false, managePayroll: true, adjustSalarySlips: true,
+    viewFinancePortal: false, viewSelfServiceInvoices: true, createInvoices: false, approveInvoices: true, confirmInvoicePayments: false, exportInvoices: false, manageExpenses: false, viewExpenseReports: false, uploadInvoiceExcel: false, managePayroll: true, adjustSalarySlips: true,
     // IT & Infrastructure
     viewITPortal: true, manageITAccess: false, manageITSubscriptions: false, manageITDevices: true, manageITInvoices: false,
     // Referrals
@@ -284,7 +284,7 @@ export const DEFAULT_FEATURE_PERMISSIONS: Record<string, Record<string, boolean>
     // BD & Leads
     viewBD: false, manageLeads: false, deleteLeads: false, manageProposals: false, sendProposals: false, manageExecutiveTargets: false, exportBD: false,
     // Finance & Invoices
-    viewFinancePortal: false, createInvoices: false, approveInvoices: false, confirmInvoicePayments: false, exportInvoices: false, manageExpenses: false, viewExpenseReports: false, uploadInvoiceExcel: false, managePayroll: false, adjustSalarySlips: false,
+    viewFinancePortal: false, viewSelfServiceInvoices: true, createInvoices: false, approveInvoices: false, confirmInvoicePayments: false, exportInvoices: false, manageExpenses: false, viewExpenseReports: false, uploadInvoiceExcel: false, managePayroll: false, adjustSalarySlips: false,
     // IT & Infrastructure
     viewITPortal: false, manageITAccess: false, manageITSubscriptions: false, manageITDevices: false, manageITInvoices: false,
     // Referrals

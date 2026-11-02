@@ -212,6 +212,7 @@ export const FEATURE_ACTIONS: FeatureMeta[] = [
 
   // Finance & Invoices
   { key: "viewFinancePortal", name: "Access Finance Portal", category: "Finance & Invoices", subGroup: "Invoices Management", description: "View company invoicing, billing records, and payment receipts", icon: "fa-solid fa-coins" },
+  { key: "viewSelfServiceInvoices", name: "Self-Service Invoice Generator & History", category: "Finance & Invoices", subGroup: "Employee Self-Service", description: "Access SelfServiceInvoiceTab to generate personal monthly salary/contractor invoices and review invoice history", icon: "fa-solid fa-file-invoice-dollar" },
   { key: "createInvoices", name: "Generate & Send Invoices", category: "Finance & Invoices", subGroup: "Invoices Management", description: "Create professional client invoices with itemized line items", icon: "fa-solid fa-file-invoice-dollar" },
   { key: "approveInvoices", name: "Approve & Manage Invoices", category: "Finance & Invoices", subGroup: "Invoices Management", description: "Approve, reject, and update invoice status", icon: "fa-solid fa-circle-check" },
   { key: "confirmInvoicePayments", name: "Confirm Payments & Attach Proof", category: "Finance & Invoices", subGroup: "Invoices Management", description: "Mark invoices as Paid, record Bank Transfer/UPI/Cash and save payment proofs in Drive", icon: "fa-solid fa-receipt" },
@@ -357,7 +358,7 @@ const PRESET_TEMPLATES: RolePresetTemplate[] = [
       "viewTeamDirectory", "viewEmployeeProfiles", "editEmployeeProfiles", "inviteTeamMembers", "viewOrgChart", "reassignReportingLine",
       "logOwnTimesheet", "editOwnTimesheet", "viewTeamTimesheets", "approveTimesheets", "exportTimesheets", "clockInOut", "canViewShiftClock", "viewAllShiftExtensions", "approveAdditionalShiftTime", "exportShiftExtensions", "viewShiftCalendar", "viewLoginHoursSummary", "viewTeamAvailability", "manageTeamAvailability", "logOwnAvailability", "manageHolidays", "importHolidayExcel",
       "requestRegularization", "approveRegularization", "viewRegularizationDesk",
-      "viewOwnLeaves", "applyLeaves", "viewAllLeaves", "approveLeaves", "viewLeaveBalances", "manageLeaveBalances", "viewSalarySlips", "manageCompanyChecklists", "manageHRVault", "manageHRCases", "reassignHRPartner", "manageHRIsolation", "approveTimesheetsAndInvoices", "approveInvoices", "managePayroll", "adjustSalarySlips",
+      "viewOwnLeaves", "applyLeaves", "viewAllLeaves", "approveLeaves", "viewLeaveBalances", "manageLeaveBalances", "viewSalarySlips", "viewSelfServiceInvoices", "manageCompanyChecklists", "manageHRVault", "manageHRCases", "reassignHRPartner", "manageHRIsolation", "approveTimesheetsAndInvoices", "approveInvoices", "managePayroll", "adjustSalarySlips",
       "viewOwnAppraisals", "submitSelfReview", "viewManagerReviews", "createAppraisalCycles", "submit360PeerReview", "manageFnFSettlements", "viewFnFSettlements", "viewHRCasesSLA", "manageITAssetAllocation",
       "viewGoals", "sendKudos", "submitSurvey", "createPulseSurveys",
       "submitReferral", "viewOwnReferrals", "viewAllReferrals", "manageReferrals",
@@ -391,7 +392,7 @@ const PRESET_TEMPLATES: RolePresetTemplate[] = [
     features: [
       "viewKpiWidgets", "viewAnnouncements", "viewTeamDirectory", "viewSalaryData", "viewOrgChart",
       "viewClients", "viewReports", "exportClientData",
-      "viewFinancePortal", "createInvoices", "approveInvoices", "confirmInvoicePayments", "exportInvoices", "manageExpenses", "viewExpenseReports", "uploadInvoiceExcel", "managePayroll", "adjustSalarySlips", "viewSalarySlips",
+      "viewFinancePortal", "viewSelfServiceInvoices", "createInvoices", "approveInvoices", "confirmInvoicePayments", "exportInvoices", "manageExpenses", "viewExpenseReports", "uploadInvoiceExcel", "managePayroll", "adjustSalarySlips", "viewSalarySlips",
       "viewITPortal", "manageITInvoices", "manageITSubscriptions",
       "sendChatMessages", "viewMailCenter", "sendEmails",
       "viewNotifications",
@@ -412,7 +413,7 @@ const PRESET_TEMPLATES: RolePresetTemplate[] = [
       "viewProjects", "changeTaskStatus", "commentOnTasks", "viewProjectWiki", "viewProjectGantt",
       "viewDriveFiles", "uploadDriveFiles", "downloadDriveFiles", "shareDriveFiles",
       "sendChatMessages", "viewMailCenter", "sendEmails", "joinVirtualHuddles",
-      "viewOwnLeaves", "applyLeaves", "viewLeaveBalances", "viewSalarySlips",
+      "viewOwnLeaves", "applyLeaves", "viewLeaveBalances", "viewSalarySlips", "viewSelfServiceInvoices",
       "viewOwnAppraisals", "submitSelfReview",
       "viewGoals", "sendKudos", "submitSurvey",
       "submitReferral", "viewOwnReferrals",
@@ -436,7 +437,7 @@ const PRESET_TEMPLATES: RolePresetTemplate[] = [
       "viewAnalyticsOverview", "viewPerformanceMetrics", "viewAuditLogs", "exportAuditLogs",
       "viewClients", "viewReports", "exportClientData",
       "viewBD", "exportBD",
-      "viewFinancePortal", "viewExpenseReports", "exportInvoices",
+      "viewFinancePortal", "viewSelfServiceInvoices", "viewExpenseReports", "exportInvoices",
       "viewITPortal", "viewAllReferrals", "viewNotifications",
     ],
   },
